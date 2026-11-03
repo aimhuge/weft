@@ -67,6 +67,9 @@ needs `x-weft-token: 1`, like every other route.
   `save()` sends that hash, so a file the thread changed meanwhile comes back as a conflict (the banner offers **Reload**
   or **Overwrite**) instead of being overwritten. While the tab is visible and has no unsaved edits, it polls `stat` every 2 s and
   reloads when the thread edits the file. An edited tab that changes on disk gets the same banner.
+  A worker card's file can't afford the poll (`live: false`); over the worker's session line it is watched instead
+  (`files.watch`, `lib/line-file-watch.ts`), and `lib/use-file-watch.ts` re-reads it on each pushed hash under the same
+  rule: a clean tab reloads, an edited one gets the banner. Without a line it reloads when reopened.
 - `components/EditorColumn.tsx` (+ `EditorColumnPills.tsx`): the tab strip (name, unsaved dot, ×), the mode menu,
   ⌘S, ⌘P (`components/QuickOpen.tsx`, fuzzy over the file list), ⌘W, the empty state and the conflict banner. The three
   editors load lazily, so the board's bundle doesn't carry them until a file opens.

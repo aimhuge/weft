@@ -88,7 +88,7 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
 const TURN_VERBS = new Set<HostVerb>(["card.message", "card.message.edit", "card.restart", "card.fresh"]);
 
 // Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put"]);
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.watch", "files.unwatch", "files.write", "card.warm", "settings.get", "settings.put"]);
 
 const NO_HOST_VERBS = "This host takes its settings only from its own window.";
 

@@ -149,6 +149,7 @@ describe("localHost", () => {
     ["files.read", { id: "c1", path: "a.ts" }, filesApi.read, ["c1", "a.ts"]],
     ["files.read", { id: "c1", path: "a.ts", at: "HEAD" }, filesApi.head, ["c1", "a.ts"]],
     ["files.write", { id: "c1", path: "a.ts", text: "x", baseHash: "h" }, filesApi.write, ["c1", "a.ts", "x", "h"]],
+    ["files.watch", { id: "c1", path: "a.ts" }, filesApi.read, ["c1", "a.ts"]],
     ["card.warm", { id: "c1" }, api.warm, [{ cardId: "c1" }]],
     ["card.create", { id: "n1", prompt: "p", start: false }, api.create, [{ prompt: "p", start: false }]],
     ["dev.open", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "open" }]],
@@ -164,6 +165,10 @@ describe("localHost", () => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);
     expect(fn).toHaveBeenCalledWith(...expected);
+  });
+
+  it("takes an unwatch with nothing to stop: this Mac's editor polls", async () => {
+    await expect(localHost.act("files.unwatch", { id: "c1", path: "a.ts" })).resolves.toBeUndefined();
   });
 
   it("warms a card through /api/warm, best effort", async () => {

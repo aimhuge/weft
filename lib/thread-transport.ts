@@ -24,8 +24,10 @@ export interface ThreadTransport {
   loadPage(cardId: string, before?: number): Promise<ThreadPage | null>;
   // Find over the whole thread, loaded or not (lib/thread-find.ts). Left out, find covers the loaded window.
   searchThread?: (cardId: string, query: string) => Promise<FindMatch[] | null>;
-  // A hook: live changes to this card's thread, and a reconnect (when the caller re-reads the newest page).
-  useLive(cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void): void;
+  // A hook: live changes to this card's thread, a reconnect (when the caller re-reads the newest page), and the reply as
+  // it streams where the transport carries it (a worker card's session line, lib/line-host.ts). The desktop's own
+  // streaming text comes from the board (lib/board-live.ts), so its transport never calls onStreaming.
+  useLive(cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void, onStreaming?: (text: string) => void): void;
   // A hook: the items as they are drawn (the web's blob refs become signed URLs).
   useView(items: ThreadItem[]): ThreadItem[];
   // Interrupt the running turn.

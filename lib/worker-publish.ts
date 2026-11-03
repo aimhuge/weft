@@ -12,6 +12,7 @@ import path from "node:path";
 import type { BlobStoreBundle } from "./blob-store";
 import { lastPerKey, projectCard, projectItem, publishes, type RowHost } from "./card-rows";
 import type { LineEvent } from "./host-line-protocol";
+import { createDeltaStream } from "./line-deltas";
 import type { Card, ThreadItem } from "./types";
 import type { BoardEvent } from "./types-card";
 import type { ItemRow, OutputRow, Registry } from "./worker-registry";
@@ -54,12 +55,29 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
     return d;
   };
 
+  // Session lines hear what the rows get, projected and uploaded once (lib/host-line.ts): never a card that was never
+  // published, so the copilot's delete stays off them as its card does.
+  const mirrors = new Set<(event: LineEvent) => void>();
+  const shipped = new Set<string>();
+  const mirror = (event: LineEvent) => mirrors.forEach((fn) => fn(event));
+  // A reply as it streams, only to lines (the rows get the item), redacted and coalesced (lib/line-deltas.ts).
+  const deltas = createDeltaStream(mirror, (id) => source.getThread(id).length);
+  const streams = (id: string) => {
+    const card = mirrors.size ? source.getCard(id) : undefined;
+    return Boolean(card && publishes(card, host));
+  };
+
   function hear(event: BoardEvent) {
     if (event.type === "card") {
       if (publishes(event.card, host)) mark(event.card.id).card = true;
     } else if (event.type === "card_deleted") {
+      deltas.end(event.id);
       mark(event.id).deleted = true;
+    } else if (event.type === "delta") {
+      if (streams(event.cardId)) deltas.add(event.cardId, event.text);
     } else if (event.type === "thread") {
+      // A finished reply ends the streaming text, as on a Mac's board (lib/board-live.ts).
+      if (event.item.kind === "assistant" || event.item.kind === "result") deltas.end(event.cardId);
       const d = mark(event.cardId);
       d.seqs.add(event.index);
       if (event.truncate) d.fromSeq = Math.min(d.fromSeq ?? Infinity, event.index + 1);
@@ -68,11 +86,6 @@ export function createPublisher(reg: Pick<Registry, "putCard" | "putItems">, sou
 
   const folderOf = (card: Card) => folders.get(card.id) ?? path.basename(card.cwd);
 
-  // Session lines hear what the rows get, projected and uploaded once (lib/host-line.ts): never a card that was never
-  // published, so the copilot's delete stays off them as its card does.
-  const mirrors = new Set<(event: LineEvent) => void>();
-  const shipped = new Set<string>();
-  const mirror = (event: LineEvent) => mirrors.forEach((fn) => fn(event));
 
   async function ship(id: string, d: Dirty) {
     const card = source.getCard(id);

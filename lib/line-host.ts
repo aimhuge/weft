@@ -7,10 +7,14 @@
 //   couldn't send (LineDown) takes the relay instead; one it sent and then lost (LineLost) is refused rather than sent
 //   twice, since the worker may have run it. Text that pastes files goes by the relay, which uploads them first.
 // - The open thread hears the line's `events` instead of the 2.5 s poll, and re-reads its newest page whenever the line
-//   comes up or goes down, so nothing between the poll and the push is missed.
+//   comes up or goes down, so nothing between the poll and the push is missed. Its reply types out as it streams (`delta`
+//   events, lib/line-streaming.ts), as a local card's does.
+// - The editor's open files reload when they change on the worker (`file` events, lib/line-file-watch.ts).
 import { useEffect, useRef } from "react";
 import type { HostVerb } from "./host-api/types";
 import type { HostArgs } from "./host-command";
+import { lineWatch } from "./line-file-watch";
+import { NOT_STREAMING, streamedAfter } from "./line-streaming";
 import { MEDIA_REF } from "./media";
 import { LineDown } from "./session-line-calls";
 import { lineFor, useLineRoute } from "./session-lines";
@@ -57,7 +61,7 @@ const files = new Map<string, ReturnType<typeof workerFilesVia>>();
 // The editor's files for a worker's cards, over its line when it's up.
 export function lineFiles(workerId: string) {
   let f = files.get(workerId);
-  if (!f) files.set(workerId, (f = workerFilesVia((verb, args) => askOnLine(workerId, verb, args))));
+  if (!f) files.set(workerId, (f = { ...workerFilesVia((verb, args) => askOnLine(workerId, verb, args)), watch: lineWatch(workerId) }));
   return f;
 }
 
@@ -67,13 +71,17 @@ export function warmOnLine(workerId: string, cardId: string): void {
   if (line?.up()) line.call("card.warm", { id: cardId }).catch(() => {});
 }
 
-export function useLineLive(workerId: string, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
+type OnStreaming = ((text: string) => void) | undefined;
+
+export function useLineLive(workerId: string, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void, onStreaming?: OnStreaming) {
   const direct = useLineRoute(workerId)?.kind === "direct";
   const update = useRef(onUpdate);
   const reconnect = useRef(onReconnect);
+  const streaming = useRef<OnStreaming>(onStreaming);
   useEffect(() => {
     update.current = onUpdate;
     reconnect.current = onReconnect;
+    streaming.current = onStreaming;
   });
   useWorkerLive(cardId, onUpdate, !direct);
   const first = useRef(true);
@@ -82,10 +90,18 @@ export function useLineLive(workerId: string, cardId: string, onUpdate: (update:
     if (first.current) first.current = false;
     else reconnect.current();
     if (!direct) return;
-    return lineFor(workerId)?.onEvent((event) => {
+    let streamed = NOT_STREAMING;
+    const off = lineFor(workerId)?.onEvent((event) => {
       if (event.t === "thread_cleared" && event.cardId === cardId) update.current(() => EMPTY);
       if (event.t === "thread" && event.cardId === cardId) update.current((prev) => applyThreadEvent(prev, event));
+      const next = streamedAfter(streamed, event, cardId);
+      if (next !== streamed) streaming.current?.((streamed = next).text);
     });
+    // Another card, or the line went: what was streaming isn't any more (the re-read page has the reply if it landed).
+    return () => {
+      off?.();
+      if (streamed.text) streaming.current?.("");
+    };
   }, [direct, workerId, cardId]);
 }
 
@@ -97,7 +113,7 @@ export function lineTransport(workerId: string): ThreadTransport {
   if (!t) {
     t = workerTransportVia(
       (verb, args) => actOnLine(workerId, verb, args),
-      (cardId, onUpdate, onReconnect) => useLineLive(workerId, cardId, onUpdate, onReconnect),
+      (cardId, onUpdate, onReconnect, onStreaming) => useLineLive(workerId, cardId, onUpdate, onReconnect, onStreaming),
       lineFiles(workerId),
     );
     transports.set(workerId, t);

@@ -99,6 +99,9 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "skills.list": (a) => call("GET", `/api/skills?card=${encodeURIComponent(a.id)}`),
   "files.list": (a) => filesApi.list(a.id),
   "files.read": (a) => (a.at === "HEAD" ? filesApi.head(a.id, text(a.path)) : filesApi.read(a.id, text(a.path))),
+  // This Mac's editor polls its own files (lib/use-open-file.ts): a watch is only the file's hash now.
+  "files.watch": (a) => filesApi.read(a.id, text(a.path)).then((f) => ({ path: f.path, hash: f.hash })),
+  "files.unwatch": (a) => Promise.resolve({ path: text(a.path) }),
   "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
   "dev.open": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "open" }),
   "dev.stop": (a) => api.devAction(a.id, "stop"),

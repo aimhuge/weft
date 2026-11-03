@@ -68,9 +68,9 @@ export function remoteRefusal({ verb, args }: HostPayload): string | null {
   if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;
   // The editor stays inside the card's folder (lib/file-access.ts), off credentials and .git, and a save off what
   // configures its agent: what the card's own thread could do when asked, never what would widen it (./file-policy.ts).
-  if (verb === "files.read" || verb === "files.write") {
+  if (verb === "files.read" || verb === "files.watch" || verb === "files.write") {
     if (typeof args.path !== "string") return "That names no file.";
-    return verb === "files.read" ? readRefusal(args.path) : writeRefusal(args.path);
+    return verb === "files.write" ? writeRefusal(args.path) : readRefusal(args.path);
   }
   return cardFieldsRefusal(verb, args);
 }

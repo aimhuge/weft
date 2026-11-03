@@ -4,7 +4,9 @@
 //
 //   host      board → worker  { id, verb, args }        one host-api verb, run as a `host` command is (remoteRefusal)
 //             worker → board  { id, ok, result|error }  in order, reliable
-//   events    worker → board  { t: "card" | "card_deleted" | "thread" | "thread_cleared", … }   what the relay mirrors
+//   events    worker → board  { t: "card" | "card_deleted" | "thread" | "thread_cleared", … }   what the relay mirrors,
+//                             { t: "delta", … }   a reply's text as it streams (lib/line-deltas.ts), and
+//                             { t: "file", … }    a watched file changed (lib/host-line-files.ts)
 //   line      both ways       ping/pong (the heartbeat and the chip's ms), offer/answer (renegotiation over the line)
 //   terminal  board → worker  { t: "open", folder, cols, rows, widen } then input/resize; worker → board opened/data/exit/refused.
 //             Only with a signed approval for that folder (lib/host-line-terminal.ts); without one, TERMINAL_REFUSAL.
@@ -58,7 +60,12 @@ export type LineEvent =
   | { t: "card"; card: Card }
   | { t: "card_deleted"; id: string }
   | { t: "thread"; cardId: string; index: number; item: ThreadItem; truncate?: boolean }
-  | { t: "thread_cleared"; cardId: string };
+  | { t: "thread_cleared"; cardId: string }
+  // The reply streaming in on a card, redacted, ~50 ms at a time: `text` follows what came before for the same `index` (the
+  // thread's length when the reply began), or replaces it with `reset`.
+  | { t: "delta"; cardId: string; index: number; text: string; reset?: true }
+  // A file a board watches (files.watch) changed on the worker: its hash now, null once it's gone or can't be read.
+  | { t: "file"; cardId: string; path: string; hash: string | null };
 
 // A watched device to carry as a track on the line, and the label of the input channel that goes with it
 // (`input:<device>:<nonce>`): that channel closing is what stops this track, not one before or after it.
@@ -131,14 +138,28 @@ export function readHostReply(raw: string): HostReply | null {
   return null;
 }
 
+type Message = Record<string, unknown>;
+
+// Each event's reader, by its `t`: the event, or null when it isn't whole.
+const EVENT_READERS: Record<LineEvent["t"], (p: Message) => LineEvent | null> = {
+  card: (p) => (isObject(p.card) && str(p.card.id) ? { t: "card", card: p.card as unknown as Card } : null),
+  card_deleted: (p) => (str(p.id) ? { t: "card_deleted", id: p.id } : null),
+  thread_cleared: (p) => (str(p.cardId) ? { t: "thread_cleared", cardId: p.cardId } : null),
+  thread: (p) =>
+    str(p.cardId) && num(p.index) && isObject(p.item)
+      ? { t: "thread", cardId: p.cardId, index: p.index, item: p.item as unknown as ThreadItem, ...(p.truncate === true ? { truncate: true } : {}) }
+      : null,
+  delta: (p) =>
+    str(p.cardId) && num(p.index) && typeof p.text === "string"
+      ? { t: "delta", cardId: p.cardId, index: p.index, text: p.text, ...(p.reset === true ? { reset: true } : {}) }
+      : null,
+  file: (p) => (str(p.cardId) && str(p.path) && (p.hash === null || str(p.hash)) ? { t: "file", cardId: p.cardId, path: p.path, hash: p.hash } : null),
+};
+
 export function readLineEvent(raw: string): LineEvent | null {
   const p = parse(raw);
-  if (!p) return null;
-  if (p.t === "card" && isObject(p.card) && str(p.card.id)) return { t: "card", card: p.card as unknown as Card };
-  if (p.t === "card_deleted" && str(p.id)) return { t: "card_deleted", id: p.id };
-  if (p.t === "thread_cleared" && str(p.cardId)) return { t: "thread_cleared", cardId: p.cardId };
-  if (p.t !== "thread" || !str(p.cardId) || !num(p.index) || !isObject(p.item)) return null;
-  return { t: "thread", cardId: p.cardId, index: p.index, item: p.item as unknown as ThreadItem, ...(p.truncate === true ? { truncate: true } : {}) };
+  const read = p && typeof p.t === "string" && Object.hasOwn(EVENT_READERS, p.t) ? EVENT_READERS[p.t as LineEvent["t"]] : null;
+  return p && read ? read(p) : null;
 }
 
 function lineScreen(v: unknown): LineScreen | undefined {

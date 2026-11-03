@@ -6,8 +6,12 @@
 import { createContext, useContext } from "react";
 import { filesApi } from "./client-files";
 
-// `live` false: the source can't afford a stat poll, so an open file doesn't reload on its own.
-export type FilesSource = typeof filesApi & { live?: boolean };
+// Watches one open file and calls back with its hash when it changes (null once it's gone); returns the stop.
+export type FileWatch = (cardId: string, path: string, changed: (hash: string | null) => void) => () => void;
+
+// `live` false: the source can't afford a stat poll, so an open file doesn't reload on its own, unless the source can
+// `watch` it, which pushes changes instead (a worker's, over its session line: lib/line-file-watch.ts).
+export type FilesSource = typeof filesApi & { live?: boolean; watch?: FileWatch };
 
 export const FilesSourceContext = createContext<FilesSource>(filesApi);
 
