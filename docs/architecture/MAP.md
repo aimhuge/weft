@@ -552,8 +552,15 @@ When a new doc lands in this folder, add it here on the same change.
   `Sealer.blob` in `lib/sync-seal-upload.ts` per card in `lib/cloud-sync-cards.ts` and `lib/cloud-sync-upload.ts`, a paired
   browser's held uploads in `lib/web-upload.ts` (`webBlobSeal` in `lib/web-sync-key.ts`), opened by `lib/cloud-inbox-receive.ts`
   (`macKeyring`), on the web by `lib/web-blob-open.ts` (pictures in `useWebBoard`, pages through `components/web-board/useSealedPage.ts`
-  in `WebPane`, the page route's `?sealed=1`), and drawn as the 🔒 stand-in by the page route and `lib/share-page-serve.ts`. A worker's key grant and its own sealing are designed,
-  not built (docs/architecture/mobile-security.md#sealing-on-a-weft-worker-design).
+  in `WebPane`, the page route's `?sealed=1`), and drawn as the 🔒 stand-in by the page route and `lib/share-page-serve.ts`. A worker's key grant and its own sealing
+  (docs/architecture/mobile-security.md#sealing-on-a-weft-worker): main grants in `electron/worker-key-grants.cjs` (Settings → Devices →
+  Seal…, `worker-keys:*` IPC from `electron/pairing-ipc.cjs`, regrant on rotation, drop and rotate on Re-pin and Revoke;
+  `lib/use-devices.ts` `sealLine`, `components/DevicesSettings.tsx` `WorkerSeal`); the worker checks a grant in `lib/worker-key-grant.ts`,
+  holds the ring and its seal floor in `lib/worker-keyring.ts`, wires it in `lib/worker-sealing-wire.ts` (the `key_grant` ping is
+  `lib/worker-wake.ts` `listenForKeyGrants`), seals with `lib/worker-sealing.ts` + `lib/worker-seal-rows.ts` in `lib/worker-publish.ts`
+  and `lib/worker-pane.ts`, and opens pasted files with `openingReader`; the desktop board opens a worker's rows, pages and pictures
+  in `lib/worker-board-open.ts` (main's `POST /sync/keyring`) from `lib/worker-board.ts` and `lib/worker-thread-reads.ts`. Migration
+  `supabase/migrations/20261103090000_worker_key_grants.sql`.
 - `lib/passkey-verify.ts` (+ main's copy `electron/passkey-verify.cjs`) + `lib/approval-passkey.ts` + `lib/passkey-phone-only.ts` +
   `lib/approval-passkey-check.ts` + `lib/web-passkey.ts` + `lib/web-passkey-approval.ts` + `lib/sign-origin.ts` + `lib/sign-approve.ts` +
   `lib/sign-sheet.ts` + `lib/passkey-display.ts`: passkey approvals (H7, docs/architecture/mobile-security.md#4-passkey-approvals-h7), on

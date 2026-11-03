@@ -119,7 +119,7 @@ move a sealed item onto another card or seq and have it open: `weft-sync-v1\n<or
 
 ## Sealed blobs
 
-Status: **built for a Mac and the web board** (2026-11-03); a worker's are [designed below](#sealing-on-a-weft-worker-design).
+Status: **built for a Mac and the web board** (2026-11-03); a worker's in [Sealing on a Weft Worker](#sealing-on-a-weft-worker).
 `lib/blob-seal.ts` on `lib/sync-seal.ts`'s `sealBytes` / `openBytes`.
 
 A row that names a file names it by `blob:sha256:<hex>`, the hash of the plaintext, and the file sits in `weft-blobs` at
@@ -159,66 +159,85 @@ A row that names a file names it by `blob:sha256:<hex>`, the hash of the plainte
   when a sealed row names it later (like old rows), and one that went up sealed stays sealed when a share link or a
   published mini app names the same bytes later: those draw the 🔒 stand-in until the page changes (a new sha).
 
-## Sealing on a Weft Worker (design)
+## Sealing on a Weft Worker
 
-Status: **designed, not built** (2026-11-03). Today a worker holds no workspace key: it publishes its card, item and tool
-rows and its pages plain, and a Mac or browser sends a worker's card its files plain. This is how it closes, in two
-steps, each reusing a piece already built and trusted (the pairing pins and the Mac's device key from H8 and H10).
+Status: **built** (2026-11-03); migration `supabase/migrations/20261103090000_worker_key_grants.sql` (additive, applied by the
+lead). Without a grant a worker publishes plain as before, and Settings → Devices says so. Two steps, each reusing a piece
+already trusted: the pairing pins and the Mac's approval key from H8 and H10.
 
 ### Step A: a key grant to the worker
 
 ```
-Settings → Devices → the worker → Seal this worker's threads        (IPC from the board window only, like pairing)
-main:   the worker's pinned box key (electron/worker-pins.cjs) ─ Touch ID "Give m1mini the key to your sealed threads"
-        ─ for each version main holds: sealed = seal(key, box, purpose "workspace-key:<org>:<worker>:<version>")
-          (lib/worker-seal.ts's X25519 + HKDF + AES-256-GCM, electron/worker-seal.cjs)
-        ─ sig = Mac device key (electron/desktop-signer.cjs) over
+Settings → Devices → the worker → "Threads in the clear · Seal…"     (IPC worker-keys:grant, board window only)
+main (electron/worker-key-grants.cjs):
+        Seal synced threads is on? ─ the worker is yours and live (cloud_workers, main's own session)
+        ─ paired (a pinned sign key) and its row's box key is the one pinned (electron/worker-pins.cjs)
+        ─ Touch ID "give the worker m1mini the key to your sealed threads"
+        ─ for each version main holds: sealed = seal(box key, key, "workspace-key:<org>:<worker>:<version>")
+          (electron/worker-seal.cjs ≡ lib/worker-seal.ts: X25519 + HKDF + AES-256-GCM)
+        ─ sig = this Mac's approval key (electron/desktop-signer.cjs) over
           "weft-worker-key-v1\n<org>\n<worker>\n<version>\n<box key>\n<sha256(sealed) hex>"
-        ─ insert worker_key_grants { org_id, worker_id, version, sealed, mac_device, sig }   (RLS: the worker's owner)
-worker: worker_key_grants(p_key) RPC (sha256(wwk_) → its own rows) ─ check sig against the Mac key in mac-keys.json
-        (trustPairingMac; never a key off the network) ─ the box key named is its own ─ open under the purpose
-        ─ hold the ring in memory only; read again at start and on a `key_grant` ping
+        ─ insert worker_key_grants { org_id, worker_id, version, box_key, sealed, mac_device, sig }   (RLS: the worker's owner)
+        ─ remember the worker in ~/.weft/vault/worker-key-grants.json (safeStorage)
+database: an insert pings the worker on worker-keys:<sha256("weft-worker-keys:" + key_hash)> (event key_grant)
+worker (lib/worker-keyring.ts, lib/worker-key-grant.ts):
+        worker_key_grants(p_key) ─ for each row: this worker and workspace ─ box_key is its own ─ sig by a Mac in
+        macKeysAt(home).pinned() (the key from its pairing code; never one off the network) ─ opens under its purpose
+        to 32 bytes ─ the ring, in memory only; read at start (before the daemon), on the ping and every 10 minutes
 ```
 
-- **Never readable by weft.zip.** The server stores a box sealed to a key it can't open, and the signature means a
-  server (or the owner's stolen session) can't plant a key of its own choosing: a planted key would let it read
-  everything the worker seals after. A worker enrolled by token trusts no Mac, so it never takes a grant; it stays plain.
-- **Rotation and revocation.** `syncKeys.rotate(org, keep)` gains the granted workers (main keeps which ones it granted,
-  sealed beside `worker-pins.json`), so a rotation grants them the new version under the same Touch ID. Revoking a worker
-  (or Re-pin dropping its box key) deletes its grants and rotates, as revoking a phone does. A grant is offered only while
-  **Seal synced threads** is on, and pairing a worker (H10) can offer it under its own Touch ID.
-- **Settings → Devices** says which state a worker is in: "Threads sealed (key v3)", or "Threads in the clear · Seal…"
-  (no grant, or a grant for an older version only), so a worker without a key keeps working, plainly labelled.
+- **Never readable by weft.zip, never plantable.** The server stores a box sealed to a key it can't open, and the signature
+  means a server (or the owner's stolen session) can't plant a key of its choosing. A worker enrolled by token trusts no
+  Mac, so it takes no grant and stays plain; main refuses to grant one too. When PR #85's revocation lands, a revoked
+  pairing Mac drops out of `pinned()` (`mac-revoked.json`), so its grants are refused on the next read.
+- **The seal floor.** Once a worker has accepted a grant it writes `seal-floor.json` in its home (no key in it). From then
+  on a worker with no key **holds** its rows and pages back instead of publishing plain, so a server that hides the grants
+  (or a restart while offline) can't downgrade it to the clear. Deleting the file on the box goes back to plain on purpose.
+- **Rotation.** main's `syncKeys.rotate` is wrapped in `electron/pairing-ipc.cjs`: after a phone's revoke rotates the key,
+  every worker main granted whose box key is still pinned gets the new version (`regrant`). One whose pin went is dropped.
+- **Revoke and Re-pin.** Revoking a worker (Settings → Devices) runs `device_revoke`, whose `revoked_at` trigger deletes
+  its grants; the board then calls `worker-keys:drop`, which deletes them from main's side too and **rotates**, so what is
+  sealed next is under a version the worker never had. Re-pin (`worker-pins:forget`) drops and rotates the same way, and
+  says so if it couldn't. The worker's next read finds no grant and drops the key from memory.
+- **Settings → Devices** folds the state into the worker's line (`lib/use-devices.ts` `sealLine`): "Threads sealed (key v3)"
+  when its newest grant is the workspace's newest version, else "Threads in the clear · Seal…" (no grant, or an older
+  version only, which a revoked device may hold).
 
-**Migration (proposed, additive):** `worker_key_grants (org_id uuid, worker_id uuid references cloud_workers on delete
-cascade, version int, sealed text, mac_device text, sig text, created_at timestamptz, primary key (worker_id, version))`
-with RLS insert/select/delete for the worker's `owner_user` who is an org member, a `security definer`
-`worker_key_grants(p_key text)` RPC keyed by `key_hash` that returns only that worker's rows and nothing for a revoked
-worker, and a trigger that deletes a worker's grants when `cloud_workers.revoked_at` is set.
+**Migration:** `worker_key_grants (org_id, worker_id → cloud_workers on delete cascade, version, box_key, sealed, mac_device,
+sig, granted_by, created_at; primary key (worker_id, version); (org_id, version) → workspace_keys)` with RLS select / insert /
+delete for the worker's `owner_user` (insert also needs org membership and a live worker); `worker_key_grants(p_key)`
+(security definer, keyed by `key_hash` through `worker_for_key`, nothing for a revoked worker); a trigger that deletes a
+worker's grants when `cloud_workers.revoked_at` is set; and the `key_grant` ping trigger.
 
 ### Step B: the worker seals and opens
 
-- **Opens.** The worker's attachment download (`workerBlobReader` through `app/api/worker-blob` read mode) runs the bytes
-  through `openBlob` with its ring before `receiveAttachments` checks the sha, as `macReceive` does. With step A in, the
-  Mac's `withAttachments` (`lib/worker-board.ts`) and a paired browser's `webBlobSeal` seal for a worker's card too: the
-  Mac when the worker's grant covers its current version, the browser when the card's row came sealed (which only a
-  worker with the key can write).
-- **Seals its rows like a Mac's outbox.** The publisher (`lib/worker-publish.ts`) takes a `Sealer` built by
-  `makeSealer(s, key, isShared)` from the worker's newest granted version, and hands `Sealer.blob(cardId)` to its blob
-  store through `withBlobSeal`, exactly as `lib/cloud-sync-upload.ts` does; `worker_put_card` / `worker_put_items` take
-  the sealed jsonb unchanged, so weft.zip's server sees ciphertext. A card with a share link stays plain.
-- **Boards open them.** The web board already opens any row sealed with the workspace key (`openSyncedCard`,
-  `openSyncedItem`) and any sealed blob (`lib/web-blob-open.ts`). The desktop board reads a worker's rows on this Mac's
-  own server (`lib/worker-board-reads.ts`, `lib/worker-board.ts` `workerPage`), which opens them with main's keyring;
-  ⌘F on a worker card (`lib/worker-thread-reads.ts`) reads the rows in batches, opens and matches them with
-  `searchCloudThread`, as weft.zip does for a Mac's, instead of matching in SQL.
+- **Seals its rows like a Mac's outbox.** `lib/worker-sealing-wire.ts` builds `makeSealer(s, newest key, isShared)` per
+  flush (`lib/worker-sealing.ts`); the publisher (`lib/worker-publish.ts`) seals the card, its items and long tool results
+  (`lib/worker-seal-rows.ts`) and hands `Sealer.blob(cardId)` to its blob store through `withBlobSeal`. A page opened in the
+  pane (`lib/worker-pane.ts`) goes up sealed for its card. `worker_put_card` / `worker_put_items` store the sealed jsonb
+  unchanged. A card with a share link stays plain. Session lines hear the rows plain: a line is end to end with the Mac.
+- **Opens.** The worker's attachment reader (`openingReader`) runs a pasted file through `openBlob` before
+  `receiveAttachments` checks the sha, and logs the version it lacks when it can't.
+- **Boards open them.** The web board already opens any sealed row and blob with the workspace key. The desktop board
+  opens a worker's rows on this Mac's own server (`lib/worker-board-open.ts`) with every version main holds
+  (`POST /sync/keyring`, once a minute, asked only when something sealed comes by): cards (`readWorkerBoard`), thread pages
+  (`workerThreadPage`), long tool results (`workerToolOutput`), pages (`workerPage`: the page opened and its sealed assets
+  inlined as `data:` URLs, which the route's CSP allows; 🔒 when it won't open) and pictures (`workerBlobUrls`: a sealed one
+  becomes a `data:` URL, each read once). ⌘F on a worker card (`lib/worker-thread-reads.ts`) reads the rows in batches,
+  opens them and their cut tool results, and matches after opening, as weft.zip does; a 🔒 stand-in matches nothing.
 
 **Threat model.** In scope: weft.zip's server, its database and backups, Weft's operators, a stolen account session, and
-anyone holding the worker's `wwk_` key without its box. With A and B, none of them reads a worker's sealed thread, its
-pages or the files sent to it, plants a workspace key on the worker, or gets a grant for a box they control (the grant
-goes only to the box key main pinned under Touch ID). Out of scope, as for a Mac: the worker box itself (whoever runs
-code there reads its memory, and its cards run with its privileges), and a key the Mac granted before a revoke for
-rows sealed under that version.
+anyone holding the worker's `wwk_` key without its box. None of them reads a granted worker's sealed thread, its pages or
+the files sent to it, plants a workspace key on the worker (no Mac signature), downgrades it to plain by hiding grants (the
+seal floor), or gets a grant for a box they control (main seals only to the box key it pinned under Touch ID, and refuses
+when the row's key changed). They can delete grants or stall the ping: denial of service, which holds the worker's rows.
+Out of scope, as for a Mac: the worker box itself (whoever runs code there reads its memory, and its cards run with its
+privileges), and a key the Mac granted before a revoke for rows sealed under that version.
+
+**Not yet.** Files a Mac or a browser sends a worker's card still go up plain (`withAttachments` in `lib/worker-board.ts`,
+`webBlobSeal`); the worker opens sealed ones already, so turning those on is the follow-up. Pairing a worker doesn't offer
+Seal under its own Touch ID yet. A worker keeps sealing with the newest version it was granted, so if a regrant after a
+rotation fails it seals under the older version until Seal… is pressed again (Devices shows it "in the clear").
 
 ## 3. Signed approvals
 
@@ -506,8 +525,9 @@ pending request and its name from the registry, so a worker card's Allow from th
 
 ## Gaps
 
-- A Weft Worker seals nothing yet: it holds no workspace key, so its rows and pages stay plain even with sealing on, and a
-  file a Mac or a browser sends a worker's card goes up plain ([Sealing on a Weft Worker](#sealing-on-a-weft-worker-design)).
+- A Weft Worker seals only once you press Seal… for it (Settings → Devices); until then its rows and pages stay plain. A
+  file a Mac or a browser sends a worker's card still goes up plain, though the worker opens sealed ones
+  ([Sealing on a Weft Worker](#sealing-on-a-weft-worker), "Not yet").
 - Sealed blobs: the phone app (weft-mobile) opens them only once it adopts `openBlob`; until then a phone draws a sealed
   picture broken. A sealed file is write-once under its sha (see [Sealed blobs](#sealed-blobs)), and a sealed page's
   `#anchor` is lost in `srcdoc`.
