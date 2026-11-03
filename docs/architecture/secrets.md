@@ -383,6 +383,16 @@ restart, with no standing grant on a worker (`electron/worker-dev-env.cjs`), sea
 here. Lending the Mac's gog and gh sign-ins to a worker is not built: it needs a process boundary on the worker. The design, guarantees and limits are in
 [project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built).
 
+A worker card's **Goose provider key** (built 2026-11-03, `supabase/migrations/20261103160000_goose_key_ask.sql`, not
+applied) isn't a vault value: it's the key in this Mac's Keychain (`electron/goose-token.cjs`). Each Goose turn on a
+paired worker whose provider takes one sends a signed `goose_key` ask (provider, endpoint, card, nonce) through the same
+`worker_mac_ask` path as a dev server's env. Main (`electron/worker-goose-key.cjs`) refuses unless the provider and
+endpoint are exactly what this Mac last set for that worker with Touch ID (`electron/worker-goose-set.cjs`, recorded when
+`electron/widen-sign.cjs` signs the `settings.put`), asks Touch ID naming the worker, card, provider and endpoint, and
+answers with a `secret_use` marked `use: "goose"`, sealed to the pinned box key for that card, ask, provider and endpoint
+and signed by this Mac. The worker puts it in that one Goose process's env and redacts it from the turn
+([weft-worker.md](weft-worker.md#goose-on-a-worker)). It is never kept on a worker.
+
 ### Kept on a worker
 
 Built 2026-11-03 (H8's last step), with `supabase/migrations/20261103130000_worker_vault_keep.sql` (not applied). Off unless

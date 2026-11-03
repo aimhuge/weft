@@ -755,16 +755,44 @@ settings, signed (built 2026-11-03):
 - **Saved.** `applyGooseSettings` (`lib/host-goose-settings.ts`) checks both fields first: a provider in the catalog or
   `""`, an endpoint that's `""` or an http(s) URL of at most 500 characters with no user or password in it. Then it
   saves. `settings.get` reads them back with the host settings.
-- **The endpoint reaches Goose.** A worker has no Electron main to grant a key, so Goose starts as the plain binary;
-  `gooseEndpointEnv` (`lib/goose-provider.ts`) still sets the endpoint's own variable (`ANTHROPIC_HOST`, `LITELLM_HOST`,
+- **The endpoint reaches Goose.** A worker has no Electron main to grant a key; without one from the Mac (below) Goose
+  starts as the plain binary, and `gooseEndpointEnv` (`lib/goose-provider.ts`) still sets the endpoint's own variable (`ANTHROPIC_HOST`, `LITELLM_HOST`,
   `AZURE_OPENAI_ENDPOINT`, `GOOSE_PROVIDER__HOST`), as it now does on a Mac where Goose holds its own key.
-- **The key doesn't travel, and isn't wired yet.** There's no path for a Goose provider's key to a worker. The vault on
-  a worker (H8's per-use seal, `lib/worker-secret-run.ts`) seals project-vault names for one `mcp__secrets__run` command,
-  not the Keychain key Electron main keeps for Goose, and a key in `worker.env` doesn't reach Goose either: `cliEnv`
-  drops every secret-named variable from a CLI's env, `GOOSE_DISABLE_KEYRING` is set and `GOOSE_PATH_ROOT` points Goose's
-  own config at the card's state folder. So today a Goose card on a worker runs only against a provider that needs no key
-  (Ollama, a keyless LiteLLM or custom endpoint). Missing: a per-turn Goose key grant from the Mac, sealed to the worker's
-  seal key like `secret_use`, after Touch ID.
+- **The key comes from the Mac, per turn, after Touch ID** (built 2026-11-03, with
+  `supabase/migrations/20261103160000_goose_key_ask.sql`, not applied). The key stays in the paired Mac's Keychain
+  (`electron/goose-token.cjs`); a worker's `worker.env` still can't reach Goose (`cliEnv` drops secret-named variables,
+  `GOOSE_DISABLE_KEYRING` is set). Each Goose turn whose provider takes a key asks for it:
+
+  ```
+  worker gooseLaunch (lib/goose-launch.ts) on a worker ─ gooseKeyOnWorker (lib/worker-goose-key.ts): openAsk(nonce,
+         goose: true) ─ goose_key device call through worker_mac_ask, signed by sign-key.json over [card, box key,
+         nonce, expiry, provider, endpoint] (lib/worker-goose-key-wire.ts)
+  Mac    lib/device-calls.ts → POST /secrets/worker-goose-key (by call id only) → electron/worker-goose-key.cjs:
+         re-read the row with main's session ─ paired worker only (pinned sign key) ─ signature ─ a card its owner
+         started (cardOrigin) ─ nonce spent once ─ provider AND endpoint equal what this Mac last signed for that
+         worker (electron/worker-goose-set.cjs, recorded by electron/widen-sign.cjs after the settings.put Touch ID)
+         ─ the Keychain key ─ Touch ID naming the worker, card, provider and endpoint ─ seal to the PINNED box key for
+         gooseKeyPurpose(card, nonce, [provider, endpoint]) ─ Mac-signed secret_use, use: "goose"
+  worker deliverSecretUse (lib/worker-secret-asks.ts): Mac signature ─ the open ask ─ opens under the goose purpose
+         only ─ same card, nonce, provider and endpoint, the one key name ─ gooseEnvFor (lib/goose-provider.ts) ─
+         that one Goose process's env; remember() for redaction; the next turn asks again
+  ```
+
+  - **Where the key may go.** Main answers only for the provider and endpoint it last set on that worker under Touch ID,
+    so a worker (or anyone holding its `wwk_` key) can't point the key at a new host: changing the endpoint means a new
+    signed `settings.put`, whose Touch ID names it. A Mac that never set the pair, or whose record won't open, refuses.
+  - **Only that turn's process.** The key goes into the spawned `goose run`'s env (and so to the tools and subagents it
+    runs), never the daemon's own env, an argument or a file. Goose's rows (its replies, progress steps, result and a
+    failure's error) go through `redactStored` in `lib/goose-runner.ts`, so the key shows as `‹NAME›` in the thread;
+    `forgetOnTurnEnd` drops it from memory when the card leaves Running.
+  - **What a refusal does.** Denied, no Mac, unpaired or no key saved fails the turn with why, except LiteLLM and a
+    custom endpoint, which may run keyless and start plain. Ollama never asks.
+  - **Not kept on the worker.** "Keep on this worker" (`vault_keep`) is per project, development or preview; the opened
+    plaintext of a Goose key says production, which keeping refuses on both sides, and a kept key would save only the
+    trip, not the Touch ID. So every Goose turn on a worker asks Touch ID once.
+  - **The threat that stays.** Any code that turn runs on the worker (its shell tool, a script, a dependency) can read the
+    key from its env, as the Touch ID prompt says; the worker's other cards run as the same OS user and could read a
+    running Goose's env. The key is as safe as that box for as long as the turn runs.
 
 ### Cloning onto a worker
 
