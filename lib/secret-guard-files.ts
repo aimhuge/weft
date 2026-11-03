@@ -139,9 +139,12 @@ export function isSecretFile(file: string, dataDir = DATA_DIR, dotGlob = false):
 // the data mini apps (`apps/<slug>/index.html`, `weft-app.json`), which name vault secrets by name only;
 // sealing it stopped threads building or editing one such as Growth (2026-10-29). `scout/` is the refactor
 // scout's cache (lib/scout.ts): findings about code, which /weft:done reads and writes (2026-10-31).
+// `worktrees/` holds Isolated cards' checkouts (lib/worktrees.ts) and the pool's repos.json and ready markers: sealed, an
+// Isolated card couldn't read its own cwd, and a deny has no grant button (2026-11-02). Secret names (`.env`) inside a
+// checkout stay sealed by name, and a link out to the vault by its real place; the folder gate fences other cards' ones.
 // Everything else in the data dir — threads/, vault/, apps.json, app-grants.json, the control token — stays
 // sealed; attachments/ opens one file at a time, to the card whose user pasted it (lib/secret-guard-pasted.ts).
-export const DATA_OPEN = /^(show|apps|scout)(\/.*)?$/i;
+export const DATA_OPEN = /^(show|apps|scout|worktrees)(\/.*)?$/i;
 
 // Whether a path inside the data dir (relative to it) is in an open folder: `..` is folded first, so
 // `apps/../vault` is `vault`, and a path that climbs out of the data dir is never open.

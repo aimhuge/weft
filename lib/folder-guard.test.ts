@@ -10,7 +10,7 @@ vi.mock("./store", () => ({ DATA_DIR: "/nonexistent/.weft", getCard: (id: string
 vi.mock("./settings", () => ({ allowedFolders: () => h.allowed }));
 vi.mock("./project-folders", () => ({ projectFolders: (project: string) => h.folders.get(project) ?? [] }));
 
-const { folderAsk, folderGuard, folderGuardMatcher, grantedRead, outsideFolder, pathsOf, tilde } = await import("./folder-guard");
+const { folderAsk, folderGuard, folderGuardMatcher, grantedRead, outsideFolder, pathsOf, showPageCall, tilde } = await import("./folder-guard");
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-folder-guard-")));
 const project = path.join(root, "project");
@@ -227,5 +227,32 @@ describe("grantedRead", () => {
     expect(grantedRead("Read", { file_path: "/Users/zzz-guard-elsewhere/a.ts" }, project, "c1")).toBe(false);
     expect(grantedRead("Grep", { pattern: "x" }, project, "c1")).toBe(false);
     expect(grantedRead("Read", { file_path: path.join(dir, "a.ts") }, project, undefined)).toBe(false);
+  });
+});
+
+// The system prompt tells every thread to write its pane pages in SHOW_DIR, so no permission mode asks about it (2026-10-31).
+describe("showPageCall", () => {
+  const show = path.join(root, "data", "show");
+  fs.mkdirSync(show, { recursive: true });
+
+  it("is true for a file tool writing, editing or reading a page in the show folder", () => {
+    expect(showPageCall("Write", { file_path: path.join(show, "ling-quality.html") }, project, [show])).toBe(true);
+    expect(showPageCall("Edit", { file_path: path.join(show, "plan", "index.html") }, project, [show])).toBe(true);
+    expect(showPageCall("Read", { file_path: show }, project, [show])).toBe(true);
+  });
+
+  it("is false for Bash, a path outside it, one climbing out of it, or no path", () => {
+    expect(showPageCall("Bash", { command: `cp a.png ${show}/a.png` }, project, [show])).toBe(false);
+    expect(showPageCall("Write", { file_path: path.join(project, "a.html") }, project, [show])).toBe(false);
+    expect(showPageCall("Write", { file_path: path.join(show, "..", "vault.json") }, project, [show])).toBe(false);
+    expect(showPageCall("Write", { file_path: path.join(root, "data", "shows", "a.html") }, project, [show])).toBe(false);
+    expect(showPageCall("Write", {}, project, [show])).toBe(false);
+  });
+
+  it("defaults to Weft's own show folder and the temp dirs", () => {
+    expect(showPageCall("Write", { file_path: "/nonexistent/.weft/show/a.html" }, project)).toBe(true);
+    expect(showPageCall("Edit", { file_path: "/tmp/weft-clone/scripts/a.ts" }, project)).toBe(true);
+    expect(showPageCall("Write", { file_path: path.join(os.tmpdir(), "a.txt") }, project)).toBe(true);
+    expect(showPageCall("Write", { file_path: "/var/a.txt" }, project)).toBe(false);
   });
 });

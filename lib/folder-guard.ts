@@ -6,7 +6,7 @@ import { editedPath } from "./overlap";
 import { projectFolders } from "./project-folders";
 import { proseOf } from "./shell-text";
 import { allowedFolders } from "./settings";
-import { SHOW_DIR } from "./show-dir";
+import { scratchDirs } from "./show-dir";
 import { DATA_DIR, getCard } from "./store";
 import { worktreesRoot } from "./worktrees";
 import type { PromptReason } from "./types";
@@ -182,13 +182,14 @@ export function grantedRead(toolName: string, input: Record<string, unknown>, cw
   return paths.length > 0 && paths.every((p) => granted.some((g) => inside(p, g)) || inside(p, realish(cwd)));
 }
 
-// A file tool call (not Bash) whose every path lies in SHOW_DIR: a thread's own pane page, which the system prompt
-// tells it to write, so neither the CLI's working-directory gate nor the permission mode asks about it (2026-10-31).
-export function showPageCall(toolName: string, input: Record<string, unknown>, cwd: string, showDir = SHOW_DIR): boolean {
+// A file tool call (not Bash) whose every path lies in a scratch folder: a thread's own pane page in SHOW_DIR, which
+// the system prompt tells it to write (2026-10-31), or a temp dir (2026-11-02), so neither the CLI's working-directory
+// gate nor the permission mode asks about it. Bash there is left to the CLI, which trusts it like the project.
+export function showPageCall(toolName: string, input: Record<string, unknown>, cwd: string, dirs = scratchDirs()): boolean {
   if (toolName === "Bash") return false;
-  const show = realish(showDir);
+  const free = dirs.map(realish);
   const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, os.homedir())));
-  return paths.length > 0 && paths.every((p) => inside(p, show));
+  return paths.length > 0 && paths.every((p) => free.some((d) => inside(p, d)));
 }
 
 // Whether a call is a file tool whose target really is inside dir: a link out of it counts as where it lands, and

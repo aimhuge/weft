@@ -301,7 +301,7 @@ A deny beats an ask, so the prompt never shows and a grant buys nothing here.
 | the home itself, listed: `ls ~/.weft-worker`, `ls -la`, the LS tool (not `-R`, not a glob of it) | open: names only, so a thread can find the folders below (2026-11-02) |
 | `worker.json`, `worker.env`, `seal-key.json`, `github-credentials`, `kept-vault.json` | refused: the worker's key, its Claude token, its private seal key, its GitHub token, the values a Mac kept here |
 | `worker.log`, `update-bad`, `update-trial`, `rollback.sh`, anything new | refused: the log is the daemon's raw stdout and stderr with no redaction pass, so whatever any process printed (an SDK error echoing a request, a CLI's debug output) lands there; `update-bad` keeps the first line of git and pnpm errors, which can carry a credentialed remote URL; `rollback.sh` is a copy of `install/worker-rollback.sh`, readable in the clone |
-| `data/`, as on a Mac | refused, save `data/show` and `data/apps` |
+| `data/`, as on a Mac | refused, save `data/show`, `data/apps`, `data/scout` and `data/worktrees` (Isolated cards' checkouts, open since 2026-11-02; their `.env` files and links out stay sealed) |
 | `work/` (or `WEFT_WORKER_ROOT`) | open: it's where cards run |
 | `weft/`, the clone of Weft | read and run: a public repo, and `/weft:done` runs `commit.sh` from the plugin inside it. Never changed by a thread: it's the code the daemon and `weft-worker` run, so an edit could turn off the re-pair check (`lib/worker-clone-guard.ts`, 2026-11-02) |
 
@@ -457,8 +457,29 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   reply to an offline worker queues, and the thread says so. There's no Backlog in a worker project.
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
-- **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  a file pasted into a new thread for a worker goes up plain (a reply's goes sealed once the card is).
+- **Pasted files travel** (2026-11-02, `lib/attachment-transfer.ts`). A screenshot or PDF pasted into a worker card's
+  reply, or into a new thread's prompt, is saved in this Mac's `~/.weft/attachments` as always. `sendWorkerAction` and
+  `startWorkerThread` then upload each file the text names from that folder to weft-blobs as you (`<org>/<sha>`, the
+  same bucket and path the Mac's cloud sync uses) and put `attachments: [{ name, sha, mime }]` on the command. The text
+  itself is left as it is. Only images (png, jpg, gif, webp) and PDFs up to 25 MB go, 20 at most per message. Anything
+  else stops the send with a message the composer shows, so nothing reaches the worker as a path it can't open.
+  ```
+  Mac server (your session)      weft.zip /api/worker-blob {sha, read: true}        worker daemon (wwk_ key)
+   upload <org>/<sha> ─────────▶ key → worker row; an open (pending/claimed) ◀───── receive(text, payload)
+   cloud_commands.payload          command to worker:<id> lists that sha?           fetch the signed URL (2 min)
+     .attachments                  ─▶ signed download URL, else 403                 ≤ 25 MB, sha256 matches, type
+                                                                                    saved in DATA_DIR/attachments/<name>
+                                                                                    text's paths → that copy → the turn
+  ```
+  The daemon does this before `sendUserMessage` (a `reply`) or before the card starts (`run`, `new_card`). The thread's
+  user message then names the worker's own copy, so `lib/secret-guard-pasted.ts` opens it as it does any local paste.
+  A file that can't be brought over fails the whole command with the reason, and no turn starts. The read is scoped
+  so a worker's key can't read the workspace's other blobs, even by a sha it guessed. The worker's `mayUpload` now
+  also takes its `attachments` folder, so the pasted picture shows on weft.zip too (same bytes, same sha, so nothing
+  uploads again). The blobs are in the clear, as a worker's pages are. A thread that still names a path that isn't
+  on its machine gets "pasted on another machine and didn't reach this one" from the guard (`pastedElsewhere`), not
+  the secret-values refusal. The web board's composer can't attach files yet; when it can, it calls the same
+  `encodeAttachments`.
 - **Sealed threads:** Settings → Devices → the worker → Seal… grants a paired worker the workspace key, sealed to the box key
   the Mac pinned and signed by the Mac's approval key after Touch ID (`electron/worker-key-grants.cjs`). The worker checks it
   against the Mac in `mac-keys.json`, holds the key in memory only (`lib/worker-keyring.ts`, read at start, on a `key_grant`
@@ -467,6 +488,8 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   Add a worker offers Seal… right after pairing while your Mac seals. Once it has sealed, `seal-floor.json` in its home makes a worker with no key hold
   its rows back rather than publish plain. Re-pin and Revoke drop its grants and rotate the key. A token-enrolled worker
   trusts no Mac and stays plain. See [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker).
+- **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
+  a file pasted into a new thread for a worker goes up plain (a reply's goes sealed once the card is).
 
 ### Pages from a worker
 
@@ -516,8 +539,14 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
     which runs first in every mode and follows links ([What's sealed on a worker](#whats-sealed-on-a-worker)). So
     `show/../../worker.json`, a link in `show` to a sealed file, `data/board.json` and `data/showcase` are all refused.
     `lib/secret-guard-worker.test.ts` holds that line.
-  - **Ask me still asks.** A card in `default` mode prompts for a page, because working directories don't change that
-    mode. It's the mode you picked, so it stays that way; a card run in it on a worker waits for an answer on the board.
+  - **Ask me doesn't ask about a page either.** Working directories don't change `default` mode, so the shared ask
+    (`lib/guards/ask.ts`) lets a file tool call whose every path is in `SHOW_DIR` through (`showPageCall` in
+    `lib/folder-guard.ts`): writing its page is what the system prompt tells every thread to do, every turn. Bash in
+    the folder, and everything else, still asks in that mode.
+  - **The temp dirs ride along too** (2026-11-02). Threads clone and build scratch copies in `/tmp` (`/tmp/weft-wp3`),
+    and every command there asked, dozens a turn. `scratchDirs` adds `/tmp` and `os.tmpdir()` (`/var/folders/…/T` on
+    macOS), each as written and by its real path, to `additionalDirectories`, and `showPageCall` lets file tools there
+    through in any mode. Bash in them is trusted like the project: read-only commands go, others follow the card's mode.
 - **Only Claude Code and puku-cli for now.** Their MCP servers run in the daemon's process. Codex and Goose reach Weft's
   tools over the local server (`lib/mcp-bridge.ts`), which a worker doesn't run, so they have no `open_url` yet.
 - **What may go up** (`workerMayUpload`, `lib/worker-blobs.ts`). A Mac's rule is "under home and not a known secret". That

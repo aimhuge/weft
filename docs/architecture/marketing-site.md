@@ -53,6 +53,13 @@ catalog**, not typed:
   Startups, Open source, Education and Regional pricing, two by two, each marked **Coming soon** until weft.zip can
   grant or sell it. Its numbers come from the catalog too (`STARTUP_TEAM`, `freeTierCapLabel()`, `REGIONAL_PRO_CENTS`); drop the Coming soon chip per card as each plan lands
   ([billing.md](billing.md#startups-open-source-education-and-regional-pricing)).
+- Under the access row, `components/home/CloudWorkers.tsx` (`#wz-cloud`, `.wz-cloud*` in `components/home/cloud.css`)
+  asks for **Weft Cloud Workers**: a Weft Worker we host ([weft-worker.md](weft-worker.md)), so cards run with the laptop
+  shut and no server of your own. It isn't built or priced yet, so the card has no price: a plain form asks *what would
+  you use a cloud worker for?* and an email, and posts to `/api/cloud-workers/request`. `lib/cloud-worker-request.ts`
+  checks it and sends it the feedback dot's way (`collectFeedback` in `lib/feedback-send.ts`: the `feedback` table and
+  the team's Slack, titled "☁️ Cloud worker request", rate-limited per address), then 303s back to the same-origin page
+  at `#wz-cloudSent` or `#wz-cloudFailed`, where CSS `:target` shows the matching line. No client JS.
 - Each card ends in its way in (`.wz-planCta`, clay on the featured card, `data-track="plan_clicked"`): Free's is the
   hero's download link, which `Home.tsx` passes in as `download`; Pro and Team link to `/billing?plan=pro|team`
   (`lib/billing/plan-link.ts`), which signs the visitor in, lands on `/<slug>/billing` and opens the upgrade dialog, whose

@@ -64,6 +64,15 @@ describe("isSecretFile", () => {
     expect(isSecretFile("/Users/me/.weft/scout/../vault/acme.json", DATA)).toBe(true);
   });
 
+  // Isolated cards work in worktrees under the data dir: sealed, they couldn't read their own cwd (2026-11-02).
+  it("lets a thread use an Isolated card's worktree, save its secret files", () => {
+    expect(isSecretFile("/Users/me/.weft/worktrees/weft/pool-ab12/lib/a.ts", DATA)).toBe(false);
+    expect(isSecretFile("~/.weft/worktrees/weft/pool-ab12", DATA)).toBe(false);
+    expect(isSecretFile("/Users/me/.weft/worktrees/weft/pool-ab12/.env", DATA)).toBe(true);
+    expect(isSecretFile("/Users/me/.weft/worktrees/../vault/acme.json", DATA)).toBe(true);
+    expect(isSecretFile("/Users/me/.weft/worktreesx/a.ts", DATA)).toBe(true);
+  });
+
   // Attachments open one file at a time to the card that pasted them (lib/secret-guard-pasted.ts), never as a folder.
   it("keeps the attachments folder sealed by path", () => {
     expect(isSecretFile("/Users/me/.weft/attachments", DATA)).toBe(true);
