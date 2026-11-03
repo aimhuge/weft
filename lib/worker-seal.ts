@@ -2,11 +2,12 @@
 // X25519 private key on its box and publishes the public half on its cloud_workers row. The desktop seals with a
 // fresh ephemeral key: X25519 to a shared secret, HKDF-SHA256 to an AES-256-GCM key, bound to both public keys and
 // to what the secret is for. Supabase carries only the sealed bytes, which only that worker can open.
+// @weft/client seals the same bytes without node (packages/weft-client/src/seal.ts), so weft.zip and the phone seal a
+// session line's offer themselves; lib/worker-seal-client.test.ts opens theirs here.
 import crypto from "node:crypto";
 import type { Sealed } from "@weft/client";
 
-// The sealed shape lives in @weft/client, for the commands that carry one.
-export type { Sealed };
+export { sealedOf, type Sealed } from "@weft/client";
 
 export interface SealKeys {
   publicKey: string;
@@ -44,14 +45,6 @@ export function open(keys: SealKeys, sealed: Sealed, purpose: string): string {
   const decipher = crypto.createDecipheriv("aes-256-gcm", key, Buffer.from(sealed.iv, "base64"));
   decipher.setAuthTag(Buffer.from(sealed.tag, "base64"));
   return Buffer.concat([decipher.update(Buffer.from(sealed.ct, "base64")), decipher.final()]).toString("utf8");
-}
-
-// A sealed value as it comes off the network, or null when it isn't one.
-export function sealedOf(value: unknown): Sealed | null {
-  if (!value || typeof value !== "object") return null;
-  const s = value as Record<string, unknown>;
-  const ok = s.v === 1 && ["epk", "iv", "ct", "tag"].every((k) => typeof s[k] === "string" && /^[A-Za-z0-9+/=]+$/.test(s[k]));
-  return ok ? (s as unknown as Sealed) : null;
 }
 
 // What the login command's sealed token is for: a token sealed for anything else won't open as one.

@@ -99,7 +99,8 @@ function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source, workerId }: { 
 // source: the worker's name, for the host chip and the live screen's "streaming from". mobileApp: the card is a React
 // Native or Expo app, so the host chip offers Start simulator while the pane shows something else. local: Local
 // Simulator mode, on the desktop board only (components/use-local-simulator.ts); the host chip's menu carries it.
-// workerId: the desktop board's worker, whose session line can carry the live screen as a track (lib/use-line-screen.ts).
+// workerId: the worker whose session line this board holds (the desktop's, or weft.zip's own: lib/web-lines.ts), which
+// can carry the live screen as a track (lib/use-line-screen.ts).
 export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions, source, mobileApp, workerId, local }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: ScreenInputFn; actions?: ReactNode; source?: string; mobileApp?: boolean; workerId?: string; local?: LocalSimulator }) {
   const screen = pane?.kind === "screen" ? { device: pane.device, devices: pane.devices, label: pane.label } : undefined;
   return (
