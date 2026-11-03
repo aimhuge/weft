@@ -96,3 +96,18 @@ describe("widenLabel", () => {
     expect(widenLabel({})).toBe("change nothing");
   });
 });
+
+describe("Goose's provider on a worker", () => {
+  it("is the widening of a settings.put that names it, and nothing else of the patch", () => {
+    expect(widenChangeOf({ verb: "settings.put", args: { id: "", patch: { maxThreads: 2, gooseProviderId: "openai" } } })).toEqual({ goose: { gooseProviderId: "openai" } });
+    expect(widenChangeOf({ verb: "settings.put", args: { id: "", patch: { gooseBaseUrl: "https://x" } } })).toEqual({ goose: { gooseBaseUrl: "https://x" } });
+    expect(widenChangeOf({ verb: "settings.put", args: { id: "", patch: { maxThreads: 2 } } })).toBeNull();
+    expect(widenChangeOf({ verb: "settings.get", args: { id: "" } })).toBeNull();
+  });
+
+  it("says it in words, a cleared one as the default", () => {
+    expect(widenLabel({ goose: { gooseProviderId: "litellm", gooseBaseUrl: "http://proxy:4000" } })).toBe("point Goose at the provider litellm and the endpoint http://proxy:4000");
+    expect(widenLabel({ goose: { gooseProviderId: "" } })).toBe("point Goose at the provider Goose's own");
+    expect(widenLabel({ goose: { gooseBaseUrl: "" } })).toBe("point Goose at the endpoint none");
+  });
+});

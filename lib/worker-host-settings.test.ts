@@ -46,3 +46,28 @@ describe("workerSettings", () => {
     await expect(workerSettings("w1", undefined, FAST)).rejects.toThrow("HTTP 502");
   });
 });
+
+describe("workerSettings with Goose's provider", () => {
+  afterEach(() => {
+    delete (window as unknown as { weft?: unknown }).weft;
+  });
+
+  it("signs a patch that points Goose elsewhere, after Touch ID, over exactly that patch", async () => {
+    const auth = { kind: "ed25519", device: "mac", issuedAt: 1, nonce: "n".repeat(16), sig: "c2ln" };
+    const widen = vi.fn(() => Promise.resolve(auth));
+    (window as unknown as { weft: unknown }).weft = { approval: { widen } };
+    const fetchMock = serve({ status: "done", error: null, result: { ok: true, cardId: "", settings: SETTINGS } });
+    await workerSettings("w1", { gooseProviderId: "openai", maxThreads: 2 }, FAST);
+    expect(widen).toHaveBeenCalledWith({ host: "w1", card: "", verb: "settings.put", change: { goose: { gooseProviderId: "openai" } }, args: { patch: { gooseProviderId: "openai", maxThreads: 2 } } });
+    const sent = JSON.parse(((fetchMock.mock.calls[0] as unknown[])[1] as RequestInit).body as string) as unknown;
+    expect(sent).toEqual({ workerId: "w1", verb: "settings.put", args: { patch: { gooseProviderId: "openai", maxThreads: 2 }, widen: auth } });
+  });
+
+  it("sends nothing without the desktop's signer, or when Touch ID is refused", async () => {
+    const fetchMock = serve({ status: "done", error: null, result: { ok: true, cardId: "", settings: SETTINGS } });
+    await expect(workerSettings("w1", { gooseBaseUrl: "https://x" }, FAST)).rejects.toThrow(/Touch ID/);
+    (window as unknown as { weft: unknown }).weft = { approval: { widen: () => Promise.resolve(null) } };
+    await expect(workerSettings("w1", { gooseBaseUrl: "https://x" }, FAST)).rejects.toThrow("Not approved");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

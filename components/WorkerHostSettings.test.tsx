@@ -79,4 +79,31 @@ describe("WorkerHostSettings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save on worker" }));
     await waitFor(() => expect(screen.getByText("maxThreads must be a whole number.")).toBeTruthy());
   });
+
+  it("shows Goose's provider only for a worker that reports it, and saves it as part of the patch", async () => {
+    (window as unknown as { weft: unknown }).weft = { approval: { widen: () => Promise.resolve(null) } };
+    remote.settings.set("w1", { ...base, gooseProviderId: "", gooseBaseUrl: "" });
+    render(<WorkerHostSettings />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Goose provider" })).toBeTruthy());
+    expect(screen.queryByRole("textbox", { name: "Goose endpoint" })).toBeNull();
+    expect(screen.getByText(/asks Touch ID/)).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Goose provider" }), { target: { value: "litellm" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Goose endpoint" }), { target: { value: "http://proxy:4000" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save on worker" }));
+    await waitFor(() => expect(workerSettings).toHaveBeenLastCalledWith("w1", { gooseProviderId: "litellm", gooseBaseUrl: "http://proxy:4000" }));
+    delete (window as unknown as { weft?: unknown }).weft;
+  });
+
+  it("keeps Goose's fields shut without the desktop's signer, and hides them for an older worker", async () => {
+    remote.settings.set("w1", { ...base, gooseProviderId: "openai", gooseBaseUrl: "https://gw" });
+    render(<WorkerHostSettings />);
+    await waitFor(() => expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Goose provider" }).disabled).toBe(true));
+    expect(screen.getByRole<HTMLInputElement>("textbox", { name: "Goose endpoint" }).value).toBe("https://gw");
+    expect(screen.getByText(/needs Touch ID in the Weft desktop app/)).toBeTruthy();
+    cleanup();
+    remote.settings.set("w1", { ...base });
+    render(<WorkerHostSettings />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Threads running at once" })).toBeTruthy());
+    expect(screen.queryByRole("combobox", { name: "Goose provider" })).toBeNull();
+  });
 });
