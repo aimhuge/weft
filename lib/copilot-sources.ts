@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { basename, join } from "node:path";
-import { readActivity } from "./activity";
+import { readActivity, withoutHandedOff } from "./activity";
 import { shell } from "./browser-tools";
 import { readPile, repoRoot } from "./commit-pile";
 import { firstLine } from "./format";
@@ -10,7 +10,7 @@ import { measureQuality } from "./quality";
 import { weakest } from "./quality-view";
 import { readScout } from "./scout";
 import { mapBacklog } from "./sprint-plan";
-import { DATA_DIR, getThread } from "./store";
+import { DATA_DIR, getThread, listCards } from "./store";
 import { COPILOT_ID, type Card } from "./types";
 import { listWebhooks } from "./webhooks";
 
@@ -98,7 +98,7 @@ function projectQuality(root: string): string[] {
 }
 
 export const streak: Source = () => {
-  const days = tallyDays(readActivity(), (cwd) => cwd);
+  const days = tallyDays(withoutHandedOff(readActivity(), listCards()), (cwd) => cwd);
   const now = Date.now();
   const s = streakOf(activeDays(days), dayKey(now));
   const sum = (n: number) => {

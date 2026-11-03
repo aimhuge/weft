@@ -22,7 +22,8 @@ const log: ActivityEvent[] = [];
 const board: { cards: Card[] } = { cards: [] };
 const gitName = { value: "Ada Lovelace" as string | Error };
 
-vi.mock("./activity", () => ({
+vi.mock("./activity", async (orig) => ({
+  withoutHandedOff: (await orig<typeof import("./activity")>()).withoutHandedOff,
   trackActivity: vi.fn(),
   readActivity: () => log,
   record: vi.fn((e: Omit<ActivityEvent, "id">) => log.push({ ...e, id: `r${log.length}` })),
@@ -127,6 +128,21 @@ describe("gameState", () => {
     expect(both.xp - alone.xp).toBe(2 + 10);
     expect(both.today).toEqual({ cards: 1, turns: 1, done: 1, xp: 1 + 2 + 10 });
     expect(both.totals.shipped).toBe(alone.totals.shipped + 1);
+  });
+
+  it("counts a card handed to a worker once, as the worker's card", () => {
+    const alone = gameState({ cwd: A, now: NOW });
+    const handedOff = { workerId: "w", commandId: "cmd" };
+    board.cards.push({ id: "h1", title: "Sent", prompt: "", cwd: A, backend: "claude", permissionMode: "default", column: "review", createdAt: NOW, updatedAt: NOW, handedOff });
+    log.push({ id: "created:h1", kind: "created", at: NOW, card: "h1", cwd: A });
+    try {
+      const game = gameState({ cwd: A, now: NOW });
+      expect(game.totals.started).toBe(alone.totals.started);
+      expect(game.xp).toBe(alone.xp);
+    } finally {
+      board.cards.pop();
+      log.pop();
+    }
   });
 
   it("measures projects once per TTL and logs one quality snapshot a day", () => {

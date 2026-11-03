@@ -74,7 +74,8 @@ One worker per box, no worker picker on the board. The first box is a Mac mini (
   each use). In a worker project, `POST /api/cards` with `start` calls `lib/worker-handoff.ts` instead of
   `startCard`: it picks one of your workers (online, then busy, then offline), sends the card's first message as a
   `run` under the project's folder name and its GitHub remote as `https://github.com/<slug>.git`, and leaves the local
-  card in Review with the prompt and a note naming the worker. A failed send deletes the card rather than run it
+  card in Review with the prompt and a note naming the worker, marked `handedOff: { workerId, commandId }` so the game
+  counts the run once, as the worker's card (gamification.md#work-on-a-worker). A failed send deletes the card rather than run it
   locally. Switching on refuses when you have no worker. The run and its replies live on the worker's card, which
   [the desktop board shows](#worker-projects-on-the-desktop-board) under the worker's project.
 

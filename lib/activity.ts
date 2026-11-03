@@ -28,7 +28,7 @@ const log = () => globalSingleton<Log>("__weftActivity", () => ({ events: null, 
 export function backfillEvents(cards: Card[]): ActivityEvent[] {
   const out: ActivityEvent[] = [];
   for (const card of cards) {
-    if (card.role === "copilot") continue;
+    if (card.role === "copilot" || card.handedOff) continue;
     const base = { card: card.id, cwd: card.cwd };
     out.push({ ...base, id: `created:${card.id}`, at: card.createdAt, kind: "created", title: card.title });
     const last = card.lastActivity ?? card.updatedAt;
@@ -40,6 +40,13 @@ export function backfillEvents(cards: Card[]): ActivityEvent[] {
     }
   }
   return out.sort((a, b) => a.at - b.at);
+}
+
+// The log less what cards handed to a worker logged before they were marked (their "created", the moment they were
+// made): the worker's own card counts that run (lib/worker-activity.ts), so it isn't made twice.
+export function withoutHandedOff(events: ActivityEvent[], cards: Card[]): ActivityEvent[] {
+  const handed = new Set(cards.flatMap((c) => (c.handedOff ? [c.id] : [])));
+  return handed.size ? events.filter((e) => !e.card || !handed.has(e.card)) : events;
 }
 
 function parse(text: string): ActivityEvent[] {
@@ -98,6 +105,7 @@ export function recordLimit(limit: "five_hour" | "seven_day", at: number, card?:
 
 // What one card change means for the log.
 export function changeEvents(prev: { column: Column; turns: number } | undefined, card: Card, running: number, now: number): ActivityEvent[] {
+  if (card.handedOff) return [];
   if (!prev) return backfillEvents([card]);
   const base = { card: card.id, cwd: card.cwd, at: now };
   const out: ActivityEvent[] = [];

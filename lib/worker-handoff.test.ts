@@ -63,7 +63,7 @@ describe("handOffToWorker", () => {
     expect(sendRun).toHaveBeenCalledWith({ workerId: "w1", folder: "app", prompt: "fix it!", repo: "https://github.com/me/app.git" }, client);
     expect(appendThread).toHaveBeenCalledWith("c1", expect.objectContaining({ kind: "user", text: "fix it!" }));
     expect(appendThread).toHaveBeenCalledWith("c1", expect.objectContaining({ kind: "assistant", text: expect.stringContaining("**m1mini**") as unknown }));
-    expect(updateCard).toHaveBeenCalledWith("c1", { column: "review" });
+    expect(updateCard).toHaveBeenCalledWith("c1", { column: "review", handedOff: { workerId: "w1", commandId: "cmd-1" } });
   });
 
   it("sends no git URL for a project without a GitHub remote", async () => {
