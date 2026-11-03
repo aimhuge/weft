@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
+import { HEADS_UNREAD } from "./passkey-head";
 import { workerSigning, workerWidenFor } from "./worker-signing";
 
 describe("workerWidenFor", () => {
@@ -17,6 +18,15 @@ describe("workerWidenFor", () => {
     expect(fs.existsSync(path.join(home, "widen-nonces.json"))).toBe(true);
     expect((await w.signers.verify({ device: "d", message: "m", sig: "s" })).ok).toBe(false);
     expect(workerWidenFor({ home, workerId: "w1", root: "/w", listFolders: () => [], repoPath: () => "", nameFolder }).root).toBe("/w");
+  });
+
+  it("checks a passkey against its Mac's heads when it's given them", async () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "weft-wsign-"));
+    const heads = vi.fn(() => Promise.reject(new Error("offline")));
+    const w = workerWidenFor({ home, workerId: "w1", root: "/w", listFolders: () => [], repoPath: () => "", nameFolder: vi.fn(), heads, env: {} });
+    const body = { device: "d", credId: "c", message: "m", authenticatorData: "", clientDataJSON: "", signature: "" };
+    expect(await w.signers.verifyPasskey(body)).toEqual({ ok: false, reason: HEADS_UNREAD });
+    expect(heads).toHaveBeenCalledTimes(1);
   });
 
   it("hands the line a terminal that checks the same approvals", async () => {

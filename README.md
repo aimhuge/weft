@@ -1015,6 +1015,11 @@ claims the code, prints a check code, and joins once you confirm the same code w
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
 **Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
 shows on the box. A worker never switches Macs without the one it trusts signing off.
+With two Macs signed in, a worker asks for secrets and the vault only from the Mac it's paired with, and says so when
+that Mac is closed. Revoke a phone, browser or Mac on any of your Macs and it stops being trusted everywhere: the Mac that
+paired a phone or browser unpins it within a minute, its passkeys leave every worker's set, and a worker whose Mac was
+revoked takes nothing from that Mac again. A worker also refuses a passkey approval until it holds your Mac's latest
+passkey set, which your Mac publishes where a stolen session can't take it back.
 **Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
 window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
 in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:

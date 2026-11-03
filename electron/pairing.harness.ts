@@ -1,5 +1,5 @@
 // An in-memory supabase-js stand-in for the pairing tests: enough of the query builder (insert/select/update/delete,
-// eq, order, limit, single, maybeSingle) over plain arrays, with the unique keys the real tables have, so a test reads
+// eq, in, order, limit, single, maybeSingle) over plain arrays, with the unique keys the real tables have, so a test reads
 // what the desktop wrote the way the phone would.
 type Row = Record<string, unknown>;
 
@@ -24,10 +24,11 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
     let payload: Row[] = [];
     let patch: Row = {};
     const filters: [string, unknown][] = [];
+    const sets: [string, unknown[]][] = [];
     let order: { col: string; asc: boolean } | null = null;
     let limit = Infinity;
     let mode: "many" | "single" | "maybe" = "many";
-    const matches = (r: Row) => filters.every(([c, v]) => r[c] === v);
+    const matches = (r: Row) => filters.every(([c, v]) => r[c] === v) && sets.every(([c, vs]) => vs.includes(r[c]));
     function run(): { data: unknown; error: { message: string; code?: string } | null } {
       const rows = table(name);
       if (op === "insert") {
@@ -68,6 +69,7 @@ export function fakeDb(seed: Record<string, Row[]> = {}) {
       update: (p: Row) => ((op = "update"), (patch = p), b),
       delete: () => ((op = "delete"), b),
       eq: (c: string, v: unknown) => (filters.push([c, v]), b),
+      in: (c: string, vs: unknown[]) => (sets.push([c, vs]), b),
       order: (col: string, o?: { ascending?: boolean }) => ((order = { col, asc: o?.ascending !== false }), b),
       limit: (n: number) => ((limit = n), b),
       single: () => ((mode = "single"), b),

@@ -80,7 +80,7 @@ export function registry(rpc: Rpc, key: string) {
     accountSettings: () => call<SyncedRow | null>(rpc, "worker_account_settings", { p_key: key }),
     setLimits: (limits: PackedLimits) => call<unknown>(rpc, "worker_set_limits", { p_key: key, p_limits: limits }),
     deviceCall: (device: string, cardId: string, tool: string, args: unknown) => call<string | null>(rpc, "worker_device_call", { p_key: key, p_device: device, p_card: cardId, p_tool: tool, p_args: args }),
-    // A card's mcp__secrets__run asking the owner's newest live Mac (lib/worker-secret-run.ts); null when none is up.
+    // A card's mcp__secrets__run asking the Mac this worker is paired with (lib/worker-secret-run.ts); null when it's away.
     secretAsk: (cardId: string, args: unknown) => call<string | null>(rpc, "worker_secret_ask", { p_key: key, p_card: cardId, p_args: args }),
     deviceResult: (id: string) => call<DeviceAnswer | null>(rpc, "worker_device_result", { p_key: key, p_call: id }),
     deviceCancel: (id: string) => call<boolean>(rpc, "worker_device_cancel", { p_key: key, p_call: id }),
@@ -113,6 +113,10 @@ export function registry(rpc: Rpc, key: string) {
     setLists: (crons: unknown[], webhooks: unknown[]) => call<unknown>(rpc, "worker_set_lists", { p_key: key, p_crons: crons, p_webhooks: webhooks }),
     // The owner's Macs' crons, read-only, for list_crons (lib/worker-mac-crons.ts, supabase/migrations/*_mac_crons_for_workers.sql).
     macCrons: async () => (await call<MacCronsRow[] | null>(rpc, "worker_mac_crons", { p_key: key })) ?? [],
+    // Whether the Mac this worker was paired with has been revoked (lib/worker-mac-revocation.ts), and every passkey head
+    // its Mac published (lib/passkey-head.ts): supabase/migrations/*_worker_pairing_mac.sql, *_worker_passkey_heads.sql.
+    macState: () => call<unknown>(rpc, "worker_mac_state", { p_key: key }),
+    passkeyHeads: async () => (await call<unknown[] | null>(rpc, "worker_passkey_heads", { p_key: key })) ?? [],
   };
 }
 

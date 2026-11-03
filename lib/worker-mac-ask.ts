@@ -1,6 +1,6 @@
 // A worker's line to its owner's Mac for what needs a person (docs/architecture/tunnels.md#on-a-worker): a tunnel's
-// Touch ID, a relay's sealed signing secret. The worker queues a device call with worker_mac_ask (the owner's freshest
-// desktop gets it), the Mac's inbox runs it (lib/device-call-approvals.ts) and writes its answer, and this waits for it.
+// Touch ID, a relay's sealed signing secret. The worker queues a device call with worker_mac_ask (the Mac it's paired
+// with gets it), the Mac's inbox runs it (lib/device-call-approvals.ts) and writes its answer, and this waits for it.
 // Also the key-checked writes a tunnel needs, since a worker has no session (supabase/migrations/*_worker_tunnels.sql).
 import type { DeviceAnswer } from "./worker-registry";
 
@@ -24,8 +24,10 @@ export function macLink(): MacLink {
   return link;
 }
 
+// The vault's asks go only to the Mac this worker is paired with; a tunnel or relay goes to it first and to your newest
+// open Mac when it's away (worker_mac_ask, supabase/migrations/*_worker_pairing_mac.sql).
 export const MAC_AWAY =
-  "This needs your Touch ID on your Mac, and no Mac of yours answered: open Weft there, signed in to the same account and syncing, then try again.";
+  "This needs your Touch ID on your Mac, and no Mac of yours answered. The vault answers only from the Mac this worker is paired with: open Weft there, signed in to the same account and syncing, then try again.";
 // A Mac claims at once on its Realtime ping, else on its 30 s check; past that it isn't there.
 export const CLAIM_MS = 45_000;
 // Long enough to unlock, read the prompt and touch the sensor.
