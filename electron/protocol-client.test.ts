@@ -55,27 +55,28 @@ describe("listenForLinks", () => {
     const showMain = vi.fn();
     const handleLink = vi.fn();
     listenForLinks({ app, protocol: "weft", showMain, handleLink });
-    return { handlers, showMain, handleLink };
+    const fire = (name: string, ...args: unknown[]) => handlers[name]?.(...args);
+    return { fire, showMain, handleLink };
   }
 
   it("hands a second launch's link to handleLink and shows the window", () => {
-    const { handlers, showMain, handleLink } = listen();
-    handlers["second-instance"]({}, ["C:\\electron.exe", "C:\\weft", "weft://account-callback?code=abc"]);
+    const { fire, showMain, handleLink } = listen();
+    fire("second-instance", {}, ["C:\\electron.exe", "C:\\weft", "weft://account-callback?code=abc"]);
     expect(showMain).toHaveBeenCalled();
     expect(handleLink).toHaveBeenCalledWith("weft://account-callback?code=abc");
   });
 
   it("only shows the window for a second launch with no link", () => {
-    const { handlers, showMain, handleLink } = listen();
-    handlers["second-instance"]({}, ["C:\\electron.exe"]);
+    const { fire, showMain, handleLink } = listen();
+    fire("second-instance", {}, ["C:\\electron.exe"]);
     expect(showMain).toHaveBeenCalled();
     expect(handleLink).not.toHaveBeenCalled();
   });
 
   it("takes macOS open-url links and stops the default", () => {
-    const { handlers, handleLink } = listen();
+    const { fire, handleLink } = listen();
     const event = { preventDefault: vi.fn() };
-    handlers["open-url"](event, "weft://card/1");
+    fire("open-url", event, "weft://card/1");
     expect(event.preventDefault).toHaveBeenCalled();
     expect(handleLink).toHaveBeenCalledWith("weft://card/1");
   });
