@@ -8,6 +8,14 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Changed
+
+- **🤖 Cards a thread sends to another machine start as that project's default agent.** When a thread's `create_card` sends a card to a Weft Worker, or a thread on a worker sends one to your Mac or another worker, the card now starts as the agent you set as that project's default in Settings → Agents, and the reply says which one. If the thread names that same agent, the card goes through; any other agent is refused before anything is sent, with the reason and how to pick it yourself, since only Weft's own window can sign one. A worker can't see your Mac projects' defaults, so it refuses a named agent for a Mac card. Leave the agent out and the card lands in Backlog with the project's default. (`lib/host-agent.ts`, `lib/board-tools-hosts.ts`, `lib/worker-board-tools.ts`)
+
+### Fixed
+
+- **🔐 Worker cards can use the vault tools.** A Worker card's thread was refused every 🔐 tool by an out-of-date capability table, though listing names, adding blanks, the in-thread key input (`ask_add`), storing generated values, pushing to Vercel and `mcp__secrets__run` all reach the vault on your Mac from a Worker, each behind Touch ID there. Now only `fill_field` stays refused, since it types into your Mac's own pane. (`lib/worker-tools.ts`)
+
 ## [0.7.1] - 2026-11-03
 
 ### Added
