@@ -992,7 +992,12 @@ once), and drop phones that uninstalled the app. Settings → Sync → **Phones*
 **A worker's simulator in the pane.** A worker streams its simulator to the card's pane, marked "streaming from" the worker.
 On the desktop board you can drive it without asking the thread: **📱 Start simulator** on a React Native or Expo card, a device
 menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / Medium / High quality menu for the WebRTC video
-(15, 30 or 60 fps; Medium is full size).
+(15, 30 or 60 fps; Medium is full size). An Android emulator gets the same live video, from `screenrecord`, and ⌘V on the
+live screen types your clipboard's text on the device (docs/architecture/weft-worker.md#the-fast-path).
+
+**Goose on a worker.** Settings → Threads → On a worker sets a worker's Goose provider and endpoint. They say where a Goose
+card's traffic goes, so Save asks Touch ID and the worker checks the Mac's signature; the provider's key doesn't travel
+yet (docs/architecture/weft-worker.md#goose-on-a-worker).
 
 **Local Simulator** (was Manual QA). Testing a worker's app by hand? The **host chip** at the top right of the card's pane, beside Share, names
 where the card runs ("m1mini", "m1mini + simulator" while one streams, "this Mac + simulator" in Local Simulator mode). Its menu starts the
