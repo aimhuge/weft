@@ -10,7 +10,8 @@
 // Goose provider and endpoint, and anything else that widens what a card may touch or where its traffic goes. A row
 // from the network can't name them (remoteRefusal), and a worker drops them from a synced snapshot.
 
-export const ACCOUNT_SETTINGS = ["automations", "pushOnDone", "doneModel", "doneEffort", "subagentModel", "threadPrompt", "backupModel"] as const;
+// `agents` is your agents (Settings → Agents) and each worker project's default (lib/agent-sync.ts).
+export const ACCOUNT_SETTINGS = ["automations", "pushOnDone", "doneModel", "doneEffort", "subagentModel", "threadPrompt", "backupModel", "agents"] as const;
 export type AccountSetting = (typeof ACCOUNT_SETTINGS)[number];
 
 export const HOST_SETTINGS = ["maxThreads", "keepAliveMinutes", "worktreePool", "defaultBackend"] as const;

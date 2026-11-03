@@ -13,7 +13,7 @@ vi.mock("./worker-acts", () => ({ postWorkerAction }));
 const listenForAnswer = vi.hoisted(() => vi.fn(() => () => {}));
 vi.mock("./line-answer", () => ({ listenForAnswer, lineToken: () => "tok" }));
 
-const { closeLines, LINGER_MS, lineFor, onLineEvents, retainLine, useLineRoute, useSessionLine } = await import("./session-lines");
+const { closeLines, LINGER_MS, lineFor, onLineEvents, onLineFlips, retainLine, useLineRoute, useSessionLine } = await import("./session-lines");
 const { getWorkerRoute, resetWorkerRoute } = await import("./worker-route");
 
 function fakeLine() {
@@ -95,6 +95,21 @@ describe("retainLine", () => {
     off();
     made[0]!.emit({ t: "card_deleted", id: "c2" });
     expect(heard).toHaveBeenCalledTimes(1);
+  });
+
+  it("says when a line comes up or goes down, once per flip", () => {
+    retainLine("w1", make);
+    const flipped = vi.fn();
+    const off = onLineFlips(flipped);
+    made[0]!.set({ kind: "connecting" });
+    expect(flipped).not.toHaveBeenCalled();
+    made[0]!.set({ kind: "direct", ms: 4 });
+    made[0]!.set({ kind: "direct", ms: 6 });
+    made[0]!.set({ kind: "relay" });
+    expect(flipped.mock.calls).toEqual([["w1", true], ["w1", false]]);
+    off();
+    made[0]!.set({ kind: "direct", ms: 4 });
+    expect(flipped).toHaveBeenCalledTimes(2);
   });
 });
 

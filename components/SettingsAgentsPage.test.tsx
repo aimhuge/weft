@@ -33,6 +33,10 @@ const registry = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/skill-registry-client", () => ({ skillRegistry: registry, startSkillThread: vi.fn() }));
 
+// Your workers' projects, read once: none unless a test gives some.
+const workerProjects = vi.hoisted(() => ({ list: [] as { path: string; worker: string; folder: string }[] }));
+vi.mock("@/lib/use-worker-projects-once", () => ({ useWorkerProjectsOnce: () => workerProjects.list }));
+
 import SettingsAgentsPage from "./SettingsAgentsPage";
 
 beforeEach(() => {
@@ -140,6 +144,19 @@ describe("SettingsAgentsPage", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("Reviewer copy");
     // The copy opens as a new agent, so it saves with createAgent, not updateAgent.
     expect(screen.getByRole("button", { name: "Add agent" })).toBeInTheDocument();
+  });
+
+  it("lists a worker's projects too, named with their worker, and sets one's default", async () => {
+    workerProjects.list = [{ path: "worker://w1/site", worker: "m1mini", folder: "site" }];
+    try {
+      await renderPage();
+      const select = screen.getByLabelText("Default agent for site · m1mini");
+      expect(select).toHaveValue("builder");
+      await userEvent.selectOptions(select, "a-1");
+      await waitFor(() => expect(api.setProjectAgent).toHaveBeenCalledWith("worker://w1/site", "a-1"));
+    } finally {
+      workerProjects.list = [];
+    }
   });
 
   it("sets a project's default agent, and puts Builder back as no agent", async () => {

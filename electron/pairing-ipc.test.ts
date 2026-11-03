@@ -75,3 +75,21 @@ describe("pairing IPC", () => {
     expect(db.tables.workspace_key_grants[0]!).toMatchObject({ device_id: "mac-row", version: 1 });
   });
 });
+
+describe("passkey heads and reconciling", () => {
+  it("publishes a worker's head into its log with each set, and reconciles before a refresh", async () => {
+    const { call, db, dataDir } = setup();
+    fs.writeFileSync(path.join(dataDir, "device-id"), "d".repeat(64));
+    const [set] = (await call("approval:endorse", { worker: "w1", revoke: true })) as { generation: number }[];
+    expect(db.tables.worker_passkey_heads).toEqual([expect.objectContaining({ worker_id: "w1", head: expect.objectContaining({ worker: "w1", generation: set?.generation, mac: "d".repeat(64) }) as unknown })]);
+    expect(await call("approval:endorse-refresh")).toHaveLength(1);
+  });
+
+  it("still hands the set back when the log refuses the head", async () => {
+    const { call, db, dataDir } = setup();
+    fs.writeFileSync(path.join(dataDir, "device-id"), "d".repeat(64));
+    const from = db.from;
+    db.from = ((name: string) => (name === "worker_passkey_heads" ? { insert: () => Promise.resolve({ data: null, error: { message: "no such table" } }) } : from(name))) as typeof db.from;
+    expect(await call("approval:endorse", { worker: "w1", revoke: true })).toHaveLength(1);
+  });
+});

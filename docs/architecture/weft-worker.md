@@ -252,6 +252,34 @@ it scheduled `expire-cloud-commands` at 04:17 UTC daily. A migration never runs 
 Integrations → Cron later schedules it once by hand in the SQL editor:
 `select cron.schedule('expire-cloud-commands', '17 4 * * *', 'select private.expire_cloud_commands()');`.
 
+Since `supabase/migrations/20261103070200_command_leases.sql`, a `claimed` row with a lease (below) goes after a day
+untouched instead of 7: its host renews, and so touches, it while it runs, so one left alone that long has lost its host.
+A claimed row without a lease (claimed by a host older than leases) still waits the 7 days.
+
+### Leases
+
+A host claims a command once (`lib/host/inbox.ts`), so one that died mid-command used to leave the row `claimed` until
+expiry, and the board that asked waited on a result that would never come. Now a claim holds a **lease**,
+`cloud_commands.lease_until`, three minutes ahead (`supabase/migrations/20261103070200_command_leases.sql`):
+
+- **Taking one.** `worker_claim` sets it; a Mac's conditional update gets it from the `cloud_commands_lease` trigger,
+  which also renews it on any write to `lease_until` while the row is claimed (from the database's clock, never the
+  client's value) and drops it when the row leaves `claimed`.
+- **Keeping it.** The inbox holds the ids of the commands it's running (`createLeases` in `lib/host/lease.ts`, kept in
+  `InboxState.leases` so a Mac's survives a module reload), and the host's beat (`lib/host/beat.ts`, `renew`) renews them
+  at most once a minute: a worker through `worker_renew(key, ids)`, a Mac by touching `lease_until` under its own session
+  (`sessionLine` in `lib/host/identity.ts`, with the new `update (lease_until)` grant). A long clone run aside keeps its
+  lease the same way.
+- **Losing it.** At the start of a pass, at most once a minute, a host requeues its *own* expired claims, but only `host`
+  commands whose verb is safe to run twice: `IDEMPOTENT_VERBS`, the handlers flagged `idempotent: true` in
+  `lib/host-api/index.ts`. Today that's the reads: `skills.list`, `files.list`, `files.read`, `settings.get` and
+  `dev.log`. A worker calls `worker_reclaim(key, verbs)`, a Mac the invoker function `reclaim_cloud_commands(device,
+  verbs)` (its RLS and grants decide, and the lease is read against the database's clock). Everything else (a new card,
+  a reply, `run`, a stop, a write, a mode change) stays claimed and is never run again: twice would be worse than never.
+  It's the same host that requeues, so a box that's gone for good leaves its rows to expiry.
+- **An older database.** Without the migration the functions and the column aren't there; the first such error turns
+  leases off for an hour, said once in the log, and the inbox claims and reports exactly as before.
+
 ### What's sealed on a worker
 
 Vault values for a card's `mcp__secrets__run` reach a worker sealed to its `seal-key.json` for one run and stay in the
@@ -298,18 +326,81 @@ Settings → Devices → the worker → **Re-pair**, paste the new Mac's `wph.�
 a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`). The approval lasts 30 minutes and is
 good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker)).
 
-**A lost Mac, or a box that trusts none** (enrolled by token, or after `weft-worker forget-macs`): no Mac can approve,
-so wipe the box's enrolment and enrol it fresh. In a terminal on the box:
+**A lost Mac, or a box that trusts none** (enrolled by token, after `weft-worker forget-macs`, or once its Mac was
+revoked: the daemon checks every minute and stops trusting a revoked pairing Mac for good,
+[device-registry.md](device-registry.md#revoked-on-one-device-untrusted-on-all)): no Mac can approve, so wipe the box's
+enrolment and enrol it fresh. In a terminal on the box:
 
 ```sh
-rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json
+rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json ~/.weft-worker/passkeys.json
 weft-worker enrol <the wph.… code from the new Mac>
 weft-worker restart
 ```
 
-Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. The secret guard refuses those
-two paths to threads by name. A passkey-confirmed re-pair at weft.zip, with a code shown on the box's console, would
-spare the wipe; it isn't built.
+Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. `passkeys.json` goes too: the
+passkeys in it were endorsed by the old Mac, and the new one endorses its own. `mac-revoked.json` stays, so a revoked Mac
+is never trusted on this box again. The secret guard refuses these paths to threads.
+
+`weft-worker status` names the Mac it takes secrets from by its key's fingerprint, or says that Mac was revoked. With
+two Macs signed in, the worker's secret and vault asks go only to the one it's paired with (`cloud_workers.paired_mac`,
+[device-registry.md](device-registry.md#the-pairing-mac)); when that Mac is away the card hears so, rather than the ask
+going to a Mac whose answer the box would refuse.
+
+#### Passkey heads: a worker never approves with an outdated set
+
+Built 2026-11-03 with `supabase/migrations/20261103080100_worker_passkey_heads.sql` (not applied). The pairing Mac sends
+a worker its passkey set as a `pin` command, re-sent until the worker's signed receipt; but until a revoke's pin landed,
+the worker still took the revoked passkey, and a session that deleted the pin rows could hold that off.
+
+- **The channel.** Whenever main signs a worker's set (`electron/widen-endorse.cjs`: Passkeys, a revoke, a narrowing
+  after an unpair or a reconcile) it also signs a **head**, `weft-endorse-head-v1` over {worker, generation, issuedAt},
+  with the same approval key, and inserts it in `worker_passkey_heads` before the set goes out; once a day it signs the
+  current one again. A failed insert is tried again on the next refresh (in 5 minutes for the same set, at once for a
+  newer one).
+- **Why it can't be held back.** The table is insert-only for clients (no update or delete grant; only a 30-day prune by
+  the database's own clock), so a stolen session can add rows but never remove or change the real head. The worker reads
+  every head for itself (`worker_passkey_heads(key)`, at most 501), keeps those its *trusted* Mac key signed for it
+  (`lib/passkey-head.ts` `newestHead`: junk, another worker's, another Mac's or a revoked Mac's are skipped) and takes the
+  highest generation, so an old head inserted again changes nothing. A read with more rows than it can check (a flood) is
+  a refusal, so junk can't push the real head out of sight; it remembers the highest head it has seen in
+  `passkeys.json` (`seen`), so the prune never lowers the bar.
+- **The rule.** Before a passkey assertion counts (`lib/host-signers.ts` `verifyPasskey`), the worker reads the heads; it
+  refuses while the set it holds is older than the newest ("it holds set N, your Mac signed M"), and refuses when it can't
+  read them. The Mac's own signature (Touch ID) doesn't depend on it.
+- **Limits.** Fail-closed by design: until the migration is applied, or while Supabase can't be reached, a worker takes no
+  passkey approvals (the Mac's own still work). A flood of junk rows (owner's session only) stops passkey approvals until
+  it ages out. Withholding the Mac's insert itself would need control of the Mac's network.
+
+#### A passkey-approved re-pair: designed, not built
+
+Asked for: re-pair at weft.zip with a passkey, confirmed by a code shown on the box's console, so a lost Mac doesn't
+cost a wipe. **Not built, because it doesn't fit the existing approval ladder safely.** A browser passkey is
+deliberately the lowest approver: it may not approve a vault secret, skipping permissions or a folder grant ("That one
+needs your phone or this Mac", `lib/passkey-phone-only.ts`, `PASSKEY_TOO_WIDE` in `lib/widen-check.ts`). A re-pair
+chooses the Mac the box takes *every* secret from, which is strictly more than any of those. Letting a passkey do it
+would make the passkey the weakest link for all secrets on the box: whoever holds a browser session and a synced passkey
+(an unlocked laptop, a passkey shared through a password manager) could move the box to a Mac of theirs. And the case it
+is for, a lost Mac, is exactly when the worker can't learn of a newer passkey set (only that Mac signs one), so a passkey
+the user revoked from another Mac could still approve. The wipe needs a real shell on the box, which a thread can't fake
+(the secret guard refuses those paths), so it stays the recovery.
+
+What would make it fit, if it's wanted later:
+
+1. **Approver.** A *phone* (the trusted tier) rather than a browser passkey, which means a worker pins a phone's Ed25519
+   key the way it pins passkeys: endorsed by the pairing Mac in the same `weft-endorse` set, with the same heads
+   (`lib/passkey-head.ts`), so revoking the phone anywhere stops it.
+2. **Request.** On the box, `weft-worker enrol wph.… --re-pair --remote` (terminal only, as today) inserts a
+   `worker_repair_requests` row with its key (worker id, the new code's pairing and workspace, the new Mac key, a random
+   12-character console code shown only on the box; the row stores its hash) and polls it.
+3. **Approval.** The phone (or sign.weft.zip, if the phone tier is ever opened to passkeys) asks for the console code,
+   typed by hand, never in a link, so an approval can't be for a request the person didn't start at the box. It reads the
+   request itself, shows the worker's name, the new Mac's fingerprint and the workspace, and signs
+   `weft-repair-remote-v1` over {worker, newMacKey, pairingId, orgId, codeHash, issuedAt, nonce}. 30-minute lifetime, one
+   use, as `wra.` lines.
+4. **Box check.** The approval counts only if the signer is in its pinned set *and* that set is not behind the newest
+   head (`latestHead`), then `trustPairingMac` replaces the Mac as today.
+5. **Notice.** Every remote re-pair emails the account, as a new connector signer does (`connector_signers`), with a
+   link to revoke the worker.
 
 ### Worker projects on the desktop board
 
@@ -333,12 +424,21 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   `useWorkerBoard` now draws its cards through; a refusal reloads them. Not offered: delete, Share…, the agent, the
   folder, skills, the vault, the dev server, and logging this Mac's CLI in.
 - **Reading:** the account's Supabase session lives on the local server, so the renderer polls `/api/worker-board` every
-  5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. There's no Realtime here.
+  5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. A project's snapshot (the
+  header badges, [project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)) is live: from the first
+  snapshot read, the server subscribes to `cloud_worker_projects` over Realtime (`lib/worker-project-live.ts`; the table
+  joined the publication in `supabase/migrations/20261103070100_worker_projects_realtime.sql`, and RLS hands each
+  member only their workspace's rows), and each change goes to the board as a `worker_project` event, which drops that
+  project's cached snapshot and moves its version (`snapshotChanged` and `useSnapshotVersion` in
+  `lib/project-snapshot-view.ts`), so the badges read again at once. Without the publication the channel errors or stays
+  quiet, it's tried again after 5 minutes, and the badges read as before: on a turn's end, on focus, past a 15 s cache.
 - **The thread:** a worker card opens in the board's own workspace (`components/OpenCard.tsx`), like a local one:
   `ThreadPanel` over `workerTransport` (`desktop: false`, `cardEdits: true`), so its header offers rename, tags, star,
   archive and the model picker, and its reply box ↑ edit, fresh and the held-edit choices, each a host verb; the show
   rail projects the items its thread view drew (`lib/worker-shown.ts`), and the pane column is `components/WorkerPane.tsx`
-  (`WebPane` on the card's page, or the page the rail reopens; the native pane under Local Simulator). The editor column
+  (in the desktop app, this Mac's native pane on a page the card wrote or a site, as on a local card,
+  [below](#the-native-pane-on-a-worker-card); `WebPane` on the live screen, a page only the worker has, and off the
+  desktop app; the native pane under Local Simulator). The editor column
   says a worker's files aren't there yet. Reply, answer, stop and mode are the same `cloud_commands` rows the web sends.
 - **A new thread:** `POST /api/cards` with a worker path calls `startWorkerThread`, sends a `run` with that folder, makes
   no local card and answers with the worker's name. An offline worker refuses with a message and nothing is sent. A
@@ -346,7 +446,10 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
 - **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  sealed rows (a worker publishes in the clear today).
+  sealed rows: a worker publishes its rows and pages in the clear, and files reach it plain, until it holds the workspace
+  key. The grant (sealed to its pinned box key and signed by the pairing Mac after Touch ID) and the worker's own sealing
+  are designed in [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker-design); a Mac's and a browser's files
+  are sealed already ([Sealed blobs](mobile-security.md#sealed-blobs)), so a sealed card's pasted file only goes plain to a worker.
 
 ### Pages from a worker
 
@@ -365,7 +468,8 @@ blob store (lib/blob-store.ts, mayUpload = workerMayUpload)
   ▼
 card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publish.ts, lib/card-rows.ts's withUploadedPage)
   ├─▶ web board: WebThreadPanel → WebPane → /api/web-board/<org>/page/<sha>
-  └─▶ desktop board: OpenCard → WorkerPane → WebPane → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
+  └─▶ desktop board: OpenCard → WorkerPane → native pane (pane partition) → /api/worker-board/page/<sha>  (5 s poll of the worker's cards)
+                     (WebPane's iframe on the same route off the desktop app)
 ```
 
 - **The tools:** `scripts/weft-worker.ts` sets `WEFT_WORKER=1`. `open_url` then calls `openOnWorker`: a local page uploads
@@ -410,7 +514,8 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
 - **Sandboxing.** The web board is unchanged. The desktop board is stricter, because its frame sits in the board window's
   session. A worker's page is untrusted, so `app/api/worker-board/page/[sha]` sends a CSP with no `http:` source (the page
   can't fetch, load or post anything to 127.0.0.1), and the iframe is `sandbox="allow-scripts"` with no popups or forms. A
-  public site is never framed there: its CSP isn't ours, so the pane says so and offers Open ↗.
+  public site is never framed there: its CSP isn't ours, so the pane says so and offers Open ↗. (In the desktop app both
+  now load in the native pane instead, [above](#the-native-pane-on-a-worker-card); this frame is what's left off it.)
 - **The launch token stays out of frames** (`electron/api-token.cjs`). `attachApiToken` used to put it on every request
   from the board window's session, so a page could navigate its own frame to a local GET with it attached. It now skips
   a frame's navigation (`resourceType` `subFrame`) and anything a frame asks for (`details.frame.parent`, or the
@@ -420,6 +525,27 @@ card.page and the open_url item carry blob:sha256:<hex>#anchor (lib/worker-publi
   frames need nothing: the intros and the welcome loop are static files in `public/`, the print sheet is a `srcdoc` used
   only on the web, and the share views' frames aren't in the board window. Checked in real Electron 44: the board's fetch
   carried the token, the page loaded on `1`, and a sandboxed frame's self-navigation to `/api/settings` arrived with none.
+- **The native pane on a worker card** (2026-11-03). In the desktop app, `WorkerPane` loads a page the card wrote, and a
+  site, in this Mac's native pane, so it has the address bar, tabs, zoom, find, Save as app and the browser tools a local
+  card's pages have (`lib/worker-native-page.ts`). A blob opens as `http://<this Mac's server>/api/worker-board/page/<sha>#anchor`
+  under the card's key, when the card's page changes (a new one, the show rail, the review tour) and not when the card is
+  only reopened on it; a site opens as it is (the pane's own session, so the board-session rule above doesn't apply). The
+  live screen, a page only the worker has and no page stay `WebPane`, and so does weft.zip. Save as app maps the proxied
+  address back to its `blob:sha256:` ref (`savedPageUrl`), so the page still comes home through `lib/mini-app-worker.ts`.
+  What lets it load, and what it doesn't gain:
+  - `electron/self-url.cjs` stops treating exactly `/api/worker-board/page/<64 hex>` as "Weft itself" (`WORKER_PAGE`); any
+    other path on the server still is, so the pane still refuses the board and every other route.
+  - `attachPaneAttachments` (`electron/api-token.cjs`) gives the pane's session the plain read value `1` on a GET of that
+    path, as the board's frame gets it, and nothing else under the route. The pane partition never carries the launch
+    token, so the page can't reach a token-only route, and `1` is what any local process may already send.
+  - The route's CSP comes along: `sandbox allow-scripts` gives the page an opaque origin and no popups or forms, and no
+    `http:` source keeps it off 127.0.0.1, in the pane as in the frame. The pane's preload exposes `window.weft` to `file:`
+    pages only, so the page gets no data bridge.
+  - `weft://` links from a worker page are dropped (`isWorkerPageUrl` in `electron/browser-pane.cjs`): its sandboxed frame
+    could never follow one, so it can't open a card, the copilot or a pre-filled New thread either. (`reply` and `commit`
+    already needed a file page under `~/.weft`.)
+  - The pane's control server is unchanged and token-guarded; a worker card's thread runs on the worker, whose browser
+    tools drive the worker's own browser, not this pane.
 - **`worker_put_card`** fills `cloud_cards.page` and `pages` from the card
   (`supabase/migrations/20261030143806_worker_card_page.sql`), so a phone feed reads a worker's card from its row.
   `page_thumb` stays null: a worker has no pane to capture.
@@ -666,6 +792,12 @@ Backlog) to `cloud_worker_projects` through `worker_put_project` (`lib/worker-pr
 `scripts/weft-worker.ts`: every 5 minutes, 20 s after a card change, never mid-turn), and answers the editor's
 `files.*` verbs, putting a result over the row's 4 KB in the blob store through `Engine.carry`
 ([project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)).
+
+A worker card's thread header has the ⏰ and the ✦ skill set chip too: the ⏰ makes a cron on the worker with
+`cron.create` (args.id the card; the worker narrows its mode, crons.md#on-a-weft-worker), and the chip lists the worker's
+own skills and sets one with `card.update { skill }` (skills.md). Your agents from Settings → Agents, and each worker
+project's default agent, sync to the worker with your signed account settings (agents.md#on-a-weft-worker), so an agent
+you made exists there, and a new thread there that names none starts as the project's default.
 
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the
@@ -1066,7 +1198,8 @@ imagined.
    the worker publishes the pending, the board answers with the existing `answer` command, the worker resolves.
 8. **Leases.** A crashed worker leaves rows `claimed` forever (`lib/cloud-inbox.ts:151`) — that is true of the Mac
    today too, but on a Mac a human sees the board and clicks Cancel. On a headless box nobody does.
-   `cloud_worker_leases` with an expiry, renewed on heartbeat, makes them reclaimable.
+   `cloud_worker_leases` with an expiry, renewed on heartbeat, makes them reclaimable. Built as a column instead
+   ([Leases](#leases)): `cloud_commands.lease_until`, renewed from the beat, reclaimed only for idempotent verbs.
 9. **Worktrees.** `cp -c` is an APFS clone; it does not exist on Linux. A macOS worker gets the fast path the
    desktop already has; a Linux worker needs `cp --reflink=auto` or a plain copy. Isolated cards need a worktree
    implementation that picks per platform.

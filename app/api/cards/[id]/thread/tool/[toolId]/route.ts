@@ -1,22 +1,13 @@
 import { connection } from "next/server";
-import { fail, guard } from "@/lib/guard";
-import { getCard, getThread } from "@/lib/store";
-import { findToolResult } from "@/lib/thread-page";
+import { guard } from "@/lib/guard";
+import { hostFail, runVerb } from "@/lib/host-api";
 
-// The full result of a tool call whose inline result was trimmed (lib/cloud-sync-types.ts
-// TOOL_RESULT_INLINE_MAX). The thread row fetches it when opened.
+// The full result of a tool call whose inline result was trimmed (lib/cloud-sync-types.ts TOOL_RESULT_INLINE_MAX): the
+// thread.tool verb (lib/host-api/thread.ts). The thread row fetches it when opened.
 export async function GET(req: Request, { params }: { params: Promise<{ id: string; toolId: string }> }) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
   const { id, toolId } = await params;
-  const card = getCard(id);
-  if (!card) return fail("No such card.", 404);
-  try {
-    const result = findToolResult(getThread(id), toolId);
-    if (result === undefined) return fail("No such tool result.", 404);
-    return Response.json({ result });
-  } catch (err) {
-    return fail(err);
-  }
+  return runVerb("thread.tool", { id, toolId }).then((r) => Response.json(r), (err: unknown) => hostFail(err));
 }

@@ -27,9 +27,10 @@ describe("outcomes", () => {
 function fakeClient(answer: Record<string, unknown>) {
   const calls: unknown[][] = [];
   const chain: Record<string, unknown> = {};
-  for (const step of ["select", "update", "eq", "order", "limit", "overrideTypes"]) chain[step] = (...args: unknown[]) => (calls.push([step, ...args]), chain);
+  for (const step of ["select", "update", "eq", "in", "order", "limit", "overrideTypes"]) chain[step] = (...args: unknown[]) => (calls.push([step, ...args]), chain);
   chain.then = (resolve: (v: unknown) => unknown) => Promise.resolve(answer).then(resolve);
-  return { client: { from: () => chain } as unknown as SupabaseClient, calls };
+  const rpc = (fn: string, args: unknown) => (calls.push(["rpc", fn, args]), Promise.resolve(answer));
+  return { client: { from: () => chain, rpc } as unknown as SupabaseClient, calls };
 }
 
 describe("sessionLine (a Mac)", () => {
@@ -73,6 +74,25 @@ describe("sessionLine (a Mac)", () => {
   });
 });
 
+describe("sessionLine leases", () => {
+  it("renews its claimed rows by touching lease_until, which the database sets itself", async () => {
+    const ok = fakeClient({ error: null });
+    await sessionLine(ok.client, "u1", "m", vi.fn()).renew!(["c1", "c2"]);
+    expect(ok.calls).toContainEqual(["in", "id", ["c1", "c2"]]);
+    expect(ok.calls).toContainEqual(["eq", "status", "claimed"]);
+    expect(ok.calls.find(([s]) => s === "update")?.[1]).toHaveProperty("lease_until");
+    await expect(sessionLine(fakeClient({ error: { message: "no lease_until column" } }).client, "u1", "m", vi.fn()).renew!(["c1"])).rejects.toThrow("lease_until");
+  });
+
+  it("reclaims its device's expired claims of the verbs named, through the invoker function", async () => {
+    const got = fakeClient({ data: 2, error: null });
+    expect(await sessionLine(got.client, "u1", "mac-1", vi.fn()).reclaim!(["files.read"])).toBe(2);
+    expect(got.calls).toContainEqual(["rpc", "reclaim_cloud_commands", { p_device: "mac-1", p_verbs: ["files.read"] }]);
+    expect(await sessionLine(fakeClient({ data: null, error: null }).client, "u1", "m", vi.fn()).reclaim!([])).toBe(0);
+    await expect(sessionLine(fakeClient({ data: null, error: { message: "does not exist" } }).client, "u1", "m", vi.fn()).reclaim!([])).rejects.toThrow("does not exist");
+  });
+});
+
 describe("keyLine (a worker)", () => {
   const reg = () => ({ pending: vi.fn(() => Promise.resolve([row()])), claim: vi.fn(() => Promise.resolve(true)), report: vi.fn(() => Promise.resolve()) });
 
@@ -93,5 +113,18 @@ describe("keyLine (a worker)", () => {
       ["c1", "done", "k", null],
       ["c1", "failed", null, "no", { ok: false, error: "no" }],
     ]);
+  });
+
+  it("renews and reclaims through its key when the registry can, and leaves leases off when it can't", async () => {
+    const renew = vi.fn(() => Promise.resolve());
+    const reclaim = vi.fn(() => Promise.resolve(1));
+    const line = keyLine({ ...reg(), renew, reclaim });
+    await line.renew!(["c1"]);
+    expect(await line.reclaim!(["files.read"])).toBe(1);
+    expect(renew).toHaveBeenCalledWith(["c1"]);
+    expect(reclaim).toHaveBeenCalledWith(["files.read"]);
+    const bare = keyLine(reg());
+    expect(bare.renew).toBeUndefined();
+    expect(bare.reclaim).toBeUndefined();
   });
 });

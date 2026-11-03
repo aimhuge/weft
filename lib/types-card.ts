@@ -1,7 +1,7 @@
 // Card, column, project and board-event types used across the app.
 
 // The columns, the CLIs, the permission modes and a skill are @weft/client's, so the phone names them the same.
-import { COLUMNS, MODES, type Backend, type Column, type EditPreview, type PendingElicitation, type PermissionMode, type Question, type SkillInfo, type ThreadItem } from "@weft/client";
+import { COLUMNS, MODES, type Backend, type Column, type PendingPermission, type PermissionMode, type PromptReason, type SkillInfo, type ThreadItem } from "@weft/client";
 import type { Effort, LoginView } from "./types-settings";
 import type { Card } from "./types-card-detail";
 
@@ -213,39 +213,8 @@ export interface SkillSetView {
   seeded: boolean;
 }
 
-export interface PendingPermission {
-  id: string;
-  toolName: string;
-  title: string;
-  input: Record<string, unknown>;
-  // Set when the agent asked questions instead of asking to use a tool.
-  questions?: Question[];
-  // A folder outside the card's project that a question names, found on the server (lib/read-scope.ts
-  // stats the disk, so the client can't run it); the form offers "Read from <token>" for it.
-  readScope?: { directory: string; token: string };
-  // The page with the options' previews (lib/question-preview.ts); open it at #<question>-<option>.
-  previewUrl?: string;
-  // What a held Edit/Write would change, readable (lib/edit-preview.ts).
-  edit?: EditPreview;
-  // Why the prompt came up: a symbol-claim clash (lib/claims.ts clashWhy) or the card's permission mode.
-  why?: PromptReason;
-  // The user chose Wait: Weft answers it once the holder lets go of the code.
-  waiting?: boolean;
-  // Set when an MCP server asked instead of a tool (lib/elicitation.ts): Accept / Decline and its form.
-  elicitation?: PendingElicitation;
-}
-
-// A permission prompt's reason, as a category chip and a short detail (components/PermissionInput.tsx).
-// same-code / overlap / whole-file: another busy card's claim (lib/claims.ts); mode: the card's permission mode;
-// outside: a folder beyond the card's project (lib/folder-guard.ts); classifier: auto mode's classifier denied
-// the call itself, and the prompt offers a one-time retry (lib/classifier-denial.ts).
-export interface PromptReason {
-  category: "same-code" | "overlap" | "whole-file" | "mode" | "outside" | "classifier";
-  detail: string;
-  // For a clash: the card holding the claim and its claim key, so Wait can watch for its release (lib/permission-wait.ts).
-  // Its emoji and thumbnail show beside the prompt; first: the user put it first, so this card yields (lib/precedence.ts).
-  holder?: { id: string; title: string; claim: string; emoji?: string; thumb?: string; first?: true };
-}
+// The pending ask (a permission prompt, a question or an MCP form) and why it came up are @weft/client's.
+export type { PendingPermission, PromptReason };
 
 // Card and CardIssue live in lib/types-card-detail.ts to keep this file under the line limit.
 // Re-exported here so `./types` and direct importers keep working.
@@ -267,6 +236,8 @@ export type BoardEvent =
   | { type: "account" }
   // A cron was made, changed, run or deleted (lib/cron-store.ts): the rail's Crons drawer reloads.
   | { type: "crons" }
+  // A Weft Worker wrote a project's snapshot (lib/worker-project-live.ts): the header badges read that worker:// path again.
+  | { type: "worker_project"; project: string }
   // A restart was armed, cancelled, or the turns it waits on changed (lib/restart-when-idle.ts).
   | { type: "restart"; restart: RestartStatus };
 

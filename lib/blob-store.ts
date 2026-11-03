@@ -17,6 +17,7 @@ import {
   BLOB_REF_PREFIX,
   isBlobRef,
   type BlobRef,
+  type BlobSeal,
 } from "./cloud-sync-types";
 import { MEDIA_REF, extensionOf } from "./media";
 import { DATA_DIR } from "./store";
@@ -61,11 +62,12 @@ export interface CreateBlobStoreOptions {
   mayUpload?: (localPath: string) => boolean;
 }
 
+// `seal` on an upload puts the bytes up sealed (lib/blob-seal.ts); the ref is the plaintext's sha either way.
 export interface BlobStoreBundle {
   refFor(localPath: string): Promise<BlobRef | null>;
-  upload(localPath: string, orgId: string): Promise<BlobRef | null>;
-  uploadPage(localPath: string, orgId: string): Promise<BlobRef | null>;
-  rewriteItem(item: ThreadItem, orgId: string): Promise<ThreadItem>;
+  upload(localPath: string, orgId: string, seal?: BlobSeal): Promise<BlobRef | null>;
+  uploadPage(localPath: string, orgId: string, seal?: BlobSeal): Promise<BlobRef | null>;
+  rewriteItem(item: ThreadItem, orgId: string, seal?: BlobSeal): Promise<ThreadItem>;
   fetchBlob(ref: BlobRef, orgId: string): Promise<string | null>;
 }
 
@@ -88,45 +90,47 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
   }
 
   // Puts bytes in the bucket under their sha, once: the sha is content-addressed, so a 409 (or a 400 with
-  // "already exists") means the same bytes are there, which counts as success.
-  async function uploadBytes(sha: string, body: Buffer, type: string, orgId: string): Promise<BlobRef> {
+  // "already exists") means the same bytes are there, which counts as success. Sealed bytes keep the file's type, so a
+  // reader that opens them knows what it has; the type and the size are all the bucket learns.
+  async function uploadBytes(sha: string, body: Buffer, type: string, orgId: string, seal?: BlobSeal): Promise<BlobRef> {
     const ref = blobRefFor(sha);
     if (uploaded.has(ref)) return ref;
-    const { error } = await bucket().upload(objectPath(orgId, sha), body, { contentType: type, upsert: false });
+    const bytes = seal ? Buffer.from(seal(orgId, sha, body)) : body;
+    const { error } = await bucket().upload(objectPath(orgId, sha), bytes, { contentType: type, upsert: false });
     if (error && !isAlreadyExists(error)) throw error;
     uploaded.add(ref);
     return ref;
   }
 
-  async function upload(localPath: string, orgId: string): Promise<BlobRef | null> {
+  async function upload(localPath: string, orgId: string, seal?: BlobSeal): Promise<BlobRef | null> {
     if (!allowed(localPath)) return null;
     const sha = await sha256Of(localPath);
     if (!sha) return null;
     if (uploaded.has(blobRefFor(sha))) return blobRefFor(sha);
-    return uploadBytes(sha, fs.readFileSync(localPath), contentTypeFor(localPath), orgId);
+    return uploadBytes(sha, fs.readFileSync(localPath), contentTypeFor(localPath), orgId, seal);
   }
 
   // A page the pane showed: an HTML file goes up with each local image, stylesheet or video it names uploaded too
   // and swapped for its ref (lib/blob-page-assets.ts), so the copy in the bucket is a different blob from the file.
   // Any other file, or a page that names nothing local, goes up as it is.
-  async function uploadPage(localPath: string, orgId: string, home = os.homedir()): Promise<BlobRef | null> {
+  async function uploadPage(localPath: string, orgId: string, seal?: BlobSeal, home = os.homedir()): Promise<BlobRef | null> {
     if (!allowed(localPath)) return null;
-    if (!["html", "htm"].includes(extensionOf(localPath))) return upload(localPath, orgId);
+    if (!["html", "htm"].includes(extensionOf(localPath))) return upload(localPath, orgId, seal);
     const html = fs.readFileSync(localPath, "utf8");
-    const next = await rewritePageHtml(html, localPath, (asset) => upload(asset, orgId), home, allowed);
-    if (next === null) return upload(localPath, orgId);
+    const next = await rewritePageHtml(html, localPath, (asset) => upload(asset, orgId, seal), home, allowed);
+    if (next === null) return upload(localPath, orgId, seal);
     const body = Buffer.from(next, "utf8");
-    return uploadBytes(createHash("sha256").update(body).digest("hex"), body, contentTypeFor(localPath), orgId);
+    return uploadBytes(createHash("sha256").update(body).digest("hex"), body, contentTypeFor(localPath), orgId, seal);
   }
 
   // A tool item's images array: each entry is rewritten to a blob ref (or left as-is).
-  async function rewriteToolImages(images: string[], orgId: string, home: string): Promise<string[] | null> {
+  async function rewriteToolImages(images: string[], orgId: string, home: string, seal?: BlobSeal): Promise<string[] | null> {
     let changed = false;
     const refs: string[] = [];
     for (const url of images) {
       const local = resolveLocalPath(url, home);
       if (local) {
-        const ref = await upload(local, orgId);
+        const ref = await upload(local, orgId, seal);
         if (ref) {
           refs.push(ref);
           if (ref !== url) changed = true;
@@ -140,16 +144,16 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
 
   // A page the pane showed (a user item's page, an open_url call's URL): a file:// URL or absolute
   // path under home becomes `<blob ref><#hash>`; http(s) and localhost stay as they are.
-  async function rewritePage(page: string, orgId: string, home: string): Promise<string | null> {
+  async function rewritePage(page: string, orgId: string, home: string, seal?: BlobSeal): Promise<string | null> {
     const found = resolvePage(page.trim(), home);
-    const ref = found ? await uploadPage(found.local, orgId, home) : null;
+    const ref = found ? await uploadPage(found.local, orgId, seal, home) : null;
     return ref && found ? `${ref}${found.hash}` : null;
   }
 
   // Rewrites a markdown body's local image targets, returning the new text (or null when
   // nothing changed). The replacement is exactly the input with each match's target swapped;
   // markdown text we can't resolve stays where it was.
-  async function rewriteMarkdownText(text: string, orgId: string, home: string): Promise<string | null> {
+  async function rewriteMarkdownText(text: string, orgId: string, home: string, seal?: BlobSeal): Promise<string | null> {
     const locals = findMarkdownLocalPaths(text, home);
     if (!locals.some(Boolean)) return null;
     const refsByLocal: Array<BlobRef | null> = [];
@@ -158,7 +162,7 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
         refsByLocal.push(null);
         continue;
       }
-      refsByLocal.push(await upload(local, orgId));
+      refsByLocal.push(await upload(local, orgId, seal));
     }
     let i = 0;
     const next = text.replace(MEDIA_REF, (whole, alt: string) => {
@@ -170,21 +174,21 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
 
   // A tool item's images, and for an open_url call (the pane's history) the page it opened, whose
   // summary is that URL.
-  async function rewriteTool(item: Extract<ThreadItem, { kind: "tool" }>, orgId: string, home: string): Promise<ThreadItem> {
-    const images = item.images?.length ? await rewriteToolImages(item.images, orgId, home) : null;
-    const summary = item.name === "mcp__browser__open_url" ? await rewritePage(item.summary, orgId, home) : null;
+  async function rewriteTool(item: Extract<ThreadItem, { kind: "tool" }>, orgId: string, home: string, seal?: BlobSeal): Promise<ThreadItem> {
+    const images = item.images?.length ? await rewriteToolImages(item.images, orgId, home, seal) : null;
+    const summary = item.name === "mcp__browser__open_url" ? await rewritePage(item.summary, orgId, home, seal) : null;
     if (!images && !summary) return item;
     return { ...item, ...(images ? { images } : {}), ...(summary ? { summary } : {}) };
   }
 
-  async function rewriteItem(item: ThreadItem, orgId: string): Promise<ThreadItem> {
+  async function rewriteItem(item: ThreadItem, orgId: string, seal?: BlobSeal): Promise<ThreadItem> {
     const home = os.homedir();
 
-    if (item.kind === "tool") return rewriteTool(item, orgId, home);
+    if (item.kind === "tool") return rewriteTool(item, orgId, home, seal);
 
     if (item.kind === "user" || item.kind === "assistant") {
-      const page = item.kind === "user" && item.page ? await rewritePage(item.page, orgId, home) : null;
-      const text = item.text ? await rewriteMarkdownText(item.text, orgId, home) : null;
+      const page = item.kind === "user" && item.page ? await rewritePage(item.page, orgId, home, seal) : null;
+      const text = item.text ? await rewriteMarkdownText(item.text, orgId, home, seal) : null;
       if (!page && !text) return item;
       return { ...item, ...(page ? { page } : {}), ...(text ? { text } : {}) };
     }
@@ -209,5 +213,5 @@ export function createBlobStore(opts: CreateBlobStoreOptions): BlobStoreBundle {
     return file;
   }
 
-  return { refFor, upload, uploadPage: (localPath, orgId) => uploadPage(localPath, orgId), rewriteItem, fetchBlob };
+  return { refFor, upload, uploadPage: (localPath, orgId, seal) => uploadPage(localPath, orgId, seal), rewriteItem, fetchBlob };
 }

@@ -8,6 +8,8 @@ const requireSession = vi.hoisted(() => vi.fn(() => Promise.resolve({ uid: "u-1"
 vi.mock("./worker-board", () => ({ requireSession }));
 const readBlob = vi.hoisted(() => vi.fn());
 vi.mock("./blob-read", () => ({ readBlob }));
+const watchWorkerProjects = vi.hoisted(() => vi.fn());
+vi.mock("./worker-project-live", () => ({ watchWorkerProjects }));
 
 const { workerProjectSnapshot, workerResultBlob } = await import("./worker-board-reads");
 
@@ -39,6 +41,16 @@ describe("workerProjectSnapshot", () => {
     await expect(workerProjectSnapshot("worker://w1/ling", c.client, NOW)).resolves.toEqual({ snapshot, updatedAt: "2026-11-02T11:50:00.000Z", worker: "m1mini", status: "online" });
     expect(c.filters).toContainEqual(["cloud_worker_projects", "folder", "ling"]);
     expect(c.filters).toContainEqual(["cloud_worker_projects", "org_id", "org-1"]);
+    // From the first read on, the workspace's new snapshots are heard live.
+    expect(watchWorkerProjects).toHaveBeenCalledWith(c.client, "org-1");
+  });
+
+  it("still reads when the client can't hold a live subscription", async () => {
+    watchWorkerProjects.mockImplementationOnce(() => {
+      throw new Error("no realtime");
+    });
+    const c = client({ cloud_workers: worker });
+    await expect(workerProjectSnapshot("worker://w1/ling", c.client, NOW)).resolves.toMatchObject({ worker: "m1mini" });
   });
 
   it("has no snapshot before the worker wrote one, or before the table exists, and says when it's offline", async () => {

@@ -149,7 +149,7 @@ describe("workerRules: an answer on a worker goes through the rule on every rout
   function kinds(keys: string[]) {
     const eng = fakeEngine({ "card-1": card });
     const { w } = setup(keys);
-    return { eng, k: cardKinds(workerRules(eng.engine, undefined, undefined, "u-1", w)) };
+    return { eng, k: cardKinds(workerRules(eng.engine, { owner: "u-1", widen: w })) };
   }
 
   it("refuses an unsigned host card.permission.answer (the tile, the line) and runs a signed one", async () => {

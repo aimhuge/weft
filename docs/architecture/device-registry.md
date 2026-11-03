@@ -106,6 +106,53 @@ Settings → Devices → **Add a worker** runs the phone's steps for a box:
 - IPC `host-pairing:start|check|cancel` is registered by `electron/pairing-ipc.cjs` on the same board-only handler as
   phone pairing (`electron/host-pairing-ipc.cjs`), sharing its view of this Mac and its Touch ID.
 
+## The pairing Mac
+
+Built 2026-11-03 with `supabase/migrations/20261103080000_worker_pairing_mac.sql` (not applied). A paired worker trusts one
+Mac: the one whose approval key came in its pairing code (`lib/worker-mac-keys.ts`, `mac-keys.json`). With two Macs signed
+in, its asks used to go to the newest heartbeat, which then couldn't answer (the worker refuses another Mac's `secret_use`,
+and main answers vault asks only from a worker it pinned).
+
+- **`cloud_workers.paired_mac`** is that Mac's device id, copied from the pairing row by a trigger when
+  `worker_pair_confirm` marks it paired (no client may write it; filled for every worker paired before). It's routing only:
+  the worker still checks every answer against the key it pinned, so a wrong value at worst sends an ask where nobody can
+  answer it.
+- **`worker_secret_ask` and `worker_mac_ask`** send secret runs and the vault's asks (`vault_*`, `dev_env`) only to that Mac
+  while it beat in the last minute, and return null when it's away; the worker says so ("secrets come only from the Mac
+  it's paired with", `lib/worker-secret-run.ts`, `lib/worker-mac-ask.ts`), and `weft-worker status` names the Mac's key
+  fingerprint. A tunnel or relay, which any of your Macs may approve, tries the paired Mac first and falls back to the
+  newest beat. A token-enrolled worker (no pairing) keeps the newest beat. A revoked Mac's beat never counts.
+- **Limits.** The paired Mac must beat in the worker's own workspace (as before, the heartbeat row is per workspace the Mac
+  syncs to). A Mac that changed device id (revoked, then registered afresh) is a different Mac: re-pair.
+
+## Revoked on one device, untrusted on all
+
+Built 2026-11-03. `device_revoke` only marks rows; what decides trust is each pin list. Each now follows the registry, and
+only ever takes trust away from it:
+
+- **Phones and browsers on the Mac that paired them.** `electron/pairing.cjs` `reconcile()` reads `revoked_at` for every
+  device in `paired-devices.json` (at most once a minute, from the passkey sync every 30 s) and treats one revoked
+  elsewhere as `pairing:revoke` would: unpinned (its signatures stop counting), its grants dropped and the workspace key
+  rotated. Only a row that says `revoked_at` counts: a row missing from the read (RLS, another account signed in) unpins
+  nothing.
+- **Passkeys on workers.** The same refresh then narrows each worker's endorsed set to the passkeys still pinned here
+  (`electron/widen-endorse.cjs`), and the worker refuses a passkey while its set is older than the head the Mac
+  published ([weft-worker.md, passkey heads](weft-worker.md#passkey-heads-a-worker-never-approves-with-an-outdated-set),
+  `lib/passkey-head.ts`).
+- **The pairing Mac on its workers.** `worker_mac_state(key)` says whether the worker's `paired_mac` was revoked (its
+  heartbeat row, or a key row naming it as `host_device`). The daemon checks at start and every minute
+  (`lib/worker-mac-revocation.ts`, from `lib/worker-host-services.ts`) and marks every key it pinned revoked in
+  `mac-revoked.json`, for good: `macKeysAt().pinned()` leaves them out, so no secret answer, synced setting, endorsement,
+  widening or re-pair approval signed by that Mac counts again, even after a re-pair from it. The passkeys it endorsed
+  earlier stay as they are (no newer set can reach them). `held()` still counts the revoked key, so a count of who could
+  approve (h7's `approvers()`) must use `held()`, not `pinned()`: a revoked Mac mustn't lower the bar to "nothing paired".
+  The box then takes no secrets until it's wiped and enrolled from another Mac
+  ([weft-worker.md](weft-worker.md#re-pairing-and-a-lost-mac)).
+- **Threats checked.** A stolen session can revoke any of your devices already, so a false "revoked" costs only that
+  device, never adds one. It can't un-revoke (the keep-revoked triggers) or write `paired_mac`, and a failed read changes
+  nothing. A read that can't see a phone's row leaves it pinned (not fail-closed: an account switch would otherwise unpin
+  everything).
+
 ## Versions
 
 Settings → Devices shows the Weft version and commit each device runs in its existing subtitle ("Worker · paired · Busy · 0.7.0 (d9b7166)"), and marks one older than the newest version across your devices ("0.6.6 (abc1234, older)"). No "N behind main": that needs GitHub, so it isn't computed.
@@ -126,9 +173,6 @@ Migration `20261102290000_device_versions.sql`.
 - **`desktop_worker_beat`** stays as is (H5's heartbeat). The registry merges its rows instead.
 - **Phone and browser pairing** (`electron/pairing.cjs`, `lib/pairing-link.ts`) are unchanged: the phone app writes
   `phone_pairings` and `devices` exactly as before, and H7 is changing those files.
-- **Cross-Mac revocation (follow-up)**: a phone revoked from another Mac (or from the registry) is still pinned on the
-  Mac that paired it, and that Mac's pinned list is what decides approvals. Reconciling `electron/paired-devices.cjs`'s
-  pin list with `revoked_at` is a follow-up.
 - **A revoked Mac** can't beat under its device id, unwrap vault or workspace keys, or be paired with under that key. It
   still holds the account's session, which no device revocation can take away: with it, it can register a new key row,
   mint a new device id and beat as a new Mac, and act as the account (sync, commands) as any signed-in client can.
@@ -150,3 +194,9 @@ Migration `20261102290000_device_versions.sql`.
 touches (twice, and after H7's `20261102130000_passkey_approvals.sql`), and a 73-assertion SQL script ran every branch of
 the view, `device_revoke`, the keep-revoked trigger, the pairing functions and the phone flow as `anon` and
 `authenticated`.
+
+The pairing Mac and cross-device revocation: `lib/worker-mac-keys.test.ts`, `lib/worker-mac-revocation.test.ts`,
+`lib/worker-host-services.test.ts`, `lib/worker-secret-wiring.test.ts`, `electron/pairing.test.ts` (reconcile),
+`electron/pairing-ipc.test.ts`. Both 2026-11-03 migrations were applied twice to a scratch Postgres 17 over stand-ins, and
+a SQL script checked routing (paired Mac first, away, revoked, a token worker, the tunnel fallback), the backfill,
+`worker_mac_state` both ways, and the heads table's grants, prune, cap and cascade.

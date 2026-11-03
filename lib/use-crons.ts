@@ -39,6 +39,8 @@ export function useCrons() {
   return {
     crons,
     error,
+    // A cron made on a Weft Worker (cron.create): read the list again once the worker has republished it.
+    later: () => void setTimeout(() => void reload(), WORKER_LIST_SETTLE_MS),
     create: async (input: CronInput) => {
       const cron = await cronApi.create(input);
       put(cron);

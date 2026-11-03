@@ -65,8 +65,18 @@ export interface CardRules {
   create?(command: CloudCommandRow, args: Record<string, unknown>): Promise<string>;
   // cron.* and webhook.*: runs one on a cron or webhook this host keeps, past remoteRefusal, and resolves with the card a
   // run made (or null). Without it the host refuses them from the network (a Mac: its own are changed in its window).
-  lists?(verb: ListVerb, args: HostArgs): Promise<string | null>;
+  // cron.create comes here too, once its card checked out: a cron made from the network, whose mode the host narrows.
+  lists?(verb: ListVerb | "cron.create", args: HostArgs): Promise<string | null>;
+  // card.list from the network: the cards this host publishes, as it publishes them (a worker, lib/worker-reads.ts).
+  // Without it the host refuses it (a Mac: its cards reach a board through its own sealed sync).
+  cards?(): Promise<unknown>;
+  // thread.page, thread.search and thread.tool on a card this host runs, answered in the projection its rows carry (a
+  // worker, lib/worker-reads.ts). Without it the host refuses them (a Mac, as for card.list).
+  threads?(verb: ThreadVerb, args: Record<string, unknown>): Promise<unknown>;
 }
+
+export type ThreadVerb = Extract<HostVerb, `thread.${string}`>;
+const isThreadVerb = (verb: HostVerb): verb is ThreadVerb => verb.startsWith("thread.");
 
 // Verbs that put something on the internet or prompt the owner's Mac (dev.open: a tunnel and a Touch ID). Only the
 // owner's own command runs them from the network, never another member's of the workspace.
@@ -74,6 +84,7 @@ export const OWNER_VERBS: ReadonlySet<HostVerb> = new Set<HostVerb>(["dev.open"]
 const NOT_OWNER = "Only the owner of this card can do that.";
 
 const NO_CREATE = "This host starts new threads through new_card, not card.create.";
+export const NO_READS = "This host's cards and threads reach a board through its own sync, not as an answer to a request.";
 export const NO_LISTS = "This Mac's crons and webhooks change only in its own window (its ⏰ and 🪝 drawers, or a thread there), not from the network.";
 
 // A host verb's answer as an answer kind: the same payload, so the same approval rule and a phone's signature
@@ -88,7 +99,7 @@ export function asAnswer(command: CloudCommandRow, { args }: HostPayload): Cloud
 const TURN_VERBS = new Set<HostVerb>(["card.message", "card.message.edit", "card.restart", "card.fresh"]);
 
 // Verbs a board runs for their answer, or to warm a CLI: they change no card, so there's nothing to sync after them.
-const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put"]);
+const READS = new Set<HostVerb>(["skills.list", "files.list", "files.read", "files.write", "card.warm", "settings.get", "settings.put", "dev.status"]);
 
 const NO_HOST_VERBS = "This host takes its settings only from its own window.";
 
@@ -99,6 +110,10 @@ export function cardKinds(rules: CardRules) {
   }
 
   async function verb(name: HostVerb, args: Record<string, unknown>): Promise<unknown> {
+    if (isThreadVerb(name)) {
+      if (!rules.threads) throw new Error(NO_READS);
+      return rules.threads(name, args);
+    }
     const reply = await rules.verb(name, args);
     if (!READS.has(name)) rules.after?.();
     return reply;
@@ -171,6 +186,7 @@ export function cardKinds(rules: CardRules) {
     const card = rules.card(body.args.id, command, "reached");
     if (OWNER_VERBS.has(body.verb) && !rules.fromOwner?.(command)) throw new Error(NOT_OWNER);
     await allowed(body, card);
+    if (body.verb === "cron.create") return cronFrom(card, body);
     // Who sent a turn, for its <weft-env> block: the row's hint, never a check (lib/turn-client.ts).
     if (TURN_VERBS.has(body.verb)) noteClient(card.id, commandClient(command.payload));
     const reply = await verb(body.verb, await received(command, { ...withoutWiden(body.args), id: card.id }, textArgOf(body.verb)));
@@ -180,13 +196,21 @@ export function cardKinds(rules: CardRules) {
     return { cardId: card.id, result };
   }
 
+  // The rule a host-level verb runs through, if this host takes it from the network.
+  function hostLevel({ verb: name, args }: HostPayload): (() => Promise<unknown>) | string {
+    if (name === "card.list") return rules.cards ? () => (rules.cards as () => Promise<unknown>).call(rules) : NO_READS;
+    return rules.hostVerb ? () => (rules.hostVerb as NonNullable<CardRules["hostVerb"]>).call(rules, name, args) : NO_HOST_VERBS;
+  }
+
   // A verb on the host itself: no card to check, the same refusals, and the cardId left empty (reported as none).
   async function onHost(body: HostPayload): Promise<HostDone> {
-    if (!rules.hostVerb) throw new Error(NO_HOST_VERBS);
+    const run = hostLevel(body);
+    if (typeof run === "string") throw new Error(run);
     const refused = remoteRefusal(body);
     if (refused) throw new Error(refused);
-    const reply = await rules.hostVerb(body.verb, body.args);
-    return { cardId: "", result: verbResult(body.verb, "", reply) };
+    const reply = await run();
+    const result = carriesValue(body.verb) ? await valueResult("", reply, rules.carry) : verbResult(body.verb, "", reply);
+    return { cardId: "", result };
   }
 
   // A new card: no card to check yet, so the host's own create rule, behind the same refusals as an update.
@@ -207,6 +231,13 @@ export function cardKinds(rules: CardRules) {
     if (refused) throw new Error(refused);
     const made = await rules.lists(verb, body.args);
     return { cardId: null, result: hostResult(made ?? "") };
+  }
+
+  // A cron made from a card this host runs (the ⏰ popover): the host's own list rule, which narrows its mode.
+  async function cronFrom(card: Card, body: HostPayload): Promise<HostDone> {
+    if (!rules.lists) throw new Error(NO_LISTS);
+    await rules.lists("cron.create", { ...withoutWiden(body.args), id: card.id });
+    return { cardId: card.id, result: hostResult(card.id) };
   }
 
   return { reply, answer, stop, host };

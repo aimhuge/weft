@@ -9,7 +9,7 @@ import { hostRow, type CardTarget, type HostCommandRow, type HostPayload } from 
 import { readRefusal, writeRefusal } from "./file-policy";
 import { foreignSetting, type HostSettings } from "./host-settings";
 import { isHostLevelVerb, isHostVerb, isListVerb, type HostVerb } from "./host-verbs";
-import { listRefusal } from "./list-policy";
+import { cronCreateRefusal, listRefusal } from "./list-policy";
 import { fitSkills, type SkillsOnWire } from "./skills-wire";
 
 // What a host writes to `result`. Never the card or its thread: those travel sealed (cloud_cards, the outbox), and
@@ -63,6 +63,7 @@ export function remoteRefusal({ verb, args }: HostPayload): string | null {
   if (foreign) return `A request from the web can't change ${foreign.slice(0, 40)}. Do it in Weft's own window on that machine.`;
   // A cron or webhook the host keeps: only what the Mac's drawers change (./list-policy.ts).
   if (isListVerb(verb)) return listRefusal(verb, args);
+  if (verb === "cron.create") return cronCreateRefusal(args);
   // A scheduled message is sent as a reply when its time comes, never run, but a "!" one would read as a command
   // waiting to run, so the network can't leave one on a card at all.
   if (verb === "card.schedule" && typeof args.text === "string" && isBang(args.text)) return SHELL_REFUSED;

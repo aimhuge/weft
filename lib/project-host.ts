@@ -9,7 +9,7 @@
 import { api, call, type NewCardInput } from "./client";
 import { filesApi } from "./client-files";
 import { cronApi } from "./cron-client";
-import type { CronPatch } from "./cron-types";
+import type { CronInput, CronPatch } from "./cron-types";
 import type { FilesSource } from "./files-source";
 import { localRead, type ReadProject } from "./project-reads";
 import { cloudRead } from "./project-snapshot-view";
@@ -73,6 +73,10 @@ const given = <T extends unknown[]>(...args: T) => {
   return args;
 };
 
+// thread.page's before and limit, as the route's query: only the ones given.
+const pageQuery = (a: HostArgs): Record<string, string> =>
+  Object.fromEntries((["before", "limit"] as const).filter((k) => typeof a[k] === "number").map((k) => [k, String(a[k])]));
+
 // Each verb as the local server's card routes take it (lib/client-api.ts), the routes that mount the same handlers.
 const LOCAL: Record<HostVerb, LocalCall> = {
   // The board's own New thread goes through POST /api/cards; this is the verb's local form, the id the server's to pick.
@@ -102,6 +106,8 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "files.write": (a) => filesApi.write(a.id, text(a.path), text(a.text), a.baseHash as string | null | undefined),
   "dev.open": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "open" }),
   "dev.stop": (a) => api.devAction(a.id, "stop"),
+  // The ⏰ popover's POST /api/crons, from the card a.id names.
+  "cron.create": ({ id, ...input }) => cronApi.create({ ...(input as Omit<CronInput, "cardId">), cardId: id }),
   // The ⏰ and 🪝 drawers' routes (lib/cron-client.ts, lib/client-api.ts); a.id is the cron's or webhook's.
   "cron.update": (a) => cronApi.update(a.id, a.patch as CronPatch),
   "cron.delete": (a) => cronApi.remove(a.id),
@@ -110,6 +116,12 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "webhook.delete": (a) => api.removeWebhook(a.id),
   "dev.restart": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "rerun" }),
   "dev.log": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "log" }),
+  "dev.start": (a) => api.devAction(a.id, a.restart === true ? "restart" : "start"),
+  "dev.status": (a) => api.devStatus(a.id),
+  // The thread's reads, through their routes (lib/host-api/thread.ts).
+  "thread.page": (a) => call("GET", `/api/cards/${a.id}/thread?${new URLSearchParams(pageQuery(a)).toString()}`),
+  "thread.search": (a) => call("GET", `/api/cards/${a.id}/thread/search?q=${encodeURIComponent(text(a.q))}`),
+  "thread.tool": (a) => call("GET", `/api/cards/${a.id}/thread/tool/${encodeURIComponent(text(a.toolId))}`),
 };
 
 export const localHost: ProjectHost = {
@@ -130,8 +142,9 @@ export const localHost: ProjectHost = {
 // What a Worker has today: its cards' own verbs, the thread and its pages, Send later, a skill run as a message, its
 // files through the file verbs and the header's reads through its snapshots (H4). Share… reads the card's cloud rows,
 // which a worker publishes like a Mac's outbox (lib/card-share-worker.ts), and Delete is card.delete. Its crons and
-// webhooks change from the Mac's drawers (lists). Not this Mac's pane, vault or CLIs.
-const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete", "lists"]);
+// webhooks change from the Mac's drawers (lists), and its ⏰ makes a cron there (cron.create). Its skill set chip lists
+// the worker's own skills and sets the card's through card.update. Not this Mac's pane, vault or CLIs.
+const CLOUD_FEATURES = new Set<HostFeature>(["schedule", "files", "reads", "runSkill", "share", "delete", "lists", "cron", "skills"]);
 // What widens a card, which a worker runs only with a signed approval (lib/widen-signer.ts): offered where this Mac can
 // sign one (the desktop app), and the act asks Touch ID first.
 const SIGNED_FEATURES = new Set<HostFeature>(["folder", "agent", "shell", "terminal"]);

@@ -107,6 +107,13 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     endorsed: createEndorsed({ dir: dataDir, safeStorage: keychain }),
     workerName: (id) => workerPins.nameOf(id),
     workerSignKey: (id) => workerPins.signKeyOf(id),
+    // The head of each worker's set, into the insert-only log its worker reads (lib/passkey-head.ts), and the phones and
+    // passkeys revoked from another Mac, unpinned here before each refresh narrows the sets (electron/pairing.cjs).
+    publishHead: async (worker, head) => {
+      const { error } = await db().from("worker_passkey_heads").insert({ worker_id: worker, head });
+      if (error) throw new Error(`The passkey head couldn't be published: ${error.message}`);
+    },
+    reconcile: () => pairing.reconcile(),
   });
 
   const widenNonces = require("./widen-nonces.cjs").createWidenNonces({ dir: dataDir, safeStorage: keychain });
