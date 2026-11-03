@@ -22,6 +22,7 @@ const api = vi.hoisted(() => ({
   create: vi.fn(),
   warm: vi.fn(),
   devAction: vi.fn(),
+  devStatus: vi.fn(),
   updateWebhook: vi.fn(),
   removeWebhook: vi.fn(),
 }));
@@ -160,6 +161,13 @@ describe("localHost", () => {
     ["webhook.delete", { id: "h1" }, api.removeWebhook, ["h1"]],
     ["dev.restart", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "rerun" }]],
     ["dev.log", { id: "c1" }, call, ["POST", "/api/cards/c1/dev", { action: "log" }]],
+    ["dev.start", { id: "c1" }, api.devAction, ["c1", "start"]],
+    ["dev.start", { id: "c1", restart: true }, api.devAction, ["c1", "restart"]],
+    ["dev.status", { id: "c1" }, api.devStatus, ["c1"]],
+    ["thread.page", { id: "c1" }, call, ["GET", "/api/cards/c1/thread?"]],
+    ["thread.page", { id: "c1", before: 40, limit: 20, extra: "x" }, call, ["GET", "/api/cards/c1/thread?before=40&limit=20"]],
+    ["thread.search", { id: "c1", q: "a b" }, call, ["GET", "/api/cards/c1/thread/search?q=a%20b"]],
+    ["thread.tool", { id: "c1", toolId: "t/1" }, call, ["GET", "/api/cards/c1/thread/tool/t%2F1"]],
   ] as const)("%s goes to the route the board has always called", async (verb, args, fn, expected) => {
     const run = localHost.act as (verb: string, args: unknown) => Promise<void>;
     await run(verb, args);

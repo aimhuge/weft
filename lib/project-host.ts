@@ -71,6 +71,10 @@ const given = <T extends unknown[]>(...args: T) => {
   return args;
 };
 
+// thread.page's before and limit, as the route's query: only the ones given.
+const pageQuery = (a: HostArgs): Record<string, string> =>
+  Object.fromEntries((["before", "limit"] as const).filter((k) => typeof a[k] === "number").map((k) => [k, String(a[k])]));
+
 // Each verb as the local server's card routes take it (lib/client-api.ts), the routes that mount the same handlers.
 const LOCAL: Record<HostVerb, LocalCall> = {
   // The board's own New thread goes through POST /api/cards; this is the verb's local form, the id the server's to pick.
@@ -108,6 +112,12 @@ const LOCAL: Record<HostVerb, LocalCall> = {
   "webhook.delete": (a) => api.removeWebhook(a.id),
   "dev.restart": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "rerun" }),
   "dev.log": (a) => call("POST", `/api/cards/${a.id}/dev`, { action: "log" }),
+  "dev.start": (a) => api.devAction(a.id, a.restart === true ? "restart" : "start"),
+  "dev.status": (a) => api.devStatus(a.id),
+  // The thread's reads, through their routes (lib/host-api/thread.ts).
+  "thread.page": (a) => call("GET", `/api/cards/${a.id}/thread?${new URLSearchParams(pageQuery(a)).toString()}`),
+  "thread.search": (a) => call("GET", `/api/cards/${a.id}/thread/search?q=${encodeURIComponent(text(a.q))}`),
+  "thread.tool": (a) => call("GET", `/api/cards/${a.id}/thread/tool/${encodeURIComponent(text(a.toolId))}`),
 };
 
 export const localHost: ProjectHost = {

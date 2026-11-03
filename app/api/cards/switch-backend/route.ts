@@ -1,6 +1,7 @@
 import { connection } from "next/server";
 import { fail, guard } from "@/lib/guard";
-import { isBusy, switchBackend } from "@/lib/runner";
+import { runVerb } from "@/lib/host-api";
+import { isBusy } from "@/lib/runner";
 import { getCard } from "@/lib/store";
 import { BACKEND_IDS } from "@/lib/new-thread";
 import type { Backend } from "@/lib/types";
@@ -13,7 +14,8 @@ const BACKENDS: Backend[] = BACKEND_IDS;
 // (busy) are returned in `pending` so the column button can confirm with the user before
 // retrying (the per-card switch still refuses to switch a busy card, so the retry only
 // succeeds once each turn ends). The per-card switch decides whether to replay the last
-// user message (rate-limit cards) or just flip without replaying.
+// user message (rate-limit cards) or just flip without replaying: each one is the card.switchBackend verb
+// (lib/host-api/card-cli.ts).
 export async function POST(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
@@ -34,7 +36,7 @@ export async function POST(req: Request) {
       if (!card) { failed.push({ id, error: "no such card" }); continue; }
       if (isBusy(id)) { pending.push(id); continue; }
       try {
-        await switchBackend(id, backend, { replay: Boolean(card.rateLimitHit) });
+        await runVerb("card.switchBackend", { id, backend, replay: Boolean(card.rateLimitHit) });
         switched.push(id);
       } catch (err) {
         failed.push({ id, error: err instanceof Error ? err.message : String(err) });
