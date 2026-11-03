@@ -21,8 +21,8 @@ export const gh = {
 // Mock module factories, named so each test file can do `vi.mock("./module", () => browserToolsMock(shell))`.
 // The shell mock is shared with the test file so its `shell.mockResolvedValueOnce(...)` lines reach the
 // module the source code calls.
-export const storeMock = (dataDir: string) => ({ DATA_DIR: dataDir, getThread: (id: string): ThreadItem[] => (id === "copilot" ? copilotThread : []) });
-export const activityMock = () => ({ readActivity: (): ActivityEvent[] => activityEvents });
+export const storeMock = (dataDir: string) => ({ DATA_DIR: dataDir, listCards: (): Card[] => [], getThread: (id: string): ThreadItem[] => (id === "copilot" ? copilotThread : []) });
+export const activityMock = () => ({ readActivity: (): ActivityEvent[] => activityEvents, withoutHandedOff: (events: ActivityEvent[]) => events });
 export const browserToolsMock = (shellMock: ReturnType<typeof vi.fn>) => ({ shell: shellMock });
 export const commitPileMock = (repoRootMock: ReturnType<typeof vi.fn>, readPileMock: ReturnType<typeof vi.fn>) => ({ readPile: readPileMock, repoRoot: repoRootMock });
 export const qualityMock = (measureQualityMock: ReturnType<typeof vi.fn>) => ({ measureQuality: measureQualityMock });

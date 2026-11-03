@@ -1,7 +1,7 @@
 // What a Weft Worker runs beside its inbox so its cards behave as yours do on the Mac
 // (docs/architecture/project-hosts.md#settings-on-a-worker-wp3): your account's settings mirrored in once your paired
 // Mac's signature checks (lib/worker-settings-sync.ts, lib/account-settings-sig.ts), and its plan limits polled and
-// published (lib/worker-limits.ts). scripts/weft-worker.ts starts it once the engine has loaded; `nudge` is called as
+// published with the models at their cap (lib/worker-limits.ts). scripts/weft-worker.ts starts it once the engine has loaded; `nudge` is called as
 // commands arrive, `stop` on the way out.
 import fs from "node:fs";
 import path from "node:path";
@@ -9,6 +9,7 @@ import { settingsRefusal } from "./account-settings-sig";
 import { applyAccountSettings } from "./host-settings";
 import { readSamples } from "./limit-history";
 import { startLimitPoll } from "./limit-poll";
+import { modelLimits } from "./model-limit";
 import { macKeysAt } from "./worker-mac-keys";
 import { startWorkerLimits } from "./worker-limits";
 import type { Registry } from "./worker-registry";
@@ -45,7 +46,7 @@ export function startHostServices(reg: Pick<Registry, "accountSettings" | "setLi
     log,
   });
   const stopSettings = settings.start();
-  const limits = startWorkerLimits({ poll: startLimitPoll, read: () => readSamples(), setLimits: (packed) => reg.setLimits(packed), log });
+  const limits = startWorkerLimits({ poll: startLimitPoll, read: () => readSamples(), models: () => modelLimits(), setLimits: (packed) => reg.setLimits(packed), log });
   return {
     nudge: settings.nudge,
     stop() {

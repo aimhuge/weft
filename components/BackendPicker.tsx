@@ -28,7 +28,7 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
   const [error, setError] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const live = isLive(card);
-  const atLimit = new Set(useLimitedModels().map((l) => l.model));
+  const atLimit = new Set(useLimitedModels(card.cwd).map((l) => l.model));
   useEscape(open, () => setOpen(false));
 
   useEffect(() => {

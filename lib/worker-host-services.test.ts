@@ -9,6 +9,7 @@ import { macSigner } from "./mac-signer.harness";
 vi.mock("./host-settings", () => ({ applyAccountSettings: vi.fn(() => []) }));
 vi.mock("./limit-history", () => ({ readSamples: vi.fn(() => [{ at: 60_000, backend: "claude", kind: "five_hour", used: 5 }]) }));
 vi.mock("./limit-poll", () => ({ startLimitPoll: vi.fn() }));
+vi.mock("./model-limit", () => ({ modelLimits: vi.fn(() => [{ model: "claude-opus-5-5", at: 60_000, resetsAt: 1_800_000_000_000 }]) }));
 
 const poll = await import("./limit-poll");
 const host = await import("./host-settings");
@@ -44,7 +45,7 @@ describe("startHostServices", () => {
     expect(settingsVersionAt(dir).read()).toBe(7);
     expect(poll.startLimitPoll).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(60_000);
-    expect(reg.setLimits).toHaveBeenCalledWith({ v: 1, s: [[1, "claude", 5, 5, 0]] });
+    expect(reg.setLimits).toHaveBeenCalledWith({ v: 1, s: [[1, "claude", 5, 5, 0]], m: [["claude-opus-5-5", 1, 1_800_000_000]] });
     services.nudge();
     services.stop();
     const calls = reg.accountSettings.mock.calls.length;

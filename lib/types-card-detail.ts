@@ -121,6 +121,9 @@ export interface Card {
   qaDevice?: string | null;
   // A worker's card on a React Native or Expo app (lib/mobile-app.ts): its pane offers Start simulator.
   mobileApp?: boolean;
+  // Run on Worker sent this card's first message to a worker (lib/worker-handoff.ts): the run lives on the worker's own
+  // card, so this local record of it counts for nothing in streaks, XP and "made" totals (lib/activity.ts).
+  handedOff?: { workerId: string; commandId: string };
   // Haiku's emoji for the card, shown in place of a thumbnail until it has one.
   emoji?: string;
   // Who last named the card: you (typed or renamed it) or Weft's retitle after its first turn (lib/retitle.ts).

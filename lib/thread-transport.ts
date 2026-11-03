@@ -62,6 +62,9 @@ export interface ThreadTransport {
   // The card's own controls in the thread's header reach its host: rename, tags, star, archive and the model picker
   // (lib/project-host.ts). The desktop's always do; a worker card's do too (lib/worker-transport.ts), and so do weft.zip's on your own cards.
   cardEdits?: boolean;
+  // The mode picker offers YOLO on a card of another host: a worker card on the desktop app, whose act asks Touch ID
+  // for a signed approval of exactly that change (lib/widen-signer.ts). The desktop's own cards always offer it.
+  signsSkip?: boolean;
   // The review panel, the skills chip and the copilot's starters: the desktop board's own.
   desktop: boolean;
 }

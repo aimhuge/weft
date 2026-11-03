@@ -120,6 +120,27 @@ describe("a worker card's header", () => {
   });
 });
 
+describe("a worker card's mode picker", () => {
+  const renderWith = (signsSkip: boolean) =>
+    render(
+      <ThreadTransportContext.Provider value={{ ...workerTransport, signsSkip }}>
+        <ThreadPanel card={card} items={[]} streaming="" onSend={vi.fn(() => Promise.resolve())} onAnswer={vi.fn()} onMode={vi.fn()} onClose={vi.fn()} />
+      </ThreadTransportContext.Provider>,
+    );
+
+  it("offers YOLO where the board signs the change with Touch ID", async () => {
+    renderWith(true);
+    await userEvent.click(screen.getByRole("button", { name: /^Permissions:/ }));
+    expect(screen.getByText("YOLO")).toBeInTheDocument();
+  });
+
+  it("leaves YOLO out where the board can't sign it", async () => {
+    renderWith(false);
+    await userEvent.click(screen.getByRole("button", { name: /^Permissions:/ }));
+    expect(screen.queryByText("YOLO")).not.toBeInTheDocument();
+  });
+});
+
 describe("a worker card's reply box", () => {
   it("keeps a ! command off the agent: the box turns amber and says a shell runs only on this Mac's cards", async () => {
     const { onSend } = renderWorkerPanel({ ...card, sessionId: "s-1" });

@@ -112,18 +112,24 @@ describe("FirstMessageErrorBanner", () => {
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
-  it("on a worker's card, reruns on the card's own CLI's default, not this Mac's backup model, and on the worker", async () => {
+  it("on a worker's card, reruns on the backup model your Settings sync to it, on the worker", async () => {
     const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
     fetchMock.mockImplementation((url) => Promise.resolve(json(url.startsWith("/api/workers") ? { status: "done", error: null } : { commandId: "cmd-1" })));
     const card = makeCard({ id: "w-card", cwd: "worker://w1/ling", error: "rate limit", backend: "claude", model: "claude-fable-5-1" });
     render(<FirstMessageErrorBanner card={card} items={failedThread()} openSettings={() => {}} />);
-    fireEvent.click(screen.getByRole("button", { name: "Rerun on Opus 5.5" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Rerun on Sonnet 5\.5/ }));
     await waitFor(() => {
       const posted = fetchMock.mock.calls.filter(([url, init]) => url === "/api/worker-board" && init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as unknown);
-      expect(posted).toEqual([{ action: "host", cardId: "w-card", verb: "card.rerunModel", args: { id: "w-card", model: "claude-opus-5-5" } }]);
+      expect(posted).toEqual([{ action: "host", cardId: "w-card", verb: "card.rerunModel", args: { id: "w-card", model: "claude-sonnet-5-5" } }]);
     });
-    expect(api.settings).not.toHaveBeenCalled();
     expect(api.rerunModel).not.toHaveBeenCalled();
+  });
+
+  it("on a worker's card with no Settings to read (weft.zip), reruns on its own CLI's default", () => {
+    const card = makeCard({ id: "w-card", cwd: "worker://w1/ling", error: "rate limit", backend: "claude", model: "claude-fable-5-1" });
+    render(<FirstMessageErrorBanner card={card} items={failedThread()} />);
+    expect(screen.getByRole("button", { name: "Rerun on Opus 5.5" })).toBeInTheDocument();
+    expect(api.settings).not.toHaveBeenCalled();
   });
 
   it("with no backup configured, the Rerun button is 'Pick a backup model' and opens Settings", async () => {
