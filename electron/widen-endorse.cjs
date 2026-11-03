@@ -39,6 +39,15 @@ function createEndorsed({ dir, safeStorage }) {
   return { read, set, file };
 }
 
+// The head: this Mac's latest generation for a worker, signed and put in the insert-only worker_passkey_heads log, which
+// the worker reads before a passkey approval counts (lib/passkey-head.ts headMessage, the same bytes). A revoke whose pin
+// row a stolen session deletes still reaches the worker this way: the log has no delete for clients. Signed again daily,
+// so the log (pruned after 30 days) always holds one.
+const HEAD_V = "weft-endorse-head-v1";
+const headMessage = (h) => canonical({ v: HEAD_V, worker: h.worker, generation: h.generation, issuedAt: h.issuedAt });
+const HEAD_EVERY_MS = 24 * 3_600_000;
+const HEAD_RETRY_MS = 5 * 60_000;
+
 const HELD_V = "weft-endorse-held-v1";
 const heldMessage = (h) => canonical({ v: HELD_V, worker: h.worker, generation: h.generation });
 const keyOf = (k) => `${k.device} ${k.credId} ${k.publicKey}`;
@@ -59,9 +68,12 @@ function heldSigned(signKey, worker, receipt) {
  * @param {{ signer: { sign: (m: string) => string }, macDevice: () => string, confirm: (reason: string) => Promise<boolean>,
  *   passkeys: () => Array<{ id: string, passkey?: { credId: string, publicKey: string } }>,
  *   endorsed: ReturnType<typeof createEndorsed>, workerName?: (id: string) => string | null,
- *   workerSignKey?: (id: string) => string | null, now?: () => number }} deps
+ *   workerSignKey?: (id: string) => string | null, now?: () => number,
+ *   publishHead?: (worker: string, head: object) => Promise<unknown>, reconcile?: () => Promise<unknown> }} deps
+ * publishHead inserts a signed head in worker_passkey_heads; reconcile drops passkeys and phones revoked from another
+ * Mac (electron/pairing.cjs reconcile) before a refresh narrows each worker's set.
  */
-function registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys, endorsed, workerName = () => null, workerSignKey = () => null, now = Date.now }) {
+function registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys, endorsed, workerName = () => null, workerSignKey = () => null, now = Date.now, publishHead, reconcile }) {
   // The passkeys this Mac has pinned now, each by its device, credential and key.
   const pairedKeys = () => passkeys().filter((d) => d.passkey).map((d) => ({ device: d.id, credId: d.passkey.credId, publicKey: d.passkey.publicKey }));
 
@@ -71,8 +83,35 @@ function registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys, en
     const generation = Math.max(now(), (Number(before?.generation) || 0) + 1);
     const e = { worker, passkeys: keys, generation, issuedAt: now() };
     const endorsement = { ...e, mac: macDevice(), sig: signer.sign(endorseMessage(e)) };
-    endorsed.set(worker, { keys, generation, endorsement, confirmed: Number(before?.confirmed) || 0 });
+    endorsed.set(worker, { keys, generation, endorsement, confirmed: Number(before?.confirmed) || 0, headGeneration: Number(before?.headGeneration) || 0, headAt: Number(before?.headAt) || 0 });
     return endorsement;
+  }
+
+  // Signs and publishes the head for a worker's current generation; remembered once it's in, so a failed insert is tried
+  // again on the next refresh. Never throws: the pin still goes out.
+  async function publish(worker) {
+    const record = endorsed.read()[worker];
+    if (!publishHead || !record || !Number.isFinite(Number(record.generation))) return false;
+    const head = { worker, generation: Number(record.generation), issuedAt: now() };
+    try {
+      await publishHead(worker, { ...head, mac: macDevice(), sig: signer.sign(headMessage(head)) });
+    } catch {
+      // A worker deleted since, or the log not there yet: asked again in a few minutes, or at once for a newer set.
+      endorsed.set(worker, { ...endorsed.read()[worker], headTried: head.generation, headTriedAt: head.issuedAt });
+      return false;
+    }
+    endorsed.set(worker, { ...endorsed.read()[worker], headGeneration: head.generation, headAt: head.issuedAt });
+    return true;
+  }
+
+  // Every worker whose head is behind its set, or a day old.
+  async function publishDue() {
+    for (const [worker, record] of Object.entries(endorsed.read())) {
+      if (!ID.test(worker) || !record || typeof record !== "object") continue;
+      const stale = (Number(record.headGeneration) || 0) < Number(record.generation) || now() - (Number(record.headAt) || 0) >= HEAD_EVERY_MS;
+      const failedLately = record.headTried === record.generation && now() - (Number(record.headTriedAt) || 0) < HEAD_RETRY_MS;
+      if (stale && !failedLately) await publish(worker);
+    }
   }
 
   const named = (worker) => {
@@ -86,17 +125,24 @@ function registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys, en
     const worker = raw && typeof raw === "object" ? raw.worker : undefined;
     if (typeof worker !== "string" || !ID.test(worker)) throw new Error("That names no worker.");
     const before = endorsed.read()[worker];
-    if (raw.revoke === true) return [sign(worker, [], before)];
+    if (raw.revoke === true) {
+      const endorsement = sign(worker, [], before);
+      await publish(worker);
+      return [endorsement];
+    }
     const keys = pairedKeys();
     if (!keys.length) return [];
     if (!(await confirm(`let your ${keys.length === 1 ? "paired passkey" : `${keys.length} paired passkeys`} approve folder, agent and "!" changes on the worker ${named(worker)}`))) return null;
-    return [sign(worker, keys, before)];
+    const endorsement = sign(worker, keys, before);
+    await publish(worker);
+    return [endorsement];
   });
 
   // Every worker whose set the worker hasn't confirmed yet, after narrowing each to the passkeys still paired here, the
   // exact same credential and key (a device id paired again with a new passkey isn't in it: adding one asks Touch ID).
   // A narrowing is signed without Touch ID; one already signed and not yet confirmed is sent again as it was.
-  handle("approval:endorse-refresh", () => {
+  handle("approval:endorse-refresh", async () => {
+    if (reconcile) await reconcile().catch(() => {});
     const paired = new Set(pairedKeys().map(keyOf));
     const out = [];
     for (const [worker, record] of Object.entries(endorsed.read())) {
@@ -107,6 +153,7 @@ function registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys, en
       const generation = Number(endorsement.generation);
       if ((Number(record.confirmed) || 0) < generation) out.push({ worker, generation, endorsements: [endorsement] });
     }
+    await publishDue();
     return out;
   });
 
@@ -122,4 +169,4 @@ function registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys, en
   });
 }
 
-module.exports = { registerWidenEndorse, createEndorsed, endorseMessage, heldMessage, ENDORSE_V };
+module.exports = { registerWidenEndorse, createEndorsed, endorseMessage, heldMessage, headMessage, ENDORSE_V, HEAD_V, HEAD_EVERY_MS };

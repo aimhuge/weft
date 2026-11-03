@@ -7,6 +7,8 @@ const { checkClaim, newSecret, pairingLink, passkeyCode, SIGN_PAIR_URL } = requi
 const { fingerprint } = require("./device-fingerprint.cjs");
 
 const TTL_MS = 5 * 60_000;
+// How often reconcile reads the registry (it's asked on every passkey sync, every 30 s per window).
+const RECONCILE_MS = 60_000;
 
 /**
  * @param {{ db: () => any, userId?: () => string, sodium: () => any, macDevice: () => string, myDevice: () => Promise<{ id: string, publicKey: string }>,
@@ -129,10 +131,33 @@ function createPairing({ db, userId = () => "", sodium, macDevice, myDevice, pai
     return { ok: true, version };
   }
 
+  // A phone or browser this Mac pinned that was revoked somewhere else (another Mac's Settings, or Settings → Devices'
+  // device_revoke): unpinned here too, so its signatures stop counting, then its grants dropped and the workspace key
+  // rotated as revoke() does. Only a row that says revoked_at counts: a row missing from the read (RLS, another
+  // account signed in) unpins nothing. The server can only take trust away here, never add it.
+  let reconciledAt = -Infinity;
+  async function reconcile() {
+    if (now() - reconciledAt < RECONCILE_MS) return [];
+    reconciledAt = now();
+    const pinned = paired.list();
+    if (!pinned.length) return [];
+    const rows = fail(await db().from("devices").select("id, revoked_at").in("id", pinned.map((d) => d.id)), "Your devices couldn't be read") ?? [];
+    const dropped = [];
+    for (const row of rows) {
+      const device = pinned.find((d) => d.id === row.id);
+      if (!row.revoked_at || !device || !paired.unpin(device.id)) continue;
+      dropped.push(device.id);
+      await db().from("workspace_key_grants").delete().eq("device_id", device.id);
+      const keep = paired.list().filter((d) => d.orgId === device.orgId).map((d) => ({ id: d.id, boxKey: d.boxKey }));
+      await syncKeys.rotate(device.orgId, keep).catch(() => {});
+    }
+    return dropped;
+  }
+
   const publicView = (d) => ({ id: d.id, name: d.name, kind: d.kind, platform: d.platform, fingerprint: d.fingerprint, pairedAt: d.pairedAt, ...(d.passkey ? { passkey: true } : {}) });
   const list = () => paired.list().map(publicView);
 
-  return { start, check, cancel, revoke, list };
+  return { start, check, cancel, revoke, list, reconcile };
 }
 
-module.exports = { createPairing, TTL_MS };
+module.exports = { createPairing, TTL_MS, RECONCILE_MS };

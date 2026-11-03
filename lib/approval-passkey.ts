@@ -5,23 +5,15 @@
 // was): canonical JSON (keys sorted at every depth) of one fixed set of fields, so no value can forge another field, and
 // readPasskeyMessage takes back only that exact shape, re-encoded byte for byte. It carries the whole tool input, so the
 // approval sheet shows everything the signature covers. Id fields refuse control characters outright.
+import type { PasskeyAuth } from "@weft/client";
 import type { ApprovalFields } from "./approval-sig";
 import type { GrantScope } from "./cloud-commands";
 import type { PendingPermission } from "./types";
 
 export const PASSKEY_MESSAGE_V = "weft-passkey-approval-v1";
 
-// What rides beside the answer payload (cloud_commands.payload.auth) when a browser signed it. Every byte part base64url.
-export interface PasskeyAuth {
-  kind: "webauthn";
-  // public.devices.id of the browser, and its passkey's credential id.
-  device: string;
-  credId: string;
-  issuedAt: number;
-  authenticatorData: string;
-  clientDataJSON: string;
-  signature: string;
-}
+// What rides beside the answer payload when a browser signed it: the shape lives in @weft/client.
+export type { PasskeyAuth };
 
 // The tool and its input, and the card's folder (shown on the sheet, from the Mac's own card on the host side).
 export type PasskeyAction = Pick<PendingPermission, "toolName" | "input"> & { folder?: string };

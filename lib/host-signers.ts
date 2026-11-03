@@ -13,6 +13,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_OLD, readEndorsement, type EndorsedKey } from "./host-endorse";
+import { behind, latestHead, type HeadCheck } from "./passkey-head";
 import { verifyPasskeyAssertion, type PasskeyOrigin } from "./passkey-verify";
 import type { Verified } from "./widen-check";
 import { macKeysAt, macSigned, type MacKeys } from "./worker-mac-keys";
@@ -27,26 +28,29 @@ export interface PinnedPasskey {
   by: string;
 }
 
-// passkeys.json: the set the newest endorsement named, and that endorsement's generation.
+// passkeys.json: the set the newest endorsement named, that endorsement's generation, and the newest generation the
+// trusted Mac's heads have named (lib/passkey-head.ts), kept so a head pruned from the log is never forgotten.
 interface Pinned {
   generation: number;
   passkeys: PinnedPasskey[];
+  seen: number;
 }
 
 export const NO_MAC = "This worker trusts no Mac yet: pair it again from Settings → Devices (weft-worker enrol <code> --re-pair on the box).";
 
-export function createHostSigners(home: string, origins: readonly PasskeyOrigin[], macs: MacKeys = macKeysAt(home)) {
+// `heads`: the worker's read of its passkey heads; with it, a passkey approval waits until the set held is the Mac's latest.
+export function createHostSigners(home: string, origins: readonly PasskeyOrigin[], macs: MacKeys = macKeysAt(home), heads?: HeadCheck) {
   const file = path.join(home, "passkeys.json");
 
   function load(): Pinned {
     try {
       const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
       // A list from before generations: generation 0, so the next endorsement replaces it.
-      if (Array.isArray(parsed)) return { generation: 0, passkeys: parsed as PinnedPasskey[] };
+      if (Array.isArray(parsed)) return { generation: 0, passkeys: parsed as PinnedPasskey[], seen: 0 };
       const p = parsed as Partial<Pinned> | null;
-      return { generation: Number(p?.generation) || 0, passkeys: Array.isArray(p?.passkeys) ? p.passkeys : [] };
+      return { generation: Number(p?.generation) || 0, passkeys: Array.isArray(p?.passkeys) ? p.passkeys : [], seen: Number(p?.seen) || 0 };
     } catch {
-      return { generation: 0, passkeys: [] };
+      return { generation: 0, passkeys: [], seen: 0 };
     }
   }
 
@@ -66,7 +70,21 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
     return Promise.resolve(ok ? { ok: true } : { ok: false, reason: "The approval's signature isn't the pairing Mac's." });
   }
 
+  // Why a passkey can't approve now, because the set held is older than the newest head the trusted Mac signed: null when
+  // it's current. The highest head seen is kept, so the bar only rises.
+  async function headRefusal(): Promise<string | null> {
+    if (!heads) return null;
+    const got = await latestHead(heads, macs.pinned());
+    if ("refused" in got) return got.refused;
+    const pinned = load();
+    const seen = Math.max(pinned.seen, got.latest);
+    if (seen > pinned.seen) write({ ...pinned, seen });
+    return pinned.generation < seen ? behind(pinned.generation, seen) : null;
+  }
+
   async function verifyPasskey(body: { device: string; credId: string; message: string; authenticatorData: string; clientDataJSON: string; signature: string }): Promise<Verified> {
+    const late = await headRefusal();
+    if (late) return { ok: false, reason: late };
     const pinned = load();
     const found = pinned.passkeys.find((p) => p.device === body.device && p.credId === body.credId);
     if (!found) return { ok: false, reason: "That passkey isn't trusted on this worker. Let it approve here from Weft on your Mac (Settings → Devices)." };
@@ -95,7 +113,7 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
     if (held) return pinned.generation;
     if (e.generation <= pinned.generation) throw new Error(ENDORSE_OLD);
     const passkeys = e.passkeys.map((k) => ({ ...k, counter: pinned.passkeys.find((p) => same(p, k))?.counter ?? 0, by: e.mac }));
-    write({ generation: e.generation, passkeys });
+    write({ generation: e.generation, passkeys, seen: pinned.seen });
     return e.generation;
   }
 
