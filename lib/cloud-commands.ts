@@ -1,176 +1,56 @@
-// Commands the weft.zip board sends to a Mac (public.cloud_commands, supabase/migrations/*_card_commands.sql).
-// Four kinds: start a card in a synced folder (`newCardCommand` → `newCardBody`), reply to a card's thread
-// (`replyCommand` → `replyBody`), answer a thread's pending permission or question (`answerCommand` → `answerBody`),
-// and stop a card's running turn (`stopCommand` → `stopBody`). The web builds the row, the Mac (lib/cloud-inbox.ts)
-// reads the payload back; all four live here so the two sides can't drift.
+// Commands the weft.zip board sends to a Mac (public.cloud_commands, supabase/migrations/*_card_commands.sql). The
+// shapes, the builders the boards use and the readers that need nothing of the Mac live in @weft/client
+// (packages/weft-client/src/cloud-commands.ts); this is the Mac's side: the model lists a new card's CLI is read
+// from, the new card's request body (with who asked) and the folder an answer grants.
 import {
   GRANT_SCOPES,
-  readQuestionReply,
-  type ApprovalAuth,
+  isNewCardMode,
+  newCardCommand as clientNewCardCommand,
   type Backend,
-  type Effort,
+  type CloudCommandRow,
+  type AnswerPayload,
   type GrantScope,
-  type HostPayload,
-  type HostResult,
-  type PasskeyAuth,
-  type QuestionReply,
-  type Sealed,
+  type NewCardForm,
+  type NewCardPayload,
+  type NewCommand,
 } from "@weft/client";
 import { backendFor, CODEX_DEFAULT_MODEL } from "./new-thread";
 import type { PendingPermission } from "./types";
 import { commandClient } from "./turn-client";
 
-export type CloudCommandStatus = "pending" | "claimed" | "done" | "failed";
-
-// What a new card is made from. Not the permission mode: the Mac uses its own default, so the web can't ask
-// for a thread that runs without asking.
-export interface NewCardPayload {
-  prompt: string;
-  title?: string;
-  backend?: Backend;
-  model?: string;
-  effort?: Effort | "";
-  tags?: string[];
-  // The mode it starts in (RUN_MODES: never bypassPermissions; plan only on a worker, a Mac starts it as default:
-  // lib/cloud-new-card-mode.ts); left out, the host's default (on a Mac, held to the same rule).
-  permissionMode?: NewCardMode;
-  // false: made in Backlog and left there; left out, it starts.
-  start?: false;
-  // Who the thread is (lib/agents.ts). Only with `widen`, a signed approval for it (lib/create-widen.ts).
-  agent?: string;
-  widen?: unknown;
-}
-
-// The modes a new card may start in from the web: plan too, never bypassPermissions (lib/worker-commands.ts RUN_MODES).
-export const NEW_CARD_MODES = ["default", "acceptEdits", "auto", "plan"] as const;
-export type NewCardMode = (typeof NEW_CARD_MODES)[number];
-const isNewCardMode = (v: unknown): v is NewCardMode => NEW_CARD_MODES.includes(v as NewCardMode);
-
-// A message typed into a card's thread on the web, for the Mac that runs the card to send as if typed there.
-export interface ReplyPayload {
-  cardId: string;
-  text: string;
-}
+export {
+  answerBody,
+  answerCommand,
+  commandText,
+  isOpenCommand,
+  NEW_CARD_MODES,
+  replyBody,
+  replyCommand,
+  stopBody,
+  stopCommand,
+  type AnswerPayload,
+  type ClonePayload,
+  type CloudCommandKind,
+  type CloudCommandRow,
+  type CloudCommandStatus,
+  type InputPayload,
+  type LinePayload,
+  type LoginPayload,
+  type ModePayload,
+  type NewCardForm,
+  type NewCardMode,
+  type NewCardPayload,
+  type NewCommand,
+  type PinPayload,
+  type QaPayload,
+  type ReplyPayload,
+  type StopPayload,
+  type UpdatePayload,
+} from "@weft/client";
 
 // How far an Allow on an outside-folder prompt reaches: this card, or every card on the machine running it. The
 // signed message carries it too, so it lives with the approval shapes in @weft/client.
 export { GRANT_SCOPES, type GrantScope };
-
-// An answer to a card's pending permission request or question: the pendingId ties the answer to the
-// request the user saw (otherwise the oldest is answered), allow vs. deny, the question's answers, and
-// the same reply (notes per question / "Chat about this") the permission route carries.
-export interface AnswerPayload {
-  cardId: string;
-  pendingId: string;
-  allow: boolean;
-  answers?: Record<string, string>;
-  reply?: QuestionReply;
-  // This card / Always on an outside-folder prompt. A scope and never a path: the machine running the card takes the
-  // folder from its own pending request (answerGrant), so a command can only grant what the prompt on screen asked for.
-  grant?: GrantScope;
-  // A paired phone's signature over this answer (lib/approval-sig.ts, docs/architecture/mobile-security.md); the Mac
-  // checks it in lib/approval-check.ts and reads it off the raw payload, never from answerBody. A paired browser's
-  // passkey signature is the PasskeyAuth kind (lib/approval-passkey.ts).
-  auth?: ApprovalAuth | PasskeyAuth;
-}
-
-// A request to stop a card's running turn.
-export interface StopPayload {
-  cardId: string;
-}
-
-// A Claude Code token sealed to one Weft Worker (lib/worker-seal.ts); only that worker can open it.
-export interface LoginPayload {
-  token: Sealed;
-}
-
-// A session line's offer, sealed to the worker (lib/worker-board.ts openWorkerLine, lib/host-line.ts).
-// A Mac's endorsements of its passkeys for one worker (lib/host-signers.ts readEndorsement), each signed after Touch ID.
-export interface PinPayload {
-  endorsements: unknown[];
-}
-
-export interface LinePayload {
-  sealed: Sealed;
-}
-
-// A GitHub repo to put on a Weft Worker, with no thread.
-export interface ClonePayload {
-  repo: string;
-}
-
-// "run", "login", "github_login" and "clone" go to a Weft Worker, never a Mac: their payloads and readers are
-// lib/worker-commands.ts.
-// A worker's card: the thread's mode picker, and a tap or swipe on its live screen (lib/worker-commands.ts).
-export interface ModePayload {
-  cardId: string;
-  mode: string;
-}
-
-export interface InputPayload {
-  cardId: string;
-  kind: "tap" | "swipe";
-  device: string;
-  x: number;
-  y: number;
-  x2?: number;
-  y2?: number;
-  ms?: number;
-}
-
-// Local Simulator mode: which Mac a card's device tools go to, null to stop. Routing only: the Mac holds the approval.
-// Update now: nothing to carry, only the ask.
-export type UpdatePayload = Record<string, never>;
-
-export interface QaPayload {
-  cardId: string;
-  device: string | null;
-}
-
-// "host" carries any verb in lib/host-api (lib/host-command.ts); reply, answer, stop and mode run as its verbs too.
-// "line" is a sealed WebRTC offer that opens a worker's session line (lib/host-line.ts). "pin" carries a Mac's signed
-// endorsements of its passkeys for a worker (lib/host-signers.ts).
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line" | "secret_use" | "pin";
-
-// public.cloud_commands.
-export interface CloudCommandRow {
-  id: string;
-  org_id: string;
-  created_by: string;
-  kind: CloudCommandKind;
-  // The Mac that runs it (cloud_cards.owner_device) and the folder it runs in (cloud_cards.folder).
-  target_device: string;
-  folder: string;
-  payload: NewCardPayload | ReplyPayload | AnswerPayload | StopPayload | LoginPayload | ClonePayload | ModePayload | InputPayload | QaPayload | UpdatePayload | HostPayload | LinePayload | PinPayload;
-  status: CloudCommandStatus;
-  card_id: string | null;
-  error: string | null;
-  // What a `host` command came to, written by the host that ran it (lib/host-command.ts HostResult). Absent on a
-  // database without the column yet, and null for the other kinds.
-  result?: HostResult | null;
-  created_at: string;
-  updated_at: string;
-}
-
-// The columns a client may set when it inserts a command (the rest are the database's).
-export type NewCommand = Pick<CloudCommandRow, "org_id" | "kind" | "target_device" | "folder" | "payload">;
-
-// A command is still on its way: the web board shows it until its card turns up.
-export const isOpenCommand = (c: Pick<CloudCommandRow, "status">) => c.status === "pending" || c.status === "claimed";
-
-// What the web board's New thread dialog collects.
-export interface NewCardForm {
-  prompt: string;
-  // A model id from MODELS ("" or absent: the CLI's own default). It also says which CLI runs the card.
-  model?: string;
-  effort?: Effort | "";
-  // The CLI, when no model names it (the CLI picker's "default model").
-  backend?: Backend;
-  permissionMode?: NewCardMode;
-  tags?: string[];
-  // Made in Backlog instead of started.
-  backlog?: boolean;
-}
 
 function backendOf(model: string): Backend | undefined {
   return model === CODEX_DEFAULT_MODEL ? "codex" : backendFor(model);
@@ -178,47 +58,7 @@ function backendOf(model: string): Backend | undefined {
 
 // The row the web inserts for a new card, or null when there is nothing to run (an empty prompt).
 export function newCardCommand(target: { orgId: string; device: string; folder: string }, form: NewCardForm): NewCommand | null {
-  const prompt = form.prompt.trim();
-  if (!prompt) return null;
-  const payload: NewCardPayload = { prompt };
-  const backend = form.model ? backendOf(form.model) : undefined;
-  if (form.model && backend) {
-    payload.backend = backend;
-    payload.model = form.model;
-  } else if (form.backend) payload.backend = form.backend;
-  if (form.effort) payload.effort = form.effort;
-  if (form.permissionMode) payload.permissionMode = form.permissionMode;
-  const tags = form.tags?.map((t) => t.trim()).filter(Boolean);
-  if (tags?.length) payload.tags = tags;
-  if (form.backlog) payload.start = false;
-  return { org_id: target.orgId, kind: "new_card", target_device: target.device, folder: target.folder, payload };
-}
-
-// The row the web inserts to reply to a card, addressed to the Mac and folder the card runs in; null for an empty reply.
-export function replyCommand(target: { orgId: string; device: string; folder: string; cardId: string }, text: string): NewCommand | null {
-  const message = text.trim();
-  if (!message) return null;
-  return { org_id: target.orgId, kind: "reply", target_device: target.device, folder: target.folder, payload: { cardId: target.cardId, text: message } };
-}
-
-// The row the web inserts to answer a card's pending permission request or question, addressed to the Mac and
-// folder the card runs in; null when the request is missing the pendingId it has to carry.
-export function answerCommand(
-  target: { orgId: string; device: string; folder: string; cardId: string },
-  body: { pendingId: string; allow: boolean; answers?: Record<string, string>; reply?: QuestionReply; grant?: GrantScope; auth?: PasskeyAuth },
-): NewCommand | null {
-  if (!body.pendingId) return null;
-  const payload: AnswerPayload = { cardId: target.cardId, pendingId: body.pendingId, allow: body.allow };
-  if (body.auth) payload.auth = body.auth;
-  if (body.answers) payload.answers = body.answers;
-  if (body.reply) payload.reply = body.reply;
-  if (body.allow && body.grant) payload.grant = body.grant;
-  return { org_id: target.orgId, kind: "answer", target_device: target.device, folder: target.folder, payload };
-}
-
-// The row the web inserts to stop a card's running turn.
-export function stopCommand(target: { orgId: string; device: string; folder: string; cardId: string }): NewCommand {
-  return { org_id: target.orgId, kind: "stop", target_device: target.device, folder: target.folder, payload: { cardId: target.cardId } };
+  return clientNewCardCommand(target, form, backendOf);
 }
 
 const text = (v: unknown) => (typeof v === "string" ? v : undefined);
@@ -245,38 +85,6 @@ export function newCardBody(command: Pick<CloudCommandRow, "folder" | "payload">
   };
 }
 
-// A reply as a Mac reads it off the network: the card and the text, or null when either is missing.
-export function replyBody(command: Pick<CloudCommandRow, "payload">): ReplyPayload | null {
-  const raw: unknown = command.payload;
-  const p: Partial<Record<keyof ReplyPayload, unknown>> = raw && typeof raw === "object" ? raw : {};
-  const cardId = text(p.cardId);
-  const message = text(p.text)?.trim();
-  return cardId && message ? { cardId, text: message } : null;
-}
-
-// An answer as a Mac reads it off the network: the card, the request, the allow/deny, the answers, and the
-// question reply. Returns null when any required field is missing or the wrong type, or when the answer
-// shape is invalid (only string values; the reply is sanitized the same way the permission route does it).
-export function answerBody(command: Pick<CloudCommandRow, "payload">): AnswerPayload | null {
-  const raw: unknown = command.payload;
-  const p: Partial<Record<keyof AnswerPayload, unknown>> = raw && typeof raw === "object" ? raw : {};
-  const cardId = text(p.cardId);
-  const pendingId = text(p.pendingId);
-  if (!cardId || !pendingId) return null;
-  const allow = p.allow === true;
-  const answers =
-    p.answers && typeof p.answers === "object" && !Array.isArray(p.answers)
-      ? (Object.fromEntries(Object.entries(p.answers as Record<string, unknown>).filter(([, v]) => typeof v === "string")) as Record<string, string>)
-      : undefined;
-  const reply = p.reply && typeof p.reply === "object" ? readQuestionReply(p.reply) : undefined;
-  const out: AnswerPayload = { cardId, pendingId, allow };
-  if (answers && Object.keys(answers).length) out.answers = answers;
-  if (reply) out.reply = reply;
-  const grant = allow ? GRANT_SCOPES.find((s) => s === p.grant) : undefined;
-  if (grant) out.grant = grant;
-  return out;
-}
-
 // The folder an answer grants, read from the request waiting on this machine, or null when it grants none. Throws
 // rather than fall back to Allow once: the human asked for a grant, and one that can't be given leaves the prompt up.
 // Only a tool's outside-folder prompt qualifies: a question's folder is guessed from the model's words, and a
@@ -288,35 +96,3 @@ export function answerGrant(answer: AnswerPayload, pending: PendingPermission | 
   if (!directory) throw new Error("That request has no folder to allow.");
   return { directory, scope: answer.grant };
 }
-
-// A stop as a Mac reads it off the network: the card the turn runs on, or null when missing.
-export function stopBody(command: Pick<CloudCommandRow, "payload">): StopPayload | null {
-  const raw: unknown = command.payload;
-  const p: Partial<Record<keyof StopPayload, unknown>> = raw && typeof raw === "object" ? raw : {};
-  const cardId = text(p.cardId);
-  return cardId ? { cardId } : null;
-}
-
-// A command's prompt for the strip and the reply box: a new card's prompt, a reply's text, an answer's
-// "Allowed" / "Denied" / answers, or "Stop".
-export const commandText = (command: Pick<CloudCommandRow, "payload" | "kind">): string => {
-  const kind = command.kind as string;
-  const p = command.payload as Partial<NewCardPayload & ReplyPayload & AnswerPayload & StopPayload>;
-  if (p.text) return p.text;
-  if (p.prompt) return p.prompt;
-  if (kind === "stop") return "Stop";
-  // A host verb's typed text: an ↑ edit's or Send later's text, Send fresh's message (lib/host-row.ts).
-  if (kind === "host") {
-    const args = (command.payload as { args?: { text?: unknown; message?: unknown } }).args;
-    const typed = args?.text ?? args?.message;
-    return typeof typed === "string" ? typed : "";
-  }
-  if (kind === "answer") {
-    if (p.answers) {
-      const joined = Object.values(p.answers).join("; ");
-      if (joined) return joined;
-    }
-    return p.allow ? "Allowed" : "Denied";
-  }
-  return "";
-};
