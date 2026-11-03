@@ -1,4 +1,11 @@
 {
+  "0.7.3": {
+    "lines": [
+      "Give Weft a project and one button installs the deps, asks for your keys, and shows the app.",
+      "Weft is on your phone: each card shows its page, full screen, with your AI's last sentence below.",
+      "Share a card and it gets its own address, a preview that unfurls in Slack, and a choice to hide the chat."
+    ]
+  },
   "0.7.2": {
     "lines": [
       "Dictate in any app: press ⌥' anywhere on your Mac, and Weft types what you say where you're typing",
