@@ -2,11 +2,12 @@
 
 // A worker's device, live in the pane (lib/worker-screen.ts): frames off a Realtime topic, drawn on one <img>, or H.264
 // over WebRTC where the board can connect (lib/use-rtc-screen.ts): a video track in a <video>, or a canvas from an older worker. There, touches and keys stream live as they
-// happen; otherwise a click is a tap and a drag a swipe, sent as commands (onInput). A board with neither only watches.
-import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+// happen, and a paste types the clipboard's text; otherwise a click is a tap and a drag a swipe, sent as commands (onInput). A board with neither only watches.
+import { useEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent, type PointerEvent } from "react";
 import type { SharePane } from "@/lib/share-types";
 import { hidUsage } from "@/lib/hid-keys";
 import { isBrowserScreen } from "@/lib/host-line-protocol";
+import { pasteEvent } from "@/lib/rtc-signal";
 import { useScreenVideo } from "@/lib/use-line-screen";
 import { gesture, useScreenStream, type Point } from "@/lib/use-screen-stream";
 import type { BoardInput } from "@/lib/worker-commands";
@@ -83,6 +84,12 @@ export function WorkerScreen({ pane, onInput, source, workerId }: { pane: Screen
     if (code === null || e.metaKey || e.ctrlKey || e.repeat) return;
     if (send({ t: "key", code, down: isDown })) e.preventDefault();
   };
+  // A paste gesture (⌘V on the focused screen) types the clipboard's text on the device, over the live line only: the
+  // board never reads the clipboard on its own.
+  const paste = (e: ClipboardEvent<HTMLElement>) => {
+    const event = pasteEvent(e.clipboardData.getData("text/plain"));
+    if (event && send(event)) e.preventDefault();
+  };
   const ended = now > pane.until;
   const watch = (device: string) => {
     if (!onInput) return;
@@ -93,7 +100,7 @@ export function WorkerScreen({ pane, onInput, source, workerId }: { pane: Screen
       setNote((err as Error).message);
     });
   };
-  const handlers = { onPointerDown: press, onPointerMove: move, onPointerUp: release, onKeyDown: (e: KeyboardEvent<HTMLElement>) => key(e, true), onKeyUp: (e: KeyboardEvent<HTMLElement>) => key(e, false) };
+  const handlers = { onPointerDown: press, onPointerMove: move, onPointerUp: release, onKeyDown: (e: KeyboardEvent<HTMLElement>) => key(e, true), onKeyUp: (e: KeyboardEvent<HTMLElement>) => key(e, false), onPaste: paste };
   const surface = `max-h-full max-w-full touch-none rounded-2xl border-4 border-line ${onInput ? "cursor-pointer" : ""}`;
 
   return (
