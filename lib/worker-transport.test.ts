@@ -273,6 +273,7 @@ describe("the worker card's verbs", () => {
     expect(workerTransport.shellRefusal).toBe("A shell runs only on this Mac's cards.");
     expect(workerTransport.grantFolder).toBeUndefined();
     expect(workerTransport.cardEdits).toBe(true);
+    expect(workerTransport.signsSkip).toBe(false);
   });
 
   it("offers a shell line and Read from where this Mac can sign them, as the verbs a worker takes signed", async () => {
@@ -284,6 +285,8 @@ describe("the worker card's verbs", () => {
       await t.grantFolder!("c1", "/w/app/docs", "card");
       expect(act).toHaveBeenNthCalledWith(1, "card.shell", { id: "c1", command: "ls" });
       expect(act).toHaveBeenNthCalledWith(2, "card.update", { id: "c1", body: { readScope: "/w/app/docs" } });
+      // The mode picker offers YOLO too: the act signs that change as well (lib/widen-signer.ts).
+      expect(t.signsSkip).toBe(true);
     } finally {
       delete (window as unknown as { weft?: unknown }).weft;
     }

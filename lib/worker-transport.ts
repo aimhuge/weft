@@ -133,6 +133,7 @@ export function workerTransportVia(act: typeof actOnWorker, useLive: ThreadTrans
     // A "!" and a folder grant run with a signed approval where the board can sign one (lib/widen-signer.ts); elsewhere
     // remoteRefusal refuses card.shell from the network, so a "!" says so in the box instead of reaching the agent.
     ...(canSignWiden() ? signedVerbs(act) : {}),
+    signsSkip: canSignWiden(),
     shellRefusal: SHELL_ELSEWHERE,
     grantInAnswer: true,
     cardEdits: true,

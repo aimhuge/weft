@@ -63,6 +63,7 @@ export function NewCardDialogControls({
           onChange={onPickModel}
           cli={{ backend, onPick: onPickCli }}
           className={BARE_SELECT}
+          cwd={cwd}
         />
         <Icon
           name="chevronDown"

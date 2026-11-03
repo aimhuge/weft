@@ -18,8 +18,10 @@ import Icon from "./Icon";
 // escapes instead: delete the failed card, or rerun it on the backup model set under
 // Settings → Models. We read the backup model from the settings endpoint here so the
 // banner is self-contained — only when the predicate is true does the fetch run, so a
-// healthy thread never hits /api/settings from the banner. This Mac's Settings don't speak for a card on another host
-// (a worker's), so there the rerun is on the card's own CLI's default (hostRerunModel) and nothing is fetched.
+// healthy thread never hits /api/settings from the banner. The backup model is an account setting that syncs to your
+// workers (packages/weft-client/src/host-settings.ts ACCOUNT_SETTINGS), so a worker's card reruns on it too, the same
+// as a card here: the model goes with card.rerunModel. Where there are no Settings to read (weft.zip), a worker's card
+// reruns on its own CLI's default instead (hostRerunModel).
 //
 // The "Pick a backup model" button calls openSettings — the board-level opener from
 // components/Board.tsx — only when the parent supplies it. Without it (the read-only web
@@ -47,17 +49,17 @@ export default function FirstMessageErrorBanner({
   // (the board passes one when it knows what's open; the banner still deletes).
   onDeleted?: () => void;
 }) {
-  const local = hostOf(card).can("settings");
-  const [backupModel, setBackupModel] = useState<string | null>(() => (local ? null : hostRerunModel(card)));
+  // Off this Mac (weft.zip leaves openSettings out) there are no settings to read and none to open.
+  const settings = Boolean(openSettings);
+  const remote = hostOf(card).kind === "cloud";
+  const [backupModel, setBackupModel] = useState<string | null>(() => (!settings && remote ? hostRerunModel(card) : null));
   const [busy, setBusy] = useState<null | "rerun" | "delete">(null);
   const [error, setError] = useState<string | null>(null);
   // Only fetch the settings when this banner is going to render. The predicate is
   // re-evaluated each render, so the effect skips cleanly on a healthy thread.
   const visible = firstMessageFailed(card, items);
-  // Off this Mac (weft.zip leaves openSettings out) there are no settings to read and none to open: no backup to offer.
-  const settings = Boolean(openSettings);
   useEffect(() => {
-    if (!local || !visible || !settings || backupModel !== null) return;
+    if (!visible || !settings || backupModel !== null) return;
     let ignore = false;
     api
       .settings()
@@ -70,7 +72,7 @@ export default function FirstMessageErrorBanner({
     return () => {
       ignore = true;
     };
-  }, [local, visible, settings, backupModel]);
+  }, [visible, settings, backupModel]);
   if (!visible) return null;
   // Rerun on the backup model, or pick one in Settings; with neither, the banner only says what went wrong.
   const canRerun = Boolean(backupModel) || settings;

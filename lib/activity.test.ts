@@ -10,7 +10,7 @@ const board: { cards: Card[] } = { cards: [] };
 vi.mock("./store", () => ({ DATA_DIR: dir, listCards: () => board.cards }));
 
 const { publish } = await import("./bus");
-const { ACTIVITY_FILE, append, backfillEvents, changeEvents, readActivity, record, recordLimit, trackActivity } = await import("./activity");
+const { ACTIVITY_FILE, append, backfillEvents, changeEvents, readActivity, record, recordLimit, trackActivity, withoutHandedOff } = await import("./activity");
 
 function card(overrides: Partial<Card> = {}): Card {
   return {
@@ -46,6 +46,24 @@ describe("backfillEvents", () => {
     expect(events.find((e) => e.id === "turns:c")).toMatchObject({ at: 9, turns: 1 });
     expect(events.find((e) => e.id === "done:a")).toMatchObject({ at: 50, title: "Add login" });
   });
+
+  it("skips a card handed to a worker: the worker's card counts that run", () => {
+    const handedOff = { workerId: "w1", commandId: "cmd" };
+    expect(backfillEvents([card({ id: "h", column: "done", turns: 2, handedOff })])).toEqual([]);
+  });
+});
+
+describe("withoutHandedOff", () => {
+  it("drops what a handed-off card logged before it was marked, and keeps the rest", () => {
+    const events = [
+      { id: "created:h", kind: "created" as const, at: 1, card: "h" },
+      { id: "created:a", kind: "created" as const, at: 2, card: "a" },
+      { id: "limit", kind: "limit" as const, at: 3 },
+    ];
+    const cards = [card({ id: "h", handedOff: { workerId: "w1", commandId: "cmd" } }), card({ id: "a" })];
+    expect(withoutHandedOff(events, cards).map((e) => e.id)).toEqual(["created:a", "limit"]);
+    expect(withoutHandedOff(events, [card({ id: "a" })])).toBe(events);
+  });
 });
 
 describe("changeEvents", () => {
@@ -60,6 +78,11 @@ describe("changeEvents", () => {
     const finished = changeEvents({ column: "running", turns: 1 }, card({ column: "done", turns: 3, costUsd: 2 }), 0, now);
     expect(finished).toMatchObject([{ kind: "turn", turns: 2, cost: 2 }, { kind: "done", cost: 2, title: "Add login" }]);
     expect(changeEvents({ column: "done", turns: 0 }, card({ column: "done" }), 0, now)).toEqual([]);
+  });
+
+  it("logs nothing for a card handed to a worker", () => {
+    const handedOff = { workerId: "w1", commandId: "cmd" };
+    expect(changeEvents({ column: "review", turns: 0 }, card({ column: "done", turns: 1, handedOff }), 0, 5)).toEqual([]);
   });
 });
 

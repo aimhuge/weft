@@ -53,6 +53,7 @@ export default function ModelSelect({
   onChange,
   cli,
   className = SELECT_CLASS,
+  cwd,
 }: {
   value: string;
   label: string;
@@ -62,10 +63,12 @@ export default function ModelSelect({
   cli?: CliPick;
   // The select's own look; a caller that draws the box around it passes a bare one.
   className?: string;
+  // The thread's project: a worker's marks the worker's own capped models (lib/use-plan-limits.ts). None is this Mac's.
+  cwd?: string | null;
 }) {
   // The models that have hit their own cap, as a set. The hook is called here and the set is
   // memoized from its result, so the groups below don't change on every render.
-  const limited = useLimitedModels();
+  const limited = useLimitedModels(cwd);
   const atLimit = useMemo(() => new Set(limited.map((l) => l.model)), [limited]);
   const goose = useGooseChoice();
   const offered = useOffered(value, goose);

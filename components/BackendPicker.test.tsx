@@ -39,6 +39,19 @@ describe("BackendPicker", () => {
     expect(screen.getByRole("button", { name: "Fable 5.1" })).toHaveAttribute("aria-pressed", "false");
   });
 
+  it("marks the models at their cap on the card's own host: a worker card's, the worker's", async () => {
+    const fetch = vi.fn((url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ models: url === "/api/limits/plans?worker=w1" ? [{ model: "claude-opus-5-5", at: 1, resetsAt: 9e15 }] : [] }) } as Response));
+    vi.stubGlobal("fetch", fetch);
+    try {
+      render(<BackendPicker card={makeCard({ backend: "claude", cwd: "worker://w1/app" })} />);
+      await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
+      expect(await screen.findByText(/at its limit/)).toBeInTheDocument();
+      expect(screen.getByText(/at its limit/).closest("button")).toHaveTextContent("Opus 5.5");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("is a no-op when the chosen model is the card's own", async () => {
     render(<BackendPicker card={makeCard({ backend: "puku", model: "puku-ai-2.8" })} />);
     await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));

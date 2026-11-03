@@ -4,7 +4,8 @@
 // - workerThreadSearch: ⌘F over the whole thread (lib/thread-find.ts), not just the loaded window. The card's
 //   cloud_thread_items rows are read in pages and matched here, as app/api/cards/[id]/thread/search does over the local
 //   store. A sealed row (lib/sync-seal.ts) has no key on this server and is drawn as its 🔒 stand-in, so it matches
-//   nothing; a long tool result left out of its item (cloud_tool_outputs) isn't searched.
+//   nothing. A long tool result cut out of its item is paged from cloud_tool_outputs and put back in its item before
+//   matching, so a hit inside it lands on that item's index, as it does on a local card; a sealed one stays out.
 // - workerBlobUrls: the URLs a thread's pictures load from. A synced item names an image by its blob ref
 //   (`blob:sha256:<hex>`), which no <img> can load, so the thread view asks for them signed, the way the web board
 //   signs its own (lib/blob-urls.ts resolveBlobUrls), and draws them with lib/worker-blob-view.ts.
@@ -36,6 +37,29 @@ function findable(item: unknown): ThreadItem | null {
   return typeof item === "object" && item !== null && "kind" in item ? (item as ThreadItem) : null;
 }
 
+// A sealed output's result is its sealed JSON (lib/sync-seal.ts sealToolResult): no key here, so it's left out.
+const SEALED_OUTPUT = '{"$sealed":1';
+
+// Puts the full results of a card's cut tool calls back in their items, read in pages. False when they can't be read.
+async function fillCutResults(client: SupabaseClient, org: string, cardId: string, items: (ThreadItem | null)[]): Promise<boolean> {
+  const cut = new Map<string, [number, Extract<ThreadItem, { kind: "tool" }>]>();
+  items.forEach((item, i) => {
+    if (item?.kind === "tool" && item.resultBytes !== undefined && item.result === undefined) cut.set(item.id, [i, item]);
+  });
+  if (!cut.size) return true;
+  for (let from = 0; from < SEARCH_MAX; from += SEARCH_PAGE) {
+    const { data, error } = await client.from("cloud_tool_outputs").select("tool_id, result").eq("org_id", org).eq("card_id", cardId).order("tool_id", { ascending: true }).range(from, from + SEARCH_PAGE - 1);
+    if (error) return false;
+    const rows = data as { tool_id: string; result: string }[];
+    for (const row of rows) {
+      const found = cut.get(row.tool_id);
+      if (found && !row.result.startsWith(SEALED_OUTPUT)) items[found[0]] = { ...found[1], result: row.result };
+    }
+    if (rows.length < SEARCH_PAGE) break;
+  }
+  return true;
+}
+
 // The items holding `query` in a worker card's whole thread, by their index (seq); null when it can't be read.
 export async function workerThreadSearch(cardId: string, query: string, client: SupabaseClient = accountClient()): Promise<FindMatch[] | null> {
   if (!query) return [];
@@ -49,6 +73,7 @@ export async function workerThreadSearch(cardId: string, query: string, client: 
     for (const row of rows) items[row.seq] = findable(row.item);
     if (rows.length < SEARCH_PAGE) break;
   }
+  if (!(await fillCutResults(client, org, cardId, items))) return null;
   return matchThread(items, query);
 }
 

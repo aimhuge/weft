@@ -114,7 +114,7 @@ export default function ThreadPanel({
       <header className="flex items-start gap-3 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1">
           <PanelTitle card={card} editable={!pilot && own} editTitle={editTitle} onRename={onRename} />
-          <HeaderMeta card={card} pilot={pilot} desktop={desktop} own={own} skills={cardCan(card, transport, "skills")} onMode={onMode} onTags={onTags} />
+          <HeaderMeta card={card} pilot={pilot} desktop={desktop} own={own} skills={cardCan(card, transport, "skills")} onMode={onMode} onTags={onTags} signsSkip={transport.signsSkip === true} />
           {(card.stage || card.remaining) && (
             <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11.5px]">
               {card.stage && <span className="shrink-0 rounded bg-sunken px-1.5 py-px text-muted">{card.stage}</span>}
@@ -247,8 +247,8 @@ function PanelTitle({ card, editable, editTitle, onRename }: {
 }
 
 // Under the title: the CLI, its mode, the folder (the copilot covers the whole board), the session and its tags.
-// Off the desktop the CLI is a badge. The mode stays the Mac's unless the transport can send it (a worker's card), and YOLO stays off the network.
-function HeaderMeta({ card, pilot, desktop, own, skills, onMode, onTags }: {
+// Off the desktop the CLI is a badge. The mode stays the Mac's unless the transport can send it (a worker's card), and YOLO only where the board signs the change (transport.signsSkip): never off the network unsigned.
+function HeaderMeta({ card, pilot, desktop, own, skills, onMode, onTags, signsSkip }: {
   card: Card;
   pilot: boolean;
   desktop: boolean;
@@ -256,13 +256,15 @@ function HeaderMeta({ card, pilot, desktop, own, skills, onMode, onTags }: {
   // The skill set chip: this Mac's skill sets, so on its own cards only (cardCan "skills").
   skills: boolean;
   onMode?: (mode: PermissionMode) => void;
+  // The board signs a YOLO change for another host (lib/thread-transport.ts).
+  signsSkip: boolean;
   onTags?: () => void;
 }) {
   return (
     <div className="mt-1 flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
       {own ? <BackendPicker card={card} /> : <BackendBadge backend={card.backend} card={card} />}
       {onMode && (
-        <CrashGuard inline what="mode picker"><ModePicker small backend={card.backend} value={card.permissionMode} onChange={onMode} yolo={desktop && card.backend !== "puku" && !pilot} disabled={card.backend === "codex" && Boolean(card.sessionId)} /></CrashGuard>
+        <CrashGuard inline what="mode picker"><ModePicker small backend={card.backend} value={card.permissionMode} onChange={onMode} yolo={(desktop || signsSkip) && card.backend !== "puku" && !pilot} disabled={card.backend === "codex" && Boolean(card.sessionId)} /></CrashGuard>
       )}
       {skills && !pilot && <CrashGuard inline what="skills"><SkillsChip card={card} /></CrashGuard>}
       <span className="min-w-[3rem] truncate" title={card.cwd}>{pilot ? "✨ whole board" : folderName(card.cwd)}</span>
