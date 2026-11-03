@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { command, fakeEngine, fakeGithub, fakePublisher, fakeReg } from "./worker-daemon.harness";
 import type { DaemonDeps } from "./worker-daemon";
 import { takeClient } from "./turn-client";
-import { workerKinds } from "./worker-kinds";
+import { workerKinds, workerTable } from "./worker-kinds";
 
 const sealed = { v: 1, epk: "a", iv: "b", ct: "c", tag: "d" };
 
@@ -57,5 +57,17 @@ describe("a verb over a line", () => {
     t.d.host.mockResolvedValueOnce({ file: { text: "x".repeat(5_000) } });
     await expect(t.run({ verb: "files.read", args: { id: "card-1", path: "a.ts" } })).resolves.toMatchObject({ result: { ok: true, cardId: "card-1", blob: "ab".repeat(32) } });
     await expect(t.run({ verb: "files.read", args: { id: "card-1", path: ".ssh/id_rsa" } })).rejects.toThrow("holds credentials");
+  });
+});
+
+describe("a line offered over the LAN", () => {
+  it("opens through the same line kind, its answer handed to the port's reply", async () => {
+    const line = vi.fn(() => Promise.resolve());
+    const eng = fakeEngine();
+    const deps = { reg: fakeReg().reg, engine: eng.engine, publisher: fakePublisher().publisher, checkout: vi.fn(), login: vi.fn(), clone: vi.fn(), github: fakeGithub(), line } as unknown as DaemonDeps;
+    const table = workerTable(deps, { log: vi.fn(), askForUpdate: () => null });
+    const answerOn = vi.fn(() => Promise.resolve());
+    await expect(table.openLine(command({ kind: "line", payload: { sealed } as never }), answerOn)).resolves.toBeNull();
+    expect(line).toHaveBeenCalledWith(sealed, expect.any(Function), answerOn);
   });
 });

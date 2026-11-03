@@ -19,8 +19,9 @@ import type { ThreadPage } from "./thread-page";
 import type { Card, PermissionMode, QuestionReply } from "./types";
 import { inputCommand, modeCommand, workerDevice, type BoardInput, type BoardOffer, type ScreenInput } from "./worker-commands";
 import { seal } from "./worker-seal";
-import { RTC_PURPOSE } from "./rtc-signal";
+import { RTC_PURPOSE, type SealedAnswer } from "./rtc-signal";
 import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
+import { lanAnswer } from "./lan-offer";
 import { EMPTY_WORKER_BOARD, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
 import { cardBlobSeal, openCardRows, openedBlob, openItemRows, openOutput, openPageAssets } from "./worker-board-open";
@@ -232,7 +233,11 @@ async function sealedOffer(client: SupabaseClient, workerId: string, offer: Boar
 
 // Opens a session line: the board's offer, its answer key, topic and ICE servers, sealed to the worker's published key
 // (LINE_PURPOSE) on a `line` command, so only that worker can answer and both DTLS fingerprints travel protected.
-export async function openWorkerLine(body: LineAction, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
+// A worker on this Mac's LAN takes the offer straight (lib/lan-offer.ts): its sealed answer comes back here, and the row
+// is never written. Without one, the row as before.
+export async function openWorkerLine(body: LineAction, client: SupabaseClient = accountClient(), lan = lanAnswer): Promise<{ commandId?: string; answer?: SealedAnswer }> {
+  const answer = await lan(body.workerId, body.offer);
+  if (answer) return { answer };
   const who = await requireSession(client);
   if (!(await myWorkers(client, who)).some((w) => w.id === body.workerId)) throw new Error("That worker isn't one of yours.");
   const { data } = await client.from("cloud_workers").select("public_key").eq("id", body.workerId).maybeSingle<{ public_key: string | null }>();
