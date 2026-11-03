@@ -29,6 +29,7 @@ export default function BrowserPane({
   onClose,
   rail,
   actions,
+  saveUrl,
 }: {
   desktop: boolean;
   state: BrowserState;
@@ -42,6 +43,9 @@ export default function BrowserPane({
   rail?: ReactNode;
   // The open card's share, star and archive (components/PaneCardMarks.tsx), right of the zoom.
   actions?: ReactNode;
+  // What Save as app saves, when it isn't the address itself (a worker card's page saves its blob ref,
+  // components/WorkerPane.tsx).
+  saveUrl?: string;
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
@@ -139,10 +143,7 @@ export default function BrowserPane({
         </button>
         {find.open ? <PaneFindField find={find} /> : <AddressInput desktop={desktop} url={state.url} app={app} fresh={fresh} />}
         <NewTabButton className={nav} onOpen={() => setFresh((n) => n + 1)} />
-        {/* Save as app: the page joins the left rail below Services (components/AppsRail.tsx). */}
-        {desktop && <SaveAppButton url={state.url} title={state.title} />}
-        {/* Share an app: shown for a saved app on the board's own pane (no card actions). */}
-        {desktop && !actions && <AppShareButton app={app} />}
+        {desktop && <AppButtons url={saveUrl ?? state.url} title={state.title} app={app} share={!actions} />}
         {/* Only the page's zoom; ⌘+/−/0, ⌘+scroll and pinch work too. Accent when not 100%. */}
         <ZoomMenu zoom={zoom} disabled={!state.url} />
         {actions}
@@ -170,6 +171,17 @@ export default function BrowserPane({
       {rail}
       </div>
     </section>
+  );
+}
+
+// Save as app: the page joins the left rail below Services (components/AppsRail.tsx). Share an app: shown for a saved
+// app on the board's own pane (no card actions).
+function AppButtons({ url, title, app, share }: { url: string; title: string; app: ReturnType<typeof appFor> | undefined; share: boolean }) {
+  return (
+    <>
+      <SaveAppButton url={url} title={title} />
+      {share && <AppShareButton app={app} />}
+    </>
   );
 }
 
