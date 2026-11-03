@@ -14,6 +14,7 @@ vi.mock("./copilot-sources", async () => (await import("./board-tools.harness"))
 vi.mock("./tag-store", async () => (await import("./board-tools.harness")).tagStoreMock(state));
 vi.mock("./settings", async () => (await import("./board-tools.harness")).settingsMock(state));
 vi.mock("./folders", async () => (await import("./board-tools.harness")).foldersMock());
+vi.mock("./worker-board-reach", async () => (await import("./board-tools.harness")).reachMock(state));
 
 const { card, capturedTool, fakeActions, nth, reset, textOf } = await import("./board-tools.harness");
 const { COPILOT_PROMPT, boardMcpServer } = await import("./board-tools");
@@ -26,7 +27,7 @@ beforeEach(() => {
 describe("boardMcpServer (copilot)", () => {
   it("registers the full set of board tools for the copilot", () => {
     boardMcpServer(fakeActions());
-    const names = ["list_cards", "read_thread", "create_card", "set_tags", "start_card", "send_message", "move_card", "stop_card", "setup_status", "answer_permission", ...CRON_TOOL_NAMES, "create_agent"];
+    const names = ["list_cards", "read_thread", "create_card", "set_tags", "start_card", "send_message", "move_card", "stop_card", "answer_permission", "setup_status", ...CRON_TOOL_NAMES, "create_agent"];
     expect(state.captures.map((t) => t.name)).toEqual(names);
   });
 

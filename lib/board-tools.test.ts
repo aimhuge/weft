@@ -13,6 +13,7 @@ vi.mock("./copilot-sources", async () => (await import("./board-tools.harness"))
 vi.mock("./tag-store", async () => (await import("./board-tools.harness")).tagStoreMock(state));
 vi.mock("./settings", async () => (await import("./board-tools.harness")).settingsMock(state));
 vi.mock("./folders", async () => (await import("./board-tools.harness")).foldersMock());
+vi.mock("./worker-board-reach", async () => (await import("./board-tools.harness")).reachMock(state));
 // Off a worker unless a test says so, whatever WEFT_WORKER the test run has (a worker's own checkout sets it).
 const worker = vi.hoisted(() => ({ on: false }));
 vi.mock("./worker-pane", async (load) => ({ ...(await load<typeof import("./worker-pane")>()), onWorker: () => worker.on }));

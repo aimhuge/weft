@@ -14,7 +14,7 @@ function boardCard(id: string): Card {
 
 export { boardCard };
 
-function describeCard(card: Card) {
+export function describeCard(card: Card) {
   return [
     `id: ${card.id}`,
     `title: ${card.title}`,
@@ -31,7 +31,8 @@ function describeCard(card: Card) {
     .join("\n");
 }
 
-function threadText(items: ThreadItem[]) {
+// A worker's synced thread can hold a sealed item (no key here) or a kind this list doesn't draw: those are left out.
+export function threadText(items: ThreadItem[]) {
   return items
     .map((item) => {
       switch (item.kind) {
@@ -51,6 +52,7 @@ function threadText(items: ThreadItem[]) {
           return `USER RAN: ! ${item.command}${item.exitCode ? ` (exit ${item.exitCode})` : ""}`;
       }
     })
+    .filter(Boolean)
     .join("\n\n");
 }
 

@@ -44,7 +44,8 @@ All of `mcp__browser__*` except `fill_field`: `open_url`, `read_page`, `screensh
   call and no live view, and Chromium with the last one. Its profile is a temp folder, removed when it exits.
 - **`fill_field` stays desktop-only.** It types vault values, and a worker has no vault and no Touch ID; the route
   refuses by name (`FILL_REFUSAL`). `read_page` and the rest redact nothing on a worker for the same reason: no value can
-  have been typed.
+  have been typed. Sealing a value from the Mac's vault per fill was weighed and left out: the thread's own code shares
+  the daemon's OS user and could open it ([secrets.md](secrets.md#fill_field-on-a-weft-worker-not-planned)).
 
 ## What guards it
 
