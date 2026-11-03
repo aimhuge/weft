@@ -124,7 +124,7 @@ describe("with a key", () => {
     });
   });
 
-  it("uses the weft:// callback when running inside the desktop app", async () => {
+  it("goes back through weft.zip/auth/desktop when running inside the desktop app", async () => {
     vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:9");
     try {
       const account = await load();
@@ -132,13 +132,13 @@ describe("with a key", () => {
       await account.startSignIn("github", "http://127.0.0.1:57598");
       expect(auth.signInWithOAuth).toHaveBeenCalledWith({
         provider: "github",
-        options: { redirectTo: "weft://account-callback", skipBrowserRedirect: true },
+        options: { redirectTo: "https://weft.zip/auth/desktop", skipBrowserRedirect: true },
       });
       auth.signInWithOtp.mockResolvedValue({ error: null });
       await account.sendMagicLink("a@b.co", "http://127.0.0.1:57598");
       expect(auth.signInWithOtp).toHaveBeenCalledWith({
         email: "a@b.co",
-        options: { emailRedirectTo: "weft://account-callback", shouldCreateUser: true },
+        options: { emailRedirectTo: "https://weft.zip/auth/desktop", shouldCreateUser: true },
       });
       expect(account.weftCallbackUrl()).toBe("weft://account-callback");
     } finally {

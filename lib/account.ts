@@ -88,13 +88,14 @@ export async function accountView(): Promise<AccountView> {
   return { configured: true, user: data.session ? toAccountUser(data.session.user) : null };
 }
 
-import { weftCallbackUrl } from "./account-callback";
-export { ACCOUNT_CALLBACK_HOST, WEEFT_PROTOCOL, weftCallbackUrl } from "./account-callback";
+import { desktopReturnUrl } from "./account-callback";
+export { ACCOUNT_CALLBACK_HOST, WEEFT_PROTOCOL, weftCallbackUrl, desktopReturnUrl } from "./account-callback";
 
-// Where Supabase sends the browser back to. The packaged desktop app uses the weft:// scheme so
-// the URL doesn't depend on the dev port; plain `next dev` uses the loopback HTTP origin instead.
+// Where Supabase sends the browser back to. The desktop app goes through weft.zip/auth/desktop, which
+// opens weft://account-callback with the code (and offers a button for when the browser wants a click),
+// so the URL doesn't depend on the dev port; plain `next dev` uses the loopback HTTP origin instead.
 export function redirectUrl(origin: string): string {
-  if (process.env.WEFT_SHELL_URL) return weftCallbackUrl();
+  if (process.env.WEFT_SHELL_URL) return desktopReturnUrl();
   return `${origin.replace(/\/+$/, "")}${CALLBACK_PATH}`;
 }
 
