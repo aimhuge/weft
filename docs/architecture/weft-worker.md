@@ -601,9 +601,20 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   13 of 16 detected, before decoding and drawing), 29 fps, about 0.66 Mbps at quality 0.2 and a 2 Mbps cap. Fast scrolling
   showed artifacts at those settings, so it's now 0.6 and 8 Mbps, not yet measured under motion. Nothing's been measured off
   the LAN, and a slow link may need a lower bitrate.
-- **Not yet:** weft.zip and phones stay on JPEGs, since sealing an offer runs on the desktop's local server. The screen's own
-  line has no TURN; on a network that blocks direct connections it rides the session line, which takes TURN when this
-  Mac holds a Cloudflare TURN key (`lib/rtc-ice.ts`), or stays on JPEGs.
+- **weft.zip seals its own offers.** A tab has no Mac server, so `@weft/client` seals in the browser
+  (`packages/weft-client/src/seal.ts`: libsodium's X25519, Web Crypto's HKDF-SHA256 and AES-256-GCM, byte for byte as
+  `lib/worker-seal.ts`, which `lib/worker-seal-client.test.ts` proves by opening both on the worker's side). Your own open
+  worker card holds its worker's **session line** (`lib/web-lines.ts`, `useWebLine` in `components/web-board/useWebHost.ts`):
+  the tab reads `cloud_workers.public_key`, seals the offer (`lineOpener`) and inserts the `line` row with its own session,
+  which only the worker's owner may do (`private.owns_device`), in exactly the server's shape
+  (`20261103120000_line_row_shape.sql`, not yet applied). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
+  widening or pasted files), its thread's events beside Realtime (`lib/line-thread.ts`) and the watched screen as an H.264
+  track. The phone gets the same opener with its own RTCPeerConnection (`openLine`, `packages/weft-client/src/line-open.ts`).
+- **Not yet:** the phone app wiring the opener; TURN for weft.zip (a tab can't mint Cloudflare credentials, `/api/rtc-ice` is
+  this Mac's), so a web line forms where STUN gets through and the board stays on the relay and JPEGs where it doesn't; a
+  screen line of its own on weft.zip (it rides the session line or stays on JPEGs). The screen's own line has no TURN; on a
+  network that blocks direct connections it rides the session line, which takes TURN when this Mac holds a Cloudflare TURN
+  key (`lib/rtc-ice.ts`), or stays on JPEGs.
 - **Android** has no idb, so an emulator stays on JPEGs and `adb`. `adb exec-out screenrecord --output-format=h264` is the likely
   next step, not built because no box here has adb to measure it on.
 - **Install:** `install/worker.sh` puts idb_companion 1.1.8 in `~/.weft/tools/idb-companion`, pinned by hash, on a Mac with
