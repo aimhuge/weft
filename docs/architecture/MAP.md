@@ -76,7 +76,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `faq-site.md` — `docs/FAQ.md` as the weft.zip FAQ: the home page's six questions, `/faq` rendering the whole file, how GitHub-shaped paths, image rows and heading ids map onto the site.
 - `marketing-site.md` — the weft.zip home page's own sections: the content split across `lib/home.ts` / `lib/home-release.ts` / `components/home/*`, the pricing section reading its prices off the billing catalog, the Weft Cloud Workers request card under it (`components/home/CloudWorkers.tsx`, `lib/cloud-worker-request.ts`, `app/api/cloud-workers/request`), `loadHome()`'s parse-error fallback, and `data-track`.
 - `cloud-sync.md` — server-side cards: the outbox, the content-addressed blob store, thread paging, the `cloud_*` tables and their policies.
-- `device-registry.md` — H10: `public.device_registry` (one view over `devices`, `cloud_workers`, `phone_pairings`), `device_revoke` for every kind, Settings → Devices, and enrolling a worker by pairing it (`worker_pair_*`). Versions: each device's Weft build in its subtitle and on the admin Users page (`lib/device-version.ts`, `desktop_set_build`, `20261102290000_device_versions.sql`).
+- `device-registry.md` — H10: `public.device_registry` (one view over `devices`, `cloud_workers`, `phone_pairings`), `device_revoke` for every kind, Settings → Devices, and enrolling a worker by pairing it (`worker_pair_*`). The pairing Mac gets a worker's asks (`paired_mac`), and a device revoked anywhere stops being trusted on the Mac that pinned it and on the workers that pinned it (`reconcile`, `worker_mac_state`, passkey heads). Versions: each device's Weft build in its subtitle and on the admin Users page (`lib/device-version.ts`, `desktop_set_build`, `20261102290000_device_versions.sql`).
 - `mobile-security.md` — pairing a phone or browser (QR, pinned by the Mac, Touch ID), the workspace sync key, sealed rows, signed approvals, passkey approvals from weft.zip (H7).
 - `mobile.md` — the phone app's server side: `push_devices`, the `cloud_cards` push trigger, the `push-card` Edge Function and its Expo payload, Settings → Sync → Phones.
 - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.
@@ -505,7 +505,8 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/pairing-crypto.cjs`: pairing a phone or browser and the workspace sync key (docs/architecture/mobile-security.md). Main
   makes the code (its secret only in memory and the QR's #), checks the claim's HMAC proof and signature, asks Touch ID, pins the device
   in `~/.weft/vault/paired-devices.json` (sealed; the pin, not `public.devices`, decides whose approvals count) and seals the key to it in
-  `workspace_key_grants`. Revoke unpins, drops its grants, marks it revoked and rotates. Board IPC `weft.pairing.*` only; the server
+  `workspace_key_grants`. Revoke unpins, drops its grants, marks it revoked and rotates; `reconcile` does the same for a device
+  revoked from another Mac or the registry (docs/architecture/device-registry.md#revoked-on-one-device-untrusted-on-all). Board IPC `weft.pairing.*` only; the server
   reads `POST /sync/key`, `/pairing/verify`, `/pairing/status`. The two Settings → Sync switches live in the same sealed file.
   `electron/desktop-signer.cjs` + `electron/approval-sign.cjs`: this Mac's own Ed25519 approval key (sealed in `~/.weft/vault/desktop-sign-key.json`); board IPC
   `weft.approval.sign` finds the request on main's own server, asks Touch ID in main's words, then signs the phone's message, and `/pairing/verify` checks it like a phone's (not yet
@@ -541,7 +542,12 @@ When a new doc lands in this folder, add it here on the same change.
   `electron/worker-repair.cjs` (main signs after Touch ID) + `components/WorkerRepair.tsx` (Devices → Re-pair) move an enrolled
   worker to another Mac only on its trusted Mac's signature, with `lib/worker-clone-guard.ts` keeping threads from editing the
   worker's own clone that runs the check (docs/architecture/project-hosts.md#re-pairing-a-worker); `electron/device-beat.cjs` `linkHost` names the Mac's
-  device id on its key row (docs/architecture/device-registry.md).
+  device id on its key row (docs/architecture/device-registry.md). The pairing Mac (`cloud_workers.paired_mac`,
+  `supabase/migrations/20261103080000_worker_pairing_mac.sql`) gets a worker's secret and vault asks; a revoked one is marked
+  in the worker's `mac-revoked.json` by `lib/worker-mac-revocation.ts` (from `lib/worker-host-services.ts`) and left out of
+  `lib/worker-mac-keys.ts` `pinned()`. Passkey heads: `lib/passkey-head.ts` (the worker's check, in `lib/host-signers.ts`
+  `verifyPasskey`), signed and published by `electron/widen-endorse.cjs`, the insert-only `worker_passkey_heads`
+  (`supabase/migrations/20261103080100_worker_passkey_heads.sql`; docs/architecture/weft-worker.md#passkey-heads-a-worker-never-approves-with-an-outdated-set).
 - `lib/sync-seal.ts` + `lib/sodium.ts` + `lib/approval-sig.ts` + `lib/pairing-link.ts`: the isomorphic half (Mac server, web, phone):
   sealed envelopes with org/card/slot bound in, the signed approval message, the pairing link and claim. `lib/sync-seal-upload.ts`
   seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers;

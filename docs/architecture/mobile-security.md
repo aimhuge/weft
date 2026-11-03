@@ -78,6 +78,10 @@ vault's (`workspace_keys`, `workspace_key_grants`) so the 🔐 drawer and the De
   `workspace_key_grants`, set `devices.revoked_at`, then **rotate** the workspace key: a new version, wrapped to the
   Mac and every device still pinned. Rows already sealed stay under the old version (the revoked device may have read
   them); everything after is under the new one. A trigger keeps `revoked_at` from being cleared again.
+- **Revoked somewhere else** (another Mac, or Settings → Devices' `device_revoke`): the Mac that pinned the device reads
+  `revoked_at` for its pins at most once a minute (`electron/pairing.cjs` `reconcile`, run before each passkey sync) and
+  does the same unpin, grant drop and rotation; the same sync narrows every worker's passkey set
+  ([device-registry.md](device-registry.md#revoked-on-one-device-untrusted-on-all)). A row it can't see unpins nothing.
 - Each Mac pairs on its own: a phone paired with the MacBook isn't trusted by the Mac mini until it's paired there
   too. A second Mac on the same workspace finds a key it has no grant for and uploads plain rows (`POST /sync/key` says
   `none`); Mac-to-Mac pairing is under Gaps.
