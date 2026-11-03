@@ -136,7 +136,7 @@ describe("startPolling", () => {
 });
 
 describe("leases", () => {
-  it("requeues expired idempotent claims before it reads the queue, and holds a command only while it runs it", async () => {
+  it("reads the queue first, then requeues expired idempotent claims, and holds a command only while it runs it", async () => {
     const order: string[] = [];
     let during: string[] = [];
     const st = newInboxState();
@@ -152,13 +152,21 @@ describe("leases", () => {
     });
     const inbox = createInbox({ connect: () => ({ line, dispatch }), log: vi.fn(), state: st });
     await inbox.poll();
-    expect(order).toEqual(["reclaim", "pending"]);
+    expect(order).toEqual(["pending", "reclaim"]);
     expect(line.reclaim).toHaveBeenCalledWith(IDEMPOTENT_VERBS);
     expect(during).toEqual(["a"]);
     expect(st.leases?.held.size).toBe(0);
+    expect(st.again).toBe(false);
     // Nothing held, so the beat's renew asks nothing.
     await inbox.renew(line);
     expect(line.renew).not.toHaveBeenCalled();
+  });
+
+  it("asks for one more pass when it put commands back, so they run straight away", async () => {
+    const line = { ...fakeLine([]), reclaim: vi.fn(() => Promise.resolve(2)) };
+    const inbox = createInbox({ connect: () => ({ line, dispatch: vi.fn() }), log: vi.fn() });
+    await inbox.poll();
+    expect(line.pending).toHaveBeenCalledTimes(2);
   });
 
   it("renews a command still running, and lets go of one that failed", async () => {

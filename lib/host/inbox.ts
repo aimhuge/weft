@@ -5,7 +5,7 @@
 // queue, and the log.
 //
 // Passes are single-flight: a wake-up during one asks for one more straight after it, never one per wake-up. A claim
-// holds a lease the host renews while it runs the command (renew, from its beat); a pass first requeues the host's own
+// holds a lease the host renews while it runs the command (renew, from its beat); a pass ends by requeuing the host's own
 // expired claims of verbs safe to run twice (lib/host/lease.ts). Any other claimed command is never retried: a card
 // that was made must not be made twice.
 import type { CloudCommandRow } from "../cloud-commands";
@@ -80,11 +80,12 @@ export function createInbox(deps: InboxDeps) {
       const got = deps.connect();
       const conn = got instanceof Promise ? await got : got;
       if (!conn) return;
-      await leases.reclaim(conn.line);
       for (const command of await conn.line.pending()) {
         if (deps.aside?.(command)) void runAside(conn, command);
         else await runOne(conn, command);
       }
+      // After the queue, so a pass asks for its commands straight away; what went back runs in the pass it owes.
+      if (await leases.reclaim(conn.line)) st.again = true;
     } catch (err) {
       deps.log((err as Error).message);
     }
