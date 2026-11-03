@@ -91,6 +91,11 @@ export function registry(rpc: Rpc, key: string) {
     setDevServers: (servers: unknown[]) => call<unknown>(rpc, "worker_set_dev_servers", { p_key: key, p_servers: servers }),
     pending: async () => (await call<CloudCommandRow[] | null>(rpc, "worker_pending", { p_key: key })) ?? [],
     claim: (id: string) => call<boolean>(rpc, "worker_claim", { p_key: key, p_command: id }),
+    // Leases (supabase/migrations/*_command_leases.sql, lib/host/lease.ts): renew what it runs, requeue its own expired reads.
+    renew: async (ids: string[]): Promise<void> => {
+      await call<unknown>(rpc, "worker_renew", { p_key: key, p_commands: ids });
+    },
+    reclaim: async (verbs: string[]) => (await call<number | null>(rpc, "worker_reclaim", { p_key: key, p_verbs: verbs })) ?? 0,
     // A host command's result goes as p_result; the other kinds leave it off, so they still report to a database
     // whose worker_report predates it (supabase/migrations/*_host_command.sql).
     report: (id: string, status: "done" | "failed", cardId: string | null, error: string | null, result?: HostResult) =>

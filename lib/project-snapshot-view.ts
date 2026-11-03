@@ -4,8 +4,11 @@
 // reads for a worker:// project, from the row the worker published, read through /api/worker-board?project= and kept
 // for a few seconds so the four badges and the age line share one request. A snapshot is the last thing the worker
 // measured, so the header says how old it is when it's stale or the worker is offline ("12m ago, m1mini offline").
-import { useEffect, useState } from "react";
+// A new snapshot arrives live: the server hears the row change (lib/worker-project-live.ts) and sends `worker_project`,
+// which drops that project's cached view and moves its version, so every badge reading it reads again.
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { apiFetch } from "./api-client";
+import { useBoardEvents } from "./use-events";
 import { timeAgo } from "./format";
 import type { ProjectSnapshot, ReadProject } from "./project-reads";
 import type { WorkerProjectStatus } from "./worker-project";
@@ -41,6 +44,39 @@ export function fetchSnapshot(project: string, now = Date.now()): Promise<Snapsh
 }
 
 export const forgetSnapshots = () => views.clear();
+
+// How many times each project's snapshot changed since this window opened: a badge's effect depends on it.
+const versions = new Map<string, number>();
+const watchers = new Set<() => void>();
+
+export function snapshotChanged(project: string) {
+  views.delete(project);
+  versions.set(project, (versions.get(project) ?? 0) + 1);
+  watchers.forEach((fn) => fn());
+}
+
+const watch = (fn: () => void) => {
+  watchers.add(fn);
+  return () => void watchers.delete(fn);
+};
+
+export const snapshotVersion = (project: string | null | undefined) => (project ? (versions.get(project) ?? 0) : 0);
+
+export function useSnapshotVersion(project: string | null | undefined): number {
+  const read = () => snapshotVersion(project);
+  // The server has heard nothing, so its read is the same 0.
+  return useSyncExternalStore(watch, read, read);
+}
+
+// Hears the server's `worker_project` events; mounted once, by the header (components/HeaderBadges.tsx).
+export function useWorkerProjectEvents() {
+  useBoardEvents(
+    (event) => {
+      if (event.type === "worker_project") snapshotChanged(event.project);
+    },
+    () => {},
+  );
+}
 
 // One badge's read, from the snapshot: null (no badge) when the worker hasn't measured it.
 export const cloudRead: ReadProject = async (name, project) => (await fetchSnapshot(project)).snapshot?.[name] ?? null;

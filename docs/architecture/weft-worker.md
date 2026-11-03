@@ -251,6 +251,34 @@ it scheduled `expire-cloud-commands` at 04:17 UTC daily. A migration never runs 
 Integrations → Cron later schedules it once by hand in the SQL editor:
 `select cron.schedule('expire-cloud-commands', '17 4 * * *', 'select private.expire_cloud_commands()');`.
 
+Since `supabase/migrations/20261103070200_command_leases.sql`, a `claimed` row with a lease (below) goes after a day
+untouched instead of 7: its host renews, and so touches, it while it runs, so one left alone that long has lost its host.
+A claimed row without a lease (claimed by a host older than leases) still waits the 7 days.
+
+### Leases
+
+A host claims a command once (`lib/host/inbox.ts`), so one that died mid-command used to leave the row `claimed` until
+expiry, and the board that asked waited on a result that would never come. Now a claim holds a **lease**,
+`cloud_commands.lease_until`, three minutes ahead (`supabase/migrations/20261103070200_command_leases.sql`):
+
+- **Taking one.** `worker_claim` sets it; a Mac's conditional update gets it from the `cloud_commands_lease` trigger,
+  which also renews it on any write to `lease_until` while the row is claimed (from the database's clock, never the
+  client's value) and drops it when the row leaves `claimed`.
+- **Keeping it.** The inbox holds the ids of the commands it's running (`createLeases` in `lib/host/lease.ts`, kept in
+  `InboxState.leases` so a Mac's survives a module reload), and the host's beat (`lib/host/beat.ts`, `renew`) renews them
+  at most once a minute: a worker through `worker_renew(key, ids)`, a Mac by touching `lease_until` under its own session
+  (`sessionLine` in `lib/host/identity.ts`, with the new `update (lease_until)` grant). A long clone run aside keeps its
+  lease the same way.
+- **Losing it.** At the start of a pass, at most once a minute, a host requeues its *own* expired claims, but only `host`
+  commands whose verb is safe to run twice: `IDEMPOTENT_VERBS`, the handlers flagged `idempotent: true` in
+  `lib/host-api/index.ts`. Today that's the reads: `skills.list`, `files.list`, `files.read`, `settings.get` and
+  `dev.log`. A worker calls `worker_reclaim(key, verbs)`, a Mac the invoker function `reclaim_cloud_commands(device,
+  verbs)` (its RLS and grants decide, and the lease is read against the database's clock). Everything else (a new card,
+  a reply, `run`, a stop, a write, a mode change) stays claimed and is never run again: twice would be worse than never.
+  It's the same host that requeues, so a box that's gone for good leaves its rows to expiry.
+- **An older database.** Without the migration the functions and the column aren't there; the first such error turns
+  leases off for an hour, said once in the log, and the inbox claims and reports exactly as before.
+
 ### What's sealed on a worker
 
 Vault values for a card's `mcp__secrets__run` reach a worker sealed to its `seal-key.json` for one run and stay in the
@@ -332,7 +360,14 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
   `useWorkerBoard` now draws its cards through; a refusal reloads them. Not offered: delete, Share…, the agent, the
   folder, skills, the vault, the dev server, and logging this Mac's CLI in.
 - **Reading:** the account's Supabase session lives on the local server, so the renderer polls `/api/worker-board` every
-  5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. There's no Realtime here.
+  5 s (once a minute with no worker), and an open thread re-reads its newest page every 2.5 s. A project's snapshot (the
+  header badges, [project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)) is live: from the first
+  snapshot read, the server subscribes to `cloud_worker_projects` over Realtime (`lib/worker-project-live.ts`; the table
+  joined the publication in `supabase/migrations/20261103070100_worker_projects_realtime.sql`, and RLS hands each
+  member only their workspace's rows), and each change goes to the board as a `worker_project` event, which drops that
+  project's cached snapshot and moves its version (`snapshotChanged` and `useSnapshotVersion` in
+  `lib/project-snapshot-view.ts`), so the badges read again at once. Without the publication the channel errors or stays
+  quiet, it's tried again after 5 minutes, and the badges read as before: on a turn's end, on focus, past a 15 s cache.
 - **The thread:** a worker card opens in the board's own workspace (`components/OpenCard.tsx`), like a local one:
   `ThreadPanel` over `workerTransport` (`desktop: false`, `cardEdits: true`), so its header offers rename, tags, star,
   archive and the model picker, and its reply box ↑ edit, fresh and the held-edit choices, each a host verb; the show
@@ -1063,7 +1098,8 @@ imagined.
    the worker publishes the pending, the board answers with the existing `answer` command, the worker resolves.
 8. **Leases.** A crashed worker leaves rows `claimed` forever (`lib/cloud-inbox.ts:151`) — that is true of the Mac
    today too, but on a Mac a human sees the board and clicks Cancel. On a headless box nobody does.
-   `cloud_worker_leases` with an expiry, renewed on heartbeat, makes them reclaimable.
+   `cloud_worker_leases` with an expiry, renewed on heartbeat, makes them reclaimable. Built as a column instead
+   ([Leases](#leases)): `cloud_commands.lease_until`, renewed from the beat, reclaimed only for idempotent verbs.
 9. **Worktrees.** `cp -c` is an APFS clone; it does not exist on Linux. A macOS worker gets the fast path the
    desktop already has; a Linux worker needs `cp --reflink=auto` or a plain copy. Isolated cards need a worktree
    implementation that picks per platform.

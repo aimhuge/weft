@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { hostFor } from "@/lib/project-host";
+import { useSnapshotVersion } from "@/lib/project-snapshot-view";
 import { fixPrompt, tone, type QualityReport, type Section } from "@/lib/quality-view";
 import { findingPrompt, findingTitle, headroomScore, openFindings, scoreNote, scoreParts, type ScoutState } from "@/lib/scout-view";
 import { folderName, timeAgo } from "@/lib/format";
@@ -112,6 +113,8 @@ export default function QualityBadge({
   const [started, setStarted] = useState<string[]>([]);
   const [menu, setMenu] = useState(false);
   const { scout, rescout, started: markStarted } = useScout(cwd);
+  // A worker's new snapshot reads again (lib/project-snapshot-view.ts); always 0 on this Mac's own projects.
+  const fresh = useSnapshotVersion(cwd);
 
   useEffect(() => {
     if (!cwd) return;
@@ -132,7 +135,7 @@ export default function QualityBadge({
       live = false;
       window.removeEventListener("focus", load);
     };
-  }, [cwd]);
+  }, [cwd, fresh]);
 
   if (!cwd || !loaded || loaded.cwd !== cwd || !loaded.q) return null;
   const q = loaded.q;
