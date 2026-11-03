@@ -10,12 +10,13 @@ vi.mock("./blob-urls", () => ({ resolveBlobUrls: (client: unknown, org: string, 
 
 const { BLOB_REFS_MAX, SEARCH_MAX, SEARCH_PAGE, workerBlobUrls, workerThreadSearch } = await import("./worker-thread-reads");
 
-type Row = { seq: number; item: unknown };
+type Row = { seq: number; item: unknown } | { tool_id: string; result: string };
 
 // A client whose cloud_thread_items read answers `pages` in turn (or an error), recording each range asked for.
 function client(pages: (Row[] | "error")[], uid: string | null = "u1") {
   const ranges: [number, number][] = [];
   const filters: unknown[][] = [];
+  const tables: string[] = [];
   let read = 0;
   const query = {
     select: () => query,
@@ -32,9 +33,12 @@ function client(pages: (Row[] | "error")[], uid: string | null = "u1") {
   };
   const c = {
     auth: { getSession: () => Promise.resolve({ data: { session: uid ? { user: { id: uid } } : null } }) },
-    from: () => query,
+    from: (table: string) => {
+      tables.push(table);
+      return query;
+    },
   };
-  return { client: c as never, ranges, filters };
+  return { client: c as never, ranges, filters, tables };
 }
 
 const user = (text: string) => ({ kind: "user", text, at: 0 });
@@ -70,6 +74,30 @@ describe("workerThreadSearch", () => {
     const sealed = { $sealed: 1, v: 1, n: "n", c: "deploy" };
     const { client: c } = client([[{ seq: 0, item: sealed }, { seq: 1, item: null }, { seq: 2, item: "deploy" }, { seq: 3, item: say("deploy") }]]);
     expect(await workerThreadSearch("c1", "deploy", c)).toEqual([{ index: 3, hits: 1 }]);
+  });
+
+  it("searches a long tool result cut out of its item, and lands on that item's index", async () => {
+    const cut = (id: string) => ({ kind: "tool", id, name: "Bash", summary: "ls", resultBytes: 9000, at: 0 });
+    const items = [{ seq: 0, item: say("hay") }, { seq: 1, item: cut("t1") }, { seq: 2, item: cut("t2") }, { seq: 3, item: cut("t3") }];
+    const outputs = [{ tool_id: "t1", result: "a needle and a needle" }, { tool_id: "t2", result: '{"$sealed":1,"c":"needle"}' }, { tool_id: "gone", result: "needle" }];
+    const { client: c, tables } = client([items, outputs]);
+    expect(await workerThreadSearch("c1", "needle", c)).toEqual([{ index: 1, hits: 2 }]);
+    expect(tables).toEqual(["cloud_thread_items", "cloud_tool_outputs"]);
+  });
+
+  it("pages the cut results until one comes back short, and is null when they can't be read", async () => {
+    const items = [{ seq: 0, item: { kind: "tool", id: "t9", name: "Bash", resultBytes: 9000, at: 0 } }];
+    const full = Array.from({ length: SEARCH_PAGE }, (_, i) => ({ tool_id: `x${i}`, result: "hay" }));
+    const { client: c, ranges } = client([items, full, [{ tool_id: "t9", result: "needle" }]]);
+    expect(await workerThreadSearch("c1", "needle", c)).toEqual([{ index: 0, hits: 1 }]);
+    expect(ranges).toHaveLength(3);
+    expect(await workerThreadSearch("c1", "needle", client([items, "error"]).client)).toBeNull();
+  });
+
+  it("reads no outputs when no item was cut", async () => {
+    const { client: c, tables } = client([[{ seq: 0, item: { kind: "tool", id: "t1", name: "Bash", result: "short needle", at: 0 } }]]);
+    expect(await workerThreadSearch("c1", "needle", c)).toEqual([{ index: 0, hits: 1 }]);
+    expect(tables).toEqual(["cloud_thread_items"]);
   });
 
   it("is empty for an empty query, without a read", async () => {
