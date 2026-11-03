@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LimitSample } from "./limit-chart";
-import { latestReading, MAX_PACKED, packLimits, unpackLimits } from "./limits-wire";
+import { latestReading, MAX_MODELS, MAX_PACKED, MODEL_ID_MAX, packLimits, unpackLimits, unpackModels } from "./limits-wire";
 
 const samples: LimitSample[] = [
   { at: 60_000, backend: "claude", kind: "five_hour", used: 10, resetsAt: 1_800_000_000 },
@@ -39,6 +39,27 @@ describe("the limits wire", () => {
     ]);
     expect(unpackLimits(null)).toEqual([]);
     expect(unpackLimits({ s: "x" })).toEqual([]);
+  });
+
+  it("packs the models at their cap beside the samples, and reads back the ones not yet reset", () => {
+    const models = [
+      { model: "claude-opus-5-5", at: 120_000, resetsAt: 1_800_000_000_000 },
+      { model: "claude-sonnet-5", at: 60_000, resetsAt: 1_000_000 },
+    ];
+    const packed = packLimits(samples, MAX_PACKED, models);
+    expect(packed.m).toEqual([["claude-opus-5-5", 2, 1_800_000_000], ["claude-sonnet-5", 1, 1000]]);
+    expect(unpackModels(packed, 2_000_000)).toEqual([{ model: "claude-opus-5-5", at: 120_000, resetsAt: 1_800_000_000_000 }]);
+    expect(packLimits(samples)).not.toHaveProperty("m");
+  });
+
+  it("caps how many models go up and how long an id is, and reads anything else as none capped", () => {
+    const many = Array.from({ length: MAX_MODELS + 3 }, (_, i) => ({ model: `${"m".repeat(MODEL_ID_MAX + 5)}${i}`, at: 0, resetsAt: 1e15 }));
+    const m = packLimits([], MAX_PACKED, many).m!;
+    expect(m).toHaveLength(MAX_MODELS);
+    expect(m[0]![0]).toHaveLength(MODEL_ID_MAX);
+    expect(unpackModels({ v: 1, s: [], m: [["x", 1], [2, 1, 3], "y", ["ok", 1, 2e12]] }, 0)).toEqual([{ model: "ok", at: 60_000, resetsAt: 2e15 }]);
+    expect(unpackModels(null)).toEqual([]);
+    expect(unpackModels({ v: 1, s: [] })).toEqual([]);
   });
 
   it("reads the newest of each window", () => {

@@ -228,7 +228,8 @@ flipping it. See `docs/bug-fixes/012-fable-xhigh-effort-crashes-puku.md`.
 A card whose **very first turn** came back with an error gets a different escape
 (`components/FirstMessageErrorBanner.tsx`): rerun the first message on the user's configured
 backup model (Settings → Models → Backup model, `components/BackupModelPicker.tsx`), or delete
-the card. The predicate is `firstMessageFailed(card, items)` (`lib/first-message-failed.ts`):
+the card. A worker's card reruns on the same backup model (an account setting that syncs to workers), sent with
+`card.rerunModel`; on weft.zip, with no Settings to read, it reruns on its CLI's default (`hostRerunModel`). The predicate is `firstMessageFailed(card, items)` (`lib/first-message-failed.ts`):
 exactly one user message, no assistant text after it, the card isn't live, and `card.error` is
 set. The handler is `rerunOnModel(cardId, model)` next to `switchBackend`: it ends the session,
 sets the new model (and clears `sessionId` and `error`/`rateLimitHit` either way), then

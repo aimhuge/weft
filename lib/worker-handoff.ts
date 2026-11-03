@@ -34,16 +34,17 @@ export async function requireWorker(client: SupabaseClient = accountClient()): P
 }
 
 // Sends the card's first message to the worker, under the project's folder name and its GitHub remote (cloned the
-// first time), and records on the card what went where.
+// first time), and records on the card what went where. `handedOff` keeps the game from counting the run twice: the
+// worker's own card is the one that counts (lib/worker-activity.ts).
 export async function handOffToWorker(card: Card, client: SupabaseClient = accountClient()): Promise<{ started: false; worker: string }> {
   const worker = await requireWorker(client);
   const root = projectRoot(card.cwd);
   const slug = githubRepoOf(root);
   const prompt = firstMessage(card);
-  await sendRun({ workerId: worker.id, folder: path.basename(root), prompt, repo: slug ? `https://github.com/${slug}.git` : undefined }, client);
+  const { commandId } = await sendRun({ workerId: worker.id, folder: path.basename(root), prompt, repo: slug ? `https://github.com/${slug}.git` : undefined }, client);
   const at = Date.now();
   appendThread(card.id, { kind: "user", text: prompt, at });
   appendThread(card.id, { kind: "assistant", text: `Sent to your worker **${worker.name}** (${worker.status}). It runs there, not on this machine; follow and reply to it under ${worker.name}'s project on this board, or on the weft.zip board.`, at });
-  updateCard(card.id, { column: "review" });
+  updateCard(card.id, { column: "review", handedOff: { workerId: worker.id, commandId } });
   return { started: false, worker: worker.name };
 }
