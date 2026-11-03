@@ -71,7 +71,8 @@ const nextConfig: NextConfig = {
   // esbuild (lib/app-build.ts, the mini-app bundler) ships the platform binary through package.json exports
   // (node_modules/@esbuild/darwin-arm64/bin/esbuild); when Turbopack resolves it on the server it 500s every
   // route that imports it transitively (2026-10-19). Externalize it the same way.
-  serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "esbuild"],
+  // multicast-dns (lib/lan-offer.ts, the LAN path to a worker) opens a UDP socket: loaded from node_modules as it is.
+  serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "esbuild", "multicast-dns"],
   // @weft/client (packages/weft-client) is a workspace package that ships TypeScript source, so Next compiles it with
   // the app's own code instead of loading it from node_modules at runtime.
   transpilePackages: ["@weft/client"],

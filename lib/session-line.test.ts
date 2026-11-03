@@ -2,6 +2,7 @@
 // heartbeat and its ms, and falling back to the relay and trying again. Repair and renegotiation are in
 // lib/session-line-repair.test.ts; two real peers run in lib/session-line.real.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { LineOffer } from "./host-line-protocol";
 import { sealAnswer } from "./rtc-signal";
 import { ANSWER_MS, BEAT_MS, GATHER_MS, RETRY_MS } from "./session-line";
 import { LineDown } from "./session-line-calls";
@@ -32,6 +33,15 @@ describe("opening", () => {
     expect(seen.topics.size).toBe(0);
     expect(routed).toHaveBeenCalledTimes(1);
     off();
+  });
+
+  it("takes a sealed answer that came back with the offer (a worker on the LAN), with no Broadcast", async () => {
+    const { line } = setup({ offer: vi.fn(async (_: string, o: LineOffer) => ({ answer: await sealAnswer(o.key, "lan answer") })) });
+    await flushUntil(() => (seen.pcs.at(-1)?.remote.length ?? 0) > 0);
+    expect(last().remote).toEqual([{ type: "answer", sdp: "lan answer" }]);
+    last().openAll();
+    expect(line.route()).toEqual({ kind: "direct", ms: null });
+    line.close();
   });
 
   it("waits for gathering, up to a limit", async () => {

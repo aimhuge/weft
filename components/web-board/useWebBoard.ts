@@ -224,7 +224,6 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     async (plain: NewCommand): Promise<CloudCommandRow | string> => {
       let row: NewCommand;
       try {
-        // Says it's weft.zip, with this browser's time zone, for the thread's <weft-env> block: a hint, never a check.
         row = withClientHint(await withAttachments(plain, uploads, webBlobSeal), webClientHint());
       } catch (err) {
         return (err as Error).message;

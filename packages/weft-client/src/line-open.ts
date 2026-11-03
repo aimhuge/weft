@@ -57,19 +57,21 @@ export function gathered(pc: OfferPeer, wait: (ms: number) => Promise<void>): Pr
   return Promise.race([complete, wait(GATHER_MS)]);
 }
 
-// The offer for a peer whose channels are already made, listening for its answer. `stop` stops listening.
-export async function offerLine(pc: OfferPeer, ice: IceServer[], deps: OfferDeps): Promise<{ offer: LineOffer; stop: () => void }> {
+// The offer for a peer whose channels are already made, listening for its answer. `stop` stops listening; `take` lands an
+// answer that came another way (a LAN offer's reply), through the same checks.
+export async function offerLine(pc: OfferPeer, ice: IceServer[], deps: OfferDeps): Promise<{ offer: LineOffer; stop: () => void; take: (sealed: SealedAnswer) => void }> {
   await pc.setLocalDescription(await pc.createOffer());
   await gathered(pc, deps.wait);
   const key = deps.keys.newKey();
   const topic = lineTopic(deps.token());
-  const stop = deps.listen(topic, (sealed) => {
+  const take = (sealed: SealedAnswer) => {
     void deps.keys
       .open(key, sealed)
       .then((sdp) => (deps.current() ? pc.setRemoteDescription({ type: "answer", sdp }) : undefined))
       .catch(() => {});
-  });
-  return { offer: { sdp: pc.localDescription?.sdp ?? "", key, topic, ice }, stop };
+  };
+  const stop = deps.listen(topic, take);
+  return { offer: { sdp: pc.localDescription?.sdp ?? "", key, topic, ice }, stop, take };
 }
 
 export interface OpenLineDeps<C> extends Omit<OfferDeps, "current"> {
@@ -107,7 +109,10 @@ export async function openLine<C>(workerId: string, deps: OpenLineDeps<C>): Prom
   try {
     const made = await offerLine(pc, ice, { ...deps, current: () => live });
     stop = made.stop;
-    await deps.offer(workerId, made.offer);
+    // An offer that went straight to the worker (over the LAN) may come back with its answer.
+    const sent = await deps.offer(workerId, made.offer);
+    const direct = (sent as { answer?: SealedAnswer } | null | undefined)?.answer;
+    if (direct) made.take(direct);
   } catch (err) {
     close();
     throw err;

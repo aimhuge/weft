@@ -445,10 +445,14 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **Folder reports:** `worker_set_folders` and `lib/worker-folders.ts` exist, but the daemon doesn't call them yet, so
   until it does a project needs a card to show.
 - **Not yet:** attachments on a new thread, Run on Worker's local record cards still sit on the local project, and
-  sealed rows: a worker publishes its rows and pages in the clear, and files reach it plain, until it holds the workspace
-  key. The grant (sealed to its pinned box key and signed by the pairing Mac after Touch ID) and the worker's own sealing
-  are designed in [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker-design); a Mac's and a browser's files
-  are sealed already ([Sealed blobs](mobile-security.md#sealed-blobs)), so a sealed card's pasted file only goes plain to a worker.
+  files a Mac or a browser pastes into a worker card still go up plain (the worker opens sealed ones already).
+- **Sealed threads:** Settings → Devices → the worker → Seal… grants a paired worker the workspace key, sealed to the box key
+  the Mac pinned and signed by the Mac's approval key after Touch ID (`electron/worker-key-grants.cjs`). The worker checks it
+  against the Mac in `mac-keys.json`, holds the key in memory only (`lib/worker-keyring.ts`, read at start, on a `key_grant`
+  ping and every 10 minutes), and from then on publishes its card, items, tool outputs, pages and their files sealed, as a
+  Mac's outbox does; both boards open them. Once it has sealed, `seal-floor.json` in its home makes a worker with no key hold
+  its rows back rather than publish plain. Re-pin and Revoke drop its grants and rotate the key. A token-enrolled worker
+  trusts no Mac and stays plain. See [mobile-security.md](mobile-security.md#sealing-on-a-weft-worker).
 
 ### Pages from a worker
 
@@ -680,7 +684,7 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   worker card holds its worker's **session line** (`lib/web-lines.ts`, `useWebLine` in `components/web-board/useWebHost.ts`):
   the tab reads `cloud_workers.public_key`, seals the offer (`lineOpener`) and inserts the `line` row with its own session,
   which only the worker's owner may do (`private.owns_device`), in exactly the server's shape
-  (`20261103150000_line_row_shape.sql`, not yet applied). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
+  (`20261103150000_line_row_shape.sql`). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
   widening or pasted files), its thread's events beside Realtime (`lib/line-thread.ts`) and the watched screen as an H.264
   track. The phone gets the same opener with its own RTCPeerConnection (`openLine`, `packages/weft-client/src/line-open.ts`).
 - **TURN on weft.zip.** A web line asks weft.zip's own `GET /api/web-board/ice` (`lib/web-ice.ts`, `webIce` in
@@ -716,6 +720,67 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   Xcode. A failure only skips it, and `lib/idb-companion.ts` also finds it on PATH. idb's GitHub release publishes no digest, so
   the hash is of the file as downloaded. An auto-update runs `pnpm install` but not that script, so an enrolled box needs
   `weft-worker update` to get it.
+
+### The LAN path
+
+A board on the same network as a worker opens its [session line](project-hosts.md#the-session-line-h6-as-built) straight
+to the box, found through a signed mDNS hint, with no Supabase round trip: no `line` row, no Broadcast answer. The line
+it opens is the same one, its verbs on the same `host` path; only how the offer and the answer travel changes. Supabase
+stays the fallback for every step that fails. Built 2026-11-03.
+
+```
+worker  lib/worker-lan-start.ts ── multicast-dns ── _weft._tcp  PTR/SRV/A + TXT { v, id, fp, port, at, sig }
+                                                                 sig = worker sign key over weft-lan-hint-v1\n id\n fp\n port\n at
+        lib/worker-lan.ts  POST /line on 0.0.0.0:<port>
+Mac     lib/lan-offer.ts   (this Mac's server, from openWorkerLine)
+          1 main: POST /lan-line/keys → the sign key + box key pinned at pairing (electron/lan-line-sign.cjs)
+          2 lib/lan-mdns.ts browser: a TXT for that worker id that checks against those pins, fresh (lib/lan-hint.ts)
+          3 seal the board's offer to the pinned box key (LINE_PURPOSE); main: POST /lan-line/sign → this Mac's device key
+            over weft-lan-offer-v1\n workerId\n issuedAt\n nonce\n sha256(sealed)
+          4 POST http://<packet's source address>:<port>/line { v, workerId, sealed, mac }
+worker  rate → size → shape → pinned Mac key + fresh + nonce once → unseal → daemon.lanLine: the `line` kind (lib/worker-kinds.ts
+        openLine) as the owner's row would run it → lib/host-line.ts answers to the reply, not the Broadcast topic
+board   ◀── { answer: sealed under the one-time key } in the /api/worker-board reply ── lib/session-line.ts opens it as before
+```
+
+- **Where it runs.** The renderer can't browse mDNS or reach a LAN socket, so this Mac's server does it inside
+  `openWorkerLine` (`lib/worker-board.ts`), before the row; the reply's `answer` goes to `createSessionLine`, which feeds it to
+  the same `openAnswer` a Broadcast answer takes. The browser (`multicast-dns`, MIT) opens once per server process, on the first
+  offer, and only after main answered (off the desktop there is no control server, so no socket is opened); it asks for
+  `_weft._tcp` every 30 s and waits up to 400 ms for a hint when it has none. `WEFT_LAN=0` turns it off on either end.
+- **Which boxes.** Only a worker paired through Settings → Devices: the Mac needs its pinned sign key (to check the hint) and
+  box key (to seal to), and the box needs the Mac key from the pairing code (`mac-keys.json`, to check the offer). A
+  token-enrolled box, a box after `weft-worker forget-macs`, and a worker this Mac re-pinned (box key dropped) take the row.
+  The worker listens on any free port (`WEFT_LAN_PORT` fixes one) and logs "offering lines on the LAN, port N".
+- **Reconnecting.** A dropped line (no answer, ICE `failed`, a channel closed) is offered again after the backoff, and each new
+  offer takes the LAN when a fresh hint is up and the row when it isn't; an ICE `disconnected` or a missed pong first tries the
+  line's own ICE restart, as before. So a box that moves off the LAN falls back to Supabase on the next try, and one that comes
+  back is reached directly again.
+- **What's checked, and against what.** The hint: the worker id, the fingerprint of the box key this Mac pinned, an Ed25519
+  signature by the sign key it pinned at pairing (never `cloud_workers`), and `at` within 5 min (re-signed every 60 s). The
+  offer, in order, cheapest first: 6 tries per address and 20 in all per minute, and 2 being answered at once (429); 64 KB by
+  Content-Length and while streaming, 5 s for headers (413); a whole offer for this worker's id (400 / 403); then a Mac key
+  this box pinned and hasn't since marked revoked (`mac-revoked.json`, lib/worker-mac-revocation.ts; read on every offer), a signature over this exact sealed offer's digest and this worker id, `issuedAt` within 60 s of the box's
+  clock, and a nonce never seen (kept on disk in `lan-nonces.json`, inside the sealed worker home); then the seal opens for
+  `LINE_PURPOSE`. Every refusal past the shape is the same 403.
+- **Threat model.** *A spoofed advert* (someone on the LAN advertising this worker's id) fails the signature or the
+  fingerprint and is never offered to. *A replayed advert* (a real TXT re-sent from another address within its 5 minutes)
+  sends the sealed offer to the wrong place: it can't be opened (sealed to the box key), its answer key and TURN credentials
+  are inside it, and the board falls back to the row when nothing answers; the cost is the attempt. *A replayed offer* is
+  refused by its nonce, and a stale one by its time; one replayed inside the window to the real box would open nothing the
+  replayer can use, since the answer comes back sealed under the board's one-time key. *An offer from anyone else on the
+  LAN* (anyone can seal to a public box key) is refused without the pinned Mac's signature, so the port gives no more than
+  the relay, which takes only the owner's rows. *DoS on the port* is bounded by the rate and size limits, the concurrent cap
+  and the timeouts; a flood can make the board fall back to Supabase, never take the line. *DoS on the browser* is bounded by
+  64 workers and 4 records each, checked only when a line is offered. The Mac signs with its device key and no Touch ID, as it
+  signs settings: what's signed is built in main from checked fields under its own prefix, so it can't stand for an approval,
+  and only the server holds the control server's token. A line opened this way can do exactly what a `line` row's can.
+- **Tested** with a fake mDNS bus (`lib/lan-mdns.test.ts`) and end to end on 127.0.0.1 (`lib/lan-line.loopback.test.ts`): a
+  worker daemon advertises, this Mac's server finds it, checks it, seals, signs and posts, the worker opens the line through
+  its own `line` kind, and the board opens the answer; a spoofed advert is ignored and an unpinned Mac refused. Not yet run on
+  a real LAN (multicast through a real router, a Linux box's firewall, Electron's server).
+- **Not yet.** Reconnecting without a new offer (the address is only used to deliver the offer; ICE does the rest); IPv6
+  (the socket is `udp4`); weft.zip and the phone, which can't browse mDNS.
 
 **Local Simulator.** To test by hand with no tap latency, a card can run its build on a simulator on your Mac, with the agent still driving it:
 [Local Simulator mode](manual-qa.md).

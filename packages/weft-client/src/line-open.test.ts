@@ -123,6 +123,14 @@ describe("openLine", () => {
     expect(pc.remote).toHaveLength(1);
   });
 
+  it("lands an answer the offer came back with", async () => {
+    let made: Peer | null = null;
+    const { d } = deps();
+    await openLine("w1", { ...d, peer: () => (made = new Peer()), ice: () => Promise.resolve([]), offer: () => Promise.resolve({ answer: { iv: "i", ct: "good" } }) });
+    await flush();
+    expect((made as unknown as Peer).remote).toEqual([{ type: "answer", sdp: "v=0 answer" }]);
+  });
+
   it("closes the peer when the offer can't go", async () => {
     let made: Peer | null = null;
     const { d, stopped } = deps();

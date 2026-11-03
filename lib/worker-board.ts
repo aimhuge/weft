@@ -7,7 +7,6 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import { encodeAttachments } from "./attachment-transfer";
 import { signPageAssets } from "./blob-page-sign";
-import { readBlob } from "./blob-read";
 import { createBlobStore } from "./blob-store";
 import { switchQa } from "./qa-switch";
 import { answerCommand, replyCommand, stopCommand, type GrantScope, type NewCommand } from "./cloud-commands";
@@ -20,10 +19,13 @@ import type { ThreadPage } from "./thread-page";
 import type { Card, PermissionMode, QuestionReply } from "./types";
 import { inputCommand, modeCommand, workerDevice, type BoardInput, type BoardOffer, type ScreenInput } from "./worker-commands";
 import { seal } from "./worker-seal";
-import { RTC_PURPOSE } from "./rtc-signal";
+import { RTC_PURPOSE, type SealedAnswer } from "./rtc-signal";
 import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
+import { lanAnswer } from "./lan-offer";
 import { EMPTY_WORKER_BOARD, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
+import { openCardRows, openedBlob, openItemRows, openOutput, openPageAssets } from "./worker-board-open";
+import { SEALED_PAGE_HTML } from "./blob-seal";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 import { macHint } from "./host-facts";
 import { linePlaintext, withClientHint } from "@weft/client";
@@ -117,7 +119,8 @@ export async function readWorkerBoard(client: SupabaseClient = accountClient(), 
     changedCards(client, who.org, ids, from),
   ]);
   if (cards.error) throw new Error(`Couldn't read your worker's threads: ${cards.error.message}`);
-  const rows = cards.data as CardRow[];
+  // A worker that holds a key grant seals its rows: opened with main's keys (lib/worker-board-open.ts).
+  const rows = await openCardRows(who.org, cards.data as CardRow[]);
   const { asOf, delta, removed } = readMarks(rows, from, since);
   const board = boardFrom(workers, folders, rows.filter((r) => !r.deleted), now, seen);
   return { signedIn: true, ...board, ...(asOf ? { asOf } : {}), ...(delta ? { delta: true, removed } : {}) };
@@ -144,12 +147,12 @@ function readMarks(rows: CardRow[], from: string | null, since: string | undefin
 // still carries the thread's total, so a rewound thread shows.
 export async function workerThreadPage(cardId: string, before: number | undefined, client: SupabaseClient = accountClient(), after?: number): Promise<ThreadPage | null> {
   const who = await requireSession(client);
-  let query = client.from("cloud_thread_items").select("card_id, seq, item").eq("org_id", who.org).eq("card_id", cardId);
+  let query = client.from("cloud_thread_items").select("card_id, seq, item, at").eq("org_id", who.org).eq("card_id", cardId);
   if (before !== undefined) query = query.lt("seq", before);
   if (after !== undefined) query = query.gt("seq", after);
   const { data, error } = await query.order("seq", { ascending: false }).limit(THREAD_PAGE_SIZE);
   if (error) return null;
-  if (after === undefined || data.length) return pageFromRows(cardId, data);
+  if (after === undefined || data.length) return pageFromRows(cardId, await openItemRows(who.org, data));
   const head = await client.from("cloud_thread_items").select("seq").eq("org_id", who.org).eq("card_id", cardId).order("seq", { ascending: false }).limit(1);
   if (head.error) return null;
   return { items: [], start: after + 1, total: head.data.length ? (head.data[0] as { seq: number }).seq + 1 : 0 };
@@ -160,17 +163,21 @@ export async function workerToolOutput(cardId: string, toolId: string, client: S
   const who = await requireSession(client);
   const { data, error } = await client.from("cloud_tool_outputs").select("result").eq("org_id", who.org).eq("card_id", cardId).eq("tool_id", toolId).maybeSingle<{ result: string }>();
   if (error || !data) throw new Error("That output isn't there.");
-  return data.result;
+  return openOutput(who.org, cardId, toolId, data.result);
 }
 
 // A page a worker card opened, for the desktop board's pane: the bytes through the account's own session, an HTML page's
 // assets signed the same way (lib/blob-page-sign.ts). Null when it isn't there or isn't yours to read.
 export async function workerPage(sha: string, client: SupabaseClient = accountClient()): Promise<{ body: BodyInit; type: string } | null> {
   const who = await requireSession(client);
-  const got = await readBlob(client, who.org, sha, { r2: null });
-  if (!got) return null;
+  // A sealed page opens here, its sealed assets inline as data: URLs; one that won't open is the 🔒 page.
+  const got = await openedBlob(client, who.org, sha);
+  if (got === undefined) return null;
+  if (got === null) return { type: "text/html; charset=utf-8", body: SEALED_PAGE_HTML };
   const type = got.type || "application/octet-stream";
-  return { type, body: type.startsWith("text/html") ? await signPageAssets(client, who.org, new TextDecoder().decode(got.bytes)) : got.bytes };
+  if (!type.startsWith("text/html")) return { type, body: got.bytes as Uint8Array<ArrayBuffer> };
+  const html = new TextDecoder().decode(got.bytes);
+  return { type, body: got.sealed ? await openPageAssets(client, who.org, html) : await signPageAssets(client, who.org, html) };
 }
 
 // Where a command for a card goes: the worker that runs it, read fresh, and only a card a worker of yours owns.
@@ -221,7 +228,11 @@ async function sealedOffer(client: SupabaseClient, workerId: string, offer: Boar
 
 // Opens a session line: the board's offer, its answer key, topic and ICE servers, sealed to the worker's published key
 // (LINE_PURPOSE) on a `line` command, so only that worker can answer and both DTLS fingerprints travel protected.
-export async function openWorkerLine(body: LineAction, client: SupabaseClient = accountClient()): Promise<{ commandId: string }> {
+// A worker on this Mac's LAN takes the offer straight (lib/lan-offer.ts): its sealed answer comes back here, and the row
+// is never written. Without one, the row as before.
+export async function openWorkerLine(body: LineAction, client: SupabaseClient = accountClient(), lan = lanAnswer): Promise<{ commandId?: string; answer?: SealedAnswer }> {
+  const answer = await lan(body.workerId, body.offer);
+  if (answer) return { answer };
   const who = await requireSession(client);
   if (!(await myWorkers(client, who)).some((w) => w.id === body.workerId)) throw new Error("That worker isn't one of yours.");
   const { data } = await client.from("cloud_workers").select("public_key").eq("id", body.workerId).maybeSingle<{ public_key: string | null }>();
