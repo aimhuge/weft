@@ -83,7 +83,8 @@ describe("approval:sign", () => {
   }
   const answer = { cardId: "card-1", pendingId: "p-1", allow: true };
   type Command = Pick<CloudCommandRow, "org_id" | "target_device" | "payload">;
-  const cmd = (target: string, auth: unknown): Command => ({ org_id: "org-1", target_device: target, payload: { auth } as unknown as CloudCommandRow["payload"] });
+  // This Mac's own card is signed over the workspace "local" (lib/local-approve.ts LOCAL_ORG), whatever the board names.
+  const cmd = (target: string, auth: unknown, org = "local"): Command => ({ org_id: org, target_device: target, payload: { auth } as unknown as CloudCommandRow["payload"] });
   const deps = (wired: ReturnType<typeof setup>["wired"], now: number) => ({
     verify: (b: { device: string; message: string; sig: string }) => wired.routes["POST /pairing/verify"](b) as Promise<{ ok: boolean; reason?: string }>,
     approvers: () => Promise.resolve(1),
@@ -101,6 +102,8 @@ describe("approval:sign", () => {
     // Moved onto another request, card or host, it no longer checks out.
     expect(await approvalProblem(command, { ...answer, pendingId: "p-2" }, null, deps(wired, auth.issuedAt))).toMatch(/doesn't check out/);
     expect(await approvalProblem(cmd("worker:w", auth), answer, null, deps(wired, auth.issuedAt))).toMatch(/doesn't check out/);
+    // Nor as a network answer, which names the real workspace.
+    expect(await approvalProblem(cmd("mac-1", auth, "org-1"), answer, null, deps(wired, auth.issuedAt))).toMatch(/doesn't check out/);
     // This Mac's own key isn't a paired approver.
     expect(wired.routes["POST /pairing/status"]()).toMatchObject({ approvers: 0 });
   });

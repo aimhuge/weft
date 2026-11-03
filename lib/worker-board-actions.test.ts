@@ -46,6 +46,16 @@ describe("sendWorkerAction", () => {
     expect((inserted() as { payload: unknown }).payload).toEqual({ cardId: "c1", pendingId: "p1", allow: true, grant: "always" });
   });
 
+  it("carries this Mac's signature on an Allow, and drops one that isn't the shape a worker reads", async () => {
+    const { client, inserted } = fakeClient({ cardRow: target });
+    const auth = { device: "mac-1", issuedAt: 5, sig: "c2ln" };
+    await sendWorkerAction({ action: "answer", cardId: "c1", pendingId: "p1", allow: true, auth: { ...auth, publicKey: "k" } as never }, client);
+    expect((inserted() as { payload: unknown }).payload).toEqual({ cardId: "c1", pendingId: "p1", allow: true, auth });
+    const bad = fakeClient({ cardRow: target });
+    await sendWorkerAction({ action: "answer", cardId: "c1", pendingId: "p1", allow: true, auth: { device: "mac-1" } as never }, bad.client);
+    expect((bad.inserted() as { payload: unknown }).payload).toEqual({ cardId: "c1", pendingId: "p1", allow: true });
+  });
+
   it("sends an answer as the row the web board sends", async () => {
     const { client, inserted } = fakeClient({ cardRow: target });
     await sendWorkerAction({ action: "answer", cardId: "c1", pendingId: "p1", allow: true, answers: { q: "a" } }, client);

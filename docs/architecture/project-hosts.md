@@ -37,7 +37,7 @@ row was a missing command kind and a missing handler on the board, not a missing
 | Share… | `card-share`, `ShareCardDialog` | the same dialog over the rows the worker published (`lib/card-share-worker.ts`, 2026-11-02; sharing.md) |
 | ↑ edit, Restart, Fresh | `messages`, `fresh` | as host verbs (H3) |
 | "!" shell | `shell` | `card.shell` with a signed approval ([Signed widening](#signed-widening-as-built)) |
-| Allow on a request | `permission` | an answer the worker takes from the network today; a Touch ID-signed Allow is built and landing (PR #80, [below](#what-landed-on-2026-11-03)) |
+| Allow on a request | `permission` | a Touch ID-signed Allow from the desktop (PR #80), a passkey's, or a paired phone's once the Mac endorsed it there (mobile-security.md, [Phones on a worker](mobile-security.md#phones-on-a-worker-h10-built-2026-11-03)); a local card signs its phone-only Allows too |
 | Wait, Me first, Others first | `permission` | as host verbs, on the tile and in the thread (H3) |
 | Stop a subagent task | `tasks/[taskId]/stop` | `card.stopTask` (H3) |
 | Attachments in a reply | `/api/attachments` | images and PDFs travel as blobs on `reply`, `run` and `new_card` (`lib/attachment-transfer.ts`), sealed when the card's row is (PR #94); a brand-new worker thread's with the newest version this Mac granted its worker (`workerBlobSeal`) |
@@ -1408,8 +1408,10 @@ folder grant) stay native on the phone or the Mac.
 
 Secrets on a Worker start as the per-use seal above (`secret_use`). The vault can now also be kept on the host, opt-in,
 each use still behind the Mac's Touch ID ([secrets.md](secrets.md#kept-on-a-worker), PR #88). On a worker card the
-desktop's Allow is signed by main after Touch ID once PR #80 lands; the phone approving on a worker (H10) and signing a
-local card's Allow are still open.
+desktop's Allow is signed by main after Touch ID (PR #80), and a paired phone approves there once the pairing Mac endorsed
+its key in the worker's signed set (`weft-endorse-v3`). On this Mac's own card an Allow on a phone-only ask is signed by
+main after Touch ID and checked by the route on the same path (`lib/local-approve.ts`); a plain local Allow stays one
+click on the board window's token (mobile-security.md, "A local card's Allow").
 
 ## Devices and records
 
@@ -1524,6 +1526,12 @@ applied on production.
   (`lib/worker-approve.ts`, `answerAsKind` on), with a clear refusal for older Macs. Roll-out: update the Mac before
   its workers, or Allows on worker cards are refused and the request stays waiting.
 - **This Mac's board tools reach worker cards** (PR #83): [Board tools on a worker](#board-tools-on-a-worker).
+- **Phones on a worker and a local card's signed Allow** (PR #96, with PR #80). Settings → Devices → Passkeys also endorses
+  this Mac's paired phones to the worker (`weft-endorse-v3`, v2 unchanged when there are none), and the worker takes an
+  endorsed phone's signed Allow behind the same heads as a passkey (`lib/host-signers.ts` `verifyAnswer`); answers only.
+  On this Mac, an Allow on a phone-only ask is signed by main after Touch ID and checked by
+  `POST /api/cards/<id>/permission` (`lib/local-approve.ts`), and the copilot can't give one. No migration
+  (mobile-security.md, "Phones on a worker" and "A local card's Allow").
 - **Agents across hosts** (this change, on top of PR #83): a card a board tool sends to another host runs as that
   project's default agent; another named agent is refused with why ([Agents across hosts](#agents-across-hosts)).
 
@@ -1531,7 +1539,9 @@ applied on production.
 
 Plainly, as of 2026-11-03:
 
-- **Approvals.** The phone approving on a worker (H10); signing a local card's Allow (PR #80 covers worker cards only).
+- **Approvals.** Built and landing (after PR #80): phones on a worker and a local card's phone-only Allow, above. Left: the
+  phone app signing for worker cards (mobile-security.md, Phone side step 7); a phone signing a widening on a worker (it
+  approves answers only); a plain local Allow stays unsigned by design (one click, the board window's token).
 - **Passkey re-pair at weft.zip.** Designed only
   ([weft-worker.md](weft-worker.md#a-passkey-approved-re-pair-designed-not-built)): it needs a phone approver and a
   console code.
@@ -1592,8 +1602,8 @@ Each ships on its own. Status as of 2026-11-03.
    their own origin, **sign.weft.zip**, which serves only the pairing and approve pages under a strict CSP; the Mac
    rebuilds the message from its own names and main checks it. The desktop signs too
    ([mobile-security.md](mobile-security.md#the-desktop-signs-too)), and a worker pins the pairing Mac's key (H10).
-   The board's Allow asking for that signature on a worker card is built and landing (PR #80); a local card's Allow and
-   the phone on a worker are open.
+   The board's Allow asking for that signature on a worker card is built and landing (PR #80), and so are a phone's Allow
+   on a worker and a local card's signed phone-only Allow (the PR after it); the phone app's side for worker cards is open.
 8. **H8 secrets on a Worker** (built). The per-use seal (2026-11-02,
    [as built](#secrets-on-a-worker-h8-the-per-use-seal-as-built)), T2's list, blanks, `set_value`, `push_to_vercel` and a
    dev server's env (2026-11-02, [as built](#the-vault-on-a-worker-t2-as-built)), and values kept on a worker (2026-11-03,
@@ -1607,7 +1617,8 @@ Each ships on its own. Status as of 2026-11-03.
 10. **H10 one device registry** and one pairing flow (built 2026-11-02, [device-registry.md](device-registry.md)):
     `public.device_registry`, `device_revoke` for every kind, Settings → Devices, and Add a worker as a pairing
     (`worker_pair_*`); `worker_enrol` stays for tokens. Follow-ups built 2026-11-03 (PR #85): asks to the pairing Mac,
-    cross-Mac revocation, passkey heads. Open: the phone approving on a worker, the passkey re-pair at weft.zip.
+    cross-Mac revocation, passkey heads; a paired phone approving on a worker (landing after PR #80). Open: the passkey
+    re-pair at weft.zip.
 11. **Signed widening** (built 2026-11-02, [as built](#signed-widening-as-built)): a new folder, agent or read scope,
     skipping prompts, a "!" line, the terminal over the line and a new thread with an agent run on a remote host with a
     fresh approval for exactly that change, from the desktop's Touch ID key or a passkey; YOLO in a worker card's mode

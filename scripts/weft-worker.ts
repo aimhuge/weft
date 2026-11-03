@@ -173,7 +173,7 @@ async function startCommand() {
   const publisher = createPublisher(reg, store, console.warn, { blobs, orgId: config.orgId, sealer: sealing.sealer });
   subscribe(publisher.hear);
   // Signed widening: the pairing Mac's approvals and its endorsed passkeys lift the network's refusals (lib/worker-signing.ts).
-  const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder, heads: reg.passkeyHeads, signHeld: (await import("../lib/worker-secret-wiring")).pairedSigner(home) });
+  const { widen, terminal } = (await import("../lib/worker-signing")).workerSigning({ home, workerId: config.workerId, root, listFolders: listProjectFolders, repoPath: paths.repoPath, nameFolder: publisher.nameFolder, orgId: config.orgId, folderOf: publisher.folderOf, heads: reg.passkeyHeads, signHeld: (await import("../lib/worker-secret-wiring")).pairedSigner(home) });
   // The board tools reach the user's board, not this store (docs/architecture/project-hosts.md#board-tools-on-a-worker):
   // the owner's cards, a card for another host, and this worker's crons and webhooks published for the Mac's drawers.
   const [{ setBoardLink }, { createListsPublisher }, { listCrons }, { listWebhooks, onWebhooksWrite }, { startCronClock }] = await inTurn([

@@ -47,6 +47,8 @@ describe("unsigned answers", () => {
   it("refuse an Allow once a phone is paired", async () => {
     expect(await approvalProblem(command(), answer, permission, deps())).toBe(UNSIGNED_REFUSED);
     expect(await approvalProblem(command({ device: 1 }), answer, null, deps())).toBe(UNSIGNED_REFUSED);
+    // A host that words it its own way (a worker, lib/worker-approve.ts).
+    expect(await approvalProblem(command(), answer, permission, deps({ unsigned: "Ask the Mac." }))).toBe("Ask the Mac.");
   });
   it("let an Allow through with no phone, or when the web may approve", async () => {
     expect(await approvalProblem(command(), answer, permission, deps({ approvers: () => Promise.resolve(0) }))).toBeNull();

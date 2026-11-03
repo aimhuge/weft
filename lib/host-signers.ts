@@ -7,12 +7,14 @@
 // - A browser's passkey: endorsed by that Mac, whose key signs `weft-endorse-v2` over the whole set for this worker
 //   (lib/host-endorse.ts; a `pin` command, lib/worker-kinds.ts). The worker keeps the newest set and each counter, as
 //   main does, in passkeys.json.
+// - A paired phone's Ed25519 sign key: endorsed in the same set (`weft-endorse-v3`), and trusted for an answer's Allow
+//   only (verifyAnswer), never a widening, a secret use or a setting, which stay the pairing Mac's (or a passkey's).
 //
 // Both files sit in the worker's home, mode 600; threads on the worker can't read or write that home
 // (lib/secret-guard-files.ts sealedInHome).
 import fs from "node:fs";
 import path from "node:path";
-import { endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_OLD, readEndorsement, type EndorsedKey } from "./host-endorse";
+import { endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_OLD, readEndorsement, type EndorsedKey, type EndorsedPhone } from "./host-endorse";
 import { behind, latestHead, type HeadCheck } from "./passkey-head";
 import { verifyPasskeyAssertion, type PasskeyOrigin } from "./passkey-verify";
 import type { Verified } from "./widen-check";
@@ -28,13 +30,22 @@ export interface PinnedPasskey {
   by: string;
 }
 
-// passkeys.json: the set the newest endorsement named, that endorsement's generation, and the newest generation the
-// trusted Mac's heads have named (lib/passkey-head.ts), kept so a head pruned from the log is never forgotten.
+export interface PinnedPhone extends EndorsedPhone {
+  // The Mac whose key endorsed it.
+  by: string;
+}
+
+// passkeys.json: the set the newest endorsement named (passkeys and phones), that endorsement's generation, and the newest
+// generation the trusted Mac's heads have named (lib/passkey-head.ts), kept so a head pruned from the log is never forgotten.
 interface Pinned {
   generation: number;
   passkeys: PinnedPasskey[];
+  phones: PinnedPhone[];
   seen: number;
 }
+
+export const PHONE_UNTRUSTED = "That phone isn't trusted on this worker. Let it approve here from Weft on your Mac (Settings → Devices → the worker → Passkeys).";
+export const PHONE_SIG = "The approval's signature isn't that phone's.";
 
 export const NO_MAC = "This worker trusts no Mac yet: pair it again from Settings → Devices (weft-worker enrol <code> --re-pair on the box).";
 
@@ -46,11 +57,12 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
     try {
       const parsed: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
       // A list from before generations: generation 0, so the next endorsement replaces it.
-      if (Array.isArray(parsed)) return { generation: 0, passkeys: parsed as PinnedPasskey[], seen: 0 };
+      if (Array.isArray(parsed)) return { generation: 0, passkeys: parsed as PinnedPasskey[], phones: [], seen: 0 };
       const p = parsed as Partial<Pinned> | null;
-      return { generation: Number(p?.generation) || 0, passkeys: Array.isArray(p?.passkeys) ? p.passkeys : [], seen: Number(p?.seen) || 0 };
+      const list = <T>(v: T[] | undefined): T[] => (Array.isArray(v) ? v : []);
+      return { generation: Number(p?.generation) || 0, passkeys: list(p?.passkeys), phones: list(p?.phones), seen: Number(p?.seen) || 0 };
     } catch {
-      return { generation: 0, passkeys: [], seen: 0 };
+      return { generation: 0, passkeys: [], phones: [], seen: 0 };
     }
   }
 
@@ -82,6 +94,16 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
     return pinned.generation < seen ? behind(pinned.generation, seen) : null;
   }
 
+  // An answer's Ed25519 signature: a phone the Mac endorsed here, by the device id the answer names, once the set held
+  // is the Mac's latest (a revoked phone drops out of a newer set); any other device id is the pairing Mac's to sign.
+  async function verifyAnswer(body: { device: string; message: string; sig: string }): Promise<Verified> {
+    const phone = load().phones.find((p) => p.device === body.device);
+    if (!phone) return verify(body);
+    const late = await headRefusal();
+    if (late) return { ok: false, reason: late };
+    return macSigned(phone.signKey, body.message, body.sig) ? { ok: true } : { ok: false, reason: PHONE_SIG };
+  }
+
   async function verifyPasskey(body: { device: string; credId: string; message: string; authenticatorData: string; clientDataJSON: string; signature: string }): Promise<Verified> {
     const late = await headRefusal();
     if (late) return { ok: false, reason: late };
@@ -105,19 +127,30 @@ export function createHostSigners(home: string, origins: readonly PasskeyOrigin[
     if (e.worker !== self) throw new Error("That endorsement is for another worker.");
     const pinned = load();
     const same = (p: EndorsedKey, k: EndorsedKey) => p.device === k.device && p.credId === k.credId && p.publicKey === k.publicKey;
-    const adds = e.passkeys.some((k) => !pinned.passkeys.some((p) => same(p, k)));
+    const samePhone = (p: EndorsedPhone, k: EndorsedPhone) => p.device === k.device && p.signKey === k.signKey;
+    const adds = e.passkeys.some((k) => !pinned.passkeys.some((p) => same(p, k))) || e.phones.some((k) => !pinned.phones.some((p) => samePhone(p, k)));
     if (adds && Math.abs(now - e.issuedAt) > ENDORSE_MAX_AGE_MS) throw new Error("That endorsement is too old. Send it again from your Mac.");
     const checked = await verify({ device: e.mac, message: endorseMessage(e), sig: e.sig });
     if (!checked.ok) throw new Error(checked.reason);
-    const held = e.generation === pinned.generation && !adds && e.passkeys.length === pinned.passkeys.length;
+    const held = e.generation === pinned.generation && !adds && e.passkeys.length === pinned.passkeys.length && e.phones.length === pinned.phones.length;
     if (held) return pinned.generation;
     if (e.generation <= pinned.generation) throw new Error(ENDORSE_OLD);
     const passkeys = e.passkeys.map((k) => ({ ...k, counter: pinned.passkeys.find((p) => same(p, k))?.counter ?? 0, by: e.mac }));
-    write({ generation: e.generation, passkeys, seen: pinned.seen });
+    const phones = e.phones.map((k) => ({ device: k.device, signKey: k.signKey, by: e.mac }));
+    write({ generation: e.generation, passkeys, phones, seen: pinned.seen });
     return e.generation;
   }
 
-  return { read, verify, verifyPasskey, endorse, file };
+  // How many keys can approve an answer here: the pinned Mac's and the passkeys and phones it endorsed (lib/worker-approve.ts). None
+  // (a token-enrolled box), and an unsigned Allow still runs, as on a Mac with nothing paired.
+  // Every Mac key ever pinned counts, revoked ones too (lib/worker-mac-keys.ts held()): revoking the pairing Mac must
+  // never leave a worker that takes unsigned Allows.
+  const approvers = () => {
+    const pinned = load();
+    return (macs.held?.() ?? macs.pinned()).length + pinned.passkeys.length + pinned.phones.length;
+  };
+
+  return { read, phones: () => load().phones, verify, verifyAnswer, verifyPasskey, endorse, approvers, file };
 }
 
 export type HostSigners = ReturnType<typeof createHostSigners>;

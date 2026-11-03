@@ -7,6 +7,7 @@ import { z } from "zod";
 import { firstMessage } from "./automations";
 import { actOnHostCard, findHostCard, hostThreadText } from "./board-tools-hosts";
 import { markSeen } from "./copilot-digest";
+import { phoneOnlyAllow } from "./passkey-phone-only";
 import { updateCard } from "./store";
 import { rememberTags } from "./tag-store";
 import { normalizeTags } from "./tags";
@@ -20,6 +21,9 @@ export interface BoardActions {
   answer(cardId: string, allow: boolean, answers?: Record<string, string>): void;
   isBusy(cardId: string): boolean;
 }
+
+// What the copilot is told when it tries to Allow a phone-only ask for the user.
+export const COPILOT_PHONE_ONLY = "That one needs the user's Touch ID: it reaches a vault secret, skips permissions or changes an agent's settings. Ask them to Allow it on the card.";
 
 type Reply = { content: { type: "text"; text: string }[]; isError?: true };
 
@@ -153,6 +157,9 @@ export function copilotCardTools(actions: BoardActions, reach: WorkerReach) {
         return onCard(
           card_id,
           (card) => {
+            // A phone-only ask takes the user's Touch ID on the card (lib/local-approve.ts), never the copilot's word. On a
+            // worker card the Allow goes unsigned, and a worker that pins a Mac refuses it (lib/worker-approve.ts).
+            if (phoneOnlyAllow(card.pending, allow)) throw new Error(COPILOT_PHONE_ONLY);
             actions.answer(card.id, allow, answersFor(card));
             return said(card);
           },

@@ -17,7 +17,7 @@ vi.mock("./folders", async () => (await import("./board-tools.harness")).folders
 vi.mock("./worker-board-reach", async () => (await import("./board-tools.harness")).reachMock(state));
 
 const { card, capturedTool, fakeActions, nth, reset, textOf } = await import("./board-tools.harness");
-const { COPILOT_PROMPT, boardMcpServer } = await import("./board-tools");
+const { COPILOT_PHONE_ONLY, COPILOT_PROMPT, boardMcpServer } = await import("./board-tools");
 const { CRON_TOOL_NAMES } = await import("./cron-types");
 
 beforeEach(() => {
@@ -226,4 +226,18 @@ describe("boardMcpServer (copilot)", () => {
     expect(textOf(r2)).toBe("Denied on “Fix the bug”.");
     expect(answer.mock.calls[1]).toEqual(["a", false, undefined]);
   });
+
+  it("answer_permission won't Allow a phone-only ask: that takes the user's Touch ID on the card", async () => {
+    const pending: PendingPermission = { id: "p1", toolName: "Bash", title: "Run", input: { command: "claude --dangerously-skip-permissions" } };
+    state.cardStore.set("a", card(state, { id: "a", pending }));
+    const answer = vi.fn();
+    boardMcpServer({ start: vi.fn(), stop: async () => {}, answer, isBusy: () => false });
+    const r = await capturedTool(state, "answer_permission").handler({ card_id: "a", allow: true });
+    expect(textOf(r)).toBe(COPILOT_PHONE_ONLY);
+    expect(answer).not.toHaveBeenCalled();
+    // Deny is still the copilot's to give.
+    await capturedTool(state, "answer_permission").handler({ card_id: "a", allow: false });
+    expect(answer).toHaveBeenCalledWith("a", false, undefined);
+  });
 });
+

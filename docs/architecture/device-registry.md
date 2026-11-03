@@ -135,7 +135,8 @@ only ever takes trust away from it:
   elsewhere as `pairing:revoke` would: unpinned (its signatures stop counting), its grants dropped and the workspace key
   rotated. Only a row that says `revoked_at` counts: a row missing from the read (RLS, another account signed in) unpins
   nothing.
-- **Passkeys on workers.** The same refresh then narrows each worker's endorsed set to the passkeys still pinned here
+- **Passkeys and phones on workers.** The same refresh then narrows each worker's endorsed set to the passkeys and phones
+  still pinned here (a phone approves Allows there once endorsed, mobile-security.md "Phones on a worker")
   (`electron/widen-endorse.cjs`), and the worker refuses a passkey while its set is older than the head the Mac
   published ([weft-worker.md, passkey heads](weft-worker.md#passkey-heads-a-worker-never-approves-with-an-outdated-set),
   `lib/passkey-head.ts`).

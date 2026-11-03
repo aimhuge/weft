@@ -3,7 +3,8 @@
 //
 // reply, answer, stop and host are the host core's shared card kinds (lib/host/dispatch.ts), run through the same
 // runVerb the desktop's routes run, so there is one code path; this file gives them the worker's CardRules: its own
-// cards only (never the copilot), pasted files brought over first, an answer's folder grant through the engine. mode,
+// cards only (never the copilot), pasted files brought over first, an answer's folder grant through the engine, and an
+// Allow only signed by the pairing Mac or a passkey it endorsed (lib/worker-approve.ts). mode,
 // input and qa are the worker's own kinds: mode is card.update's permissionMode within CARD_MODES (never
 // bypassPermissions), and leaves a Codex session in its sandbox mode.
 import type { CloudCommandRow } from "./cloud-commands";
@@ -12,6 +13,7 @@ import { cardKinds, type CardRules } from "./host/dispatch";
 import type { Card } from "./types";
 import type { Engine } from "./worker-daemon";
 import { inputBody, modeBody, qaBody } from "./worker-commands";
+import { workerApprove } from "./worker-approve";
 import type { WorkerReads } from "./worker-reads";
 import { placeUpdate, workerWidenCheck, type WorkerWiden } from "./worker-widen";
 
@@ -52,6 +54,11 @@ export function workerRules(engine: Engine, { create, lists, owner, widen, reads
       return reply;
     },
     widen: widen && workerWidenCheck(widen),
+    // An Allow takes the pairing Mac's signature or a passkey it endorsed here (lib/worker-approve.ts); a host
+    // card.permission.answer goes through the same answer kind, so it can't skip that rule, and needs its pendingId.
+    ...(widen ? { approve: workerApprove(widen) } : {}),
+    answerAsKind: true,
+    questionReplies: true,
     // A worker's own settings, edited from your Mac's Settings (only HOST_SETTINGS; remoteRefusal and the verb check).
     hostVerb: (verb, args) => engine.host(verb, args),
     // Goose's provider and endpoint, only once a signed widening from the pairing Mac checked out (lib/host/dispatch.ts).

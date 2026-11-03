@@ -18,6 +18,8 @@ export const wipeKept = (home: string) => fs.rmSync(path.join(home, KEPT_FILE), 
 export interface MacKeys {
   pinned(): string[];
   pin(key: string): void;
+  // Every key ever pinned, revoked ones too; left out, pinned() stands in.
+  held?(): string[];
 }
 
 // A JSON list of strings in the worker's home: [] when the file is missing; null when it's there but won't read.

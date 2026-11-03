@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { endorseMessage, ENDORSE_MAX_AGE_MS, ENDORSE_OLD, readEndorsement, type EndorsedKey, type Endorsement } from "./host-endorse";
+import { macKeysAt } from "./worker-mac-keys";
 import { createHostSigners, NO_MAC } from "./host-signers";
 import { macSigner, memoryMacs } from "./mac-signer.harness";
 import { makePasskey } from "./passkey.harness";
@@ -40,6 +41,28 @@ describe("createHostSigners: the pairing Mac", () => {
     const mac = macSigner();
     fs.writeFileSync(path.join(h, "mac-keys.json"), JSON.stringify([mac.key]));
     expect((await createHostSigners(h, ORIGINS).verify({ device: "d", message: "m", sig: mac.sign("m") })).ok).toBe(true);
+  });
+});
+
+describe("createHostSigners: approvers", () => {
+  it("counts the pinned Mac and the passkeys it endorsed, and none on a token-enrolled box", async () => {
+    expect(createHostSigners(home(), ORIGINS, memoryMacs()).approvers()).toBe(0);
+    const mac = macSigner();
+    const s = createHostSigners(home(), ORIGINS, memoryMacs([mac.key]));
+    expect(s.approvers()).toBe(1);
+    const { raw } = await endorsed(mac);
+    await s.endorse(raw, "w1", NOW);
+    expect(s.approvers()).toBe(2);
+  });
+
+  it("still counts a revoked pairing Mac, so revoking it never leaves a worker taking unsigned Allows", () => {
+    const h = home();
+    const mac = macSigner();
+    const macs = macKeysAt(h);
+    macs.pin(mac.key);
+    macs.revoke([mac.key]);
+    expect(macs.pinned()).toEqual([]);
+    expect(createHostSigners(h, ORIGINS, macs).approvers()).toBe(1);
   });
 });
 
@@ -171,7 +194,7 @@ describe("endorseMessage", () => {
 describe("readEndorsement", () => {
   it("takes only a whole one", async () => {
     const { raw } = await endorsed();
-    expect(readEndorsement(raw)).toEqual(raw);
+    expect(readEndorsement(raw)).toEqual({ ...raw, phones: [] });
     const key = raw.passkeys[0];
     for (const bad of [null, "x", { ...raw, worker: "a b" }, { ...raw, passkeys: [{ ...key, publicKey: "a b" }] }, { ...raw, passkeys: "no" }, { ...raw, generation: "1" }, { ...raw, issuedAt: Infinity }, { ...raw, mac: 1 }, { ...raw, passkeys: Array(51).fill(key) }, { ...raw, passkeys: [null] }]) {
       expect(readEndorsement(bad)).toBeNull();

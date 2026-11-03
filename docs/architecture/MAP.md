@@ -516,8 +516,14 @@ When a new doc lands in this folder, add it here on the same change.
   revoked from another Mac or the registry (docs/architecture/device-registry.md#revoked-on-one-device-untrusted-on-all). Board IPC `weft.pairing.*` only; the server
   reads `POST /sync/key`, `/pairing/verify`, `/pairing/status`. The two Settings → Sync switches live in the same sealed file.
   `electron/desktop-signer.cjs` + `electron/approval-sign.cjs`: this Mac's own Ed25519 approval key (sealed in `~/.weft/vault/desktop-sign-key.json`); board IPC
-  `weft.approval.sign` finds the request on main's own server, asks Touch ID in main's words, then signs the phone's message, and `/pairing/verify` checks it like a phone's (not yet
-  called by the board: mobile-security.md, "The desktop signs too"). `electron/pairing-open.cjs` marks an open code for the clipboard guard.
+  `weft.approval.sign` finds the request on main's own server (this Mac's card, or a worker card's row through `GET /api/worker-board?ask=`, `lib/worker-ask-read.ts`), asks
+  Touch ID in main's words, then signs the phone's message over that host's own names, and `/pairing/verify` (a Mac) or `lib/worker-approve.ts` (a worker) checks it. The board
+  calls it for every Allow on a worker card (`lib/answer-signer.ts`, from `lib/card-handlers-host.ts` and `lib/use-worker-board.ts`): mobile-security.md, "The desktop signs
+  too". On this Mac's own card it signs an Allow on a phone-only ask (`localSignedAnswer`, from `lib/card-handlers.ts`, `lib/thread-handlers.ts` and the copilot's lane and
+  window) over the workspace "local", and `POST /api/cards/<id>/permission` checks it (`lib/local-approve.ts`, `signedProblem` in `lib/approval-check.ts`); the copilot's
+  `answer_permission` refuses one (mobile-security.md, "A local card's Allow"). `electron/widen-endorse.cjs` also endorses this Mac's paired phones to a worker
+  (`weft-endorse-v3`, `lib/host-endorse.ts`), whose `lib/host-signers.ts` `verifyAnswer` takes their signed Allow (mobile-security.md, "Phones on a worker").
+  `electron/pairing-open.cjs` marks an open code for the clipboard guard.
 - The LAN path to a worker (docs/architecture/weft-worker.md#the-lan-path): the worker advertises `_weft._tcp` with a TXT
   signed by its paired sign key (`lib/worker-lan-start.ts`, `advertise` in `lib/lan-mdns.ts`, the bytes in `lib/lan-hint.ts`)
   and takes a sealed line offer on its port only when this Mac's device key signed it (`lib/worker-lan.ts`, `lib/lan-rate.ts`,
@@ -564,7 +570,8 @@ When a new doc lands in this folder, add it here on the same change.
   (`supabase/migrations/20261103080100_worker_passkey_heads.sql`; docs/architecture/weft-worker.md#passkey-heads-a-worker-never-approves-with-an-outdated-set).
 - `lib/sync-seal.ts` + `lib/sodium.ts` + `lib/approval-sig.ts` + `lib/pairing-link.ts`: the isomorphic half (Mac server, web, phone):
   sealed envelopes with org/card/slot bound in, the signed approval message, the pairing link and claim. `lib/sync-seal-upload.ts`
-  seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers;
+  seals rows in `lib/cloud-sync-upload.ts` when the switch is on; `lib/approval-check.ts` is `lib/cloud-inbox.ts`'s rule for answers, and a worker's
+  through `lib/worker-approve.ts` (the pairing Mac's key and its endorsed passkeys, `HostSigners.approvers`);
   `lib/web-sync-key.ts` opens rows on the web board (`components/web-board/useWebBoard.ts`, `lib/cloud-thread-page.ts`) and pairs a
   browser (`app/pair`, `components/web-board/PairBrowser.tsx`). Settings card: `components/PairDevices.tsx` (`lib/use-pairing.ts`).
   Sealed blobs (docs/architecture/mobile-security.md#sealed-blobs): `lib/blob-seal.ts` (seal/open under `blobAad`, the opened

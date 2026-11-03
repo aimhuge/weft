@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeForRisk, phoneOnly } from "./passkey-phone-only";
+import { normalizeForRisk, phoneOnly, phoneOnlyAllow } from "./passkey-phone-only";
 
 const bash = (command: string) => phoneOnly({ toolName: "Bash", input: { command } });
 const write = (file_path: string, content = "x") => phoneOnly({ toolName: "Write", input: { file_path, content } });
@@ -74,5 +74,21 @@ describe("phoneOnly", () => {
     expect(bash('echo "$HOME" && ls')).toBe(false);
     expect(bash('claude --allowedTools "Read" -p go')).toBe(false);
     expect(bash("codex -a on-request exec x")).toBe(false);
+  });
+});
+
+describe("phoneOnlyAllow", () => {
+  const risky = { toolName: "Bash", input: { command: "codex --yolo" } };
+  it("is an Allow on a phone-only permission request, and nothing else", () => {
+    expect(phoneOnlyAllow(risky, true)).toBe(true);
+    expect(phoneOnlyAllow(risky, false)).toBe(false);
+    expect(phoneOnlyAllow({ toolName: "Bash", input: { command: "ls" } }, true)).toBe(false);
+    expect(phoneOnlyAllow(null, true)).toBe(false);
+    expect(phoneOnlyAllow({ ...risky, questions: [{ question: "?" }] as never }, true)).toBe(false);
+    expect(phoneOnlyAllow({ ...risky, elicitation: {} as never }, true)).toBe(false);
+  });
+  it("reads a request off the wire with fields missing as nothing to run, or no input", () => {
+    expect(phoneOnlyAllow({} as never, true)).toBe(false);
+    expect(phoneOnlyAllow({ toolName: "mcp__secrets__run" } as never, true)).toBe(true);
   });
 });

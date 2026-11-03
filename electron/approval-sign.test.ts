@@ -50,13 +50,26 @@ describe("waitingRequest", () => {
 });
 
 describe("serverCards", () => {
-  it("reads the cards from main's own server with the read token", async () => {
-    const fetch = vi.fn((): Promise<{ json: () => Promise<{ cards?: { id: string }[] }> }> => Promise.resolve({ json: () => Promise.resolve({ cards: [{ id: "c" }] }) }));
+  type Res = { ok?: boolean; json: () => Promise<{ cards?: { id: string }[]; card?: unknown }> };
+  const respond = (url: string): Promise<Res> =>
+    Promise.resolve(url.endsWith("/api/copilot") ? { ok: true, json: () => Promise.resolve({ card: { id: "copilot" } }) } : { ok: true, json: () => Promise.resolve({ cards: [{ id: "c" }] }) });
+
+  it("reads the cards and the copilot from main's own server with the read token", async () => {
+    const fetch = vi.fn(respond);
     vi.stubGlobal("fetch", fetch);
-    expect(await serverCards(() => ({ url: "http://127.0.0.1:1" }))()).toEqual([{ id: "c" }]);
+    expect(await serverCards(() => ({ url: "http://127.0.0.1:1" }))()).toEqual([{ id: "c" }, { id: "copilot" }]);
     expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:1/api/cards", { headers: { "x-weft-token": "1" } });
-    fetch.mockImplementationOnce(() => Promise.resolve({ json: () => Promise.resolve({}) }));
-    expect(await serverCards(() => ({ url: "http://127.0.0.1:1" }))()).toEqual([]);
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:1/api/copilot", { headers: { "x-weft-token": "1" } });
     await expect(serverCards(() => undefined)()).rejects.toThrow(/isn't up/);
+  });
+
+  it("leaves out a copilot that won't read, and a list that isn't one", async () => {
+    const fetch = vi.fn((url: string): Promise<Res> => (url.endsWith("/api/copilot") ? Promise.resolve({ ok: false, json: () => Promise.resolve({}) }) : Promise.resolve({ ok: true, json: () => Promise.resolve({}) })));
+    vi.stubGlobal("fetch", fetch);
+    expect(await serverCards(() => ({ url: "http://127.0.0.1:1" }))()).toEqual([]);
+    fetch.mockImplementation((url: string) => (url.endsWith("/api/copilot") ? Promise.reject(new Error("down")) : respond(url)));
+    expect(await serverCards(() => ({ url: "http://127.0.0.1:1" }))()).toEqual([{ id: "c" }]);
+    fetch.mockImplementation((url: string) => (url.endsWith("/api/copilot") ? Promise.resolve({ ok: true, json: () => Promise.resolve({ card: "x" }) }) : respond(url)));
+    expect(await serverCards(() => ({ url: "http://127.0.0.1:1" }))()).toEqual([{ id: "c" }]);
   });
 });

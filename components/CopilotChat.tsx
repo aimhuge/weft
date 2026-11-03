@@ -3,6 +3,7 @@
 import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 import { handFiles } from "@/lib/file-drop";
 import { useFileDrop } from "@/lib/use-file-drop";
+import { localSignedAnswer } from "@/lib/answer-signer";
 import { api, mergeThread } from "@/lib/client";
 import { isLive } from "@/lib/format";
 import { useBoardEvents } from "@/lib/use-events";
@@ -131,7 +132,7 @@ export default function CopilotChat() {
             items={items}
             streaming={streaming}
             onSend={send}
-            onAnswer={(allow, answers, reply) => void api.answer(COPILOT_ID, allow, answers, card.pending?.id, reply).catch(() => {})}
+            onAnswer={(allow, answers, reply) => void localSignedAnswer(card, allow).then((auth) => api.answer(COPILOT_ID, allow, answers, card.pending?.id, reply, auth)).catch(() => {})}
             placeholder="Ask about your threads, or tell me what to start"
             empty={<CopilotEmpty onAsk={(text) => void send(text).catch((err: unknown) => setError(String(err)))} />}
           />

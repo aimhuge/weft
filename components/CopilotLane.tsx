@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { localSignedAnswer } from "@/lib/answer-signer";
 import { answerNow, stopNow } from "@/lib/optimistic-cards";
 import { api } from "@/lib/client";
 import { COPILOT_LAYER, LAUNCHER, PANEL, PANEL_BOTTOM, panelBox, setCopilotPanel } from "@/lib/copilot-float";
@@ -149,9 +150,13 @@ export default function CopilotLane(props: {
                 onSend={send}
                 onAnswer={(allow, answers, reply) => {
                   // A plain Allow or Deny leaves at once, as on any card (lib/thread-handlers.ts).
+                  // An Allow on a phone-only ask is signed after Touch ID first (lib/answer-signer.ts).
                   const pendingId = card.pending?.id;
-                  const send = () => api.answer(COPILOT_ID, allow, answers, pendingId, reply);
-                  return (pendingId && !answers && !reply ? answerNow(COPILOT_ID, pendingId, allow, send) : send()).catch((err: unknown) => {
+                  const signed = localSignedAnswer(card, allow).then((auth) => {
+                    const send = () => api.answer(COPILOT_ID, allow, answers, pendingId, reply, auth);
+                    return pendingId && !answers && !reply ? answerNow(COPILOT_ID, pendingId, allow, send) : send();
+                  });
+                  return signed.catch((err: unknown) => {
                     fail(err);
                     throw err;
                   });

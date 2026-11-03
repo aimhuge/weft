@@ -66,6 +66,24 @@ describe("workerThreadHandlers", () => {
     expect(sendWorkerAction).toHaveBeenCalledWith({ action: "answer", cardId: "c1", pendingId: "p1", allow: true, answers: { q: "a" }, reply: undefined });
   });
 
+  it("signs an Allow and its grant with Touch ID first, and sends nothing when it's refused", async () => {
+    const sign = vi.fn(() => Promise.resolve({ device: "mac-1", issuedAt: 5, sig: "c2ln", publicKey: "k" }));
+    (window as unknown as { weft: unknown }).weft = { approval: { sign } };
+    const handlers = workerThreadHandlers(card({ pending: { id: "p1", toolName: "Read", input: {} } }), ctx);
+    await handlers.onAnswer(true, undefined, undefined, "card");
+    expect(sign).toHaveBeenCalledWith({ cardId: "c1", pendingId: "p1", allow: true, grant: "card" });
+    expect(sendWorkerAction).toHaveBeenCalledWith(expect.objectContaining({ action: "answer", allow: true, grant: "card", auth: { device: "mac-1", issuedAt: 5, sig: "c2ln" } }));
+    sendWorkerAction.mockClear();
+    sign.mockResolvedValueOnce(null as never);
+    await expect(handlers.onAnswer(true)).rejects.toThrow("Not approved");
+    expect(sendWorkerAction).not.toHaveBeenCalled();
+    // A question's answers go unsigned.
+    await workerThreadHandlers(card({ pending: { id: "p2", questions: [{ question: "Which?" }] } }), ctx).onAnswer(true, { Which: "a" });
+    expect(sign).toHaveBeenCalledTimes(2);
+    expect(sendWorkerAction).toHaveBeenCalledWith(expect.not.objectContaining({ auth: expect.anything() as unknown }));
+    delete (window as unknown as { weft?: unknown }).weft;
+  });
+
   it("sends nothing when nothing is waiting for an answer", async () => {
     const handlers = workerThreadHandlers(card(), ctx);
     await expect(handlers.onAnswer(true)).resolves.toBeUndefined();

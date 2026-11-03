@@ -29,6 +29,7 @@ export type { BoardActions };
 // servers, lib/runner-ask.ts labels the permission prompt, lib/weft-prompts.ts the copilot prompt.
 export { COPILOT_PROMPT, SAFE_BOARD_TOOLS, isTrustedTool } from "./board-tools-trust";
 export { describeBoardTool } from "./board-tools-format";
+export { COPILOT_PHONE_ONLY } from "./board-tools-copilot";
 
 const COLUMN = z.enum(["backlog", "running", "needs_you", "review", "done"]);
 

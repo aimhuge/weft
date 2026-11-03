@@ -5,19 +5,23 @@ import { workerBlobUrls, workerThreadSearch } from "@/lib/worker-thread-reads";
 import { openWorkerLine, readWorkerBoard, sendWorkerAction, workerThreadPage, workerToolOutput, type LineAction, type WorkerAction } from "@/lib/worker-board";
 import { workerProjectSnapshot, workerResultBlob } from "@/lib/worker-board-reads";
 import { pinWorkerPasskeys, type PinAction } from "@/lib/worker-pin";
+import { readWorkerAsk } from "@/lib/worker-ask-read";
 import { macTwin } from "@/lib/worker-twin-mac";
 
 // Your Weft Workers' projects on the desktop board (lib/worker-board.ts): GET lists them with their cards, GET ?card=
 // reads a page of that card's thread (before= walks back, after= sends only the items past that seq), since= only the
 // cards changed after it, GET ?card=&tool= reads a full tool result, GET ?project= a worker project's snapshot for the
 // header badges, GET ?blob= a host verb's answer too big for its row (the editor's), GET ?card=&q= finds q over the
-// whole thread, GET ?blobs=<ref>,<ref> signs the blob refs a thread's pictures name (lib/worker-thread-reads.ts), GET ?twin=
+// whole thread, GET ?ask=<card> the card's row for Electron main to sign an Allow over (lib/worker-ask-read.ts), GET ?blobs=<ref>,<ref> signs the blob refs a thread's pictures name (lib/worker-thread-reads.ts), GET ?twin=
 // a worker project's checkout on this Mac, for an in-thread ask_add (lib/use-ask-folder.ts), and POST sends
 // a reply, an answer, a stop, a mode, a tap or any host verb as a cloud_commands row, a session line's sealed offer, or a
 // Mac's passkey endorsements (pin). A new thread goes through POST /api/cards like any other.
 
-// The reads that name no card: a worker project's snapshot, a verb's oversized answer, and a thread's picture refs signed.
+// The reads that aren't a thread's: a worker project's snapshot, a verb's oversized answer, a thread's picture refs
+// signed, and a card's row for main to sign an Allow over (electron/approval-sign.cjs).
 async function blobReads(params: URLSearchParams): Promise<Response | null> {
+  const ask = params.get("ask");
+  if (ask) return Response.json({ ask: await readWorkerAsk(ask) });
   const twin = params.get("twin");
   if (twin) return Response.json({ folder: macTwin(twin) });
   const project = params.get("project");
