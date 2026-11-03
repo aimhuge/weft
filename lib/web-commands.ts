@@ -76,8 +76,11 @@ const isWorkerAdmin = (c: Pick<CloudCommandRow, "kind">) => c.kind === "login" |
 // A host verb (an ↑ edit, Send later, a star from the desktop) answers in the thread or the card it changes.
 const isHostVerb = (c: Pick<CloudCommandRow, "kind">) => c.kind === "host";
 
+// A session line's sealed offer (lib/web-lines.ts, or the desktop's): plumbing, with nothing to show.
+const isLine = (c: Pick<CloudCommandRow, "kind">) => c.kind === "line";
+
 // The strip under the header follows new threads; a card's own commands show under its reply box instead.
-export const boardCommands = (commands: CloudCommandRow[]) => commands.filter((c) => !isCardCommand(c) && !isWorkerAdmin(c) && !isHostVerb(c));
+export const boardCommands = (commands: CloudCommandRow[]) => commands.filter((c) => !isCardCommand(c) && !isWorkerAdmin(c) && !isHostVerb(c) && !isLine(c));
 
 // A host verb that carried typed text (↑ edit, Send fresh, Send later) and failed after its box let it go: it shows
 // above the box with its text, so a refusal that came late (the Mac was asleep) doesn't lose what was typed.

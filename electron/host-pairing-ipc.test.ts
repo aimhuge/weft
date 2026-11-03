@@ -79,6 +79,23 @@ describe("Re-pin", () => {
     expect(pins.forget).toHaveBeenCalledWith("w1");
     expect(hosts).toBeDefined();
   });
+
+  it("drops a re-pinned worker's key grants too, and says when that failed", async () => {
+    const handlers = new Map<string, (...args: unknown[]) => unknown>();
+    const pins = { pin: vi.fn(), forget: vi.fn(() => true) };
+    const dropKeys = vi.fn(() => Promise.resolve({ dropped: true }));
+    registerHostPairing((channel, fn) => handlers.set(channel, fn), { db: () => ({}), userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "k" }), confirm: () => Promise.resolve(true), dropKeys }, pins);
+    expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ forgotten: true });
+    expect(dropKeys).toHaveBeenCalledWith("w1");
+    dropKeys.mockRejectedValueOnce(new Error("offline"));
+    expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ forgotten: true, keysError: "offline" });
+    dropKeys.mockRejectedValueOnce("odd");
+    expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ forgotten: true, keysError: "odd" });
+    pins.forget.mockReturnValueOnce(false);
+    dropKeys.mockClear();
+    expect(await handlers.get("worker-pins:forget")!("w1", "m1mini")).toEqual({ forgotten: false });
+    expect(dropKeys).not.toHaveBeenCalled();
+  });
 });
 
 describe("in the pairing IPC", () => {

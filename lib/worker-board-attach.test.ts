@@ -32,7 +32,7 @@ describe("a message to a worker with a pasted file", () => {
   it("uploads the file and lists it on the reply", async () => {
     const { client, inserted, uploads } = fakeClient({ cardRow: target });
     await sendWorkerAction({ action: "reply", cardId: "c1", text: text(dir) }, client, dir);
-    expect(uploads).toEqual([{ path: `org-1/${SHA}`, type: "image/png" }]);
+    expect(uploads).toMatchObject([{ path: `org-1/${SHA}`, type: "image/png" }]);
     expect(inserted()).toMatchObject({ kind: "reply", payload: { cardId: "c1", text: text(dir), attachments: [{ name: "shot-1a2b.png", sha: SHA, mime: "image/png" }] } });
   });
 

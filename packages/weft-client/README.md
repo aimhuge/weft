@@ -29,6 +29,11 @@ Code that runs the same in React Native (Hermes), a browser and Node, with no I/
 - **Approval messages**: `approvalMessage`, `signApproval`, `verifyApproval`, `readApprovalAuth`, given the caller's
   libsodium as a `Sodium` (libsodium-wrappers on the Mac and the web, react-native-libsodium on the phone).
 
+- **A session line's opening**: `sealTo` / `answerKeys` (the offer sealed to a worker's X25519 key byte for byte as
+  `lib/worker-seal.ts`, given the caller's libsodium and Web Crypto `subtle` as a `SealCrypto`), the `line` row and
+  `lineOpener`, and `offerLine` / `openLine` over an RTCPeerConnection the caller hands in (the browser's, or
+  react-native-webrtc's), with a `wait` for the clock.
+
 ## What doesn't
 
 - No DOM, React, React DOM, Next or Node built-ins (`node:*`, `fs`, `path`, `crypto`). The package's own

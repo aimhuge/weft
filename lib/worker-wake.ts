@@ -67,3 +67,9 @@ export const listenForWakes = (client: WakeClient, key: string, hooks: WakeHooks
 
 // Joins the shared topic for pushes to main, on the same socket.
 export const listenForPushes = (client: WakeClient, hooks: WakeHooks, log: (msg: string) => void) => join(client, PUSH_TOPIC, PUSH_EVENT, "update", hooks, log);
+
+// A new key grant for this worker (supabase/migrations/*_worker_key_grants.sql): its own topic, derived the same way, so
+// it reads its grants at once (lib/worker-keyring.ts). Must match private.worker_key_grant_topic.
+export const KEY_GRANT_EVENT = "key_grant";
+export const keyGrantTopic = (key: string) => `worker-keys:${sha256(`weft-worker-keys:${sha256(key)}`)}`;
+export const listenForKeyGrants = (client: WakeClient, key: string, hooks: WakeHooks, log: (msg: string) => void) => join(client, keyGrantTopic(key), KEY_GRANT_EVENT, "key grant", hooks, log);

@@ -957,7 +957,10 @@ A picture or PDF you paste into the reply box goes up to your workspace and down
 takes the CLI, model, effort, mode, tags and Backlog too (and Plan first on a worker). A teammate's card stays read-only. Thread text goes up unencrypted unless you
 turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, long tool
 output and the files they name (pasted pictures, the pane's pages and captures) are encrypted with a workspace key that only
-your Mac and the devices you pair hold; a paired browser opens them itself and seals what you paste into a sealed card. **Pair a phone** shows a QR code
+your Mac and the devices you pair hold; a paired browser opens them itself and seals what you paste into a sealed card. A paired
+Weft Worker seals too once you press **Seal…** on its line in Settings → Devices (Touch ID): your Mac seals the key to the box key
+it pinned and signs it, the worker checks the signature against the Mac it was paired with, and its threads, pages and files go
+up sealed from then on; both boards open them. **Pair a phone** shows a QR code
 for the Weft phone app (or a link to open in another browser); your Mac checks the claim and asks for Touch ID, and once a
 phone is paired an **Allow** has to come from it, signed after Face ID, so a stolen sign-in can't run tools on your Mac.
 More in [docs/architecture/mobile-security.md](docs/architecture/mobile-security.md). Separately, a long thread opens on its newest 50 items

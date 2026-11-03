@@ -22,22 +22,46 @@ export interface WorkerCode {
   fingerprint?: string;
 }
 
-type WorkerCheck = { status: "open" | "paired" | "cancelled" | "expired" | "failed"; error?: string; worker?: { name: string; code: string } };
+type WorkerCheck = { status: "open" | "paired" | "cancelled" | "expired" | "failed"; error?: string; worker?: { id?: string; name: string; code: string } };
 
 export interface HostPairingBridge {
   start(orgId?: string): Promise<WorkerCode>;
   check(id: string): Promise<WorkerCheck>;
   cancel(id: string): Promise<void>;
   // Re-pin: forget the keys main pinned for a worker's secrets, after Touch ID (electron/worker-pins.cjs).
-  forgetPin?: (id: string, name: string) => Promise<{ forgotten?: boolean; denied?: boolean }>;
+  forgetPin?: (id: string, name: string) => Promise<{ forgotten?: boolean; denied?: boolean; keysError?: string }>;
   // Approve re-pair: Touch ID, then main signs the box's move to the Mac in the code (electron/worker-repair.cjs).
   approveRepair?: (id: string, code: string) => Promise<RepairResult>;
+  // Seal… : main grants a worker the workspace key after Touch ID, drops it after a revoke, and says who holds which
+  // version (electron/worker-key-grants.cjs).
+  grantKey?: (id: string) => Promise<{ version?: number; denied?: boolean }>;
+  dropKeys?: (id: string) => Promise<unknown>;
+  keyStatus?: () => Promise<KeyStatus>;
+}
+
+export interface KeyStatus {
+  sealOn: boolean;
+  workers: Record<string, { version: number; latest: number }>;
+}
+
+// What Settings → Devices says of a worker's threads: sealed under the workspace's newest key, or in the clear (no grant,
+// or a grant for an older version only, which a revoked device may hold).
+export function sealLine(status: KeyStatus | null, id: string): { sealed: boolean; text: string } {
+  const w = status?.workers[id];
+  if (w && w.version >= w.latest) return { sealed: true, text: `Threads sealed (key v${w.version})` };
+  return { sealed: false, text: "Threads in the clear" };
+}
+
+export function sealOutcome(name: string, r: { version?: number; denied?: boolean }): string {
+  if (r.denied) return `Not sealed: ${name} keeps publishing in the clear.`;
+  return `${name} now holds key v${r.version ?? 0}: it seals what it publishes from now on.`;
 }
 
 export type RepairResult = { denied: true } | { approval: string; command: string; fingerprint: string };
 
-export function repinOutcome(name: string, r: { forgotten?: boolean; denied?: boolean }): string {
+export function repinOutcome(name: string, r: { forgotten?: boolean; denied?: boolean; keysError?: string }): string {
   if (r.denied) return "Not re-pinned.";
+  if (r.keysError) return `Forgot ${name}'s pinned keys, but its workspace key grant couldn't be dropped: ${r.keysError}`;
   return r.forgotten ? `Forgot ${name}'s pinned keys: its next secret ask pins the keys it has now.` : `${name} had no pinned keys on this Mac.`;
 }
 
@@ -82,6 +106,9 @@ export async function sendPasskeys(workerId: string, name: string, sync: () => P
   return `${name} now lets ${which} approve changes there.`;
 }
 
+// A ref read through a call, so a check after an await isn't narrowed by one before it.
+const isLive = (ref: { current: boolean }) => ref.current;
+
 export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   const [view, setView] = useState<DevicesView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -89,16 +116,19 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   const [note, setNote] = useState<string | null>(null);
   const live = useRef(true);
 
+  const [keys, setKeys] = useState<KeyStatus | null>(null);
   const reload = useCallback(async () => {
     try {
       const next = await readJson<DevicesView>(await apiFetch("/api/devices"));
+      const status = await hosts?.keyStatus?.().catch(() => null);
       if (!live.current) return;
       setView(next);
+      if (status) setKeys(status);
       setError(null);
     } catch (err) {
       if (live.current) setError(err instanceof Error ? err.message : String(err));
     }
-  }, []);
+  }, [hosts]);
 
   useEffect(() => {
     live.current = true;
@@ -129,7 +159,15 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
         if (r.status === "open" || !live.current) return;
         setCode(null);
         setNote(workerOutcome(r));
-        if (r.status === "paired") await reload();
+        if (r.status !== "paired") return;
+        // While your Mac seals, offer the new worker the key at once, under its own Touch ID (electron/worker-key-grants.cjs).
+        const w = r.worker;
+        if (w?.id && hosts.grantKey && (await hosts.keyStatus?.())?.sealOn) {
+          const sealed = await hosts.grantKey(w.id).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }));
+          // Read again: the Touch ID took a while, and Settings may have closed meanwhile.
+          if (isLive(live)) setNote(`${workerOutcome(r)} ${"error" in sealed ? `Not sealed: ${sealed.error}` : sealOutcome(w.name, sealed)}`);
+        }
+        await reload();
       });
     }, POLL_MS);
     return () => clearInterval(timer);
@@ -149,6 +187,8 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
       } else {
         // A worker's answer can carry what GitHub confirmed about the tokens it held (lib/device-registry.ts).
         const r = await readJson<{ note?: string }>(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
+        // A worker's key grants go with it (the database drops them); main rotates so it never had what's sealed next.
+        if (device.kind === "worker") await hosts?.dropKeys?.(device.id);
         if (r.note && live.current) setNote(`${device.name}: ${r.note}`);
       }
       await reload();
@@ -158,6 +198,13 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
     act(async () => {
       const r = await hosts?.forgetPin?.(device.id, device.name);
       if (r && live.current) setNote(repinOutcome(device.name, r));
+    });
+
+  const seal = (device: DeviceView) =>
+    act(async () => {
+      const r = await hosts?.grantKey?.(device.id);
+      if (r && live.current) setNote(sealOutcome(device.name, r));
+      await reload();
     });
 
   // Lets this Mac's paired passkeys approve folder, agent, shell and terminal changes on a worker (lib/worker-pin.ts).
@@ -180,6 +227,9 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
     canRepair: Boolean(hosts?.approveRepair),
     revoke,
     repin,
+    keys,
+    canSeal: Boolean(hosts?.grantKey),
+    seal,
     addWorker: () =>
       act(async () => {
         setNote(null);
