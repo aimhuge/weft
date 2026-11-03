@@ -21,7 +21,7 @@ export const RETRY_OFF_MS = 60 * 60_000;
 const RENEW_MAX = 100;
 
 // The verbs a host requeues when their lease runs out, read from the host-api table so a new verb opts in where it's
-// defined. Today: skills.list, files.list, files.read, settings.get, dev.log.
+// defined. Today: skills.list, files.list, files.read, files.watch, files.unwatch, settings.get, dev.log.
 export const IDEMPOTENT_VERBS: HostVerb[] = (Object.keys(HOST_API) as HostVerb[]).filter((v) => (HOST_API[v] as Handler).idempotent === true);
 
 // PostgREST's words for a function or column it doesn't have.

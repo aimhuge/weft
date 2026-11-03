@@ -194,6 +194,8 @@ async function startCommand() {
   // through the host kind's path (the daemon hands `run` in).
   const lines = createHostLines({
     terminal,
+    // The editor's live reload: a file open on a line, watched until the line drops it (lib/worker-file-watch.ts).
+    watchFile: (await import("../lib/worker-file-watch")).watchCardFiles((id) => store.getCard(id)?.cwd),
     unseal: (sealed, purpose) => open(keys, sealed, purpose),
     answerOn: async (topic, sealed) => {
       const channel = await openScreenChannel(client, topic);

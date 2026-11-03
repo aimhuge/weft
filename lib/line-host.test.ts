@@ -118,6 +118,29 @@ describe("useLineLive", () => {
     expect(state.listeners.size).toBe(0);
   });
 
+  it("types out the reply as it streams, ends it when it lands, and clears it when the line goes", () => {
+    line();
+    state.route = { kind: "direct", ms: 3 };
+    const shown: string[] = [];
+    const { rerender } = renderHook(() => useLineLive("w1", "c1", vi.fn(), vi.fn(), (text) => shown.push(text)));
+    const hear = (e: LineEvent) => act(() => state.listeners.forEach((fn) => fn(e)));
+    hear({ t: "delta", cardId: "c1", index: 1, text: "Hel" });
+    hear({ t: "delta", cardId: "c2", index: 1, text: "other" });
+    hear({ t: "delta", cardId: "c1", index: 1, text: "lo " });
+    hear({ t: "thread", cardId: "c1", index: 1, item: { kind: "assistant", text: "Hello", at: 2 } as never });
+    hear({ t: "delta", cardId: "c1", index: 3, text: "Next " });
+    expect(shown).toEqual(["Hel", "Hello ", "", "Next "]);
+    state.route = { kind: "relay" };
+    rerender();
+    expect(shown.at(-1)).toBe("");
+    // Nothing was streaming: the next route change says nothing.
+    state.route = { kind: "direct", ms: 3 };
+    rerender();
+    state.route = { kind: "relay" };
+    rerender();
+    expect(shown).toHaveLength(5);
+  });
+
   it("hears nothing when the line went between the route and the read", () => {
     state.route = { kind: "direct", ms: 1 };
     expect(() => renderHook(() => useLineLive("w1", "c1", vi.fn(), vi.fn()))).not.toThrow();
@@ -132,7 +155,7 @@ describe("lineTransport", () => {
     const l = line();
     await t.act("card.stop", { id: "c1" });
     expect(l.call).toHaveBeenCalled();
-    renderHook(() => t.useLive("c1", vi.fn(), vi.fn()));
+    renderHook(() => t.useLive("c1", vi.fn(), vi.fn(), vi.fn()));
     expect(polls.at(-1)).toBe(true);
   });
 });
@@ -146,6 +169,7 @@ describe("the editor's verbs over the line", () => {
     expect(askWorker).not.toHaveBeenCalled();
     expect(lineFiles("w-files")).toBe(lineFiles("w-files"));
     expect((lineTransport("w-files") as unknown as { files: unknown }).files).toBe(lineFiles("w-files"));
+    expect(lineFiles("w-files").watch).toBeTypeOf("function");
   });
 
   it("takes the relay with no line, or one that couldn't send, and passes any other failure on", async () => {

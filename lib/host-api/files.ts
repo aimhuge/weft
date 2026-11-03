@@ -54,6 +54,22 @@ export async function readFileVerb({ id, path: file, at }: FileArgs & { at?: "HE
   return at === "HEAD" ? headOf(cwd, file) : { file: await readFile(cwd, file) };
 }
 
+// Live reload over a session line (lib/host-line-files.ts): the same checks and audit as a read, and the file's hash now.
+// The line that ran it then watches the file and pushes a `file` event when it changes; over the relay there's no line to
+// push on, and this is only a read.
+export async function watchFileVerb({ id, path: file }: FileArgs): Promise<{ path: string; hash: string | null }> {
+  const cwd = requireCard(id).cwd;
+  const rel = await checked(cwd, text(file, "A path"), readRefusal);
+  audit("files.watch", id, rel);
+  return { path: rel, hash: (await readFile(cwd, file)).hash };
+}
+
+// The watch's end: the line drops it once this has run. It reads nothing, so there's nothing to check but the card.
+export async function unwatchFileVerb({ id, path: file }: FileArgs): Promise<{ path: string }> {
+  requireCard(id);
+  return Promise.resolve({ path: text(file, "A path") });
+}
+
 // A save that refuses to overwrite a file that changed since it was read (baseHash), as the Mac's editor does.
 export async function writeFileVerb({ id, path: file, text: body, baseHash }: FileArgs & { text: string; baseHash?: string | null }): Promise<{ result: SaveResult } | { conflict: OpenedFile }> {
   const cwd = requireCard(id).cwd;
