@@ -113,7 +113,7 @@ port.
   (docs/architecture/mini-apps.md).
   A **React app** is a folder with an `App.tsx` and no `package.json`: Weft bundles it with its own React into a
   static page on save, and the pane reloads. Shared, a folder app's link lives under its owner,
-  `weft.zip/@you/apps/<slug>` or `weft.zip/<team>/apps/<slug>`, with every file of the folder served in a sandbox. With no card
+  `weft.zip/@you/apps/<slug>` or `weft.zip/<team>/apps/<slug>`, with every file of the folder served in a sandbox, and it follows the folder: a few seconds after you save, the hosted copy updates (same mode and address). With no card
   open, the pane opens on the left and shows the app's name instead of its `file://` path, with a Share button. An app
   never holds a key: it writes `{{secret:NAME}}` in a `weft.fetch` request and Weft puts the value in outside the
   browser, only for the hosts, methods and paths its `weft-app.json` allows. The value is the author's, or each viewer's
@@ -1030,7 +1030,9 @@ Or pair it instead: Settings → **Devices** → **Add a worker** gives a line w
 claims the code, prints a check code, and joins once you confirm the same code with Touch ID on the Mac. Settings → Devices
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
 **Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
-shows on the box. A worker never switches Macs without the one it trusts signing off.
+shows on the box. A worker never switches Macs without the one it trusts signing off. Its threads come along: a re-paired
+box that keeps its signing key takes its old row's threads in the same step, and a worker that owns threads it can't
+run (revoked or offline) offers **Move threads to…** another worker of yours, as does **Revoke**.
 With two Macs signed in, a worker asks for secrets and the vault only from the Mac it's paired with, and says so when
 that Mac is closed. Revoke a phone, browser or Mac on any of your Macs and it stops being trusted everywhere: the Mac that
 paired a phone or browser unpins it within a minute, its passkeys leave every worker's set, and a worker whose Mac was

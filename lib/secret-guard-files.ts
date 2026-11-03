@@ -9,6 +9,7 @@ import path from "node:path";
 import { DATA_DIR } from "./store";
 import { workerDataDir, workerHome, workRoot } from "./worker-config";
 import { isCliCredential } from "./secret-guard-credentials";
+import { CLAUDE_SEGMENT, holdsCliHome, inCliHome } from "./secret-guard-cli-home";
 
 // .env, .env.local, .env.production.local, direnv's .envrc, Wrangler's .dev.vars, and globs like .env*.
 // Any case: macOS opens .ENV.LOCAL as .env.local.
@@ -167,7 +168,7 @@ function realPlace(file: string, depth = 0): string {
     } catch {
       // Not there at all: fall through to its folder.
     }
-    return path.join(realPlace(parent, depth + 1), path.basename(file));
+    return path.join(/*turbopackIgnore: true*/ realPlace(parent, depth + 1), path.basename(file));
   }
 }
 
@@ -259,15 +260,17 @@ export function isWorkerHome(file: string, home = workerHome()): boolean {
   return at === path.resolve(home) || realPlace(at) === realPlace(home);
 }
 
-// Whether a path is the CLI's transcript dir or inside it: `~/.claude`, `~/.claude.json`, or any
-// file under `~/.claude/projects/…`. A path that names the dir by name only (`~/.claude/…`) counts,
-// because that dir is the same folder wherever the home is.
-// The one folder in it a thread may use is a project's memory, which the system prompt tells it to keep there.
+// Whether a path is the CLI's transcript dir or inside it: `~/.claude`, `~/.claude.json`, or any file under
+// `~/.claude/projects/…`, judged by where it lands from the card's cwd (lib/secret-guard-cli-home.ts). A project's own
+// `.claude/` (skills, agents) is open. The one folder in the CLI's a thread may use is a project's memory.
 export function inTranscriptDir(file: string): boolean {
   const clean = normalized(file);
   if (/(?:^|\/)\.claude\.json$/i.test(clean)) return true;
-  return /(?:^|\/)\.claude(?:\/|$)/i.test(clean) && !inMemoryDir(clean);
+  return CLAUDE_SEGMENT.test(clean) && inCliHome(placed(clean), realPlace) && !inMemoryDir(clean);
 }
+
+// Whether a Glob or Grep from this folder walks into the CLI's own: `.claude/**` from home does.
+export const searchesCliHome = (root: string) => holdsCliHome(placed(normalized(root || ".")), realPlace);
 
 // `~/.claude/projects/<project>/memory/…` (2026-11-02). Only that: the transcripts beside it, settings*.json, hooks and
 // skills stay sealed, since a thread that could write them could grant itself permissions. `..` is folded first, and

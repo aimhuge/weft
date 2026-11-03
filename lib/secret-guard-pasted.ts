@@ -66,3 +66,14 @@ export function pastedElsewhere(file: string): string | null {
     "Ask the user to paste it again in this card's thread, or to describe what it shows."
   );
 }
+
+// A path in a shell command that ends at an attachment's name: `~/.weft/attachments/x.mp3`, quoted or bare.
+const ATTACHMENT_PATH = /[~/][^\s'"`;|&<>()]*\/attachments\/[a-z0-9][a-z0-9_-]*\.[a-z0-9]{1,8}(?=$|[\s'"`;|&<>()])/g;
+
+// The command with each file the user pasted into this card swapped for a stand-in outside the data dir, so the Bash
+// check reads what's left: a thread could Read its pasted MP3 but not `cp` or `ffmpeg` it (2026-11-03). The folder
+// itself, and any file another card's user pasted, still reach the check as they were.
+export function withoutPasted(command: string, cardId: string | undefined, dataDir = DATA_DIR, thread = getThread): string {
+  if (!cardId || !command.includes("/attachments/")) return command;
+  return command.replace(ATTACHMENT_PATH, (file) => (pastedInto(cardId, file, dataDir, thread) ? `/tmp/pasted-${path.basename(file)}` : file));
+}

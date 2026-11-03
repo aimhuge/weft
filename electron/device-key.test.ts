@@ -33,6 +33,11 @@ describe("registeredDevice", () => {
         rows.push({ ...row, id: "device-new" });
         return Promise.resolve({ data: null, error: null });
       },
+      // The bump after the insert-or-skip: name and last_seen_at, on this user's row for the key.
+      update: () => {
+        const done = Object.assign(Promise.resolve({ data: null, error: null }), { eq: () => done });
+        return done;
+      },
     };
     return { looks, accountClient: { getClaims: () => ({ sub }), supabase: { from: () => table } } };
   };

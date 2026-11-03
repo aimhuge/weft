@@ -20,7 +20,7 @@ import { versionedFrameSrc } from "@/lib/app-share-frame";
 import { appPublicUrl } from "@/lib/app-share-types";
 import { isWebEnabled } from "@/lib/home";
 import { SharedApp } from "@/components/share-view/SharedApp";
-import { ShareNotice } from "@/components/share-view/ShareNotice";
+import { ShareNotice, SignInNotice } from "@/components/share-view/ShareNotice";
 import { serviceClient } from "@/lib/web-session";
 import "@/components/home/home.css";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
@@ -64,7 +64,7 @@ async function PageBody({ params }: { params: Promise<{ id: string }> }) {
   await connection();
   const access = await appShareAccess(id);
   if (access.kind === "missing") notFound();
-  if (access.kind === "login") redirect(`/login?next=${encodeURIComponent(`/a/${id}`)}`);
+  if (access.kind === "login") return <SignInNotice next={`/a/${id}`} />;
   if (access.kind === "unconfigured") {
     return <ShareNotice title="Link unavailable">This link can&apos;t be opened right now. Try again in a little while.</ShareNotice>;
   }

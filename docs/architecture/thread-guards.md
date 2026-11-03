@@ -417,6 +417,17 @@ That covers `a && b; c | d`, `$( )` and backticks, `sh -c '…'`, a heredoc fed 
 `--title`, `--notes`… for any command that doesn't run its words, `-m`/`-t`/`-b` for git, gh and glab, and echo's
 quoted sentences), so neither the secret guard nor the folder gate reads a PR body as a list of files.
 
+## The CLI's folder and a project's `.claude/`
+
+`inTranscriptDir` seals the CLI's own folder: `~/.claude` (and its realpath), any `/Users/*/.claude` or
+`/home/*/.claude`, `CLAUDE_CONFIG_DIR`, and `~/.claude.json`, judged by where a path lands from the card's cwd
+(`lib/secret-guard-cli-home.ts`), so `.claude/x` from home and a project link into `~/.claude` stay sealed. A
+project's checked-in `.claude/` (skills, agents, commands) is open to read: it used to match any `.claude` segment,
+so a card couldn't read its own repo's skills (2026-11-03). A Glob or Grep that names `.claude` is sealed only when its
+search root holds the CLI's folder. A project's `.claude/settings*.json` still can't be changed (`changesCliSettings`):
+Write/Edit refuse it, and in Bash so does naming it or the `.claude` folder itself, or redirecting into it, since its
+hooks are the guard.
+
 ## Credential CLIs
 
 A thread can run the user's own CLIs, and some of them print the sign-in they hold. Their output lands in the
@@ -558,6 +569,14 @@ parser (comments and strings don't count):
   cold lambda (the client is cached after) cacheComponents refuses it mid-prerender, even inside `<Suspense>` and after
   `cookies()`; only `connection()` moves past it (/invite/[token] on 2026-10-18; /login, /team, /[orgSlug]/* the same day).
   `webClient()` awaits `connection()` itself, so every `requireTeam`/`webUser` gate is covered.
+- **Metadata ahead of the static gate** (`facts.ungated`, `lib/prerender-gate.ts`, blocking): a page whose default export
+  returns JSX on an `if (gate)` before any `<Suspense>` (`if (!isWebEnabled()) return <NotDeployed />`), while its
+  `generateMetadata`/`generateViewport` reads params or searchParams (an `await`, or a same-file helper it hands them to
+  or that awaits them) before its own `if (<same gate>) return …`. Where the gate holds at build time the page prerenders
+  whole and its metadata, even `"use cache"`, is runtime data: "Next.js encountered uncached or runtime data in
+  generateMetadata()". Vercel builds with the web side on, so only the Mac release build (no VERCEL/WEFT_WEB) refused
+  five share pages and kept 0.7.1 from packing (2026-11-03, fixed in 03d0bb60 with `linkPreview(params)`). The gate
+  matches by source text; the generic "awaits outside <Suspense>" message is dropped for a function this one names.
 - **Where it runs**: `lib/prerender-check.test.ts` walks the real tree (`treeProblems`) so `pnpm test` fails before a
   deploy; and the route import guard runs `prerenderCheck` on every Edit/MultiEdit/Write to a route file, only when the
   project's next.config turns cacheComponents on, and only for problems the edit adds: a segment config is denied, a

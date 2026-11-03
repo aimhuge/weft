@@ -16,7 +16,7 @@ const logError = (err: unknown) => console.error(err);
 export default function SkillsChip({ card, notify = logError }: { card: Card; notify?: (err: unknown) => void }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  const { view, toggle, reload } = useCardSkillSet(card, true, notify);
+  const { view, toggle, reload, error } = useCardSkillSet(card, true, notify);
   const changed = (card.skillsOn?.length ?? 0) + (card.skillsOff?.length ?? 0);
   useEscape(open, () => setOpen(false));
 
@@ -35,7 +35,7 @@ export default function SkillsChip({ card, notify = logError }: { card: Card; no
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="dialog"
         aria-expanded={open}
-        title={changed ? `Skills: ${changed} changed for this card` : "Skills this thread gets"}
+        title={error ?? (changed ? `Skills: ${changed} changed for this card` : "Skills this thread gets")}
         className={`whitespace-nowrap rounded px-1 hover:bg-sunken ${changed ? "text-accent" : "text-muted"}`}
       >
         ✦{view ? ` ${skillsOnCount(view.rows)}` : ""}
@@ -45,7 +45,14 @@ export default function SkillsChip({ card, notify = logError }: { card: Card; no
           <p className="border-b border-line px-3 py-2 text-[11.5px] text-muted">
             For this card only. Applies from your next message; the project’s default is in ✦ on the rail.
           </p>
-          <SkillSetList view={view} forCard onToggle={toggle} cwd={card.cwd} onInstalled={reload} search={hostOf(card).kind === "local"} />
+          {error && !view ? (
+            <p className="flex items-center justify-between gap-2 px-3 py-3 text-[12px] text-muted">
+              {error}
+              <button onClick={reload} className="rounded px-1.5 py-0.5 text-accent hover:bg-sunken">Try again</button>
+            </p>
+          ) : (
+            <SkillSetList view={view} forCard onToggle={toggle} cwd={card.cwd} onInstalled={reload} search={hostOf(card).kind === "local"} />
+          )}
         </div>
       )}
     </div>

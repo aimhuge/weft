@@ -30,7 +30,7 @@ describe("useCardSkillSet", () => {
   it("is this Mac's skill set for one of its cards", () => {
     host.kind = "local";
     const { result } = renderHook(() => useCardSkillSet(card, true, vi.fn()));
-    expect(result.current).toBe(local);
+    expect(result.current).toEqual({ ...local, error: null });
     expect(useSkillSet).toHaveBeenCalledWith({ card: "w-card" }, true, expect.any(Function));
     expect(host.thread.listSkills).not.toHaveBeenCalled();
   });
@@ -58,6 +58,21 @@ describe("useCardSkillSet", () => {
     await waitFor(() => expect(host.thread.listSkills).toHaveBeenCalledTimes(2));
     act(() => result.current.reload());
     await waitFor(() => expect(host.thread.listSkills).toHaveBeenCalledTimes(3));
+  });
+
+  it("keeps a worker that doesn't answer as the chip's error, not a notify, and reload clears it", async () => {
+    const notify = vi.fn();
+    host.thread.listSkills = vi
+      .fn<List>()
+      .mockRejectedValueOnce(new Error("Your worker didn't answer. It may be offline."))
+      .mockResolvedValueOnce([{ name: "ship", description: "", source: "weft" }]);
+    const { result } = renderHook(() => useCardSkillSet(card, true, notify));
+    await waitFor(() => expect(result.current.error).toBe("Your worker didn't answer. It may be offline."));
+    expect(result.current.view).toBeNull();
+    expect(notify).not.toHaveBeenCalled();
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.view).not.toBeNull());
+    expect(result.current.error).toBeNull();
   });
 
   it("leaves a list that hasn't come yet alone when a switch is flipped", () => {

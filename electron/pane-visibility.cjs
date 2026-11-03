@@ -33,4 +33,13 @@ function switchKey(key, current) {
   return activeKey(key);
 }
 
-module.exports = { BOARD, activeKey, paneVisibleFor, needsRestore, switchKey };
+// Whether a tab's page may be throttled while it is off screen. Chromium stops requestAnimationFrame in a
+// hidden view, so a page the agent tools drive in a card nobody is looking at never paints: a streamed
+// Next.js page sits on its Suspense fallback for good (React 19 reveals the boundary in a rAF) and a page
+// that animates with rAF freezes. Each card's current tab is the one those tools act on, so it keeps
+// rendering on or off screen; a card's other tabs are background tabs and throttle as usual.
+function throttlesOffScreen(current) {
+  return !current;
+}
+
+module.exports = { BOARD, activeKey, paneVisibleFor, needsRestore, switchKey, throttlesOffScreen };

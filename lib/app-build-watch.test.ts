@@ -176,4 +176,80 @@ describe("startAppBuildWatcher", () => {
     w.stop();
     expect(w.pendingCount()).toBe(0);
   });
+
+  it("schedules a republish after each build, and stops it with the watcher", async () => {
+    const { fs, fire } = fakeFs();
+    fs.readdirSync.mockReturnValue([]);
+    const build = vi.fn(() => Promise.resolve({}));
+    const republish = { schedule: vi.fn(), stop: vi.fn() };
+    const w = watchModule.startAppBuildWatcher({ fs: fs as never, build, debounceMs: 5, republish });
+    fire("growth/index.html.tmp");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(republish.schedule).toHaveBeenCalledWith("growth");
+    w.stop();
+    expect(republish.stop).toHaveBeenCalled();
+  });
+
+  it("syncs every already-built app on start, catching edits made while Weft was closed", () => {
+    const { fs } = fakeFs();
+    fs.readdirSync.mockReturnValue([{ name: "growth", isDirectory: () => true }, { name: "notes.html", isDirectory: () => false }]);
+    const build = vi.fn(() => Promise.resolve({}));
+    const republish = { schedule: vi.fn(), stop: vi.fn() };
+    return import("./app-build").then((m) => {
+      vi.spyOn(m, "readBuildInfo").mockReturnValue({ ok: "skipped", at: 1, inputsHash: "h" });
+      const w = watchModule.startAppBuildWatcher({ fs: fs as never, build, debounceMs: 5, republish });
+      expect(republish.schedule).toHaveBeenCalledWith("growth");
+      expect(republish.schedule).toHaveBeenCalledTimes(1);
+      expect(build).not.toHaveBeenCalled();
+      w.stop();
+    });
+  });
+
+  it("covers the odd inputs: no filename, the apps dir itself, non-Error failures, a close that throws", async () => {
+    const { fs, fire, emitError, watcher } = fakeFs();
+    fs.readdirSync.mockReturnValue([]);
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a non-Error rejection is the case under test
+    const build = vi.fn(() => Promise.reject("nope"));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const w = watchModule.startAppBuildWatcher({ fs: fs as never, build, debounceMs: 5 });
+    expect(watchModule.currentAppBuildWatcher()).toBe(w);
+    fire("");
+    fire(".");
+    expect(w.pendingCount()).toBe(0);
+    fire("alpha/App.tsx");
+    await new Promise((r) => setTimeout(r, 30));
+    expect(warn).toHaveBeenCalledWith("[weft/app-build] rebuild alpha failed: nope");
+    emitError("gone");
+    expect(warn).toHaveBeenCalledWith("[weft/app-build] watcher error: gone");
+    watcher.close = vi.fn(() => { throw new Error("closed"); });
+    expect(() => w.stop()).not.toThrow();
+    expect(watchModule.currentAppBuildWatcher()).toBeUndefined();
+    warn.mockRestore();
+  });
+
+  it("logs a non-Error watcher start failure", () => {
+    // eslint-disable-next-line @typescript-eslint/only-throw-error -- a non-Error throw is the case under test
+    const fs = { mkdirSync: vi.fn(), readdirSync: vi.fn(() => []), watch: vi.fn(() => { throw "EPERM"; }) };
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const w = watchModule.startAppBuildWatcher({ fs: fs as never, build: vi.fn() });
+    expect(warn).toHaveBeenCalledWith("[weft/app-build] could not start watcher: EPERM");
+    w.stop();
+    warn.mockRestore();
+  });
+
+  it("a second stop, and a reset with no watcher, do nothing", () => {
+    const { fs } = fakeFs();
+    const w = watchModule.startAppBuildWatcher({ fs: fs as never, build: vi.fn() });
+    w.stop();
+    expect(() => w.stop()).not.toThrow();
+    expect(() => watchModule._resetAppBuildWatcherForTests()).not.toThrow();
+  });
+
+  it("reset stops a running watcher", () => {
+    const { fs, watcher } = fakeFs();
+    watchModule.startAppBuildWatcher({ fs: fs as never, build: vi.fn() });
+    watchModule._resetAppBuildWatcherForTests();
+    expect(watcher.close).toHaveBeenCalled();
+    expect(watchModule.currentAppBuildWatcher()).toBeUndefined();
+  });
 });

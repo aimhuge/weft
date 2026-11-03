@@ -34,6 +34,8 @@ export interface DeviceView {
   build: string | null;
   // The Mac you're reading the list on.
   here: boolean;
+  // How many threads a worker owns (cloud_cards.owner_worker): what Move threads to… carries. 0 for anything else.
+  threads: number;
 }
 
 export interface DevicesView {
@@ -65,7 +67,7 @@ const COLUMNS = "id, kind, name, platform, owner_user, org_id, box_key, sign_key
 // Live first, then by kind, then by name.
 const ORDER: Record<DeviceKind, number> = { mac: 0, worker: 1, phone: 2, browser: 3 };
 
-export function deviceView(r: Row, here: string, note: string | null = null): DeviceView {
+export function deviceView(r: Row, here: string, note: string | null = null, threads = 0): DeviceView {
   const kind = (KINDS.includes(r.kind) ? r.kind : "mac") as DeviceKind;
   return {
     id: r.id,
@@ -85,6 +87,7 @@ export function deviceView(r: Row, here: string, note: string | null = null): De
     note: kind === "worker" ? note : null,
     build: r.build ?? null,
     here: kind === "mac" && r.host === here,
+    threads: kind === "worker" ? threads : 0,
   };
 }
 
@@ -106,8 +109,27 @@ export async function listDevices(client: SupabaseClient = accountClient(), here
   const { data, error } = await client.from("device_registry").select(COLUMNS).eq("owner_user", me);
   if (error) throw new Error(`Couldn't read your devices: ${error.message}`);
   const rows = (data as Row[] | null) ?? [];
-  const notes = await workerNotes(client, rows.filter((r) => r.kind === "worker").map((r) => r.id));
-  return { signedIn: true, devices: sortDevices(rows.map((r) => deviceView(r, here, notes.get(r.id) ?? null))) };
+  const workers = rows.filter((r) => r.kind === "worker").map((r) => r.id);
+  const [notes, threads] = await Promise.all([workerNotes(client, workers), threadCounts(client, workers)]);
+  return { signedIn: true, devices: sortDevices(rows.map((r) => deviceView(r, here, notes.get(r.id) ?? null, threads.get(r.id) ?? 0))) };
+}
+
+// How many threads each worker owns (worker_thread_counts, as you). Only a count beside a name, so a failed read
+// (a database without the function yet) leaves the counts at 0 and Move threads to… away, not the list.
+async function threadCounts(client: SupabaseClient, ids: string[]): Promise<Map<string, number>> {
+  if (!ids.length) return new Map();
+  const { data } = (await client.rpc("worker_thread_counts")) as { data: { worker_id: string; threads: number | string }[] | null };
+  return new Map((data ?? []).map((r) => [r.worker_id, Number(r.threads)]));
+}
+
+// Moves every thread one worker of yours owns onto another (worker_move_cards: both yours, one workspace, the target
+// not revoked), so a re-paired box, or the box that replaced it, can publish them again. Says how many moved.
+// A re-pair the server can prove moves them itself (worker_pair_confirm); this is for the rest.
+export async function moveThreads(from: string, to: string, client: SupabaseClient = accountClient()): Promise<{ moved: number }> {
+  if (!(await uid(client))) throw new Error("Sign in to Weft to move threads.");
+  const { data, error } = (await client.rpc("worker_move_cards", { p_from: from, p_to: to })) as { data: unknown; error: { message: string } | null };
+  if (error) throw new Error(`Couldn't move those threads: ${error.message}`);
+  return { moved: Number(data) || 0 };
 }
 
 // Each worker's note, read from its own row (the view doesn't carry it). Only a line under a name, so a failed read

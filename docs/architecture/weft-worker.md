@@ -343,7 +343,13 @@ weft-worker enrol <the wph.… code from the new Mac>
 weft-worker restart
 ```
 
-Then **Revoke** the old worker row in Settings → Devices. `work/` and its checkouts stay. `passkeys.json` goes too: the
+Leave `sign-key.json` where it is: it's how the server knows it's the same box. **Its threads come along.** A re-pair
+makes a new worker row, but when the new claim carries the old row's sign key (and main checked the claim's signature
+with it), `worker_pair_confirm` moves the old row's threads to the new one in the same step, if both are yours and in
+the same workspace ([device-registry.md](device-registry.md#moving-a-workers-threads)). Then **Revoke** the old worker
+row in Settings → Devices. A box that lost its `sign-key.json`, or threads you want on another box, move by hand:
+Settings → Devices → the old worker → **Move threads to…**, or the move Revoke offers.
+`work/` and its checkouts stay. `passkeys.json` goes too: the
 passkeys in it were endorsed by the old Mac, and the new one endorses its own. `mac-revoked.json` stays, so a revoked Mac
 is never trusted on this box again. The secret guard refuses these paths to threads.
 

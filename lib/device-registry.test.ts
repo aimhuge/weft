@@ -6,7 +6,7 @@ vi.mock("./device-id", () => ({ deviceId: () => "here-id" }));
 const remote = vi.hoisted(() => ({ remoteRevoke: vi.fn(), revokeNote: vi.fn(() => "GitHub off") }));
 vi.mock("./connector-remote", () => remote);
 
-const { deviceView, listDevices, revokeDevice, sortDevices } = await import("./device-registry");
+const { deviceView, listDevices, moveThreads, revokeDevice, sortDevices } = await import("./device-registry");
 
 const row = (over: Record<string, unknown> = {}) => ({
   id: "d1",
@@ -27,7 +27,7 @@ const row = (over: Record<string, unknown> = {}) => ({
   ...over,
 });
 
-function fakeClient(opts: { user?: string | null; data?: unknown; error?: { message: string } | null; notes?: unknown; rpc?: { data: unknown; error: { message: string } | null }; minted?: unknown } = {}) {
+function fakeClient(opts: { user?: string | null; data?: unknown; error?: { message: string } | null; notes?: unknown; rpc?: { data: unknown; error: { message: string } | null }; minted?: unknown; counts?: unknown } = {}) {
   const calls: unknown[][] = [];
   const query = {
     select: (...a: unknown[]) => (calls.push(["select", ...a]), query),
@@ -43,7 +43,10 @@ function fakeClient(opts: { user?: string | null; data?: unknown; error?: { mess
   const client = {
     auth: { getSession: () => Promise.resolve({ data: { session: opts.user === null ? null : { user: { id: opts.user ?? "u1" } } } }) },
     from: (t: string) => (calls.push(["from", t]), t === "connector_mints" ? mints : query),
-    rpc: (fn: string, args: unknown) => (calls.push(["rpc", fn, args]), Promise.resolve(opts.rpc ?? { data: "worker", error: null })),
+    rpc: (fn: string, args: unknown) => (
+      calls.push(["rpc", fn, args]),
+      Promise.resolve(fn === "worker_thread_counts" ? { data: opts.counts ?? null, error: opts.counts ? null : { message: "no function" } } : (opts.rpc ?? { data: "worker", error: null }))
+    ),
   };
   return { client: client as unknown as SupabaseClient, calls };
 }
@@ -125,6 +128,21 @@ describe("listDevices", () => {
     expect(macs.calls).not.toContainEqual(["from", "cloud_workers"]);
   });
 
+  it("counts each worker's threads, and only a worker's", async () => {
+    const counts = [{ worker_id: "w1", threads: "38" }, { worker_id: "d1", threads: 4 }];
+    const { client, calls } = fakeClient({ data: [row(), row({ id: "w1", kind: "worker" }), row({ id: "w2", kind: "worker" })], counts });
+    const { devices } = await listDevices(client, "here-id");
+    expect(calls).toContainEqual(["rpc", "worker_thread_counts", undefined]);
+    expect(devices.map((d) => [d.id, d.threads])).toEqual([["d1", 0], ["w1", 38], ["w2", 0]]);
+  });
+
+  it("leaves the counts at 0 when they can't be read, and doesn't ask with no workers", async () => {
+    expect((await listDevices(fakeClient({ data: [row({ id: "w1", kind: "worker" })] }).client)).devices[0]!.threads).toBe(0);
+    const macs = fakeClient({ data: [row()] });
+    await listDevices(macs.client);
+    expect(macs.calls.some((c) => c[1] === "worker_thread_counts")).toBe(false);
+  });
+
   it("is empty when signed out", async () => {
     const { client, calls } = fakeClient({ user: null });
     expect(await listDevices(client)).toEqual({ signedIn: false, devices: [] });
@@ -204,5 +222,26 @@ describe("revokeDevice", () => {
       kind: "worker",
       note: "Its GitHub tokens weren't confirmed revoked (Couldn't reach weft.zip.); they end within 8 hours.",
     });
+  });
+});
+
+describe("moveThreads", () => {
+  it("calls worker_move_cards and says how many moved", async () => {
+    const { client, calls } = fakeClient({ rpc: { data: 38, error: null } });
+    expect(await moveThreads("old", "new", client)).toEqual({ moved: 38 });
+    expect(calls).toContainEqual(["rpc", "worker_move_cards", { p_from: "old", p_to: "new" }]);
+  });
+
+  it("reads no count as none", async () => {
+    expect(await moveThreads("old", "new", fakeClient({ rpc: { data: null, error: null } }).client)).toEqual({ moved: 0 });
+  });
+
+  it("needs a sign-in, and passes the server's refusal on", async () => {
+    await expect(moveThreads("a", "b", fakeClient({ user: null }).client)).rejects.toThrow("Sign in to Weft to move threads.");
+    await expect(moveThreads("a", "b", fakeClient({ rpc: { data: null, error: { message: "That worker was revoked." } } }).client)).rejects.toThrow("Couldn't move those threads: That worker was revoked.");
+  });
+
+  it("defaults to the account client", async () => {
+    await expect(moveThreads("a", "b")).rejects.toThrow();
   });
 });

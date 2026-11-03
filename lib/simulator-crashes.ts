@@ -37,9 +37,9 @@ export function crashSummary(raw: string, deviceId: string): string | null {
 
 export async function recentCrashes(d: Device, app: string | undefined, now = Date.now(), dir = path.join(os.homedir(), "Library/Logs/DiagnosticReports")): Promise<string> {
   if (d.platform === "android") return (await adb(d, ["logcat", "-d", "-b", "crash", "-t", "60"]).catch(() => Buffer.from(""))).toString().trim();
-  if (!fs.existsSync(dir)) return "";
+  if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) return "";
   const fresh = fs
-    .readdirSync(dir)
+    .readdirSync(/*turbopackIgnore: true*/ dir)
     .filter((n) => n.endsWith(".ips") && (!app || n.startsWith(app)))
     .map((n) => ({ file: path.join(dir, n), at: fs.statSync(path.join(dir, n)).mtimeMs }))
     .filter((r) => now - r.at < WINDOW_MS)

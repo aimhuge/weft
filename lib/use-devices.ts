@@ -8,6 +8,7 @@ import { canSignWiden, endorsePasskeys } from "./widen-signer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
 import type { DeviceView, DevicesView } from "./device-registry";
+import { movedNote } from "./device-move";
 import { pairingBridge, type PairingBridge } from "./use-pairing";
 import { workerKeepBridge } from "./use-worker-keep";
 
@@ -186,8 +187,24 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
   // The board keeps syncing them too (lib/use-passkey-sync.ts); this page just shares its list.
   const untaken = usePasskeySync();
 
-  const revoke = (device: DeviceView) =>
+  const move = async (from: DeviceView, to: DeviceView) => {
+    const body = JSON.stringify({ from: from.id, to: to.id });
+    const r = await readJson<{ moved?: number }>(await apiFetch("/api/devices", { method: "POST", headers: { "content-type": "application/json" }, body }));
+    if (live.current) setNote(movedNote(from.name, to.name, r.moved ?? 0));
+  };
+
+  // Settings → Devices → Move threads to…: a worker's threads onto another of yours (lib/device-registry.ts moveThreads).
+  const moveThreads = (from: DeviceView, to: DeviceView) =>
     act(async () => {
+      await move(from, to);
+      await reload();
+    });
+
+  // Revoke, after moving its threads when Revoke's confirm named a worker to take them: a failed move stops the revoke,
+  // so the threads never end up under a revoked worker by accident.
+  const revoke = (device: DeviceView, moveTo?: DeviceView) =>
+    act(async () => {
+      if (moveTo) await move(device, moveTo);
       const pinned = new Set((await pairing?.list())?.map((d) => d.id) ?? []);
       if (revokeRoute(device, pinned) === "pairing") {
         await pairing?.revoke(device.id);
@@ -201,7 +218,7 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
         const r = await readJson<{ note?: string }>(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
         // A worker's key grants go with it (the database drops them); main rotates so it never had what's sealed next.
         if (device.kind === "worker") await hosts?.dropKeys?.(device.id);
-        if (r.note && live.current) setNote(`${device.name}: ${r.note}`);
+        if (r.note && live.current) setNote((moved) => (moveTo && moved ? `${moved} ` : "") + `${device.name}: ${r.note}`);
       }
       await reload();
     });
@@ -238,6 +255,7 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
     canRepin: Boolean(hosts?.forgetPin),
     canRepair: Boolean(hosts?.approveRepair),
     revoke,
+    moveThreads,
     repin,
     keys,
     canSeal: Boolean(hosts?.grantKey),

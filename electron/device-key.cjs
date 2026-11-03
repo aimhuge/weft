@@ -82,7 +82,7 @@ function resolveName({ dir, name }) {
  * Register this device with the shared vault, as the signed-in user.
  *
  * The row is keyed on (user_id, public_key), so this is idempotent: a second call only bumps
- * last_seen_at. The user id comes from the JWT's claims — the server's own `devices: add own`
+ * name and last_seen_at. The user id comes from the JWT's claims — the server's own `devices: add own`
  * policy demands auth.uid() = user_id — and never from anything the caller passes in.
  *
  * The upsert targets the unique index devices_user_pubkey_idx on (user_id, public_key). That index
@@ -107,11 +107,20 @@ async function registerDevice({ accountClient, dir, safeStorage, crypto, name, p
   const device = loadDeviceKey({ dir, safeStorage, crypto });
   const row = deviceRow({ userId, publicKey: device.publicKey, name: resolveName({ dir, name }), platform });
 
-  // The upsert the design names, and the only write path: one round trip, and the row is keyed on
-  // (user_id, public_key) so a second registration bumps the same row instead of duplicating it.
+  // Insert, ignoring the row if it's already there (ON CONFLICT DO NOTHING), then bump what may change.
+  // Not a plain upsert: PostgREST's DO UPDATE sets every column it was sent, and the signed-in user may
+  // only UPDATE name and last_seen_at (team_vault's column grants), so a second registration failed with
+  // "permission denied for table devices". Those grants stay narrow on purpose: a user_id or public_key
+  // the account could rewrite would let "devices: admin revoke" swap another member's key.
   // This conflict target needs the index to be non-partial — see the note above.
-  const { data, error } = await accountClient.supabase.from("devices").upsert(row, { onConflict: "user_id,public_key" });
+  const devices = () => accountClient.supabase.from("devices");
+  const { data, error } = await devices().upsert(row, { onConflict: "user_id,public_key", ignoreDuplicates: true });
   if (error) throw new Error(`This device could not be registered: ${error.message}`);
+  const bumped = await devices()
+    .update({ name: row.name, last_seen_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .eq("public_key", device.publicKey);
+  if (bumped.error) throw new Error(`This device could not be registered: ${bumped.error.message}`);
 
   const registered = Array.isArray(data) ? data[0] : data;
   return {

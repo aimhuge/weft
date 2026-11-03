@@ -1,3 +1,4 @@
+import { appPublicUrl } from "./app-share-types";
 import { growthOverview, type GrowthEvent, type GrowthOverview } from "./growth-read";
 import { growthMessage, growthSummaryMessage } from "./slack-messages";
 import { postToSlack } from "./slack-post";
@@ -115,11 +116,15 @@ export function growthTestMessage(): SlackText {
 // The cron card posts one summary a day (docs/architecture/slack.md): the headline numbers and the growth
 // dashboard's address. It goes to the growth channel, or the default channel when there is none.
 
-/** The address of the growth dashboard: the local mini app, or the deployed one. */
+// The Growth mini app's shared link (its cloud_app_shares row has slug "growth" under @fotoflo). Built with
+// appPublicUrl so it is the same /@<user>/apps/<slug> route proxy.ts serves; /apps/growth was never a route.
+export const GROWTH_DASHBOARD_URL = appPublicUrl("user", "fotoflo", "growth", "https://weft.zip");
+
+/** The address of the growth dashboard: WEFT_GROWTH_DASHBOARD_URL, else the shared Growth app on weft.zip. */
 export function growthDashboardUrl(env: Record<string, string | undefined> = process.env): string {
   const explicit = env.WEFT_GROWTH_DASHBOARD_URL?.trim();
   if (explicit) return explicit;
-  return "https://weft.zip/apps/growth";
+  return GROWTH_DASHBOARD_URL;
 }
 
 /**

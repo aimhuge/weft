@@ -4,7 +4,6 @@
 const { WebContentsView, dialog, systemPreferences } = require("electron");
 const fs = require("node:fs");
 const http = require("node:http");
-const path = require("node:path");
 const { isSelfUrl, isWorkerPageUrl } = require("./self-url.cjs");
 const { createPaneSecrets } = require("./pane-secrets.cjs");
 const { secretRunRoutes } = require("./secret-run.cjs");
@@ -24,9 +23,8 @@ const { appsDir, attachWebContentsView, createAppReload } = require("./app-reloa
 const { createPaneTabs } = require("./pane-tabs.cjs");
 const { createPaneFind } = require("./pane-find.cjs");
 const { addressBarUrl, normalizeUrl, tabState } = require("./pane-url.cjs");
+const { PANE_PARTITION, paneWebPreferences, placeView } = require("./pane-view.cjs");
 
-// Its own session, apart from the board window's, so pages never carry the launch token (electron/api-token.cjs).
-const PANE_PARTITION = "persist:threadboard-browser";
 
 function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {}, askUser }) {
   // Each card (keyed by card id) has its own tabs, so each review keeps its own browser; "board" is the
@@ -81,17 +79,11 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
 
   function layout() {
     for (const { key, view } of tabs.all()) {
-      view.setBounds(bounds);
       // Until a page loads, the board shows its own placeholder instead of a blank view.
       const hasPage = Boolean(view.webContents.getURL());
-      const current = key === active && view === viewOf(key);
-      const onScreen = current && visible && hasPage && bounds.width > 0 && bounds.height > 0;
-      // A hidden page keeps keyboard focus, and then no key reaches anything (Escape least of all).
-      const losesFocus = !onScreen && view.webContents.isFocused();
-      view.setVisible(onScreen);
-      if (losesFocus) boardContents()?.focus();
-      // Only the page on screen plays sound; background cards' pages keep running but stay silent.
-      view.webContents.setAudioMuted(!onScreen);
+      const cardsCurrent = view === viewOf(key);
+      const onScreen = key === active && cardsCurrent && visible && hasPage && bounds.width > 0 && bounds.height > 0;
+      placeView(view, { bounds, onScreen, cardsCurrent, focusBoard: () => boardContents()?.focus() });
     }
   }
 
@@ -115,7 +107,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
 
   function createView(key) {
     const view = new WebContentsView({
-      webPreferences: { partition: PANE_PARTITION, sandbox: true, contextIsolation: true, preload: path.join(__dirname, "pane-preload.cjs") },
+      webPreferences: paneWebPreferences(),
     });
     view.setBackgroundColor("#ffffff");
     getWindow().contentView.addChildView(view);

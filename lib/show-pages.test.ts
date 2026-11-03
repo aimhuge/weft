@@ -70,6 +70,14 @@ describe("starterPage", () => {
     expect(html).toContain('<img src="file:///Users/me/.weft/attachments/shot%20one.png" alt="shot.png">');
     expect(html).not.toContain("![shot.png]");
   });
+
+  it("gives pasted audio and video a player, and other files their name", () => {
+    const html = starterPage("Song", "![song.mp3](/a/song.mp3)\n![clip.mov](/a/clip.mov)\n![notes.pdf](/a/notes.pdf)");
+    expect(html).toContain('<figcaption>song.mp3</figcaption><audio controls preload="metadata" src="file:///a/song.mp3"></audio>');
+    expect(html).toContain('<video controls preload="metadata" src="file:///a/clip.mov"></video>');
+    expect(html).toContain("<figcaption>📎 notes.pdf</figcaption>");
+    expect(html).not.toContain("<img");
+  });
 });
 
 describe("backdropFor", () => {

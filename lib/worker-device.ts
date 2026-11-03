@@ -56,13 +56,13 @@ export async function packBuild(target: string, dir = os.tmpdir()): Promise<{ fi
     if (process.platform === "darwin") await exec("ditto", ["-c", "-k", "--keepParent", place, file]);
     else await exec("zip", ["-qry", file, path.basename(place)], { cwd: path.dirname(place) });
   }
-  const bytes = fs.statSync(file).size;
+  const bytes = fs.statSync(/*turbopackIgnore: true*/ file).size;
   if (bytes > MAX_BUILD_BYTES) {
     if (app) fs.rmSync(file, { force: true });
     throw new Error(`That build is ${Math.round(bytes / 1048576)} MB and the limit is 500 MB. On Android, build one ABI (reactNativeArchitectures=arm64-v8a).`);
   }
   const hash = createHash("sha256");
-  await pipeline(fs.createReadStream(file), hash);
+  await pipeline(fs.createReadStream(/*turbopackIgnore: true*/ file), hash);
   return { file, build: { sha: hash.digest("hex"), kind: app ? "app" : "apk", bytes }, temp: app };
 }
 

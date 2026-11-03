@@ -154,6 +154,33 @@ only ever takes trust away from it:
   nothing. A read that can't see a phone's row leaves it pinned (not fail-closed: an account switch would otherwise unpin
   everything).
 
+## Moving a worker's threads
+
+Every worker thread is filed by `cloud_cards.owner_worker`, and `worker_put_card` refuses a card another worker id owns.
+A re-pair makes a new `cloud_workers` row, so before this the threads stayed under the old id, drawn under an offline
+worker, and the box could never publish them again (2026-11-02: m1mini's 38 threads, fixed by hand).
+Migration `20261103001839_worker_move_cards.sql`:
+
+- **`worker_move_cards(from, to)`**, owner only: both workers yours, headless, in one workspace, `to` not revoked. It
+  re-points `owner_worker` and `owner_device` (`worker:<to>`) through `private.move_worker_cards` and drops `from`'s
+  `cloud_worker_projects` rows (the box publishes them again under its new id). `updated_at` moves, so the board's
+  changed-cards read files them under the new worker on its next poll. `cloud_thread_items` are keyed by card id.
+- **What stays with the old id:** connector grants, pins, mints and live tokens (a capability or its audit: a new worker
+  earns its own), tunnels and webhook relays (they point at the old box's dev server and carry its sealed secret),
+  `device_calls` and `cloud_worker_lists` (that box's own reports), and pairings and enrolments (history).
+- **The re-pair moves them itself** when the box proves it's the same box. `worker_pair_confirm` looks for your other
+  headless rows in the pairing's workspace with the claim's **sign key**: `sign-key.json` survives `--re-pair` and the
+  documented wipe, and main checked the claim's Ed25519 signature against that key before it confirmed
+  (`electron/host-pairing.cjs`), so the box holds its private half. A name proves nothing and isn't used; a row that's
+  another owner's or in another workspace never matches, so a box paired into someone else's workspace takes nothing.
+  The old row isn't revoked by it: Revoke it when you're ready (it now owns no threads, and the board stops listing it).
+- **Settings → Devices** (`lib/device-move.ts`, `components/WorkerMoveThreads.tsx`): a worker's subtitle counts its
+  threads ("38 threads", from `worker_thread_counts`, as you). A revoked or offline worker that owns threads offers
+  **Move threads to…**, listing your other live workers in its workspace; **Revoke** on a worker that owns threads asks
+  first and offers the same move ("Move and revoke"; a failed move stops the revoke). Both go through
+  `POST /api/devices { from, to }`, elevated like Revoke (Weft's window only), to `moveThreads`.
+- **The board** (`lib/worker-board.ts` `boardFrom`) lists a revoked worker's projects only where it still has cards.
+
 ## Versions
 
 Settings → Devices shows the Weft version and commit each device runs in its existing subtitle ("Worker · paired · Busy · 0.7.0 (d9b7166)"), and marks one older than the newest version across your devices ("0.6.6 (abc1234, older)"). No "N behind main": that needs GitHub, so it isn't computed.
@@ -191,7 +218,7 @@ Migration `20261102290000_device_versions.sql`.
 `lib/device-registry.test.ts`, `lib/host-pairing.test.ts` (main's check against the box's claim, every refused field),
 `lib/worker-pair.test.ts`, `lib/use-devices.test.ts`, `components/DevicesSettings.test.tsx`,
 `electron/host-pairing.test.ts`, `electron/host-pairing-ipc.test.ts`, `electron/device-beat.test.ts`,
-`app/api/devices/route.test.ts`. The migration was applied to a scratch Postgres 17 over stand-ins for the tables it
+`app/api/devices/route.test.ts`, `lib/device-move.test.ts`, `components/WorkerMoveThreads.test.tsx`. The migration was applied to a scratch Postgres 17 over stand-ins for the tables it
 touches (twice, and after H7's `20261102130000_passkey_approvals.sql`), and a 73-assertion SQL script ran every branch of
 the view, `device_revoke`, the keep-revoked trigger, the pairing functions and the phone flow as `anon` and
 `authenticated`.

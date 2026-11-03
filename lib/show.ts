@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { saveImageData } from "./attachments";
+import { mimeFor, saveImageData } from "./attachments";
 import { openInPane, paneThumb, paneUrl } from "./browser-tools";
 import { emojiPrompt, parseEmoji } from "./card-pictures";
 import { complete } from "./haiku";
@@ -55,7 +55,7 @@ const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": 
 
 // The splash screen's art (electron/splash.html), reused so a new card opens on the same scene.
 export const ASSETS = process.env.WEFT_ASSETS_DIR ?? path.join(process.cwd(), "electron", "assets");
-const asset = (name: string) => encodeURI(`file://${path.join(ASSETS, name)}`);
+const asset = (name: string) => encodeURI(`file://${path.join(/*turbopackIgnore: true*/ ASSETS, name)}`);
 
 // Shown the moment a turn starts on a card whose pane is blank, before any model has written anything:
 // a dimmed, slowly drifting scene behind the card's title, your ask (pasted images as thumbnails) and a
@@ -72,7 +72,8 @@ main{position:relative;z-index:1;padding:9vh 8% 0;max-width:560px;animation:rise
 .k{font:500 10.5px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.14em;color:#d9a27e;text-transform:uppercase}
 h1{margin:8px 0 0;font-size:24px;line-height:1.25;font-weight:700;letter-spacing:-.015em}
 .ask{max-height:40vh;overflow:auto;margin-top:18px;white-space:pre-wrap;color:#cfc5b8;font-size:13px;border-left:2px solid rgb(217 162 126/.6);padding-left:12px}
-.ask img{display:block;max-width:220px;max-height:160px;border-radius:6px;margin:2px 0 8px;opacity:.92}
+.ask img,.ask video{display:block;max-width:220px;max-height:160px;border-radius:6px;margin:2px 0 8px;opacity:.92}
+.ask figure{margin:2px 0 8px}.ask figcaption{font-size:12px;opacity:.8;margin-bottom:4px}.ask audio{display:block;width:100%;max-width:320px;color-scheme:dark}
 .clock{position:absolute;left:8%;bottom:5vh;z-index:1;font:500 12px ui-monospace,"SF Mono",Menlo,monospace;color:#e8dccd}
 @keyframes drift{to{transform:translateX(-3%) scale(1.04)}}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}}
@@ -98,7 +99,7 @@ setInterval(tick, 1000);
 // The scenes a working card can get: electron/assets/backdrop-*.jpg, plus the splash's own.
 function backdrops() {
   try {
-    const extra = fs.readdirSync(ASSETS).filter((f) => /^backdrop-.+\.(jpe?g|png|webp)$/i.test(f)).sort();
+    const extra = fs.readdirSync(/*turbopackIgnore: true*/ ASSETS).filter((f) => /^backdrop-.+\.(jpe?g|png|webp)$/i.test(f)).sort();
     return ["splash-speeder.jpg", ...extra];
   } catch {
     return ["splash-speeder.jpg"];
@@ -112,9 +113,18 @@ export function backdropFor(cardId: string, names = backdrops()) {
   return names[hash % names.length] ?? "splash-speeder.jpg";
 }
 
-// Your ask, escaped, with pasted images (`![name](/abs/path.png)`) shown as thumbnails.
+// Your ask, escaped, with pasted files (`![name](/abs/path.png)`) shown as thumbnails, players or a name.
 function askHtml(ask: string) {
-  return escape(ask).replace(/\n*!\[([^\]]*)\]\((\/[^)]+)\)\n*/g, (_, alt: string, file: string) => `<img src="${encodeURI(`file://${file}`)}" alt="${alt}">`);
+  return escape(ask).replace(/\n*!\[([^\]]*)\]\((\/[^)]+)\)\n*/g, (_, alt: string, file: string) => attachmentHtml(alt, file));
+}
+
+function attachmentHtml(alt: string, file: string) {
+  const src = encodeURI(`file://${file}`);
+  const kind = mimeFor(file).split("/")[0];
+  if (kind === "image") return `<img src="${src}" alt="${alt}">`;
+  if (kind === "audio") return `<figure><figcaption>${alt}</figcaption><audio controls preload="metadata" src="${src}"></audio></figure>`;
+  if (kind === "video") return `<video controls preload="metadata" src="${src}"></video>`;
+  return `<figure><figcaption>📎 ${alt}</figcaption></figure>`;
 }
 
 // Beside the New thread dialog while you write the prompt, with a tip that changes as you write (lib/new-thread-tips.ts).

@@ -26,7 +26,7 @@ const g = globalSingleton("__weftProjectSeed", () => ({
 
 export function readSeeded(file = SEEDS_FILE): Record<string, number> | null {
   try {
-    return (JSON.parse(fs.readFileSync(file, "utf8")) as { seeded?: Record<string, number> }).seeded ?? {};
+    return (JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as { seeded?: Record<string, number> }).seeded ?? {};
   } catch {
     return null;
   }

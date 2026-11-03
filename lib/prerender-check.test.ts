@@ -146,6 +146,14 @@ describe("prerenderProblems and treeProblems", () => {
     expect(m.message).toContain("make the metadata static");
   });
 
+  it("names metadata read ahead of the page's static gate as blocking, once, with its fix (the 0.7.1 dmg build)", () => {
+    const src = 'export default function Page({ params }) { if (!isWebEnabled()) return <NotDeployed />; return <Suspense><Body params={params} /></Suspense>; }\nexport async function generateMetadata({ params }) { await params; }';
+    const p = only(problems("app/s/[id]/page.tsx", src));
+    expect(p.kind).toBe("blocking");
+    expect(p.message).toContain("app/s/[id]/page.tsx: generateMetadata reads params before returning on `!isWebEnabled()`");
+    expect(p.message).toContain("linkPreview");
+  });
+
   it("names a service client built before connection() as blocking, even inside <Suspense>", () => {
     const src = "async function Body() { serviceClient(); }\nexport default function Page() { return <Suspense><Body /></Suspense>; }";
     const p = only(problems("app/s/[id]/page.tsx", src));

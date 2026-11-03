@@ -165,6 +165,12 @@ describe("boardFrom", () => {
     expect(out.projects.map((p) => p.folder)).toEqual(["fromcard", "reported"]);
   });
 
+  it("lists a revoked worker's projects only where it still has cards", () => {
+    const revoked = [workerRow({ id: "w1", revoked_at: "2026-11-02T00:00:00Z" })];
+    expect(boardFrom(revoked, new Map([["w1", ["reported"]]]), [], NOW).projects).toEqual([]);
+    expect(boardFrom(revoked, new Map([["w1", ["reported"]]]), [cardRow({ folder: "fromcard" })], NOW).projects.map((p) => p.folder)).toEqual(["fromcard"]);
+  });
+
   it("has no folder twice when a card is in a reported folder", () => {
     const out = boardFrom(workers, new Map([["w1", ["ling"]]]), [cardRow({ folder: "ling" })], NOW);
     expect(out.projects).toHaveLength(1);

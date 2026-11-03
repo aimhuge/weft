@@ -57,7 +57,7 @@ export async function claimsFor(toolName: string, input: Record<string, unknown>
   if (parser && !parser.isSourceFile(file)) return whole;
   let text: string;
   try {
-    text = fs.readFileSync(file, "utf8");
+    text = fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8");
   } catch {
     return whole;
   }

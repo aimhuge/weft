@@ -9,7 +9,7 @@ vi.mock("@/lib/guard", () => ({
   elevated: () => gate.elevatedDenied,
   fail: (err: Error, status = 400) => Response.json({ error: err.message }, { status }),
 }));
-const registry = vi.hoisted(() => ({ listDevices: vi.fn(), revokeDevice: vi.fn() }));
+const registry = vi.hoisted(() => ({ listDevices: vi.fn(), revokeDevice: vi.fn(), moveThreads: vi.fn() }));
 vi.mock("@/lib/device-registry", () => registry);
 
 const route = await import("./route");
@@ -66,5 +66,36 @@ describe("DELETE /api/devices", () => {
     gate.elevatedDenied = Response.json({ error: "This change needs Weft's own window" }, { status: 403 });
     expect((await route.DELETE(new Request(url("?id=x"), { method: "DELETE" }))).status).toBe(403);
     expect(registry.revokeDevice).not.toHaveBeenCalled();
+  });
+});
+
+describe("POST /api/devices", () => {
+  const post = (body: unknown) => new Request(url(), { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
+
+  it("moves one worker's threads onto another and says how many", async () => {
+    registry.moveThreads.mockResolvedValue({ moved: 38 });
+    const res = await route.POST(post({ from: "old", to: "new" }));
+    expect(registry.moveThreads).toHaveBeenCalledWith("old", "new");
+    expect(await res.json()).toEqual({ ok: true, moved: 38 });
+  });
+
+  it("needs both workers", async () => {
+    for (const body of [{ from: "old" }, { from: "", to: "new" }, { from: 1, to: "new" }, "not json"]) {
+      expect((await route.POST(post(body))).status).toBe(400);
+    }
+    expect(registry.moveThreads).not.toHaveBeenCalled();
+  });
+
+  it("passes a refusal on", async () => {
+    registry.moveThreads.mockRejectedValue(new Error("Couldn't move those threads: That worker was revoked."));
+    const res = await route.POST(post({ from: "old", to: "new" }));
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ error: "Couldn't move those threads: That worker was revoked." });
+  });
+
+  it("is Weft's window only", async () => {
+    gate.elevatedDenied = new Response(null, { status: 403 });
+    expect((await route.POST(post({ from: "old", to: "new" }))).status).toBe(403);
+    expect(registry.moveThreads).not.toHaveBeenCalled();
   });
 });

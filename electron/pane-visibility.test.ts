@@ -1,7 +1,7 @@
 // electron/browser-pane.cjs: the rule that decides whether the pane shows for the card that just
 // became active. Pure, so the tests cover it without standing up the pane's webContentsView.
 import { describe, expect, it } from "vitest";
-import { BOARD, activeKey, needsRestore, paneVisibleFor, switchKey } from "./pane-visibility.cjs";
+import { BOARD, activeKey, needsRestore, paneVisibleFor, switchKey, throttlesOffScreen } from "./pane-visibility.cjs";
 
 describe("activeKey", () => {
   it("keeps a card's id", () => {
@@ -58,5 +58,17 @@ describe("switchKey", () => {
 
   it("reads an empty key as the board", () => {
     expect(switchKey("", "c1")).toBe(BOARD);
+  });
+});
+
+describe("throttlesOffScreen", () => {
+  it("keeps a card's current tab rendering off screen", () => {
+    // The bug: an agent opened a streamed Next.js page in a card that wasn't on screen; the hidden view
+    // never ran requestAnimationFrame, so React never revealed the page and it stayed on "Loading…".
+    expect(throttlesOffScreen(true)).toBe(false);
+  });
+
+  it("throttles a card's background tabs", () => {
+    expect(throttlesOffScreen(false)).toBe(true);
   });
 });

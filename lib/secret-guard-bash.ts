@@ -8,6 +8,7 @@ import { DATA_DIR } from "./store";
 import { refusal } from "./secret-guard-why";
 import { credentialVerdict } from "./secret-guard-credentials";
 import { gitSubcommand, textWords } from "./shell-text";
+import { changesCliSettings } from "./secret-guard-cli-home";
 import { DATA_NAMES, expandBraces, followCd, inTranscriptDir, isSecretFile, isWorkerHome, reachesDataDir } from "./secret-guard-files";
 
 // Commands that print, copy out or send what they read.
@@ -93,7 +94,7 @@ function hardPathIn(words: string[], dataDir: string): string | undefined {
     for (const t of pathTokens(word)) {
       if (seen.has(t)) continue;
       seen.add(t);
-      if (reachesDataDir(t, dataDir) || inTranscriptDir(t)) return t;
+      if (reachesDataDir(t, dataDir) || inTranscriptDir(t) || changesCliSettings(t, true)) return t;
     }
   }
   return undefined;
@@ -259,8 +260,9 @@ const listsHome = (run: string[], word: string) =>
   nameOf(run) === "ls" && !run.some((a) => /^(-[a-zA-Z]*R|--recursive)$/.test(a)) && isWorkerHome(word);
 
 // Why one simple command is turned away.
-function commandVerdict({ words: raw, inputs, stdin }: SimpleCommand, dataDir: string, depth: number, namesSecret: () => boolean): string | null {
-  const redirected = inputs.find((f) => isSecretFile(f, dataDir));
+function commandVerdict({ words: raw, inputs, outputs, stdin }: SimpleCommand, dataDir: string, depth: number, namesSecret: () => boolean): string | null {
+  // `echo {} > .claude/settings.json` rewrites the hooks that guard this thread.
+  const redirected = inputs.find((f) => isSecretFile(f, dataDir)) ?? outputs.find((f) => changesCliSettings(f));
   if (redirected) return reason(redirected);
   const words = stripPrefixes(raw);
   if (dumpsEnvironment(words)) return ENV_DUMP;

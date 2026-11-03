@@ -17,7 +17,7 @@ const { default: DevicesSettings } = await import("./DevicesSettings");
 
 const base: DeviceView = {
   id: "m1", kind: "mac", name: "MacBook", platform: "darwin", orgId: "o", host: "h", hasBoxKey: true, hasSignKey: false, hasPasskey: false,
-  approves: false, fingerprint: "fp", status: "online", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, build: null, here: true,
+  approves: false, fingerprint: "fp", status: "online", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, build: null, here: true, threads: 0,
 };
 const DEVICES = [base, { ...base, id: "w1", kind: "worker" as const, name: "m1mini", hasSignKey: true, here: false }, { ...base, id: "p1", kind: "phone" as const, name: "iPhone", here: false }];
 const ok = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));

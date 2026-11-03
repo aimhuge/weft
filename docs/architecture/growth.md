@@ -37,6 +37,7 @@ app in October 2026 (the live numbers are the app's, not this doc's):
 | `~/.weft/apps/growth/index.html` | The page: markup, CSS and plain JS that asks for each read and draws it |
 | `~/.weft/apps/growth/weft-app.json` | The manifest: the project folder, the vault env, and every read by name |
 | `supabase/migrations/20261018054110_growth_reads.sql` | The account-level reads (`growth_overview`, `growth_signups_by_day`, `growth_active_by_day`, `growth_retention`, `growth_funnel`) |
+| `supabase/migrations/20261103033051_growth_items_at_covering.sql` | A covering index on `cloud_thread_items (at) include (org_id, card_id, kind)`, so the activity scans run index-only: `growth_active_by_day` went from ~17 s (past the statement timeout) to ~2 s |
 | `supabase/migrations/20261024041130_growth_in_app_reads.sql` | The in-app reads (`growth_cards_by_day`, `growth_engagement_by_day`, `growth_engagement_overview`, `growth_retention_in_app`) and the two helpers behind them |
 | `supabase/migrations/20261029075755_app_versions.sql` | `app_versions`, the Mac's `app_version_submit` and the `growth_versions` read |
 | `lib/app-version-sync.ts` | The signed-in Mac's once-a-day version report, on the league sync's timer |

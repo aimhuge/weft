@@ -13,6 +13,8 @@ import { useWorkerConnectors } from "@/lib/use-worker-connectors";
 import WorkerConnectors from "./WorkerConnectors";
 import { Spinner } from "./Icon";
 import { WorkerRepair } from "./WorkerRepair";
+import { MoveThreads, RevokeConfirm } from "./WorkerMoveThreads";
+import { offersMove, threadsText } from "@/lib/device-move";
 import { WorkerKeep } from "./WorkerKeep";
 import { workerKeepBridge } from "@/lib/use-worker-keep";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
@@ -28,6 +30,7 @@ function holdsLine(d: DeviceView): string {
   else if (d.hasBoxKey && d.kind !== "worker") parts.push("reads sealed threads");
   if (d.kind === "worker") parts.push(d.hasSignKey ? "paired" : "enrolled by token");
   if (d.here) parts.push("this Mac");
+  if (d.threads) parts.push(threadsText(d.threads));
   return parts.join(" · ");
 }
 
@@ -95,7 +98,8 @@ function WorkerSeal({ d, devices }: { d: DeviceView; devices: ReturnType<typeof 
 }
 
 // A live device's buttons: a worker's connectors, kept secrets, re-pin, passkeys and re-pair, and Revoke for every kind.
-function DeviceActions({ d, devices, connectors, now, onRepair, onKeep }: { d: DeviceView; devices: ReturnType<typeof useDevices>; connectors: ReturnType<typeof useWorkerConnectors>; now: number; onRepair: () => void; onKeep: () => void }) {
+// A worker that owns threads asks first, and offers to move them (RevokeConfirm).
+function DeviceActions({ d, devices, connectors, now, onRepair, onKeep, onRevoke }: { d: DeviceView; devices: ReturnType<typeof useDevices>; connectors: ReturnType<typeof useWorkerConnectors>; now: number; onRepair: () => void; onKeep: () => void; onRevoke: () => void }) {
   return (
     <div className="flex shrink-0 items-center gap-2">
       {d.kind === "worker" && d.hasSignKey && <WorkerConnectors c={connectors} workerId={d.id} name={d.name} now={now} />}
@@ -119,9 +123,24 @@ function DeviceActions({ d, devices, connectors, now, onRepair, onKeep }: { d: D
           Re-pair
         </button>
       )}
-      <button type="button" className={BUTTON} onClick={() => void devices.revoke(d)} aria-label={`Revoke ${d.name}`}>
+      <button type="button" className={BUTTON} onClick={() => (d.kind === "worker" && d.threads ? onRevoke() : void devices.revoke(d))} aria-label={`Revoke ${d.name}`}>
         Revoke
       </button>
+    </div>
+  );
+}
+
+// A row's left side: its name, what it holds and when it was seen, and any warning.
+function DeviceSummary({ d, devices, now, newest }: { d: DeviceView; devices: ReturnType<typeof useDevices>; now: number; newest: string | null }) {
+  return (
+    <div className="min-w-0">
+      <div className="truncate text-[13px] text-ink">{d.name}</div>
+      <div className={SUBTLE}>
+        {holdsLine(d)} · {seenLine(d, now, newest)}
+        {d.kind === "worker" && !d.revokedAt && <WorkerSeal d={d} devices={devices} />}
+        {devices.untaken.includes(d.id) && <span className="text-warn" title="This Mac changed which passkeys this worker trusts, and the worker hasn't confirmed it yet: until it does, a passkey you revoked may still approve there. Weft keeps sending it."> · passkeys not updated yet</span>}
+      </div>
+      {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}
     </div>
   );
 }
@@ -131,6 +150,8 @@ export default function DevicesSettings() {
   const connectors = useWorkerConnectors();
   const now = useNow();
   const [repairing, setRepairing] = useState<string | null>(null);
+  // The one row with its move picker or Revoke's confirm open.
+  const [open, setOpen] = useState<{ id: string; what: "move" | "revoke" } | null>(null);
   const [keeping, setKeeping] = useState<string | null>(null);
   const list = devices.view?.devices ?? [];
   const newest = newestVersion(list.filter((d) => !d.revokedAt).map((d) => d.build));
@@ -147,18 +168,19 @@ export default function DevicesSettings() {
         <ul className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
           {list.map((d) => (
             <li key={d.id} className={`flex flex-wrap items-center justify-between gap-x-3 ${d.revokedAt ? "opacity-60" : ""}`}>
-              <div className="min-w-0">
-                <div className="truncate text-[13px] text-ink">{d.name}</div>
-                <div className={SUBTLE}>
-                  {holdsLine(d)} · {seenLine(d, now, newest)}
-                  {d.kind === "worker" && !d.revokedAt && <WorkerSeal d={d} devices={devices} />}
-                  {devices.untaken.includes(d.id) && <span className="text-warn" title="This Mac changed which passkeys this worker trusts, and the worker hasn't confirmed it yet: until it does, a passkey you revoked may still approve there. Weft keeps sending it."> · passkeys not updated yet</span>}
-                </div>
-                {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}
+              <DeviceSummary d={d} devices={devices} now={now} newest={newest} />
+              <div className="flex shrink-0 items-center gap-2">
+                {offersMove(d, list) && (
+                  <button type="button" className={BUTTON} onClick={() => setOpen({ id: d.id, what: "move" })} aria-label={`Move ${d.name}'s threads`} title="Move the threads this worker owns to another worker of yours, so that box runs and publishes them">
+                    Move threads to…
+                  </button>
+                )}
+                {!d.revokedAt && <DeviceActions d={d} devices={devices} connectors={connectors} now={now} onRepair={() => setRepairing(repairing === d.id ? null : d.id)} onKeep={() => setKeeping(keeping === d.id ? null : d.id)} onRevoke={() => setOpen({ id: d.id, what: "revoke" })} />}
               </div>
-              {!d.revokedAt && <DeviceActions d={d} devices={devices} connectors={connectors} now={now} onRepair={() => setRepairing(repairing === d.id ? null : d.id)} onKeep={() => setKeeping(keeping === d.id ? null : d.id)} />}
               {repairing === d.id && <WorkerRepair device={d} onClose={() => setRepairing(null)} />}
               {keeping === d.id && <WorkerKeep device={d} onClose={() => setKeeping(null)} />}
+              {open?.id === d.id && open.what === "move" && <MoveThreads device={d} devices={list} onMove={(to) => void devices.moveThreads(d, to)} onClose={() => setOpen(null)} />}
+              {open?.id === d.id && open.what === "revoke" && <RevokeConfirm device={d} devices={list} onRevoke={(to) => void devices.revoke(d, to)} onClose={() => setOpen(null)} />}
             </li>
           ))}
         </ul>

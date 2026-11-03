@@ -17,7 +17,7 @@ const { POLL_MS } = await import("@/lib/use-devices");
 
 const worker: DeviceView = {
   id: "w1", kind: "worker", name: "m1mini", platform: "linux", orgId: "o", host: "h", hasBoxKey: true, hasSignKey: true, hasPasskey: false,
-  approves: false, fingerprint: "fp", status: "offline", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, build: null, here: false,
+  approves: false, fingerprint: "fp", status: "offline", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, build: null, here: false, threads: 0,
 };
 const ok = (body: unknown) => Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
 type Status = { sealOn: boolean; workers: Record<string, { version: number; latest: number }> };

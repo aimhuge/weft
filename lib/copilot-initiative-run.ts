@@ -35,7 +35,7 @@ const QUIET_WATCH_MS = 15 * 60_000;
 
 export function readState(file = FILE): InitiativeState {
   try {
-    return { ...EMPTY_STATE, ...(JSON.parse(fs.readFileSync(file, "utf8")) as Partial<InitiativeState>) };
+    return { ...EMPTY_STATE, ...(JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ file, "utf8")) as Partial<InitiativeState>) };
   } catch {
     return EMPTY_STATE;
   }

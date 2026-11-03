@@ -14,7 +14,7 @@ import { globalSingleton } from "./global-singleton";
 
 const run = promisify(execFile);
 const HOME = os.homedir();
-const ROOTS = ["dev", "code", "projects", "src", "Developer", "GitHub", "repos", "work", "Sites"].map((d) => path.join(HOME, d));
+const ROOTS = ["dev", "code", "projects", "src", "Developer", "GitHub", "repos", "work", "Sites"].map((d) => path.join(/*turbopackIgnore: true*/ HOME, d));
 // How many folders a scan looks inside, so a huge code folder can't stall the picker.
 const MAX_SCANNED = 1500;
 const SKIP = new Set(["node_modules", "dist", "build", "vendor", "target", "Library"]);
@@ -88,7 +88,7 @@ function activityOf(dir: string) {
   let latest = 0;
   for (const file of ["HEAD", "index", "FETCH_HEAD"]) {
     try {
-      latest = Math.max(latest, fs.statSync(path.join(dir, file)).mtimeMs);
+      latest = Math.max(latest, fs.statSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, file)).mtimeMs);
     } catch {}
   }
   return latest;
@@ -211,7 +211,7 @@ export async function cloneRepo(fullName: string): Promise<string> {
   // FULL_NAME guarantees an owner/name pair.
   const name = fullName.split("/")[1] ?? fullName;
   let target = path.join(parent, name);
-  for (let n = 2; fs.existsSync(target); n++) target = path.join(parent, `${name}-${n}`);
+  for (let n = 2; fs.existsSync(/*turbopackIgnore: true*/ target); n++) target = path.join(parent, `${name}-${n}`);
   try {
     await runClone(fullName, target);
   } catch (err) {

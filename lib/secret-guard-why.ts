@@ -8,6 +8,7 @@ import { DATA_DIR } from "./store";
 import { DATA_SECRET, PROC_ENV, SECRET_FILE, TEMPLATE, inTranscriptDir, placedPath } from "./secret-guard-files";
 import { workerHome } from "./worker-config";
 import { credentialFileRefusal, isCliCredential } from "./secret-guard-credentials";
+import { SETTINGS_REFUSAL, changesCliSettings } from "./secret-guard-cli-home";
 
 // The worker's files that hold a key or a token, as opposed to its log and update notes.
 const WORKER_KEYS = /^(worker\.json|worker\.env|seal-key\.json|sign-key\.json|github-credentials)$/i;
@@ -30,11 +31,13 @@ const KINDS: { is: (at: string, clean: string, dataDir: string) => boolean; say:
       `${name} is in the CLI's own folder (~/.claude), so it can't be read here: its transcripts hold every value a thread ` +
       "saw, and its settings and hooks decide what a thread may do. Keep memory in ~/.claude/projects/<project>/memory/, which is open.",
   },
+  { is: (_at, clean) => changesCliSettings(clean, true), say: SETTINGS_REFUSAL },
   {
     is: (at, _clean, dataDir) => path.dirname(at) === path.join(path.resolve(dataDir), "attachments") || /\/\.weft\/attachments$/i.test(path.dirname(at)),
     say: (name) =>
       `${name} is in Weft's attachments folder, which holds every card's pasted files, so it can't be read here. ` +
-      "The Read tool opens a file pasted into this card's own thread; one pasted into another card stays with that card.",
+      "A file pasted into this card's own thread opens to Read and to a shell command that names its full path " +
+        "(cp, ffmpeg); one pasted into another card stays with that card.",
   },
   {
     is: (at, clean, dataDir) => within(at, path.resolve(dataDir)) || /(?:^|\/)\.weft(?:\/|$)/i.test(clean),

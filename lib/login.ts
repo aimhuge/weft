@@ -237,7 +237,7 @@ export function startLogin(backend: Backend, onDone?: () => void): LoginView {
 
   const bin = binary(backend);
   const run = newRun(backend, "running", onDone);
-  const child = spawn(bin, ["auth", "login"], { env: cliEnv(), stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(/*turbopackIgnore: true*/ bin, ["auth", "login"], { env: cliEnv(), stdio: ["pipe", "pipe", "pipe"] });
   run.child = child;
 
   const onData = (chunk: Buffer) => {

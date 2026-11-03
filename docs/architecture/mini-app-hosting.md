@@ -53,6 +53,13 @@ own origin.
   whose inputs changed) is rebuilt up front, falling back from `fs.watch`'s `recursive: true` (macOS,
   Windows) to the next start on Linux for deep subfolders. `electron/app-reload.cjs` reloads the pane
   after a build.
+- **A shared app follows its sources.** After each build of a folder, `lib/app-share-republish.ts` syncs every
+  app in it that has a share link, 5 s after the folder's last build, through `readAppShare` in `lib/app-share.ts`
+  (what Share… does when it opens): the page, files and manifest go up when they changed; the mode, owner and
+  address stay; a plan over its room keeps serving the old copy. On server start every already-built folder is
+  synced once too, so an edit made while Weft was closed goes up (an unchanged link costs one row read). Keys
+  aren't pushed from here, since that can ask for Touch ID; Share… still does. Before this, the 📈 Growth app's
+  seven new reads answered 404 "isn't in the manifest" on weft.zip until someone re-ran the share by hand.
 
 ### Where it lives: under its owner
 

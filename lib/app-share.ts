@@ -138,7 +138,8 @@ export async function getAppShare(appId: string): Promise<AppShareState> {
   return withKeys(appId, await readAppShare(appId));
 }
 
-async function readAppShare(appId: string): Promise<AppShareState> {
+// Also the build watcher's republish after a save (lib/app-share-republish.ts), which skips the key push.
+export async function readAppShare(appId: string): Promise<AppShareState> {
   const t = await target(appId);
   if (t.kind === "blocked") return t.state;
   const read = await readShare(t);

@@ -42,6 +42,7 @@ interface WorkerRow {
   name: string;
   status: WorkerProjectStatus;
   last_seen_at: string | null;
+  revoked_at?: string | null;
 }
 
 interface CardRow {
@@ -74,7 +75,7 @@ export async function requireSession(client: SupabaseClient) {
 export async function myWorkers(client: SupabaseClient, who: { uid: string; org: string }): Promise<WorkerRow[]> {
   const { data, error } = await client
     .from("cloud_workers")
-    .select("id, name, status, last_seen_at")
+    .select("id, name, status, last_seen_at, revoked_at")
     .eq("org_id", who.org)
     .eq("owner_user", who.uid)
     .neq("kind", "desktop")
@@ -92,11 +93,12 @@ async function reportedFolders(client: SupabaseClient, ids: string[]): Promise<M
 
 // Your workers' cards as the board draws them: each filed under its project's worker:// path. The copilot and
 // deleted cards stay out, as on the web board.
-// A worker's status comes from presence where the board has it (lib/worker-presence.ts liveStatus).
+// A worker's status comes from presence where the board has it (lib/worker-presence.ts liveStatus). A revoked worker
+// lists only the folders it still has cards in: its reported ones would be empty offline projects.
 export function boardFrom(workers: WorkerRow[], folders: Map<string, string[]>, rows: CardRow[], now: number, seen: PresenceRead | null = null): Pick<WorkerBoard, "projects" | "cards"> {
   const live = rows.filter((r) => r.card.role !== "copilot" && r.folder);
   const projects: WorkerProject[] = workers.flatMap((w) => {
-    const names = new Set([...(folders.get(w.id) ?? []), ...live.filter((r) => r.owner_worker === w.id).map((r) => r.folder)]);
+    const names = new Set([...(w.revoked_at ? [] : (folders.get(w.id) ?? [])), ...live.filter((r) => r.owner_worker === w.id).map((r) => r.folder)]);
     return [...names].sort().map((folder) => ({ path: workerProjectPath(w.id, folder), workerId: w.id, worker: w.name, folder, status: liveStatus(w, seen, now) }));
   });
   return { projects, cards: live.map((r) => ({ ...r.card, cwd: workerProjectPath(r.owner_worker, r.folder) })) };

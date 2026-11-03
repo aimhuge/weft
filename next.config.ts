@@ -53,12 +53,27 @@ const nextConfig: NextConfig = {
         }
       : {}),
   },
-  // lib/login.ts runs a CLI by a runtime path, which makes tracing pull in the whole project
-  // folder; keep electron-builder's output (dist/) out of it. These globs match anywhere in a path,
-  // so a bare "dist/**" would also drop .next-dist/server/chunks. scripts/prepare-standalone.mjs
-  // prunes the source files that come along.
+  // A fs or spawn call on a runtime path (~/.weft, a user's repo, a CLI home) makes Turbopack trace the whole project
+  // into a server function, which Vercel then uploads. Those calls carry /*turbopackIgnore: true*/; these excludes
+  // drop the rest of what no server function reads from disk. Turbopack matches an exclude anywhere in a path, not
+  // from the project root, so "./lib/**" would also strip node_modules/typescript/lib: only name folders no package
+  // ships at runtime, and keep what outputFileTracingIncludes reads (docs/FAQ.md, electron/assets). Next also matches
+  // them as absolute paths that may stop short of the file, so a bare "dist/**" would drop .next-dist/server/chunks.
+  // scripts/prepare-standalone.mjs prunes the source files that still come along into the desktop build.
   outputFileTracingExcludes: {
-    "/**/*": ["./dist/mac*/**/*", "./dist/Weft-*", "./dist/builder-*"],
+    "/**/*": [
+      "./dist/mac*/**/*",
+      "./dist/Weft-*",
+      "./dist/builder-*",
+      "./electron/*.{cjs,cts,ts,js,json,html}",
+      "./docs/!(FAQ.md)",
+      "./docs/*/**/*",
+      "./node_modules/{electron,electron-builder,electron-publish,electron-winstaller,app-builder-bin,app-builder-lib,dmg-builder,7zip-bin}/**/*",
+      "./node_modules/{@electron,builder-util,builder-util-runtime}/**/*",
+      // weft.zip relays AI work to the desktop and never starts Claude Code, so leave its native binary (~225 MB,
+      // traced into every route that imports the SDK) out of Vercel's functions; the desktop build needs it.
+      ...(process.env.WEFT_STANDALONE ? [] : ["./node_modules/@anthropic-ai/claude-agent-sdk-*/**/*"]),
+    ],
   },
   // weft.zip/@username is a public profile. A route folder can't start with "@" (a parallel-route slot), so the
   // handle is rewritten to app/u/[username]; beforeFiles so the [orgSlug] segment never sees it.

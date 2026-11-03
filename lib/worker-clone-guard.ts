@@ -91,7 +91,7 @@ export function redirectsIntoClone(command: string, cwd: string, clone = workerC
 
 // Whether an Edit, Write or NotebookEdit of this file changes the clone.
 export function editsClone(file: string, clone = workerClone()): boolean {
-  return Boolean(file) && fs.existsSync(clone) && inClone(landing(file, process.cwd()), clone);
+  return Boolean(file) && fs.existsSync(/*turbopackIgnore: true*/ clone) && inClone(landing(file, process.cwd()), clone);
 }
 
 export const CLONE_REFUSAL =

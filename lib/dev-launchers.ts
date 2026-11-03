@@ -14,7 +14,7 @@ export const folderKey = (cwd: string) => `folder:${cwd}`;
 // Open cards' folders, most recently used first. Weft's own folder is left out: its dev server is the
 // one serving this board, and starting another would clash with it.
 export function workingFolders(cards: readonly Card[], self = process.cwd()): string[] {
-  const own = path.resolve(self);
+  const own = path.resolve(/*turbopackIgnore: true*/ self);
   const folders = cards.filter((c) => !c.archived && c.cwd && path.resolve(c.cwd) !== own).map((c) => path.resolve(c.cwd));
   return [...new Set(folders)];
 }
@@ -50,7 +50,7 @@ async function withRun(cwd: string, c: LauncherCommand, cards: readonly Card[]):
 // self, since its dev server is this board and a second `next dev` would take its port. Its url is
 // the port this server listens on, else what its dev script names.
 function selfLauncher(cards: readonly Card[], self = process.cwd(), port = process.env.PORT): DevLauncher[] {
-  const own = path.resolve(self);
+  const own = path.resolve(/*turbopackIgnore: true*/ self);
   if (!cards.some((c) => !c.archived && c.cwd && path.resolve(c.cwd) === own)) return [];
   const commands = detectDevCommands(own);
   const url = port ? `http://127.0.0.1:${port}` : commands[0]?.url;

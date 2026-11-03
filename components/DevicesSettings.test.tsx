@@ -19,7 +19,7 @@ const { POLL_MS, useDevices, hostPairingBridge } = await import("@/lib/use-devic
 
 const base: DeviceView = {
   id: "m1", kind: "mac", name: "MacBook", platform: "darwin", orgId: "o", host: "h", hasBoxKey: true, hasSignKey: false, hasPasskey: false,
-  approves: false, fingerprint: "fp", status: "online", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, build: null, here: true,
+  approves: false, fingerprint: "fp", status: "online", lastSeenAt: "2026-11-02T11:55:00Z", revokedAt: null, note: null, build: null, here: true, threads: 0,
 };
 const dev = (over: Partial<DeviceView>): DeviceView => ({ ...base, ...over });
 const DEVICES = [

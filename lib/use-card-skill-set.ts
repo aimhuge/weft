@@ -15,12 +15,22 @@ export function useCardSkillSet(card: Card, active: boolean, notify: (err: unkno
   const here = host.kind === "local";
   const local = useSkillSet({ card: card.id }, active && here, notify);
   const [remote, setRemote] = useState<{ id: string; view: SkillSetView } | null>(null);
+  // A worker that doesn't answer (offline, asleep) is a state the chip shows, not an error to log: the read runs as the
+  // card opens, so a console.error put Next's dev overlay up over every offline worker's card.
+  const [failed, setFailed] = useState<{ id: string; error: string } | null>(null);
   const [loads, setLoads] = useState(0);
 
   useEffect(() => {
     if (here || !active || !host.thread.listSkills) return;
     let live = true;
-    host.thread.listSkills(card.id, card.cwd).then((skills) => live && setRemote({ id: card.id, view: hostSkillView(skills, card) }), notify);
+    host.thread.listSkills(card.id, card.cwd).then(
+      (skills) => {
+        if (!live) return;
+        setFailed(null);
+        setRemote({ id: card.id, view: hostSkillView(skills, card) });
+      },
+      (err: unknown) => live && setFailed({ id: card.id, error: err instanceof Error ? err.message : String(err) }),
+    );
     return () => {
       live = false;
     };
@@ -40,6 +50,6 @@ export function useCardSkillSet(card: Card, active: boolean, notify: (err: unkno
   );
   const reload = useCallback(() => setLoads((n) => n + 1), []);
 
-  if (here) return local;
-  return { view: remote?.id === card.id ? remote.view : null, toggle, reload };
+  if (here) return { ...local, error: null };
+  return { view: remote?.id === card.id ? remote.view : null, toggle, reload, error: failed?.id === card.id ? failed.error : null };
 }

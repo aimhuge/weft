@@ -98,3 +98,19 @@ describe("toolVerdict on an attachment", () => {
     expect(toolVerdict("Read", { file_path: path.join(data, "vault", "acme.json") }, data, "c1")).toContain("can't be read");
   });
 });
+
+describe("Bash on a pasted file", () => {
+  const bash = (command: string, card = "c1") => toolVerdict("Bash", { command }, data, card);
+
+  it("lets a card cp or ffmpeg the file its user pasted", () => {
+    expect(bash(`cp ${shot} ~/dev/app/renders/`)).toBeNull();
+    expect(bash(`ffmpeg -i "${shot}" out.mp4 && ls`)).toBeNull();
+  });
+
+  it("keeps another card's paste, the folder, and the rest of the data dir sealed", () => {
+    expect(bash(`cp ${other} /tmp/`)).not.toBeNull();
+    expect(bash(`cp ${shot} /tmp/`, "c2")).not.toBeNull();
+    expect(bash(`ls ${attachments}`)).not.toBeNull();
+    expect(bash(`cp ${shot} ${path.join(data, "vault", "acme.json")} /tmp/`)).not.toBeNull();
+  });
+});

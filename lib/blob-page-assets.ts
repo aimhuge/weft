@@ -128,7 +128,7 @@ class PageRewriter {
       const local = resolveAssetPath(href, baseDir, this.home);
       // Read here rather than uploaded, so the store's veto has to be asked here too.
       if (!local || extensionOf(local) !== "css" || !this.allowed(local)) return null;
-      const css = await this.css(fs.readFileSync(local, "utf8"), path.dirname(local));
+      const css = await this.css(fs.readFileSync(/*turbopackIgnore: true*/ local, "utf8"), path.dirname(local));
       const media = attrOf(tag, "media");
       return `<style${media ? ` media="${media.replace(/"/g, "&quot;")}"` : ""}>\n${css.replace(/<\/style/gi, "<\\/style")}\n</style>`;
     }

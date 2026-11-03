@@ -22,11 +22,11 @@ export function defaultEffort(backend: Backend): Effort | undefined {
   if (backend === "goose") return undefined;
   try {
     if (backend === "codex") {
-      const content = fs.readFileSync(settingsFile(backend), "utf8");
+      const content = fs.readFileSync(/*turbopackIgnore: true*/ settingsFile(backend), "utf8");
       const level = /^\s*model_reasoning_effort\s*=\s*["']([^"']+)["']/m.exec(content)?.[1];
       return EFFORTS.find((e) => e === level);
     }
-    const level = (JSON.parse(fs.readFileSync(settingsFile(backend), "utf8")) as { effortLevel?: unknown } | null)?.effortLevel;
+    const level = (JSON.parse(fs.readFileSync(/*turbopackIgnore: true*/ settingsFile(backend), "utf8")) as { effortLevel?: unknown } | null)?.effortLevel;
     return EFFORTS.find((e) => e === level);
   } catch {
     return undefined;

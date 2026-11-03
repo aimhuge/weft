@@ -56,13 +56,15 @@ describe("loadDeviceKey", () => {
   });
 });
 
-// A supabase-js stand-in: it records what was upserted, so a test can see the row Weft would send.
-// Every other table method is recorded too, and fails the test if it is called: the registration
-// must be a single upsert, not a select-then-write. That fallback existed because the index behind
-// (user_id, public_key) was partial, and a partial index is not a valid ON CONFLICT inference
-// target (Postgres 42P10). The index is now non-partial with NULLS NOT DISTINCT
-// (supabase/migrations/20261027165308_devices_upsert_unique_index.sql), so the upsert stands alone.
-const fakeSupabase = () => {
+// A supabase-js stand-in: it records what was upserted and updated, so a test can see the rows Weft
+// would send. The registration is one insert-or-skip upsert (ON CONFLICT DO NOTHING, which needs only
+// the INSERT column grants) and one update of name and last_seen_at (the only columns the account may
+// UPDATE; a DO UPDATE upsert set every column it was sent and got "permission denied for table devices").
+// The conflict target relies on the non-partial (user_id, public_key) index
+// (supabase/migrations/20261027165308_devices_upsert_unique_index.sql). A select or plain insert is a
+// select-then-write fallback creeping back in, so it is recorded and refused.
+const fakeSupabase = (updateError: { message: string } | null = null) => {
+  const updated: { values: Record<string, unknown>; filters: Record<string, unknown> }[] = [];
   const upserted: { row: Record<string, unknown>; options: Record<string, unknown> | undefined }[] = [];
   const otherCalls: string[] = [];
   const table = {
@@ -79,26 +81,33 @@ const fakeSupabase = () => {
       otherCalls.push("insert");
       return Promise.resolve({ data: null, error: null });
     },
-    update: () => {
-      otherCalls.push("update");
-      return Promise.resolve({ data: null, error: null });
+    update: (values: Record<string, unknown>) => {
+      const call = { values, filters: {} as Record<string, unknown> };
+      updated.push(call);
+      const chain = Object.assign(Promise.resolve({ data: null, error: updateError }), {
+        eq: (column: string, value: unknown) => {
+          call.filters[column] = value;
+          return chain;
+        },
+      });
+      return chain;
     },
   };
-  return { upserted, otherCalls, client: { supabase: { from: () => table } } };
+  return { upserted, updated, otherCalls, client: { supabase: { from: () => table } } };
 };
 
 describe("registerDevice", () => {
   it("upserts the public half and the fingerprint, as the signed-in user", async () => {
     const dir = tmp();
-    const { upserted, otherCalls, client } = fakeSupabase();
+    const { upserted, updated, otherCalls, client } = fakeSupabase();
     const accountClient = { ...client, getClaims: () => ({ sub: "user-1" }) };
 
     const result = await registerDevice({ accountClient, dir, safeStorage: safeStorage(), crypto: sodium, name: "Studio Mac", platform: "darwin" });
 
     expect(upserted).toHaveLength(1);
     const { row, options } = upserted[0]!;
-    expect(options).toEqual({ onConflict: "user_id,public_key" });
-    // The registration is the upsert and nothing else.
+    // Insert or skip: a DO UPDATE would need UPDATE on user_id, public_key, fingerprint and platform.
+    expect(options).toEqual({ onConflict: "user_id,public_key", ignoreDuplicates: true });
     expect(otherCalls).toEqual([]);
     expect(row.user_id).toBe("user-1");
     expect(row.name).toBe("Studio Mac");
@@ -109,6 +118,20 @@ describe("registerDevice", () => {
     expect(row.public_key).toBe(device.publicKey);
     expect(result.fingerprint).toBe(row.fingerprint);
     expect(result.publicKey).toBe(device.publicKey);
+    // Then only the columns the account may update, on its own row for this key.
+    expect(updated).toHaveLength(1);
+    expect(Object.keys(updated[0]!.values).sort()).toEqual(["last_seen_at", "name"]);
+    expect(updated[0]!.values.name).toBe("Studio Mac");
+    expect(updated[0]!.filters).toEqual({ user_id: "user-1", public_key: device.publicKey });
+  });
+
+  it("says so when the bump is refused", async () => {
+    const dir = tmp();
+    const { client } = fakeSupabase({ message: "permission denied for table devices" });
+    const accountClient = { ...client, getClaims: () => ({ sub: "user-1" }) };
+    await expect(registerDevice({ accountClient, dir, safeStorage: safeStorage(), crypto: sodium, name: "Studio Mac" })).rejects.toThrow(
+      "This device could not be registered: permission denied for table devices",
+    );
   });
 
   it("never sends the private half", async () => {
@@ -146,13 +169,13 @@ describe("registerDevice", () => {
     expect(upserted).toHaveLength(0);
   });
 
-  it("registers with one upsert, never a select-then-write", async () => {
+  it("registers with one insert-or-skip upsert, never a select-then-write", async () => {
     // The regression this pins: the registration used to fall back to reading the row and then
     // updating or inserting it, because the unique index behind (user_id, public_key) was partial
     // (`where user_id is not null`) and Postgres refuses a partial index as an ON CONFLICT target
     // with 42P10. The index is now non-partial and NULLS NOT DISTINCT
     // (supabase/migrations/20261027165308_devices_upsert_unique_index.sql), so the upsert is the
-    // whole path — one round trip. If the fallback ever comes back, this fails.
+    // insert path. If the fallback ever comes back, this fails.
     const dir = tmp();
     const { upserted, otherCalls, client } = fakeSupabase();
     const accountClient = { ...client, getClaims: () => ({ sub: "user-1" }) };
@@ -161,8 +184,8 @@ describe("registerDevice", () => {
 
     expect(upserted).toHaveLength(1);
     // The conflict target the design names, and the index that makes it legal.
-    expect(upserted[0]!.options).toEqual({ onConflict: "user_id,public_key" });
-    // No read, no separate insert, no update: the upsert is the only write.
+    expect(upserted[0]!.options).toEqual({ onConflict: "user_id,public_key", ignoreDuplicates: true });
+    // No read and no separate insert: the upsert is the only insert (the update after it only bumps).
     expect(otherCalls).toEqual([]);
   });
 
