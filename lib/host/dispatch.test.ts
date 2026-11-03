@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "../cloud-commands";
 import type { Card } from "../types";
 import { takeClient } from "../turn-client";
-import { asAnswer, cardKinds, dispatcher, NO_LISTS, type CardRules } from "./dispatch";
+import { asAnswer, cardKinds, dispatcher, NO_LISTS, NO_READS, type CardRules } from "./dispatch";
 
 const cmd = (kind: string, payload: unknown) => ({ id: "c1", kind, folder: "/dev/app", payload }) as CloudCommandRow;
 const card = { id: "k1", cwd: "/dev/app", pending: { id: "p1", readScope: { directory: "/data" } } } as unknown as Card;
@@ -241,5 +241,29 @@ describe("a verb on the host itself", () => {
     await expect(cardKinds(rules({ hostVerb })).host(put({ allowedFolders: ["/"] }))).rejects.toThrow(/can't change allowedFolders/);
     expect(hostVerb).not.toHaveBeenCalled();
     await expect(cardKinds(rules()).host(put({ maxThreads: 2 }))).rejects.toThrow("This host takes its settings only from its own window.");
+  });
+});
+
+describe("reads from the network", () => {
+  it("answers card.list and a thread read through the host's own rules, with the value in the result and no sync after", async () => {
+    const after = vi.fn();
+    const cards = vi.fn(() => Promise.resolve({ cards: [] }));
+    const threads = vi.fn<NonNullable<CardRules["threads"]>>(() => Promise.resolve({ matches: [] }));
+    const r = rules({ cards, threads, after });
+    expect(await cardKinds(r).host(cmd("host", { verb: "card.list", args: { id: "k1" } }))).toEqual({ cardId: "", result: { ok: true, cardId: "", value: { cards: [] } } });
+    expect(await cardKinds(r).host(cmd("host", { verb: "thread.search", args: { id: "k1", q: "x" } }))).toEqual({ cardId: "k1", result: { ok: true, cardId: "k1", value: { matches: [] } } });
+    expect(threads).toHaveBeenCalledWith("thread.search", { id: "k1", q: "x" });
+    expect(r.card).toHaveBeenCalledOnce();
+    expect(r.verb).not.toHaveBeenCalled();
+    expect(after).not.toHaveBeenCalled();
+    await cardKinds(r).host(cmd("host", { verb: "dev.status", args: { id: "k1" } }));
+    expect(after).not.toHaveBeenCalled();
+  });
+
+  it("refuses both on a host that doesn't answer them (a Mac)", async () => {
+    const r = rules();
+    await expect(cardKinds(r).host(cmd("host", { verb: "card.list", args: {} }))).rejects.toThrow(NO_READS);
+    await expect(cardKinds(r).host(cmd("host", { verb: "thread.page", args: { id: "k1" } }))).rejects.toThrow(NO_READS);
+    expect(r.verb).not.toHaveBeenCalled();
   });
 });

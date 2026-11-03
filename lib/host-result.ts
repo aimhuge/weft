@@ -9,8 +9,8 @@ import type { HostResult } from "./host-command";
 // What fits in the row beside the rest of the result, with room to spare under the 4 KB check.
 export const INLINE_MAX = 3_000;
 
-// The verbs whose reply is the point, not a side effect.
-export const carriesValue = (verb: HostVerb) => verb.startsWith("files.");
+// The verbs whose reply is the point, not a side effect: the editor's, a thread's reads and the host's card list.
+export const carriesValue = (verb: HostVerb) => verb.startsWith("files.") || verb.startsWith("thread.") || verb === "card.list";
 
 // Puts a value's JSON in the blob store, answering its sha (lib/blob-store.ts uploadJson, through the worker's route).
 export type Carry = (json: string) => Promise<string>;
