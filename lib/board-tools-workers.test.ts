@@ -19,7 +19,6 @@ vi.mock("./worker-pane", async (load) => ({ ...(await load<typeof import("./work
 
 const { capturedTool, fakeActions, reset, textOf } = await import("./board-tools.harness");
 const { boardMcpServer, weftMcpServer } = await import("./board-tools");
-const { WORKER_AGENT_REFUSED } = await import("./board-tools-hosts");
 const { workerProjectPath } = await import("./worker-project");
 
 const APP = workerProjectPath("w1", "app");
@@ -128,10 +127,10 @@ describe("a thread's create_card on this Mac", () => {
     expect(actions.start).not.toHaveBeenCalled();
   });
 
-  it("refuses an agent for a worker card", async () => {
+  it("refuses an agent for a worker card that isn't its project's default", async () => {
     const r = await run("create_card", { prompt: "Write", folder: APP, agent: "copywriter" });
     expect(r.isError).toBe(true);
-    expect(textOf(r)).toBe(WORKER_AGENT_REFUSED);
+    expect(textOf(r)).toMatch(/starts new threads as Builder \(builder\).*signed approval/);
     expect(state.reach.start).not.toHaveBeenCalled();
   });
 

@@ -7,6 +7,15 @@ import type { Card, ThreadItem } from "./types";
 // The board tools on this Mac over every host (lib/board-tools-hosts.ts): this Mac's store is a fake, the workers are a
 // fake WorkerReach (lib/board-tools.harness.ts fakeReach).
 const store = vi.hoisted(() => ({ cards: new Map<string, Card>(), threads: new Map<string, ThreadItem[]>() }));
+// Each project's default agent on this Mac (Settings → Agents), by board path.
+const defaults = vi.hoisted(() => {
+  const projects: Record<string, string> = {};
+  return { projects };
+});
+vi.mock("./agent-store", async () => {
+  const { BUILT_IN_AGENTS } = await import("./agents");
+  return { listAgents: () => BUILT_IN_AGENTS, projectAgent: (cwd: string) => defaults.projects[cwd] };
+});
 vi.mock("./store", () => ({
   getCard: (id: string) => store.cards.get(id),
   getThread: (id: string) => store.threads.get(id) ?? [],
@@ -14,7 +23,7 @@ vi.mock("./store", () => ({
 }));
 
 const { fakeReach } = await import("./board-tools.harness");
-const { WORKER_AGENT_REFUSED, WORKER_THREAD_MAX, actOnHostCard, createWorkerCard, findHostCard, hostListText, hostThreadText, workerFolder } = await import("./board-tools-hosts");
+const { WORKER_THREAD_MAX, actOnHostCard, createWorkerCard, findHostCard, hostListText, hostThreadText, workerFolder } = await import("./board-tools-hosts");
 const { workerProjectPath } = await import("./worker-project");
 
 const APP = workerProjectPath("w1", "app");
@@ -165,7 +174,7 @@ describe("createWorkerCard", () => {
   it("starts it on the worker in default mode, with only what was given", async () => {
     const text = await createWorkerCard({ folder: APP, prompt: "Fix it", title: "T", tags: ["bug"], cli: "codex" }, reach);
     expect(reach.start).toHaveBeenCalledWith({ cwd: APP, prompt: "Fix it", title: "T", tags: ["bug"], backend: "codex", permissionMode: "default", start: true });
-    expect(text).toMatch(/^Created and started w-\d+ on m1mini \(.+\), in default mode: it asks before edits and commands\.$/);
+    expect(text).toMatch(/^Created and started w-\d+ on m1mini \(.+\), in default mode: it asks before edits and commands\. It runs as Builder \(builder\), that project's default agent\.$/);
   });
 
   it("leaves it in the worker's Backlog when asked", async () => {
@@ -173,8 +182,16 @@ describe("createWorkerCard", () => {
     expect(reach.start.mock.calls[0]?.[0]).toMatchObject({ start: false });
   });
 
-  it("refuses an agent: only Weft's own window signs one", async () => {
-    await expect(createWorkerCard({ folder: APP, prompt: "Write", agent: "copywriter" }, reach)).rejects.toThrow(WORKER_AGENT_REFUSED);
+  it("refuses an agent that isn't the project's default: only Weft's own window signs one", async () => {
+    await expect(createWorkerCard({ folder: APP, prompt: "Write", agent: "copywriter" }, reach)).rejects.toThrow(/starts new threads as Builder \(builder\).*only Weft's own window makes/);
     expect(reach.start).not.toHaveBeenCalled();
+  });
+
+  it("takes the project's default by name and sends no agent: the worker fills it from the signed setting", async () => {
+    defaults.projects[APP] = "copywriter";
+    const text = await createWorkerCard({ folder: APP, prompt: "Write", agent: "copywriter" }, reach);
+    expect(reach.start.mock.calls[0]?.[0]).not.toHaveProperty("agent");
+    expect(text).toMatch(/It runs as Copywriter \(copywriter\), that project's default agent\.$/);
+    defaults.projects = {};
   });
 });

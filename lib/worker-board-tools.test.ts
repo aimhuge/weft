@@ -8,10 +8,20 @@ import type { BoardRow } from "./worker-registry";
 // The store is a fake: this worker's own cards.
 const store = vi.hoisted(() => ({ cards: new Map<string, Card>() }));
 vi.mock("./store", () => ({ DATA_DIR: "/tmp/weft-wbt-data", getCard: (id: string) => store.cards.get(id), listCards: () => [...store.cards.values()] }));
+// The project defaults this worker's Mac signed (lib/agent-sync.ts), by worker:// path.
+const defaults = vi.hoisted(() => {
+  const projects: Record<string, string> = {};
+  return { projects };
+});
+vi.mock("./agent-store", async () => {
+  const { BUILT_IN_AGENTS } = await import("./agents");
+  return { listAgents: () => BUILT_IN_AGENTS, projectAgent: (cwd: string) => defaults.projects[cwd] };
+});
 
 const { AGENT_REFUSED, CRON_ELSEWHERE, onWorkerBoard, workerCreateCard, workerListCards } = await import("./worker-board-tools");
 const { setBoardLink } = await import("./worker-board-link");
 const { MAC_CRON_REFUSED } = await import("./worker-mac-crons");
+const { MAC_AGENT_UNKNOWN } = await import("./host-agent");
 
 let root = "";
 const rows: BoardRow[] = [];
@@ -31,6 +41,7 @@ beforeEach(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), "wbt-"));
   fs.mkdirSync(path.join(root, "weft"));
   rows.length = 0;
+  defaults.projects = {};
   store.cards.clear();
   newCard.mockClear();
   setBoardLink({ workerId: "w1", root, cards: () => Promise.resolve(rows), newCard, setLists: () => Promise.resolve(null) });
@@ -71,16 +82,33 @@ describe("workerCreateCard", () => {
 
   it("sends a card for a Mac project as new_card, carrying title, tags and start=false", async () => {
     rows.push(macRow());
-    const text = await workerCreateCard({ prompt: "Fix the Mac app", folder: "app", title: "Fix", tags: ["bug"], start: false, agent: "copywriter" }, deps());
+    const text = await workerCreateCard({ prompt: "Fix the Mac app", folder: "app", title: "Fix", tags: ["bug"], start: false }, deps());
     expect(newCard).toHaveBeenCalledWith("mac-1", "/Users/me/app", { prompt: "Fix the Mac app", title: "Fix", tags: ["bug"], start: false });
     expect(text).toMatch(/^Sent to your Mac for \/Users\/me\/app \(command cmd-1\)\. It lands in Backlog there, tagged from-worker, for the user to start/);
-    expect(text).toMatch(/agent isn't carried/);
+    expect(text).toMatch(/It gets that project's default agent there\.$/);
   });
 
-  it("sends a card for another worker as run, started", async () => {
-    const text = await workerCreateCard({ prompt: "Go", folder: "worker://w2/site" }, deps());
+  it("refuses a named agent for a Mac project before sending: the Mac's default isn't known here", async () => {
+    rows.push(macRow());
+    await expect(workerCreateCard({ prompt: "Fix", folder: "app", agent: "builder" }, deps())).rejects.toThrow(MAC_AGENT_UNKNOWN);
+    expect(newCard).not.toHaveBeenCalled();
+  });
+
+  it("sends a card for another worker as run, started, as that project's synced default agent", async () => {
+    defaults.projects["worker://w2/site"] = "copywriter";
+    const text = await workerCreateCard({ prompt: "Go", folder: "worker://w2/site", agent: "Copywriter" }, deps());
     expect(newCard).toHaveBeenCalledWith("worker:w2", "site", { prompt: "Go" });
     expect(text).toMatch(/It starts there once that worker takes it, in default mode/);
+    expect(text).toMatch(/It runs as Copywriter \(copywriter\), that project's default agent\.$/);
+  });
+
+  it("says a start=false card for another worker lands in its Backlog", async () => {
+    expect(await workerCreateCard({ prompt: "Later", folder: "worker://w2/site", start: false }, deps())).toMatch(/It lands in Backlog there once that worker takes it/);
+  });
+
+  it("refuses an agent for another worker that isn't its project's default", async () => {
+    await expect(workerCreateCard({ prompt: "Go", folder: "worker://w2/site", agent: "copywriter" }, deps())).rejects.toThrow(/starts new threads as Builder \(builder\).*signed approval/);
+    expect(newCard).not.toHaveBeenCalled();
   });
 });
 
