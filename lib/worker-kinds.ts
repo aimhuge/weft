@@ -48,6 +48,9 @@ export interface KindContext {
 
 const UPDATING = "This worker is updating itself. Try again in a moment.";
 
+// Where a LAN offer's sealed answer goes (the port's reply) instead of the board's Broadcast topic.
+type LineAnswer = NonNullable<Parameters<NonNullable<DaemonDeps["line"]>>[2]>;
+
 // A verb that came over a session line, with the bookkeeping the inbox gives a row: refused while the worker updates
 // itself, and logged with its card and outcome.
 async function lineVerb(run: () => Promise<HostDone>, payload: unknown, ctx: KindContext): Promise<HostDone> {
@@ -106,7 +109,9 @@ export async function listVerb(engine: Pick<DaemonDeps["engine"], "host">, verb:
   return card.id;
 }
 
-export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
+// The kind table, and the line kind's own path for an offer that came over the LAN (lib/worker-lan.ts): the same `line`
+// with the sealed answer handed to `answerOn` instead of the board's Broadcast topic.
+export function workerTable(deps: DaemonDeps, ctx: KindContext) {
   const { engine, publisher } = deps;
   const github = (read: () => Promise<GithubStatus | null>) => publishGithub(deps, ctx.log, read);
 
@@ -152,7 +157,22 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
   }
 
   const cards = createCardCommands(engine, create, (verb, args) => listVerb(engine, verb, args), deps.owner, deps.widen);
-  return {
+
+  // A session line's sealed offer (lib/host-line.ts): its verbs run through this table's own `host`, so they pass
+  // exactly the checks a `host` command does (CardRules, remoteRefusal).
+  async function openLine(command: CloudCommandRow, answerOn?: LineAnswer): Promise<null> {
+    if (!deps.line) throw new Error("This worker doesn't open lines yet. Update it with weft-worker update.");
+    const raw: unknown = command.payload;
+    const sealed = sealedOf(raw && typeof raw === "object" ? (raw as { sealed?: unknown }).sealed : null);
+    if (!sealed) throw new Error("That line carries no sealed offer.");
+    // Its verbs carry the line command's sender, over the line (lib/turn-client.ts: a hint for the thread, never a check).
+    const client = { ...commandClient(raw), via: "line" };
+    const run = (payload: unknown) => lineVerb(() => cards.host({ ...command, kind: "host", payload: { ...(payload as Record<string, unknown>), client } } as unknown as CloudCommandRow), payload, ctx);
+    await (answerOn ? deps.line(sealed, run, answerOn) : deps.line(sealed, run));
+    return null;
+  }
+
+  const kinds: KindTable = {
     async login(command) {
       await deps.login(sealedToken(command));
       return null;
@@ -178,21 +198,12 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
       return { cardId: "", result: { ok: true, cardId: "", value: { generation, ...(sig ? { sig } : {}) } } };
     },
     ...cards,
-    // A session line's sealed offer (lib/host-line.ts): its verbs run through this table's own `host`, so they pass
-    // exactly the checks a `host` command does (CardRules, remoteRefusal).
-    async line(command) {
-      if (!deps.line) throw new Error("This worker doesn't open lines yet. Update it with weft-worker update.");
-      const raw: unknown = command.payload;
-      const sealed = sealedOf(raw && typeof raw === "object" ? (raw as { sealed?: unknown }).sealed : null);
-      if (!sealed) throw new Error("That line carries no sealed offer.");
-      // Its verbs carry the line command's sender, over the line (lib/turn-client.ts: a hint for the thread, never a check).
-      const client = { ...commandClient(raw), via: "line" };
-      await deps.line(sealed, (payload) => lineVerb(() => cards.host({ ...command, kind: "host", payload: { ...(payload as Record<string, unknown>), client } } as unknown as CloudCommandRow), payload, ctx));
-      return null;
-    },
+    line: (command) => openLine(command),
     // The Mac's sealed answer to a card's mcp__secrets__run (lib/worker-secret-asks.ts); an old wiring without it can't open one.
     ...(deps.secretUse ? { secret_use: deps.secretUse } : {}),
   };
+  return { kinds, dispatch: dispatcher(kinds, UNKNOWN_KIND), openLine };
 }
 
-export const workerDispatch = (deps: DaemonDeps, ctx: KindContext) => dispatcher(workerKinds(deps, ctx), UNKNOWN_KIND);
+export const workerKinds = (deps: DaemonDeps, ctx: KindContext): KindTable => workerTable(deps, ctx).kinds;
+export const workerDispatch = (deps: DaemonDeps, ctx: KindContext) => workerTable(deps, ctx).dispatch;

@@ -87,6 +87,15 @@ describe("opening a line", () => {
     expect(peer.close).toHaveBeenCalledTimes(1);
   });
 
+  it("hands the answer to the caller's answerOn instead of the topic, for an offer that came over the LAN", async () => {
+    const { lines } = setup();
+    const lan = vi.fn<(topic: string, sealed: SealedAnswer) => Promise<void>>(() => Promise.resolve());
+    await lines.open(sealed, run, lan);
+    expect(answers).toEqual([]);
+    expect(lan.mock.calls[0]![0]).toBe("worker-line:t");
+    await expect(openAnswer(key, lan.mock.calls[0]![1])).resolves.toBe("answer");
+  });
+
   it("refuses an offer that isn't whole", async () => {
     const { lines } = setup({ unseal: () => JSON.stringify({ sdp: "v=0" }) });
     await expect(lines.open(sealed, run)).rejects.toThrow("incomplete");
