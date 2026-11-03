@@ -31,6 +31,21 @@ describe("startWorkerLimits", () => {
     expect(setLimits).toHaveBeenCalledTimes(3);
   });
 
+  it("publishes the models at their cap with the history, and again when they change", async () => {
+    const capped = [{ model: "claude-opus-5-5", at: 60_000, resetsAt: 1_800_000_000_000 }];
+    const models = vi.fn(() => capped);
+    const setLimits = vi.fn(() => Promise.resolve());
+    const limits = startWorkerLimits({ poll: vi.fn(), read: () => [], models, setLimits, log: vi.fn(), firstMs: 1e9, everyMs: 1e9 });
+    expect(await limits.publish()).toBe(true);
+    expect(setLimits).toHaveBeenCalledWith({ v: 1, s: [], m: [["claude-opus-5-5", 1, 1_800_000_000]] });
+    expect(await limits.publish()).toBe(false);
+    models.mockReturnValue([]);
+    expect(await limits.publish()).toBe(false);
+    models.mockReturnValue([{ ...capped[0]!, resetsAt: 1_800_000_060_000 }]);
+    expect(await limits.publish()).toBe(true);
+    limits.stop();
+  });
+
   it("publishes nothing with no history, and logs a failure once, trying again next time", async () => {
     const log = vi.fn();
     const setLimits = vi.fn(() => Promise.reject(new Error("no column")));

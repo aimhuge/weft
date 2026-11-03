@@ -98,11 +98,14 @@ caller falls back to "wait an hour" rather than pretending to know.
 - `lib/new-card.ts` — `startCard(card)` gates and schedules (see below).
 - `lib/reply-mode.ts` — `ReplyBoxState` gained `limitResetAt`; `replyBoxMode` prefers it over the
   card's own 5-hour window.
-- `lib/use-plan-limits.ts` — `useLimitedModels()` (and the `LimitedModel` type) for the model
-  pickers; the same route ships the models that have hit their own cap.
+- `lib/use-plan-limits.ts` — `useLimitedModels(cwd)` (and the `LimitedModel` type) for the model
+  pickers; the same route ships the models that have hit their own cap. A worker card's project
+  (`hostFor(cwd).workerId`, lib/project-host.ts) reads `/api/limits/plans?worker=<id>` instead: the
+  worker's own caps, one copy per host.
 - `app/api/cards/route.ts` — `POST` returns the `start` answer: `{ started, at }`.
 - `app/api/limits/plans/route.ts` — `GET` returns `{ plans, models }`: one entry per CLI that has
-  reported, carrying that CLI's own newest window readings, and the models at their cap.
+  reported, carrying that CLI's own newest window readings, and the models at their cap. With
+  `?worker=<id>`, that worker's, from its `cloud_workers.limits` row (`workerLimits`, lib/worker-limits-read.ts).
 - `lib/plan-pools.ts` — which CLIs read one plan's counter: `poolOf()`, `samePool()`, `poolKey()`.
   Every CLI has its own plan, so each is its own pool.
 - `components/NewCardDialog.tsx`, `components/NewCardDialogFooter.tsx` — the button's label and the

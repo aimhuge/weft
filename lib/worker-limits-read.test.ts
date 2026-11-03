@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 vi.mock("./account", () => ({ accountClient: () => { throw new Error("no default client in tests"); } }));
-const { workerLimitSamples } = await import("./worker-limits-read");
+const { workerLimits, workerLimitSamples } = await import("./worker-limits-read");
 
 function client(answer: { data: unknown; error: unknown }) {
   const eq = vi.fn(() => ({ maybeSingle: () => Promise.resolve(answer) }));
@@ -20,5 +20,21 @@ describe("workerLimitSamples", () => {
     expect(await workerLimitSamples("w1", client({ data: null, error: null }).c)).toEqual([]);
     expect(await workerLimitSamples("w1", client({ data: null, error: { message: "column limits does not exist" } }).c)).toEqual([]);
     expect(await workerLimitSamples("w1", client({ data: { limits: null }, error: null }).c)).toEqual([]);
+  });
+});
+
+describe("workerLimits", () => {
+  it("reads the history and the models still at their cap from one read of the row", async () => {
+    const limits = { v: 1, s: [[1, "claude", 7, 30, 0]], m: [["claude-opus-5-5", 1, 2000], ["claude-sonnet-5", 1, 1]] };
+    const { c, eq } = client({ data: { limits }, error: null });
+    expect(await workerLimits("w1", c, 1_500_000)).toEqual({
+      samples: [{ at: 60_000, backend: "claude", kind: "seven_day", used: 30 }],
+      models: [{ model: "claude-opus-5-5", at: 60_000, resetsAt: 2_000_000 }],
+    });
+    expect(eq).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads as nothing when the row can't be read", async () => {
+    expect(await workerLimits("w1", client({ data: null, error: { message: "nope" } }).c)).toEqual({ samples: [], models: [] });
   });
 });
