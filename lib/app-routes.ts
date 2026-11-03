@@ -19,6 +19,7 @@ const RESERVED: ReadonlySet<string> = new Set<string>([
   "billing",
   "checkout",
   "copilot",
+  "dictate",
   "download",
   "faq",
   "home",

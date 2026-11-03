@@ -37,6 +37,12 @@ vi.mock("./automations", async (importOriginal) => ({
 vi.mock("node:child_process", async (importOriginal) =>
   (await import("./runner.harness")).childProcessMock(h, await importOriginal<typeof import("node:child_process")>()),
 );
+// The harness's cards live under os.tmpdir(), and file calls in the temp dirs are allowed with no prompt
+// (scratchDirs, 2026-11-02), so the permission tests here keep only the show folder free to still reach a prompt.
+vi.mock("./show-dir", async (importOriginal) => {
+  const real = await importOriginal<typeof import("./show-dir")>();
+  return { ...real, scratchDirs: () => [real.SHOW_DIR] };
+});
 
 type Runner = typeof import("./runner");
 let runner: Runner;
