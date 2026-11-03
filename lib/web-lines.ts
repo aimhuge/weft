@@ -5,14 +5,17 @@
 // Mac server to do it. It reads the worker's published key and inserts the `line` row with the visitor's own session
 // (@weft/client lineOpener), so RLS lets only the worker's owner open one (private.owns_device), in exactly the row's
 // shape (supabase/migrations/20261103150000_line_row_shape.sql). The answer comes back on the board's own Broadcast
-// topic as on the desktop (lib/line-answer.ts). No TURN here yet: a tab can't mint Cloudflare credentials (/api/rtc-ice
-// is this Mac's), so a line forms where STUN gets through and the board stays on the relay where it doesn't.
+// topic as on the desktop (lib/line-answer.ts). Its ICE servers come from weft.zip's own route (app/api/web-board/ice,
+// lib/web-ice.ts), which mints Cloudflare TURN credentials as the desktop's /api/rtc-ice does, so a line forms behind a
+// network that blocks a direct route too; STUN alone when that route fails, and the board stays on the relay where a
+// line can't form. The live screen rides this line as a track (lib/use-line-screen.ts), so it relays through TURN too.
 //
 // What a line from here can do is what a row from here can do: each verb passes the worker's `host` checks
 // (remoteRefusal, CardRules), the board never sends a widening down it (lib/cloud-host-acts.ts signs those on
 // sign.weft.zip and sends them as rows), and it never opens the terminal channel, which needs the Mac's Touch ID key.
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { lineOpener, ownTimeZone, STUN, withClientHint, type ClientHint, type LineOffer, type LineRow, type SealCrypto, type SubtleLike } from "@weft/client";
+import { lineOpener, ownTimeZone, STUN, withClientHint, type ClientHint, type IceServer, type LineOffer, type LineRow, type SealCrypto, type SubtleLike } from "@weft/client";
+import { iceServers } from "./host-line-protocol";
 import { lineToken, listenForAnswer } from "./line-answer";
 import { createSessionLine, type LineDeps } from "./session-line";
 import type { MakeLine } from "./session-lines";
@@ -30,6 +33,21 @@ export async function webSealCrypto(): Promise<SealCrypto> {
 }
 
 type Db = Pick<SupabaseClient, "from">;
+
+export const WEB_ICE_URL = "/api/web-board/ice";
+const STUN_ONLY: IceServer[] = [{ urls: STUN }];
+
+// The line's ICE servers, with the visitor's session cookie: TURN when weft.zip holds a key and this visitor owns a
+// worker, else STUN alone, so a refused or failed ask still opens a line wherever a direct route exists.
+export async function webIce(fetcher: typeof fetch = fetch): Promise<IceServer[]> {
+  try {
+    const res = await fetcher(WEB_ICE_URL, { cache: "no-store", credentials: "same-origin" });
+    const servers = res.ok ? iceServers(((await res.json()) as { iceServers?: unknown }).iceServers) : [];
+    return servers.length ? servers : STUN_ONLY;
+  } catch {
+    return STUN_ONLY;
+  }
+}
 
 async function publicKeyOf(client: Db, workerId: string): Promise<string | null> {
   const { data } = await client.from("cloud_workers").select("public_key").eq("id", workerId).maybeSingle<{ public_key: string | null }>();
@@ -51,7 +69,7 @@ export function webLineOffer(client: Db, orgId: string, crypto: () => Promise<Se
 export function webLines(client: Db, orgId: string, over: Partial<LineDeps> = {}): MakeLine {
   const deps: LineDeps = {
     peer: (servers) => new RTCPeerConnection({ iceServers: servers }),
-    ice: () => Promise.resolve([{ urls: STUN }]),
+    ice: () => webIce(),
     offer: webLineOffer(client, orgId),
     listen: listenForAnswer,
     token: lineToken,

@@ -694,11 +694,18 @@ board ─ sealed offer, elevated input command ─▶ daemon ─ encrypted answe
   (`20261103150000_line_row_shape.sql`). Over it go the card's verbs (`lib/cloud-host-acts.ts`, never a
   widening or pasted files), its thread's events beside Realtime (`lib/line-thread.ts`) and the watched screen as an H.264
   track. The phone gets the same opener with its own RTCPeerConnection (`openLine`, `packages/weft-client/src/line-open.ts`).
-- **Not yet:** the phone app wiring the opener; TURN for weft.zip (a tab can't mint Cloudflare credentials, `/api/rtc-ice` is
-  this Mac's), so a web line forms where STUN gets through and the board stays on the relay and JPEGs where it doesn't; a
-  screen line of its own on weft.zip (it rides the session line or stays on JPEGs). The screen's own line has no TURN; on a
-  network that blocks direct connections it rides the session line, which takes TURN when this Mac holds a Cloudflare TURN
-  key (`lib/rtc-ice.ts`), or stays on JPEGs.
+- **TURN on weft.zip.** A web line asks weft.zip's own `GET /api/web-board/ice` (`lib/web-ice.ts`, `webIce` in
+  `lib/web-lines.ts`) for its ICE servers, which mints Cloudflare TURN credentials with the desktop's `mintIce`
+  (`lib/rtc-ice.ts`; `CLOUDFLARE_TURN_KEY_ID` and `CLOUDFLARE_TURN_KEY_API_TOKEN` on the deployment). Only a signed-in
+  visitor (cookie, or the phone's bearer) who owns an unrevoked worker gets them, at most 12 asks a minute per account
+  (per instance), never cached (`no-store`); the key never leaves the server, the browser gets the minted username and
+  credential (4 h). The servers ride in the sealed offer, so the worker relays through the same allocation. Without a key
+  on the deployment, a refusal or any failure, the line opens on STUN alone, and the board stays on the relay where that
+  can't connect. The live screen rides the session line as a track, so it relays too.
+- **Not yet:** the phone app wiring the opener (it can call `/api/web-board/ice` with its bearer); a screen line of its own
+  on weft.zip (the web can't seal the screen's own `input` offer, so it rides the session line or stays on JPEGs). The
+  screen's own line on the desktop is STUN only; on a network that blocks direct connections it rides the session line,
+  which takes TURN, or stays on JPEGs.
 - **Android** (`lib/adb-screen.ts`, built 2026-11-03, not yet run on a device). The emulator's video is `adb exec-out
   screenrecord --output-format=h264 --bit-rate=<rate> --time-limit=180 -`: raw Annex B on stdout, cut into access units by
   `lib/h264-units.ts` (a new frame starts at an AUD, SEI, SPS or PPS after a slice, or at a slice whose first_mb_in_slice is

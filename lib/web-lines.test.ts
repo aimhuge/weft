@@ -5,9 +5,10 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { LINE_PURPOSE, STUN, type LineOffer } from "@weft/client";
 import { open, newSealKeys, type Sealed } from "./worker-seal";
 import { FakePc } from "./session-line.harness";
-import { webClientHint, webLineOffer, webLines, webSealCrypto } from "./web-lines";
+import { WEB_ICE_URL, webClientHint, webIce, webLineOffer, webLines, webSealCrypto } from "./web-lines";
 
 const WORKER = "1b4e28ba-2fa1-11d2-883f-0016d3cca427";
+const TURN = { urls: ["turn:turn.cloudflare.com:3478?transport=udp"], username: "u", credential: "c" };
 const offer: LineOffer = { sdp: "v=0", key: "k", topic: "worker-line:ab", ice: [{ urls: STUN }] };
 
 type Row = { org_id: string; kind: string; target_device: string; payload: { sealed: Sealed; client?: unknown } };
@@ -52,8 +53,10 @@ describe("webLineOffer", () => {
 });
 
 describe("webLines", () => {
-  it("makes the desktop's own session line over the browser's RTCPeerConnection, STUN only, sealing here", async () => {
+  it("makes the desktop's own session line over the browser's RTCPeerConnection, with weft.zip's TURN, sealing here", async () => {
     const keys = newSealKeys();
+    const asked = vi.fn((url: string, init: RequestInit) => Promise.resolve(Response.json({ iceServers: [TURN], turn: true, url, init })));
+    vi.stubGlobal("fetch", asked);
     const { client, rows } = fakeClient(keys.publicKey);
     const made: { servers: unknown }[] = [];
     vi.stubGlobal(
@@ -67,12 +70,30 @@ describe("webLines", () => {
     );
     const line = webLines(client, "org-1", { listen: () => () => {} })(WORKER);
     await vi.waitFor(() => expect(rows).toHaveLength(1));
-    expect(made).toEqual([{ servers: [{ urls: STUN }] }]);
+    expect(asked).toHaveBeenCalledWith(WEB_ICE_URL, { cache: "no-store", credentials: "same-origin" });
+    expect(made).toEqual([{ servers: [TURN] }]);
+    // The worker relays through the same allocation: the minted servers ride in the sealed offer.
     const sealed = JSON.parse(open(keys, rows[0]!.payload.sealed, LINE_PURPOSE)) as LineOffer;
-    expect(sealed.ice).toEqual([{ urls: STUN }]);
+    expect(sealed.ice).toEqual([TURN]);
     expect(sealed.topic).toMatch(/^worker-line:[0-9a-f]{32}$/);
     expect(line.route()).toEqual({ kind: "connecting" });
     line.close();
+  });
+});
+
+describe("webIce", () => {
+  const answer = (body: unknown, status = 200) => () => Promise.resolve(new Response(JSON.stringify(body), { status }));
+
+  it("takes the servers weft.zip minted", async () => {
+    await expect(webIce(answer({ iceServers: [TURN], turn: true }) as typeof fetch)).resolves.toEqual([TURN]);
+  });
+
+  it("falls back to STUN when the route refuses, answers nothing usable or can't be reached", async () => {
+    const stun = [{ urls: STUN }];
+    await expect(webIce(answer({ error: "no" }, 403) as typeof fetch)).resolves.toEqual(stun);
+    await expect(webIce(answer({ iceServers: [{ nope: 1 }] }) as typeof fetch)).resolves.toEqual(stun);
+    await expect(webIce(answer({}) as typeof fetch)).resolves.toEqual(stun);
+    await expect(webIce(() => Promise.reject(new Error("offline")))).resolves.toEqual(stun);
   });
 });
 
