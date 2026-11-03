@@ -33,6 +33,8 @@ export interface FakeOptions {
   uploadError?: { message: string } | null;
   // The worker's published key, for a sealed offer (a cloud_workers maybeSingle).
   publicKey?: string | null;
+  // worker_key_grants rows, newest first: the versions this Mac granted the worker (lib/worker-board-open.ts workerBlobSeal).
+  grants?: unknown[] | null;
 }
 
 // The rows a table answers with. `columns` is the select being read, so one table can answer each query on
@@ -65,6 +67,8 @@ function answer(table: string, columns: string, opts: FakeOptions): { data: unkn
       return rows(opts.toolOutput ?? null, err(opts.toolError));
     case "cloud_commands":
       return rows(null, err(opts.insertError));
+    case "worker_key_grants":
+      return rows(opts.grants ?? null);
     default:
       return rows(null);
   }
