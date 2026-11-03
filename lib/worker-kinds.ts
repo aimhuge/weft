@@ -19,6 +19,7 @@ import { sentByWorker, WORKER_CARD_MODE } from "./worker-origin";
 import { workerProjectPath } from "./worker-project";
 import { sealedOf, type Sealed } from "./worker-seal";
 import type { Card, PermissionMode } from "./types";
+import { workerReads } from "./worker-reads";
 import { workerWidenCheck } from "./worker-widen";
 import { commandClient } from "./turn-client";
 
@@ -167,7 +168,8 @@ export function workerKinds(deps: DaemonDeps, ctx: KindContext): KindTable {
     return published(command, await engine.start({ ...args, cwd, permissionMode, ...(agent ? { agent } : {}) }));
   }
 
-  const cards = createCardCommands(engine, create, (verb, args) => listVerb(engine, verb, args), deps.owner, deps.widen);
+  const lists = (verb: ListVerb, args: HostArgs) => listVerb(engine, verb, args);
+  const cards = createCardCommands(engine, { create, lists, owner: deps.owner, widen: deps.widen, reads: workerReads(engine, publisher) });
   return {
     async login(command) {
       await deps.login(sealedToken(command));

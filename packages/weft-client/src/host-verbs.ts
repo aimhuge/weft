@@ -43,6 +43,14 @@ export const HOST_VERBS = [
   // T5: the Services drawer's Restart and Log on a worker's dev server.
   "dev.restart",
   "dev.log",
+  // H1: the review tour's dev server (its plan's command, and whether it answers).
+  "dev.start",
+  "dev.status",
+  // H1: reads. card.list is the host's cards (host-level: it names no card); thread.* read one card's thread.
+  "card.list",
+  "thread.page",
+  "thread.search",
+  "thread.tool",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */
@@ -55,11 +63,12 @@ export function isHostVerb(verb: string): verb is HostVerb {
 }
 
 // The verbs that act on the host itself rather than a card: their row names no card, and a host runs them only when
-// its CardRules say it takes them from the network (a worker does; a Mac's settings stay in its own window).
-export type HostLevelVerb = "settings.get" | "settings.put";
+// its CardRules say it takes them from the network (a worker does; a Mac's settings stay in its own window, and its
+// cards reach a board through its own sync). card.list reads the host's cards rather than one of them.
+export type HostLevelVerb = "settings.get" | "settings.put" | "card.list";
 /** The verbs that act on a card: every one but the host-level ones. */
 export type CardVerb = Exclude<HostVerb, HostLevelVerb>;
-const HOST_LEVEL: ReadonlySet<string> = new Set<HostLevelVerb>(["settings.get", "settings.put"]);
+const HOST_LEVEL: ReadonlySet<string> = new Set<HostLevelVerb>(["settings.get", "settings.put", "card.list"]);
 
 export function isHostLevelVerb(verb: string): boolean {
   return HOST_LEVEL.has(verb);
