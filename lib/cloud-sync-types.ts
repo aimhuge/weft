@@ -4,12 +4,8 @@
 // (settings `syncFolders`) and off by default; the Mac running a card owns it, other devices only read.
 import type { Card, ThreadItem } from "./types";
 
-// A tool result longer than this is left out of the thread item (it gets `resultBytes` instead) and fetched
-// when the row is opened: locally from /api/cards/[id]/thread/tool/[toolId], remotely from cloud_tool_outputs.
-export const TOOL_RESULT_INLINE_MAX = 2048;
-
-// How many items the thread route sends per page, newest first.
-export const THREAD_PAGE_SIZE = 50;
+// The inline cap on a tool result and the thread route's page size live with the paging, in @weft/client.
+export { TOOL_RESULT_INLINE_MAX, THREAD_PAGE_SIZE } from "@weft/client";
 
 // Images, attachments and ~/.weft/show pages, stored once each by content.
 export const BLOB_BUCKET = "weft-blobs";

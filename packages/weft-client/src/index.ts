@@ -61,3 +61,15 @@ export {
   type WidenFields,
   type WidenVerb,
 } from "./widen";
+export {
+  applyThreadEvent,
+  findToolResult,
+  mergeOlderPage,
+  pageThread,
+  trimToolResult,
+  THREAD_PAGE_SIZE,
+  TOOL_RESULT_INLINE_MAX,
+  type PageOptions,
+  type ThreadPage,
+} from "./thread-page";
+export { cutAt, pageFromItemRows, pageUpdateWith, type CloudItemChange, type CloudItemRow, type IsItem, type OpenItem } from "./cloud-thread-page";
