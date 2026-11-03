@@ -8,6 +8,10 @@ import { workerKinds } from "./worker-kinds";
 import { nonceBook } from "./widen-nonces";
 import type { WorkerWiden } from "./worker-widen";
 
+// The defaults your Mac synced (lib/agent-sync.ts), by worker project.
+const defaults = vi.hoisted(() => new Map<string, string>());
+vi.mock("./agent-store", () => ({ projectAgent: (cwd: string) => defaults.get(cwd) }));
+
 const NOW = 3_000_000;
 const auth = (nonce: string) => ({ kind: "ed25519", device: "mac", issuedAt: NOW, nonce, sig: "c2ln" });
 
@@ -51,6 +55,24 @@ describe("a worker's signed widening", () => {
     await t.kinds.run!(run({}));
     expect(t.eng.start).toHaveBeenLastCalledWith(expect.not.objectContaining({ agent: expect.anything() as unknown }));
     await expect(setup(false).kinds.run!(run({ agent: "builder", widen: auth("abcdefghijklmnop") }))).rejects.toThrow(/needs your approval/);
+  });
+
+  it("starts a thread that names no agent as its project's default from your Mac, one that names one as that", async () => {
+    defaults.set("worker://w1/app", "a-reviewer");
+    const t = setup();
+    await t.kinds.run!(command({ kind: "run", folder: "app", payload: { prompt: "go" } as never }));
+    expect(t.eng.start).toHaveBeenLastCalledWith(expect.objectContaining({ agent: "a-reviewer", cwd: "/w/app" }));
+    await t.kinds.run!(command({ kind: "run", folder: "app", payload: { prompt: "go", agent: "builder", widen: auth("abcdefghijklmnop") } as never }));
+    expect(t.eng.start).toHaveBeenLastCalledWith(expect.objectContaining({ agent: "builder" }));
+    await t.kinds.host!(command({ kind: "host", folder: "app", payload: { verb: "card.create", args: { id: "new-1", prompt: "go" } } as never }));
+    expect(t.eng.start).toHaveBeenLastCalledWith(expect.objectContaining({ agent: "a-reviewer", cwd: "/w/app" }));
+    await t.kinds.host!(command({ kind: "host", folder: "site", payload: { verb: "card.create", args: { id: "new-2", prompt: "go" } } as never }));
+    expect(t.eng.start).toHaveBeenLastCalledWith(expect.not.objectContaining({ agent: expect.anything() as unknown }));
+    // A worker that trusts no Mac has no synced defaults.
+    const bare = setup(false);
+    await bare.kinds.run!(command({ kind: "run", folder: "app", payload: { prompt: "go" } as never }));
+    expect(bare.eng.start).toHaveBeenLastCalledWith(expect.not.objectContaining({ agent: expect.anything() as unknown }));
+    defaults.clear();
   });
 
   it("pins endorsed passkeys through its signers, and says when it can't", async () => {

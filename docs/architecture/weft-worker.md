@@ -787,6 +787,12 @@ Backlog) to `cloud_worker_projects` through `worker_put_project` (`lib/worker-pr
 `files.*` verbs, putting a result over the row's 4 KB in the blob store through `Engine.carry`
 ([project-hosts.md](project-hosts.md#project-reads-and-the-editor-h4-as-built)).
 
+A worker card's thread header has the ⏰ and the ✦ skill set chip too: the ⏰ makes a cron on the worker with
+`cron.create` (args.id the card; the worker narrows its mode, crons.md#on-a-weft-worker), and the chip lists the worker's
+own skills and sets one with `card.update { skill }` (skills.md). Your agents from Settings → Agents, and each worker
+project's default agent, sync to the worker with your signed account settings (agents.md#on-a-weft-worker), so an agent
+you made exists there, and a new thread there that names none starts as the project's default.
+
 The one-sentence version: **Weft already has a remote control plane, but not a remote compute plane.** The web
 board already commands a Mac across the network through `cloud_commands`; the CLI, though, always spawns on the
 board's own machine. A worker is a second implementation of the executor behind that same command bus. The board,

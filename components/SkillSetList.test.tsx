@@ -89,6 +89,14 @@ describe("SkillSetList", () => {
     expect(registry.search).toHaveBeenLastCalledWith("arrivalzzz", "/dev/app", expect.anything());
   });
 
+  it("filters only the host's own skills for a card on another host: no skills.sh search, no scans", async () => {
+    render(<SkillSetList view={view} forCard onToggle={vi.fn()} cwd="worker://w1/app" search={false} />);
+    await userEvent.type(screen.getByLabelText("Filter skills or search skills.sh"), "zzz");
+    expect(screen.getByText(/None of your skills match/)).toBeInTheDocument();
+    expect(registry.search).not.toHaveBeenCalled();
+    expect(registry.scans).not.toHaveBeenCalled();
+  });
+
   it("says when skills.sh can't be reached", async () => {
     registry.search.mockRejectedValue(new Error("skills.sh answered 503."));
     render(<SkillSetList view={view} forCard={false} onToggle={vi.fn()} />);

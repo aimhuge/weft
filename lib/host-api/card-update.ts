@@ -1,4 +1,4 @@
-// card.update: the PATCH body of one card (title, archive, marks, read scope, mode, agent, folder, column, place),
+// card.update: the PATCH body of one card (title, archive, marks, read scope, mode, agent, skill, folder, column, place),
 // applied in that order. The validation is here, not in the route, so every host refuses what the Mac refuses.
 import { isAgent, storedAgent } from "../agents";
 import { listAgents } from "../agent-store";
@@ -78,6 +78,17 @@ async function setAgent(card: Card, value: unknown) {
   await repointCard(card, { agent }, "Stop the thread before switching its agent.", { isBusy, endSession });
 }
 
+// One skill or plugin on or off for this card alone, as the host's own skill set has it: the ✦ chip on a card whose host
+// isn't this Mac (lib/use-card-skill-set.ts). Its CLI closes when idle, so the next message starts with the new set.
+// Loaded only for that change: the skill library and its usage scan are no other field's business.
+async function setSkill(card: Card, value: unknown) {
+  const { isSkillName, setCardSkill } = await import("../skill-set-actions");
+  const { name, on } = (value && typeof value === "object" ? value : {}) as { name?: unknown; on?: unknown };
+  if (!isSkillName(name) || typeof on !== "boolean") throw new Error("That skill change names no skill.");
+  if (card.role === "copilot") throw new Error("The copilot's skills aren't set per card.");
+  await setCardSkill(card.id, name, on);
+}
+
 // Re-points a thread whose folder moved or was renamed.
 function setFolder(id: string, cwd: string | undefined) {
   if (cwd === undefined) return;
@@ -102,6 +113,7 @@ export async function updateCardVerb({ id, body }: CardUpdateArgs): Promise<{ ca
   setMarks(id, body);
   grantReadAndMode(card, body);
   if (body.agent !== undefined) await setAgent(card, body.agent);
+  if (body.skill !== undefined) await setSkill(card, body.skill);
   setFolder(id, body.cwd);
   if (body.column && body.column !== card.column) moveCard(card, body.column);
   reorder(id, body);

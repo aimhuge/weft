@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { isListVerb } from "./host-verbs";
 import { remoteRefusal } from "./host-command";
-import { BANG_CRON, listRefusal } from "./list-policy";
+import { BANG_CRON, cronCreateRefusal, listRefusal } from "./list-policy";
 
 describe("isListVerb", () => {
   it("is a host verb on a cron or a webhook", () => {
@@ -46,5 +46,28 @@ describe("listRefusal", () => {
     for (const field of ["target", "provider", "secret"]) expect(listRefusal("webhook.update", { id: "h", patch: { [field]: "x" } })).toMatch(`can't change a webhook's ${field}`);
     expect(listRefusal("webhook.update", { id: "h", patch: { events: ["a", 1] } })).toBe("That webhook's events isn't a list of names.");
     expect(listRefusal("webhook.update", { id: "h", patch: { events: "a" } })).toBe("That webhook's events isn't a list of names.");
+  });
+});
+
+describe("a cron made from a card (cron.create)", () => {
+  const ok = { id: "card-1", prompt: "tidy up", expr: "0 9 * * *" };
+
+  it("takes what the ⏰ popover sends", () => {
+    expect(cronCreateRefusal(ok)).toBeNull();
+    expect(cronCreateRefusal({ ...ok, name: "n", mode: "fork", fromMessage: "m1", enabled: false, startsAt: 1, endsAt: 2, runNow: true })).toBeNull();
+  });
+
+  it("refuses the card's own work from the row, a wrong type, no prompt or schedule, a mode that isn't one and a shell line", () => {
+    for (const field of ["cwd", "backend", "permissionMode", "agent", "model", "effort", "cardId"]) expect(cronCreateRefusal({ ...ok, [field]: "x" })).toMatch(`can't change a cron's ${field}`);
+    expect(cronCreateRefusal({ ...ok, runNow: "yes" })).toBe("That cron's runNow isn't a boolean.");
+    expect(cronCreateRefusal({ id: "card-1", expr: "0 9 * * *" })).toBe("A cron needs a prompt and a schedule.");
+    expect(cronCreateRefusal({ id: "card-1" })).toBe("That change has nothing in it.");
+    expect(cronCreateRefusal({ ...ok, mode: "shell" })).toBe("A cron's runs are fork or fresh.");
+    expect(cronCreateRefusal({ ...ok, prompt: "!rm -rf /" })).toBe(BANG_CRON);
+  });
+
+  it("isn't a list verb: its id is the card", () => {
+    expect(isListVerb("cron.create")).toBe(false);
+    expect(isListVerb("cron.update")).toBe(true);
   });
 });

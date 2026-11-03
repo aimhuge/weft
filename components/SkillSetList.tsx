@@ -16,14 +16,16 @@ interface Props {
   cwd?: string;
   // A skill from skills.sh landed in the library.
   onInstalled?: () => void;
+  // Whether a filter also searches skills.sh and offers installs here (not for a card on another host, default on).
+  search?: boolean;
 }
 
 // The rows of a skill set, grouped Weft · This project · Yours · Plugins, each with a switch. In a card's
 // ✦ menu (forCard) a row the card changed from its project's set carries a dot; a row Weft's scan flagged
 // carries a ⚠ that opens its review. A filter also searches skills.sh, below your own.
-export default function SkillSetList({ view, forCard, onToggle, cwd, onInstalled }: Props) {
+export default function SkillSetList({ view, forCard, onToggle, cwd, onInstalled, search = true }: Props) {
   const [query, setQuery] = useState("");
-  const { scans, reload } = useLibraryScans(cwd, Boolean(view));
+  const { scans, reload } = useLibraryScans(search ? cwd : undefined, Boolean(view) && search);
   if (!view) return <p className="px-3 py-3 text-[12px] text-muted">Loading skills…</p>;
   const groups = groupRows(view.rows, query);
   const review = (name: string) => void openLocalReview(cwd, name).catch((err: unknown) => console.error(err));
@@ -44,14 +46,14 @@ export default function SkillSetList({ view, forCard, onToggle, cwd, onInstalled
           </section>
         ))}
         {!groups.length && <p className="px-3 pt-3 text-[12px] text-muted">None of your skills match “{query}”.</p>}
-        <SkillSearchResults
+        {search && <SkillSearchResults
           query={query}
           cwd={cwd}
           onInstalled={() => {
             reload();
             onInstalled?.();
           }}
-        />
+        />}
       </div>
     </div>
   );

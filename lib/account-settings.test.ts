@@ -3,8 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // This Mac's account settings, pushed to your own account_settings row for your workers to mirror.
 vi.mock("./account", () => ({ accountClient: () => { throw new Error("no default client in tests"); } }));
-const snapshot = { pushOnDone: false, threadPrompt: "" };
+const snapshot: Record<string, unknown> = { pushOnDone: false, threadPrompt: "" };
 vi.mock("./host-settings", () => ({ accountSettings: vi.fn(() => ({ ...snapshot })) }));
+const saved = vi.hoisted(() => new Set<() => void>());
+vi.mock("./agent-store", () => ({
+  onAgentsSaved: (fn: () => void) => {
+    saved.add(fn);
+    return () => saved.delete(fn);
+  },
+}));
 
 vi.mock("./browser-shell", () => ({ shell: vi.fn(() => Promise.reject(new Error("The browser pane only exists in the desktop app"))) }));
 
@@ -28,6 +35,7 @@ function client({ user = "u-1", error = null, throws = false }: { user?: string 
 beforeEach(() => {
   forgetPushedSettings();
   snapshot.pushOnDone = false;
+  delete snapshot.agents;
 });
 afterEach(() => vi.useRealTimers());
 
@@ -71,6 +79,35 @@ describe("pushAccountSettings", () => {
     expect(await pushAccountSettings(refused.c)).toBe(false);
     expect(refused.upsert).toHaveBeenCalledTimes(2);
     expect(await pushAccountSettings(client({ throws: true }).c)).toBe(false);
+  });
+});
+
+describe("your agents in the row", () => {
+  it("go again without the agents when the database refuses the row, so the rest still syncs", async () => {
+    snapshot.agents = { saved: [{ id: "a-1" }], projects: {} };
+    const upsert = vi.fn((row: { settings: Record<string, unknown> }) => Promise.resolve({ error: "agents" in row.settings ? { message: "too big" } : null }));
+    const c = { auth: { getSession: () => Promise.resolve({ data: { session: { user: { id: "u-1" } } } }) }, from: () => ({ upsert }) } as unknown as SupabaseClient;
+    expect(await pushAccountSettings(c)).toBe(true);
+    expect(upsert).toHaveBeenCalledTimes(2);
+    expect(upsert).toHaveBeenLastCalledWith(expect.objectContaining({ settings: { pushOnDone: false, threadPrompt: "" } }));
+    // Remembered as sent: the same settings don't go again.
+    expect(await pushAccountSettings(c)).toBe(false);
+  });
+
+  it("says nothing was sent when the row is refused with the agents and without them", async () => {
+    snapshot.agents = { saved: [], projects: {} };
+    const refused = client({ error: { message: "down" } });
+    expect(await pushAccountSettings(refused.c)).toBe(false);
+    expect(refused.upsert).toHaveBeenCalledTimes(2);
+  });
+
+  it("is pushed again whenever Settings → Agents saves, until stopped", () => {
+    const push = vi.fn(() => Promise.resolve());
+    const stop = startAccountSettingsPush(push);
+    for (const fn of saved) fn();
+    expect(push).toHaveBeenCalledTimes(1);
+    stop();
+    expect(saved.size).toBe(0);
   });
 });
 
