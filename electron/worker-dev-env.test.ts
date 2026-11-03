@@ -4,6 +4,10 @@ import crypto from "node:crypto";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { describe as describeRun } from "./secret-run.cjs";
 import { createWorkerDevEnv } from "./worker-dev-env.cjs";
+import { createKeptRecord, sha } from "./worker-kept.cjs";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { secretUseMessage } from "../lib/secret-use";
 import { macSigned } from "../lib/worker-mac-keys";
 import { newSealKeys, open, type Sealed } from "../lib/worker-seal";
@@ -16,17 +20,17 @@ const signer = () => Promise.resolve({ publicKey: () => macKey, sign: (m: string
 const NONCE = "e".repeat(64);
 let now = 1_000_000;
 
-function setup(values: Record<string, string> = { API_KEY: "sk-dev-1", NODE_OPTIONS: "--require x" }, answer: string | null = "once") {
+function setup(values: Record<string, string> = { API_KEY: "sk-dev-1", NODE_OPTIONS: "--require x" }, answer: string | null = "once", kept?: ReturnType<typeof createKeptRecord>) {
   const inserted: Record<string, unknown>[] = [];
   const supabase = { from: () => ({ insert: (row: Record<string, unknown>) => (inserted.push(row), Promise.resolve({ error: null })) }) };
   const ask = vi.fn<(request: { message: string }) => Promise<string | null>>(() => Promise.resolve(answer));
   const pins = { pin: vi.fn() };
   const audit = vi.fn();
   const vault = { valuesForVault: vi.fn(() => Promise.resolve({ values })) };
-  const dev = createWorkerDevEnv({ vault, ask, describe: describeRun, pins, signer, audit, now: () => now });
-  const ctx = (over: Record<string, unknown> = {}, pin: Record<string, unknown> = {}) => ({
+  const dev = createWorkerDevEnv({ vault, ask, describe: describeRun, pins, signer, audit, kept, now: () => now });
+  const ctx = (over: Record<string, unknown> = {}, pin: Record<string, unknown> = {}, args: Record<string, unknown> = {}) => ({
     account: { supabase },
-    row: { org_id: "org-1", card_id: "card-1" },
+    row: { org_id: "org-1", card_id: "card-1", args },
     worker: { id: "w1", name: "m1mini" },
     a: { nonce: NONCE, expiresAt: now + 60_000, remote: "r", command: "pnpm dev", cwd: ".", script: "dev: next dev", thread: "Fix", ...over },
     pin: { publicKey: keys.publicKey, fingerprint: "ab12", firstUse: false, signKey: "SK", ...pin },
@@ -81,5 +85,18 @@ describe("createWorkerDevEnv", () => {
     expect(empty.ask).not.toHaveBeenCalled();
     const slow = setup();
     await expect(slow.dev.answer(slow.ctx({ expiresAt: now - 1 }))).rejects.toThrow("expired while it waited");
+  });
+});
+
+describe("createWorkerDevEnv with values kept on the worker", () => {
+  it("names a kept, unchanged value's version instead of carrying it", async () => {
+    const kept = createKeptRecord({ dir: fs.mkdtempSync(path.join(os.tmpdir(), "weft-kept-dev-")), safeStorage: () => ({ encryptString: (t: string) => Buffer.from(t), decryptString: (b: Buffer) => b.toString() }) });
+    kept.write({ w1: { seq: 3, keeps: { "github:o/r": { label: "o/r", envs: { development: { API_KEY: { version: 3, sha: sha("sk-dev-1") } } } } } } });
+    const s = setup({ API_KEY: "sk-dev-1", DB: "db" }, "once", kept);
+    expect(await s.dev.answer(s.ctx({}, {}, { kept: { API_KEY: 3 } }))).toMatchObject({ queued: true, names: ["API_KEY", "DB"] });
+    const sent = s.inserted[0] as { payload: { sealed: Sealed } };
+    expect(JSON.stringify(sent)).not.toContain("sk-dev-1");
+    const opened = JSON.parse(open(keys, sent.payload.sealed, devEnvPurpose("card-1", NONCE, "pnpm dev"))) as Record<string, unknown>;
+    expect(opened).toMatchObject({ names: ["API_KEY", "DB"], values: { DB: "db" }, kept: { API_KEY: 3 } });
   });
 });

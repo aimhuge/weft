@@ -82,6 +82,27 @@ describe("DevicesSettings", () => {
     expect(pairing.revoke).toHaveBeenCalledTimes(1);
   });
 
+  it("opens a paired worker's Secrets, and wipes what this Mac kept there before revoking it", async () => {
+    const order: string[] = [];
+    const workerKeep = {
+      list: vi.fn(() => Promise.resolve({ kept: [], repos: [], environments: ["development"] })),
+      keep: vi.fn(),
+      stop: vi.fn(),
+      wipe: vi.fn(() => (order.push("wipe"), Promise.reject(new Error("offline")))),
+    };
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: hosts, workerKeep };
+    apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? (order.push("revoke"), ok({ ok: true, kind: "worker" })) : ok({ signedIn: true, devices: DEVICES })));
+    render(<DevicesSettings />);
+    expect(screen.queryByRole("button", { name: "Secrets kept on iPhone" })).toBeNull();
+    await userEvent.click(await screen.findByRole("button", { name: "Secrets kept on m1mini" }));
+    expect(await screen.findByText("Nothing kept on m1mini: every secret travels per use.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(screen.queryByText(/every secret travels per use/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
+    await waitFor(() => expect(order).toEqual(["wipe", "revoke"]));
+    expect(workerKeep.wipe).toHaveBeenCalledWith("w1");
+  });
+
   it("shows a paired worker's Connectors badge, and what GitHub confirmed when it's revoked", async () => {
     apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? ok({ ok: true, kind: "worker", note: "GitHub off · 1 token revoked ✓" }) : ok({ signedIn: true, devices: DEVICES })));
     render(<DevicesSettings />);

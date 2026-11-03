@@ -156,7 +156,8 @@ async function startCommand() {
   setDeviceLink(deviceLink(reg, config.key));
   // A card's mcp__secrets__run asks the owner's Mac, and the answer comes back sealed to this box (lib/worker-secret-run.ts).
   // The other secrets tools ask it too (lib/worker-vault.ts).
-  const secrets = secretWiring(home, reg, keys);
+  // With the worker's id, the values the paired Mac keeps here too (lib/worker-kept-vault.ts).
+  const secrets = secretWiring(home, reg, keys, config.workerId);
   setSecretLink(secrets.link);
   subscribe(forgetOnTurnEnd);
   // A card's git and gh get GitHub tokens minted on weft.zip, before any CLI starts (lib/connector-worker.ts).
@@ -205,7 +206,8 @@ async function startCommand() {
   // Your account's settings mirrored in, and this box's plan limits polled and published (lib/worker-host-services.ts).
   const services = startHostServices(reg, console.log, home);
   const daemon = createDaemon({
-    reg,
+    // A revoked worker's key stops working: its heartbeat then deletes what the Mac kept here.
+    reg: secrets.wipeKept ? (await import("../lib/worker-kept-vault")).wipeWhenRevoked(reg, secrets.wipeKept, console.log) : reg,
     owner: config.ownerUser,
     publisher,
     listen: (hooks) => listenForWakes(client, config.key, hooks, console.log),
@@ -265,6 +267,7 @@ async function startCommand() {
       if ((await paths.cloneProject(dir, repo)) === "cloned") console.log(`Weft Worker: cloned ${repo} into ${dir}`);
     },
     secretUse: secrets.use,
+    keep: secrets.keep,
     // No restart: git asks its credential helper afresh each time.
     github: { login: (sealed) => github.signInGithub(home, open(keys, sealed, GITHUB_PURPOSE)), status: () => github.githubStatus() },
     // A sign-in from the desktop: save the token where the wrapper loads it, then restart (the service brings the

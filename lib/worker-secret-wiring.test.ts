@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as cjs from "../electron/worker-seal.cjs";
 import { macSigner } from "./mac-signer.harness";
 import { secretUsePurpose } from "./secret-use";
+import { keepMessage, keptPurpose } from "./worker-keep-wire";
 import { openAsk } from "./worker-secret-asks";
 import { forgetMacs, keyStatus, secretWiring } from "./worker-secret-wiring";
 import { newSealKeys, sealFingerprint } from "./worker-seal";
@@ -50,6 +51,34 @@ describe("secretWiring", () => {
     await expect(ask.values).resolves.toEqual({ A: "x" });
     forgetMacs(h);
     expect(fs.existsSync(path.join(h, "mac-keys.json"))).toBe(false);
+  });
+});
+
+describe("values the Mac keeps here", () => {
+  it("stores a signed keep, claims it in asks, opens a kept value a secret_use names, and forgets it with the Mac", async () => {
+    const h = home();
+    const keys = newSealKeys();
+    const mac = macSigner();
+    fs.writeFileSync(path.join(h, "mac-keys.json"), JSON.stringify([mac.key]));
+    const wiring = secretWiring(h, reg, keys, "w1");
+    const keep = { worker: "w1", seq: 3, issuedAt: Date.now(), op: "put" as const, repo: "github:o/r", environment: "development", entries: [{ name: "A", version: 3, sealed: cjs.seal(keys.publicKey, "kept-a", keptPurpose("w1", "github:o/r", "development", "A", 3)) }] };
+    expect(wiring.keep?.({ payload: { keep, mac: { key: mac.key, sig: mac.sign(keepMessage(keep)) } } } as never)).toEqual({ seq: 3, kept: 1 });
+    expect(wiring.link.kept?.("github:o/r", "development", ["A", "B"])).toEqual({ A: 3 });
+    expect(keyStatus(h)).toContain("Keeps secrets your Mac sent it (Keep on this worker), sealed to its box key; each use still needs your Mac's approval.");
+    const nonce = "c".repeat(64);
+    const ask = openAsk(nonce, { cardId: "wire-2", command: "npm run job", names: ["A", "B"], environment: "development", expiresAt: Date.now() + 60_000, repo: "github:o/r" });
+    const plain = { v: 1, card: "wire-2", nonce, command: "npm run job", names: ["A", "B"], environment: "development", expiresAt: Date.now() + 60_000, values: { B: "sent-b" }, kept: { A: 3 } };
+    const sealed = cjs.seal(keys.publicKey, JSON.stringify(plain), secretUsePurpose("wire-2", nonce, "npm run job"));
+    expect(wiring.use({ payload: { cardId: "wire-2", nonce, sealed, mac: mac.mac("wire-2", nonce, sealed) } } as never)).toBe("wire-2");
+    await expect(ask.values).resolves.toEqual({ A: "kept-a", B: "sent-b" });
+    wiring.wipeKept?.();
+    expect(wiring.link.kept?.("github:o/r", "development")).toEqual({});
+    const again = { ...keep, seq: 4 };
+    wiring.keep?.({ payload: { keep: again, mac: { key: mac.key, sig: mac.sign(keepMessage(again)) } } } as never);
+    expect(fs.existsSync(path.join(h, "kept-vault.json"))).toBe(true);
+    forgetMacs(h);
+    expect(fs.existsSync(path.join(h, "kept-vault.json"))).toBe(false);
+    expect(secretWiring(h, reg, keys).keep).toBeUndefined();
   });
 });
 

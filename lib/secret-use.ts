@@ -5,6 +5,7 @@
 // electron/worker-secret.cjs is main's reader of the ask, and electron/worker-seal.cjs computes the same purpose.
 import { createHash } from "node:crypto";
 import type { CloudCommandRow } from "./cloud-commands";
+import { keptVersions } from "./worker-keep-wire";
 import { sealedOf, type Sealed } from "./worker-seal";
 
 export const SECRET_ASK_TOOL = "secret_run";
@@ -31,6 +32,9 @@ export interface SecretAsk {
   thread?: string;
   // The worker's signature over askMessage, base64, when it was paired with a sign key (H10).
   sig?: string;
+  // The versions of the asked names this worker keeps (lib/worker-kept-vault.ts), outside the signature: it can only
+  // narrow what the Mac sends, never widen it, and the Mac sends a value whenever its own record disagrees.
+  kept?: Record<string, number>;
 }
 
 // What main seals: the ask it answers, repeated inside the seal, and the values.
@@ -42,6 +46,9 @@ export interface OpenedUse {
   environment: string;
   expiresAt: number;
   values: Record<string, string>;
+  // Names to take from the worker's kept copy at exactly these versions (docs/architecture/secrets.md#kept-on-a-worker):
+  // approved here like a value, but not carried.
+  kept?: Record<string, number>;
 }
 
 // The seal's purpose: a payload sealed for another card, ask or command won't open as this one.
@@ -94,7 +101,9 @@ export function openedUse(text: string): OpenedUse | null {
   if (typeof card !== "string" || typeof nonce !== "string" || typeof command !== "string" || typeof expiresAt !== "number") return null;
   if (!isNames(names) || !isEnvironment(environment) || !isObject(values)) return null;
   if (!Object.values(values).every((v) => typeof v === "string")) return null;
-  return { card, nonce, command, names, environment, expiresAt, values: values as Record<string, string> };
+  const kept = raw.kept === undefined ? undefined : keptVersions(raw.kept);
+  if (kept === null) return null;
+  return { card, nonce, command, names, environment, expiresAt, values: values as Record<string, string>, ...(kept ? { kept } : {}) };
 }
 
 // Two name lists that ask for the same secrets, in any order.

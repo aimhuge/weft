@@ -19,6 +19,8 @@ interface Ask {
   // A dev server's ask (lib/worker-dev-env.ts): sealed for devEnvPurpose, and it takes whatever names the vault's
   // development set has, since the worker can't know them before the Mac answers. A run's names are exact.
   dev?: boolean;
+  // The vault the checkout's remote names (github:owner/name), where a kept value is looked up (lib/worker-kept-vault.ts).
+  repo?: string;
   resolve: (values: Record<string, string>) => void;
   reject: (err: Error) => void;
 }
@@ -59,7 +61,7 @@ function checkMac(body: NonNullable<ReturnType<typeof secretUseBody>>, macs: Mac
 }
 
 // The values a row carries, once it opens under this ask's purpose and repeats it exactly before the expiry; throws why not.
-function openChecked(body: NonNullable<ReturnType<typeof secretUseBody>>, ask: Ask, open: (sealed: Sealed, purpose: string) => string, now: number): Record<string, string> {
+function openChecked(body: NonNullable<ReturnType<typeof secretUseBody>>, ask: Ask, open: (sealed: Sealed, purpose: string) => string, now: number) {
   let text: string;
   try {
     text = open(body.sealed, (ask.dev ? devEnvPurpose : secretUsePurpose)(ask.cardId, body.nonce, ask.command));
@@ -70,13 +72,25 @@ function openChecked(body: NonNullable<ReturnType<typeof secretUseBody>>, ask: A
   if (!use || use.card !== ask.cardId || use.nonce !== body.nonce) throw new Error("That secret use is for another ask.");
   if (use.command !== ask.command) throw new Error("That secret use is for another command.");
   if ((!ask.dev && !sameNames(use.names, ask.names)) || use.environment !== ask.environment) throw new Error("That secret use names other secrets.");
-  if (!sameNames(Object.keys(use.values), use.names)) throw new Error("That secret use doesn't carry the values it names.");
+  const kept = use.kept ?? {};
+  if (Object.keys(kept).some((name) => name in use.values)) throw new Error("That secret use names a secret twice.");
+  if (!sameNames([...Object.keys(use.values), ...Object.keys(kept)], use.names)) throw new Error("That secret use doesn't carry the values it names.");
   if (now > use.expiresAt) throw new Error("That secret use came after its ask expired.");
-  return use.values;
+  return { values: use.values, kept, environment: use.environment };
 }
 
-// The daemon's `secret_use`: hands the values to the waiting tool and returns its card, or throws why it won't.
-export function deliverSecretUse(command: Pick<CloudCommandRow, "payload">, open: (sealed: Sealed, purpose: string) => string, macs: MacKeys, now = Date.now()): string {
+// Opens the kept values a Mac-signed secret_use names from this box's own copy (lib/worker-kept-vault.ts open).
+export type KeptOpener = (repo: string, environment: string, want: Record<string, number>) => Record<string, string>;
+
+function withKept(opened: ReturnType<typeof openChecked>, ask: Ask, keptOpen: KeptOpener | undefined): Record<string, string> {
+  if (!Object.keys(opened.kept).length) return opened.values;
+  if (!ask.repo || !keptOpen) throw new Error("Your Mac said to use this worker's kept copy, but it keeps none here. Ask again: your Mac will send the values.");
+  return { ...opened.values, ...keptOpen(ask.repo, opened.environment, opened.kept) };
+}
+
+// The daemon's `secret_use`: hands the values to the waiting tool and returns its card, or throws why it won't. A value
+// the Mac approved from this box's kept copy is opened here; one that can't be fails the ask at once.
+export function deliverSecretUse(command: Pick<CloudCommandRow, "payload">, open: (sealed: Sealed, purpose: string) => string, macs: MacKeys, now = Date.now(), keptOpen?: KeptOpener): string {
   const body = secretUseBody(command);
   if (!body) throw new Error("That secret use is empty.");
   checkMac(body, macs);
@@ -88,8 +102,15 @@ export function deliverSecretUse(command: Pick<CloudCommandRow, "payload">, open
     ask.reject(new Error("The approval came too late: the ask had expired. Ask again."));
     throw new Error("That secret use came after its ask expired.");
   }
-  const values = openChecked(body, ask, open, now);
+  const opened = openChecked(body, ask, open, now);
   asks().delete(body.nonce);
+  let values: Record<string, string>;
+  try {
+    values = withKept(opened, ask, keptOpen);
+  } catch (err) {
+    ask.reject(err as Error);
+    throw err;
+  }
   ask.resolve(values);
   return ask.cardId;
 }

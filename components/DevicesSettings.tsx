@@ -13,6 +13,8 @@ import { useWorkerConnectors } from "@/lib/use-worker-connectors";
 import WorkerConnectors from "./WorkerConnectors";
 import { Spinner } from "./Icon";
 import { WorkerRepair } from "./WorkerRepair";
+import { WorkerKeep } from "./WorkerKeep";
+import { workerKeepBridge } from "@/lib/use-worker-keep";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 
 const SUBTLE = "text-[12.5px] text-muted";
@@ -72,11 +74,16 @@ function AddWorker({ devices }: { devices: ReturnType<typeof useDevices> }) {
   );
 }
 
-// A live device's buttons: a worker's connectors, re-pin, passkeys and re-pair, and Revoke for every kind.
-function DeviceActions({ d, devices, connectors, now, onRepair }: { d: DeviceView; devices: ReturnType<typeof useDevices>; connectors: ReturnType<typeof useWorkerConnectors>; now: number; onRepair: () => void }) {
+// A live device's buttons: a worker's connectors, kept secrets, re-pin, passkeys and re-pair, and Revoke for every kind.
+function DeviceActions({ d, devices, connectors, now, onRepair, onKeep }: { d: DeviceView; devices: ReturnType<typeof useDevices>; connectors: ReturnType<typeof useWorkerConnectors>; now: number; onRepair: () => void; onKeep: () => void }) {
   return (
     <div className="flex shrink-0 items-center gap-2">
       {d.kind === "worker" && d.hasSignKey && <WorkerConnectors c={connectors} workerId={d.id} name={d.name} now={now} />}
+      {d.kind === "worker" && d.hasSignKey && workerKeepBridge() && (
+        <button type="button" className={BUTTON} onClick={onKeep} aria-label={`Secrets kept on ${d.name}`} title="Keep a project's development or preview secrets on this worker (off unless you turn it on; each use still asks Touch ID here)">
+          Secrets
+        </button>
+      )}
       {d.kind === "worker" && devices.canRepin && (
         <button type="button" className={BUTTON} onClick={() => void devices.repin(d)} aria-label={`Re-pin ${d.name}`} title="Forget the keys this Mac pinned for this worker's secrets, after Touch ID; its next ask pins new ones">
           Re-pin
@@ -104,6 +111,7 @@ export default function DevicesSettings() {
   const connectors = useWorkerConnectors();
   const now = useNow();
   const [repairing, setRepairing] = useState<string | null>(null);
+  const [keeping, setKeeping] = useState<string | null>(null);
   const list = devices.view?.devices ?? [];
   const newest = newestVersion(list.filter((d) => !d.revokedAt).map((d) => d.build));
   return (
@@ -127,8 +135,9 @@ export default function DevicesSettings() {
                 </div>
                 {d.note && !d.revokedAt && <div className="text-[12.5px] text-warn">{d.note}</div>}
               </div>
-              {!d.revokedAt && <DeviceActions d={d} devices={devices} connectors={connectors} now={now} onRepair={() => setRepairing(repairing === d.id ? null : d.id)} />}
+              {!d.revokedAt && <DeviceActions d={d} devices={devices} connectors={connectors} now={now} onRepair={() => setRepairing(repairing === d.id ? null : d.id)} onKeep={() => setKeeping(keeping === d.id ? null : d.id)} />}
               {repairing === d.id && <WorkerRepair device={d} onClose={() => setRepairing(null)} />}
+              {keeping === d.id && <WorkerKeep device={d} onClose={() => setKeeping(null)} />}
             </li>
           ))}
         </ul>

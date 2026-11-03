@@ -123,8 +123,9 @@ export interface QaPayload {
 
 // "host" carries any verb in lib/host-api (lib/host-command.ts); reply, answer, stop and mode run as its verbs too.
 // "line" is a sealed WebRTC offer that opens a worker's session line (lib/host-line.ts). "pin" carries a Mac's signed
-// endorsements of its passkeys for a worker (lib/host-signers.ts).
-export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line" | "secret_use" | "pin";
+// endorsements of its passkeys for a worker (lib/host-signers.ts). "vault_keep" carries what the Mac keeps on a worker,
+// sealed to it and signed by the Mac (lib/worker-kept-vault.ts).
+export type CloudCommandKind = "new_card" | "reply" | "answer" | "stop" | "run" | "login" | "github_login" | "clone" | "mode" | "input" | "qa" | "update" | "host" | "line" | "secret_use" | "pin" | "vault_keep";
 
 // public.cloud_commands.
 export interface CloudCommandRow {
