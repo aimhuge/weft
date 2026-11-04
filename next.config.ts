@@ -54,11 +54,12 @@ const nextConfig: NextConfig = {
       : {}),
   },
   // A fs or spawn call on a runtime path (~/.weft, a user's repo, a CLI home) makes Turbopack trace the whole project
-  // into every server function, and Vercel then spends ~13 minutes uploading them. Those calls carry
-  // /*turbopackIgnore: true*/; these excludes are the backstop for one that slips in. No server route reads these
-  // files from disk (the ones it does, electron/assets and docs/FAQ.md, are left out of these globs), and what it
-  // imports from electron/ is bundled. The globs match anywhere in a path, so a bare "dist/**" would also
-  // drop .next-dist/server/chunks. scripts/prepare-standalone.mjs prunes the source files that still come along.
+  // into a server function, which Vercel then uploads. Those calls carry /*turbopackIgnore: true*/; these excludes
+  // drop the rest of what no server function reads from disk. Turbopack matches an exclude anywhere in a path, not
+  // from the project root, so "./lib/**" would also strip node_modules/typescript/lib: only name folders no package
+  // ships at runtime, and keep what outputFileTracingIncludes reads (docs/FAQ.md, electron/assets). Next also matches
+  // them as absolute paths that may stop short of the file, so a bare "dist/**" would drop .next-dist/server/chunks.
+  // scripts/prepare-standalone.mjs prunes the source files that still come along into the desktop build.
   outputFileTracingExcludes: {
     "/**/*": [
       "./dist/mac*/**/*",
@@ -67,11 +68,11 @@ const nextConfig: NextConfig = {
       "./electron/*.{cjs,cts,ts,js,json,html}",
       "./docs/!(FAQ.md)",
       "./docs/*/**/*",
-      "./scripts/**/*",
-      "./plugin/**/*",
-      "./supabase/**/*",
       "./node_modules/{electron,electron-builder,electron-publish,electron-winstaller,app-builder-bin,app-builder-lib,dmg-builder,7zip-bin}/**/*",
       "./node_modules/{@electron,builder-util,builder-util-runtime}/**/*",
+      // weft.zip relays AI work to the desktop and never starts Claude Code, so leave its native binary (~225 MB,
+      // traced into every route that imports the SDK) out of Vercel's functions; the desktop build needs it.
+      ...(process.env.WEFT_STANDALONE ? [] : ["./node_modules/@anthropic-ai/claude-agent-sdk-*/**/*"]),
     ],
   },
   // weft.zip/@username is a public profile. A route folder can't start with "@" (a parallel-route slot), so the
