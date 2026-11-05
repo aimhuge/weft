@@ -30,7 +30,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `secrets.md` — the 🔐 vault: device key, on-disk encryption, IPC, Touch ID, agent tools, dev-server env, Supabase sync.
 - `webhooks.md` — the 🪝 rail drawer, the `mcp__webhooks__*` tools, the relay URL, `webhook_deliveries` on Supabase.
 - `tunnels.md` — a private address for a local dev server: `/t/<id>`, cloudflared quick tunnels, the local gate and tickets; on a worker, approved by the owner's Mac (`lib/tunnel-host.ts`, `lib/tunnel-mac.ts`, `lib/tunnel-worker.ts`, `lib/worker-mac-ask.ts`, `lib/device-call-approvals.ts` (owner check, per-worker prompt limits), `electron/worker-label.cjs` (the pinned name in the prompt), `lib/worker-reach.ts`, `worker_tunnel_open`).
-- `dictation.md` — local whisper.cpp dictation: dictate anywhere (the floating pill), languages, the Advanced warm server, vocabulary, the transcribe route.
+- `dictation.md` — local whisper.cpp dictation: dictate anywhere (the floating pill), languages, the Advanced warm server, vocabulary, the transcribe route, `lib/wav-encode.ts` (the WAV the board sends on Windows).
 - `vercel.md` — the ▲ rail drawer: token in the Keychain, `.vercel/project.json`, env push from the vault, deploys, `vercel_events` Realtime.
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
@@ -59,7 +59,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `file-drop.md` — files dragged from Finder: the hand-off store, the window router, the `dropTarget` composers, why waiting files go in on the next task.
 - `show-rail.md` — the browser pane's 72 px rail of one mini per turn and per page, its dots, fallbacks and browser history, and the two events that sync it with the chat.
 - `board-view.md` — `mcp__board_view__*`: a thread's eyes and hands on the board window itself, fixed scripts, the token-guarded control server.
-- `keyboard-shortcuts.md` — the shortcut registry, the `?` sheet, the printed sheet, tooltips, key badges, the `ModifierHint` component, ⌘F find in the thread and the pane (`lib/thread-find.ts`, `lib/use-thread-find.ts`, `lib/find-highlight.ts`, `lib/find-reveal.ts`, `components/FindField.tsx`, `components/PaneFind.tsx`).
+- `keyboard-shortcuts.md` — the shortcut registry, the `?` sheet, the printed sheet, tooltips, key badges, the `ModifierHint` component, ⌘T new browser tab (`lib/pane-new-tab.ts`), ⌘F find in the thread and the pane (`lib/thread-find.ts`, `lib/use-thread-find.ts`, `lib/find-highlight.ts`, `lib/find-reveal.ts`, `components/FindField.tsx`, `components/PaneFind.tsx`).
 - `themes.md` — System/Light/Dark, a scene (one of Weft's pictures behind the board with its own palette), or a theme you prompted up.
 - `web-states.md` — weft.zip's loading skeletons, host-aware error page, 404 and the shared pane's load/fail states.
 - `error-boundaries.md` — `CrashGuard.tsx`, `BuildErrorBar.tsx`, the `guarded()` import wrapper, why a build error never reaches a boundary.
@@ -71,6 +71,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `quality.md` — the header's code quality checklist: coverage, file size, lint, types, guardrails; the refactor scout and the score's last 10 points.
 - `commit-pile.md` — the header's "+N/-N" uncommitted counter and the Review card that walks the pile to a clean commit.
 - `updates.md` — the Squirrel.Mac JSON feed, the download fallback, the tag-triggered signed release, `CHANGELOG.md` notes, and server patches between versions.
+- `windows.md` — Weft on Windows: the unsigned NSIS installers, x64 and arm64 (`build.win`/`build.nsis`, `scripts/dist-win.mjs`, `.cmd` toolchain wrappers in `scripts/toolchain-wrappers.mjs`), `.github/workflows/windows.yml` adding it to each release, electron-updater fed by `latest.yml` / `latest-arm64.yml` (`electron/updater-win.cjs`), `weft.zip/download/windows[?arch=arm64]`, dictation on Windows (bundled whisper.cpp, `lib/wav-encode.ts`, the Ctrl+V paste in `electron/dictation-insert.cjs`), and the POSIX habits `lib/win-command.ts` replaces (which, `.cmd` shims, process groups, `$SHELL`).
 - `changelog.md` — every project's changelog in `~/.weft/changelog.jsonl` and `changelog_entries`: the `mcp__board__changelog_*` tools, the commit stamp, the Changelog dialog, releasing into CHANGELOG.md.
 - `keep-working.md` — the menu bar icon's switch to keep the Mac awake with the lid shut so threads keep running in a bag.
 - `analytics.md` — GA4 and PostHog on every weft.zip page after the visitor's consent, never on a local board: the consent banner, the host and `isDeployed()` gates, `track()`, the event table, `data-track` links.
@@ -79,7 +80,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `cloud-sync.md` — server-side cards: the outbox, the content-addressed blob store, thread paging, the `cloud_*` tables and their policies; team projects (a linked repo's cards sync to the team, `lib/cloud-sync-route.ts`), and teammates' cards on the desktop board, read-only, under your own checkout of the repo (`cloud_cards.repo` set by `lib/cloud-sync-cards.ts` with `lib/cloud-cards-repo.ts`; `lib/team-board.ts`, `lib/team-board-types.ts`, `app/api/team-board`, `lib/use-team-board.ts`, `lib/team-host.ts` behind `hostOf`, `lib/cloud-thread-read.ts`, `components/TeamOwnerMark.tsx`, `components/TeamPane.tsx`); taking one over with Continue here (`lib/team-takeover.ts`, `lib/team-takeover-brief.ts`, `lib/team-takeover-marks.ts`, `POST /api/team-board`, `components/TeamTakeoverBar.tsx`, `cloud_card_takeovers` in `supabase/migrations/20261105110000_cloud_card_takeovers.sql`), or asking for it first (`lib/handover.ts`, `lib/handover-push.ts`, `lib/team-board-side.ts`, `app/api/handover`, `components/HandoverAskBar.tsx`, `cloud_handovers` in `supabase/migrations/20261105120000_cloud_handovers.sql`).
 - `device-registry.md` — H10: `public.device_registry` (one view over `devices`, `cloud_workers`, `phone_pairings`), `device_revoke` for every kind, Settings → Devices, and enrolling a worker by pairing it (`worker_pair_*`). The pairing Mac gets a worker's asks (`paired_mac`), and a device revoked anywhere stops being trusted on the Mac that pinned it and on the workers that pinned it (`reconcile`, `worker_mac_state`, passkey heads). Moving a worker's threads: `worker_move_cards`, the automatic move on a re-pair proven by the sign key, Move threads to… (`lib/device-move.ts`, `components/WorkerMoveThreads.tsx`, `20261103001839_worker_move_cards.sql`). Versions: each device's Weft build in its subtitle and on the admin Users page (`lib/device-version.ts`, `desktop_set_build`, `20261102290000_device_versions.sql`).
 - `mobile-security.md` — pairing a phone or browser (QR, pinned by the Mac, Touch ID), the workspace sync key, sealed rows, a session line's offer sealed in the browser or on the phone (`packages/weft-client/src/seal.ts`, `lib/web-lines.ts`), signed approvals, passkey approvals from weft.zip (H7).
-- `mobile.md` — the phone app's server side: `push_devices`, the `cloud_cards` push trigger, the `push-card` Edge Function and its Expo payload, Settings → Sync → Phones.
+- `mobile.md` — the phone app's server side: `push_devices`, the `cloud_cards` push trigger, the `push-card` Edge Function and its Expo payload, Settings → Sync → Phones, the TestFlight invite.
 - `profiles.md` — public profiles at `weft.zip/@username`: `profiles.username`, the `/@` → `/u/[username]` rewrite, what the page shows and never shows.
 - `sharing.md` — a card's share link on weft.zip: thread + pane, live; the `@aimhuge/share` modes and gate, `cloud_shares`, the sandboxed pane, redaction.
 - `copilot-suggestions.md` — the copilot's empty-chat chips: what Haiku reads, the one run per board labeled by project, the client filter, setup gaps and `setup_status`.
@@ -119,8 +120,11 @@ When a new doc lands in this folder, add it here on the same change.
   (the board's placeholder fills the slot meanwhile), and the board alone hides it; it also keeps each card's current
   tab painting off screen (`throttlesOffScreen`), since a hidden view runs no requestAnimationFrame and a streamed Next.js
   page the agent opened would sit on its Suspense fallback. `electron/pane-view.cjs` applies those rules to a tab's view
-  (`placeView`: bounds, shown, muted, throttled). `electron/pane-origins.cjs` is the
-  per-card allowlist of hosts a thread may open; a host outside it asks the user with Touch ID (`authorizeThreadOpen`).
+  (`placeView`: bounds, shown, muted, throttled). `electron/pane-origins.cjs` decides
+  which hosts a thread may open: file pages, the pane's own host, a host you opened in that card, and what
+  `electron/pane-sites.cjs` allows (localhost, the Tranco top 1000 in `pane-top-sites.json` minus its `SIGNED_IN` sites, and
+  the yeses saved in `~/.weft/pane-sites.json`, listed in Settings → Security by `components/PaneSites.tsx`); anything
+  else asks with Touch ID, a card's first page included (`authorizeThreadOpen`).
   `electron/pane-error.cjs` shows a failed load's reason, with Try again and Back, instead of Chromium's blank page.
   `electron/pane-cdp.cjs` is each page's one CDP session (console and failed-request buffers); `electron/pane-input.cjs`
   drives the page through it (trusted click, keys, type, select, scroll, wait, viewport, snapshot routes) with
@@ -132,7 +136,7 @@ When a new doc lands in this folder, add it here on the same change.
   nothing open, flips board and list view). Escape types nothing, so it arrives as a rawKeyDown — the
   rule takes that too, or the board never hears the key.
 - `electron/menus.cjs` + `electron/keep-working.cjs`: app menu, menu bar icon, dock; Keep Working (awake with the lid shut, until threads finish).
-- `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window) + `scripts/release-feed.mjs` + `.github/workflows/release.yml`: updates from GitHub Releases (Squirrel.Mac's JSON
+- `electron/updater.cjs` (+ `electron/update-window.cjs`, the Software Update window; + `electron/updater-win.cjs`, electron-updater and `latest.yml` on Windows, docs/architecture/windows.md) + `scripts/release-feed.mjs` + `.github/workflows/release.yml` (+ `windows.yml`, the Windows installer): updates from GitHub Releases (Squirrel.Mac's JSON
   feed, a download fallback when unsigned, a quiet install once nothing runs and nobody's at the Mac) and the tag-triggered signed release; `CHANGELOG.md` holds each version's notes, which Weft commits itself after a version bump (docs/architecture/updates.md). `lib/release-splash.ts` + `lib/release-splashes.json` + `lib/use-release-splash.ts` + `components/ReleaseSplash.tsx` + `scripts/release-splash.mjs`: the "What's new" splash shown once after an update, written by the Copywriter at release time. `.claude/skills/release/SKILL.md`: the repo-only `/release` run (commit, bump, splash, tag, build on a mini, publish, check weft.zip). `electron/patcher.cjs` + `electron/patcher-app.cjs` + `electron/server-patch.cjs` + `electron/server-patch-feed.cjs` + `electron/patch-key.cjs` + `scripts/server-patch-release.mjs` (`pnpm patch:release`) + `scripts/server-patch-deps.mjs` + `scripts/server-patch-keygen.mjs`: server patches, the board and server between versions, signed with ed25519, staged in `<userData>/patches`, switched in by a server restart, rolled back on a young crash (docs/architecture/updates.md#server-patches).
   `scripts/bundle-toolchain.mjs` stages what the app ships for a fresh Mac (node, npm, pnpm, puku-cli without telemetry, claude, all on
   my own Electron, plus gog, the checksum-pinned Google Workspace CLI), which `appendToolchain()` in `electron/env.cjs` puts at the end of PATH.
@@ -272,7 +276,7 @@ When a new doc lands in this folder, add it here on the same change.
   is still open — from the 15-minute poll (`lib/limit-poll.ts`, which then wakes the cards parked on them via
   `lib/limit-resume.ts`) and from a card's own turn (`lib/runner-turn.ts`).
 - `components/SettingsDialog.tsx` + `lib/settings-nav.ts`: Settings, full window over a scene, pages down the left (General, Laptop mode, Models,
-  Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync). **Search** in the title bar (`components/SettingsSearch.tsx`, ⌘F, the Edit menu's
+  Threads, Security, Automations, Shortcuts, Accounts, Teams, Sync), with the version and build commit under them (`SettingsVersion` in `components/SettingsLayout.tsx`). **Search** at the top of the page list (`components/SettingsSearch.tsx`, ⌘F, the Edit menu's
   Find or `/`) ranks every section by `lib/settings-search.ts` `SETTINGS_SECTIONS`, a hand-kept index of each page's section headings
   plus extra words, whose test fails when a heading it names is no longer in any component; a new section needs a row there. Each page's
   **top nav** (`components/SettingsSectionNav.tsx`, sticky, hidden under two sections) and the jump to a search pick are
@@ -817,6 +821,9 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/cloud-sync-repos.ts` keeps the switch per GitHub repo too (`cloud_sync_repos`), so your other Macs turn sync on for their own clone.
   Phone push (docs/architecture/mobile.md#push): `supabase/migrations/20261029104224_push_devices.sql` (`push_devices`, `register_push_device`, the `cloud_cards` trigger with its debounce),
   `supabase/functions/push-card/` (the Edge Function; `message.ts` builds the Expo payload), and `lib/push-devices.ts` + `app/api/push-devices` + `lib/use-push-devices.ts` + `components/PhoneSettings.tsx` (Settings → Sync → Phones).
+  TestFlight (docs/architecture/mobile.md#testflight): `lib/testflight.ts` (App Store Connect JWT and `inviteTester`, weft.zip only) + `app/api/testflight` (weft.zip:
+  the public link, and the invite for the bearer's email) + `lib/testflight-client.ts` + `app/api/account/testflight` (the desktop's forwarder) + `lib/use-testflight.ts` +
+  `lib/phone-prompt.ts` + `components/PhonePrompt.tsx` (the one-time "Weft on your phone" QR prompt, mounted in `components/HeaderBadges.tsx`); `components/QrCode.tsx` is shared with Pair a phone.
   `lib/sync-prompt.ts` + `lib/use-sync-prompt.ts` + `components/SyncPromptDialog.tsx` (mounted in `components/HeaderBadges.tsx`): once the welcome is
   answered and a thread in the project you're working on has reached Review, "Turn on Project Sync for <project>?" asks once a launch (signed out, "Sign in to Weft?", Weft's one sign-in ask), with a
   "Don't show me again" box (localStorage, cleared by Reset tips); `lib/scratch.ts` is the scratch-folder list it shares with `lib/welcome.ts`.

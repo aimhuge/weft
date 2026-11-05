@@ -1,6 +1,7 @@
 import { apiFetch, API_HEADERS } from "./api-client";
 import { resetIntros } from "./feature-intros";
 import { resetSplash } from "./release-splash";
+import { resetPhonePrompt } from "./phone-prompt";
 import { resetSyncPrompt } from "./sync-prompt";
 // The welcome's shapes come from lib/welcome-types.ts (types only), not from the server modules that
 // hold them: naming a server module's type still makes Turbopack resolve that module (node:fs,
@@ -39,11 +40,12 @@ export const loadWelcome = (replay = false) => apiFetch(`/api/welcome${replay ? 
 // Settings → General's "Replay the welcome" asks the dialog to show itself again, as a preview.
 export const REPLAY_EVENT = "weft:welcome-replay";
 // Bring back every first-time welcome past the dialog: each drawer's intro video, the ask to sync and this version's
-// "What's new" splash.
+// "What's new" splash, and the phone app's TestFlight prompt.
 export function resetOnboarding() {
   resetIntros();
   resetSyncPrompt();
   resetSplash();
+  resetPhonePrompt();
 }
 
 // Replay the welcome (avatar menu, command palette): the dialog again as a preview, and the welcomes after it too.

@@ -4,38 +4,21 @@
 // same link to open on another computer (a browser can read sealed threads but never approve), the paired devices with
 // Revoke, and the two switches. These are not the push phones above them (components/PhoneSettings.tsx): signing in
 // gets a phone its pushes, pairing gets it the workspace key and lets it approve with Face ID.
-import qrcode from "qrcode-generator";
-import { useMemo } from "react";
 import { openExternal } from "@/lib/auth/desktop";
 import { copyBriefly } from "@/lib/clipboard-briefly";
 import { usePairing } from "@/lib/use-pairing";
 import { useNow } from "@/lib/use-now";
+import { useTestflightLink } from "@/lib/use-testflight";
 import { Spinner } from "./Icon";
+import { QrCode } from "./QrCode";
 import SwitchRow from "./SwitchRow";
+
+export { QrCode };
 
 const CARD = "rounded-xl border border-line-strong bg-panel/85 p-5 shadow-lg backdrop-blur-xl";
 const SECTION_TITLE = "mb-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-faint";
 const SUBTLE = "text-[12.5px] text-muted";
 const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
-
-// The link as an SVG path of dark modules, drawn on white so a phone camera reads it in the dark theme too.
-export function QrCode({ text, size = 168 }: { text: string; size?: number }) {
-  const { count, d } = useMemo(() => {
-    const qr = qrcode(0, "M");
-    qr.addData(text);
-    qr.make();
-    const n = qr.getModuleCount();
-    let path = "";
-    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (qr.isDark(r, c)) path += `M${c + 2} ${r + 2}h1v1h-1z`;
-    return { count: n + 4, d: path };
-  }, [text]);
-  return (
-    <svg role="img" aria-label="Pairing QR code" width={size} height={size} viewBox={`0 0 ${count} ${count}`} shapeRendering="crispEdges" className="rounded-md">
-      <rect width={count} height={count} fill="#fff" />
-      <path d={d} fill="#000" />
-    </svg>
-  );
-}
 
 const kindLabel = (d: { kind: string; platform: string }) =>
   d.kind === "browser" ? "Browser · reads sealed threads" : `${d.platform === "android" ? "Android" : "iPhone"} · approves with Face ID`;
@@ -43,6 +26,7 @@ const kindLabel = (d: { kind: string; platform: string }) =>
 export default function PairDevices() {
   const p = usePairing();
   const now = useNow();
+  const testflight = useTestflightLink();
   if (!p.available) return null;
   const code = p.code;
   const left = code ? Math.max(0, Math.ceil((code.expiresAt - now) / 1000)) : 0;
@@ -106,6 +90,14 @@ export default function PairDevices() {
             </button>
           </div>
         </div>
+      )}
+      {!code && testflight && (
+        <p className={`mt-3 ${SUBTLE}`}>
+          No Weft app on your phone yet?{" "}
+          <button type="button" className="text-accent hover:underline" onClick={() => openExternal(testflight)}>
+            Get it on TestFlight
+          </button>
+        </p>
       )}
       {p.note && <p className="mt-3 text-[12.5px] text-ink">{p.note}</p>}
       {p.error && <p className="mt-3 text-[12.5px] text-danger">{p.error}</p>}

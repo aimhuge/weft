@@ -11,6 +11,9 @@ import { loadWelcome } from "./welcome-client";
 // Once a launch: the flag lives in the module, so the badges remounting doesn't ask twice.
 let askedThisLaunch = false;
 
+// Whether it opened this launch, so the phone prompt (lib/use-testflight.ts) waits for another one.
+export const syncAskedThisLaunch = () => askedThisLaunch;
+
 export function useSyncPrompt(cwd: string | null | undefined, cards: Card[]) {
   const folder = promptFolder(cwd, cards);
   // Read again as threads finish, so first launch's dialog is noticed once it's answered.

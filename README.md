@@ -18,6 +18,12 @@ pnpm dev:web        # the same, plus the weft.zip web routes (/login, /team, /<s
 pnpm test           # unit tests (Vitest), about a second; pnpm lint for ESLint
 ```
 
+**On Windows**, install the app instead: [weft.zip/download/windows](https://weft.zip/download/windows) gets the newest
+`Weft-Setup-X.Y.Z-x64.exe`; on a Windows-on-ARM PC use [weft.zip/download/windows?arch=arm64](https://weft.zip/download/windows?arch=arm64) (`-arm64.exe`). Dictation works there too: whisper.cpp ships inside, and the model downloads from Settings → Dictation. It's unsigned, so the first install shows SmartScreen's "Windows protected your PC":
+choose **More info → Run anyway**. It installs per user with no admin prompt and then updates itself from GitHub
+Releases like the Mac app (Restart to Update, or on its own when idle). `pnpm dist:win` builds it on a Windows box;
+CI builds it for every release (docs/architecture/windows.md).
+
 The app ships local copies of its fonts, so builds do not need to fetch fonts from Google. The home page's
 GitHub release-feed lookup times out after three seconds and falls back to the releases page.
 
@@ -55,9 +61,10 @@ port.
 - **Closing the window keeps Weft running**, with your threads' CLIs open, so conversations stay
   alive. ⌘Q quits. Opening Weft again just brings the existing window forward.
 - **⌃⌥Space** opens the copilot from any app. In the app: ⌘N new thread, ⌘J copilot, ⇧⌘B
-  browser pane, ⌘F find (the page with focus in the browser, else the open thread, else the board's filter), ⌘G next match, ⌘, settings, ⌘1 board, ⌘2 copilot.
-- **Settings search**: the box in Settings' title bar (⌘F or `/` while Settings is open) finds any setting on any page
+  browser pane, ⌘T new browser tab (its address bar focused, from the composer or anywhere), ⌘F find (the page with focus in the browser, else the open thread, else the board's filter), ⌘G next match, ⌘, settings, ⌘1 board, ⌘2 copilot.
+- **Settings search**: the box at the top of Settings' page list (⌘F or `/` while Settings is open) finds any setting on any page
   ("dark mode", "gmail", "max threads") and opens its page scrolled to it; each page's own top nav jumps between its sections.
+  Weft's version and the commit it was built from sit under the page list.
 - **Shortcuts sheet**: `?` (or the "? Shortcuts" link in the footer) lists every shortcut in the app,
   board, thread, composer, terminal and app menu, and searches them by what they do or by key ("archive",
   "cmd k", "esc"). Hold ⌘ on the board for a moment, or Shift, and a card lists what that modifier does.
@@ -150,9 +157,11 @@ port.
 - **Failed loads say why**: a page that won't load in the browser pane (say a card's dev server stopped) shows Weft's
   error page instead of a blank white one: the URL, the reason, **Try again**, **Back to the last page**, and an
   automatic reload when a local dev server comes back (`electron/pane-error.cjs`).
-- **Touch ID for new sites**: when a thread asks the pane to open a site you haven't opened in that card's pane, Weft
-  asks you with Touch ID ("open www.google.com in a card's browser pane") instead of refusing; a yes lets that card
-  use the site from then on (`electron/pane-origins.cjs`).
+- **Touch ID for new sites**: a thread opens localhost, file pages and the public top 1000 sites (Tranco) in the pane
+  without asking. A site you'd be signed into (mail, banks, shopping, social, code) or one off the list asks you once with
+  Touch ID ("open mail.google.com in a card's browser pane, now and from now on"), a card's first page included; a yes
+  holds for every card and across restarts, and Settings → Security lists those sites to add or remove one
+  (`electron/pane-origins.cjs`, `electron/pane-sites.cjs`).
 - **Themes**: Settings → General (or ⌘K "Theme: …") picks System, Light or Dark, or a scene: Twin Suns,
   Canyon, Coast Road, Neon City, Snow Pass, Cockpit, Night Cockpit or Salt Flats puts that picture behind the board with a palette drawn
   from it and clear columns. The first launch opens on Twin Suns, or Salt Flats when the Mac is in light mode
@@ -269,8 +278,8 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   lights up; dropped right on a composer, they land where you let go.
 - **The mic dictates** on this Mac with whisper.cpp: click it, talk, click again, and the text lands
   at the cursor (Esc throws the recording away). `⌥'` starts and stops it, and `⌘⌥'` works too; rebind it
-  in Settings → Shortcuts. It needs `brew install whisper-cpp ffmpeg` and a
-  model; it uses superwhisper's or Homebrew's models, or the one in `WEFT_WHISPER_MODEL`. In a
+  in Settings → Shortcuts. On a Mac it needs `brew install whisper-cpp ffmpeg` and a
+  model (on Windows whisper ships inside Weft, and the model downloads from Settings → Dictation → Advanced); it uses superwhisper's or Homebrew's models, or the one in `WEFT_WHISPER_MODEL`. In a
   normal browser tab without whisper it falls back to the browser's speech recognition.
   Settings → General → Dictation picks its language (naming it is faster than detecting it), takes a
   vocabulary of names and terms whisper should expect, and turns on **Advanced dictation**: Weft
@@ -280,7 +289,7 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   pill floats at the top of the screen with the time and your voice's pulse, a soft chime starts and stops
   it, and Esc cancels. The text is pasted where you're typing, or copied to the clipboard when there's no
   text box. Pasting into other apps needs Weft allowed in System Settings → Privacy & Security →
-  Accessibility; the composer's mic starts the same pill.
+  Accessibility (on Windows the text is pasted with Ctrl+V, with no grant); the composer's mic starts the same pill.
 - **Drafts are kept** per card and for the new-thread dialog until sent, so closing it loses nothing.
 - **One button that says what Enter does.** The reply box is in one mode at a time, named on a chip inside it
   and on its button: **Send**; while a Claude Code or puku turn runs, **Send** goes in after the agent's next tool
@@ -1008,6 +1017,10 @@ Review, the phone buzzes with the card's title and its question ("Wants to run p
 moved it. A database trigger and a Supabase Edge Function send it through Expo, once per move (a card flapping columns buzzes
 once), and drop phones that uninstalled the app. Settings → Sync → **Phones** lists the paired phones with **Remove**
 (docs/architecture/mobile.md#push).
+
+**Get the phone app.** Once you're signed in and a few threads have finished, Weft shows the phone app's TestFlight link as a
+QR code once, with **Email me an invite**, which has Apple send the beta invite to your account's email. Pair a phone in
+Settings → Sync has the link too (docs/architecture/mobile.md#testflight).
 
 **A worker's simulator in the pane.** A worker streams its simulator to the card's pane, marked "streaming from" the worker.
 On the desktop board you can drive it without asking the thread: **📱 Start simulator** on a React Native or Expo card, a device

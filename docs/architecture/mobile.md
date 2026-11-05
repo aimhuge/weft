@@ -38,6 +38,36 @@ No chat on the main screen; each card is the page its agent last showed, full sc
   `Authorization: Bearer <jwt>` (the phone) or the cookie (weft.zip). `/api/web-board/[orgId]/page/[sha]` and
   `/blob-urls` use it, so the phone loads pages and signs pane captures the way the web board does.
 
+## TestFlight
+
+Getting people onto the phone app: a one-time **Weft on your phone** prompt on the desktop board shows the external beta
+group's public TestFlight link as a QR code, with **Email me an invite**, which adds the signed-in account's email to the
+group through the App Store Connect API (Apple sends the invite). Pair a phone (Settings → Sync) has the same link as
+"No Weft app on your phone yet? Get it on TestFlight".
+
+```
+PhonePrompt (HeaderBadges)  ──GET/POST──▶ /api/account/testflight (localhost, guard)
+                                              │ lib/testflight-client.ts, Bearer <account access token>
+                                              ▼
+                                   weft.zip /api/testflight      GET: { url, invites }  (public)
+                                              │ POST: email from bearerUser(req), never the body
+                                              ▼
+                                   lib/testflight.ts inviteTester: ES256 JWT (ascToken) →
+                                   POST /v1/betaTesters {email, name, betaGroups:[group]}
+                                   409 (already in the account) → GET ?filter[email] → add to the group
+```
+
+- **When it shows** (`lib/phone-prompt.ts` `shouldOfferPhone`): signed in, welcomed, three threads finished, no phone in
+  `push_devices` yet, the sync ask didn't open this launch, weft.zip answers with a link, and `weft-phone-prompt-seen`
+  isn't set in localStorage. Closing it either way sets that flag; Settings → General → Reset tips clears it.
+- **Dormant until set up**: with no `TESTFLIGHT_PUBLIC_URL` on weft.zip, GET answers `url: null` and nothing shows; with
+  the link but no key, the prompt shows the QR code without the email button.
+- **weft.zip env** (`.env.example`, the 🔐 vault's production blanks): `ASC_ISSUER_ID`, `ASC_KEY_ID`, `ASC_PRIVATE_KEY`
+  (the .p8, newlines or `\n` escapes), `TESTFLIGHT_GROUP_ID`, `TESTFLIGHT_PUBLIC_URL` (`https://testflight.apple.com/join/…`
+  only). The key needs the App Manager or Admin role; a Developer key (the notarization one may be) can't add testers.
+- **Apple's side**: the group must be external with a build that passed Beta App Review, or invites wait for one.
+  External testing caps at 10,000 testers.
+
 ## Push
 
 A phone buzzes when one of your synced cards moves into **Needs you** or **Review**, whichever Mac (or the web board)

@@ -6,12 +6,15 @@ import "./test-utils";
 import type { PairingBridge } from "@/lib/use-pairing";
 
 vi.mock("@/lib/use-now", () => ({ useNow: () => 1_000_000 }));
+const testflightLink = vi.hoisted(() => ({ url: null as string | null }));
+vi.mock("@/lib/use-testflight", () => ({ useTestflightLink: () => testflightLink.url }));
 const { default: PairDevices, QrCode } = await import("./PairDevices");
 
 const PHONE = { id: "p1", name: "Alex's iPhone", kind: "phone" as const, platform: "ios", fingerprint: "abcdef0123456789", pairedAt: "t" };
 let bridge: { [K in keyof PairingBridge]: ReturnType<typeof vi.fn> };
 
 beforeEach(() => {
+  testflightLink.url = null;
   bridge = {
     start: vi.fn(() => Promise.resolve({ id: "code-1", link: "https://weft.zip/pair#v=1&p=x", expiresAt: 1_000_000 + 125_000 })),
     check: vi.fn(() => Promise.resolve({ status: "open" })),
@@ -96,9 +99,43 @@ describe("PairDevices", () => {
   });
 });
 
+describe("PairDevices TestFlight line", () => {
+  it("offers 'Get it on TestFlight' when the hook has a link, and opens it", async () => {
+    testflightLink.url = "https://testflight.apple.com/join/abc";
+    const openExternal = vi.fn();
+    (window as unknown as { weft: Record<string, unknown> }).weft.openExternal = openExternal;
+    render(<PairDevices />);
+    expect(await screen.findByText(/No Weft app on your phone yet\?/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Get it on TestFlight" }));
+    expect(openExternal).toHaveBeenCalledWith("https://testflight.apple.com/join/abc");
+  });
+
+  it("hides the line without a link", async () => {
+    render(<PairDevices />);
+    await screen.findByRole("button", { name: "Pair a phone" });
+    expect(screen.queryByRole("button", { name: "Get it on TestFlight" })).toBeNull();
+  });
+
+  it("hides the line while a pairing code is open", async () => {
+    testflightLink.url = "https://testflight.apple.com/join/abc";
+    render(<PairDevices />);
+    expect(await screen.findByRole("button", { name: "Get it on TestFlight" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Pair a phone" }));
+    await screen.findByRole("img", { name: "Pairing QR code" });
+    expect(screen.queryByRole("button", { name: "Get it on TestFlight" })).toBeNull();
+  });
+});
+
 describe("QrCode", () => {
   it("draws the link's modules", () => {
     const { container } = render(<QrCode text="https://weft.zip/pair#x" size={100} />);
     expect(container.querySelector("path")?.getAttribute("d")).toMatch(/^M\d+ \d+h1v1h-1z/);
+  });
+
+  it("is labelled for pairing unless told otherwise", () => {
+    const { rerender } = render(<QrCode text="x" />);
+    expect(screen.getByRole("img", { name: "Pairing QR code" })).toBeInTheDocument();
+    rerender(<QrCode text="x" label="Custom" />);
+    expect(screen.getByRole("img", { name: "Custom" })).toBeInTheDocument();
   });
 });

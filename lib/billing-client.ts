@@ -8,7 +8,7 @@ import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./billing/upg
 // the status the Settings → Weft account section shows next to the sign-in form.
 
 // Same deployment as the Puku trial: WEFT_BILLING_URL lets a preview or fork point at its own deployed Weft.
-const BASE = (process.env.WEFT_BILLING_URL || TRIAL_URL.replace(/\/api\/puku$/, "")).replace(/\/+$/, "");
+export const BASE = (process.env.WEFT_BILLING_URL || TRIAL_URL.replace(/\/api\/puku$/, "")).replace(/\/+$/, "");
 
 export type BillingClientResult = BillingStatus | { error: string } | null;
 
