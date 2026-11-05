@@ -109,9 +109,11 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
           { role: "selectAll" },
           { type: "separator" },
           {
-            label: "Find Cards",
+            // Finds cards on the board, or words in the browser pane's page when the page has focus.
+            label: "Find",
             accelerator: "CmdOrCtrl+F",
             click: () => {
+              if (pane.owns(focusedContents())) return pane.openFind();
               showMain();
               sendMenu("find");
             },

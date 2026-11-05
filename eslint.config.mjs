@@ -22,7 +22,7 @@ const OVERSIZE = {
   "lib/board-view.test.ts": 520,
   "components/SettingsDialog.tsx": 471,
   "lib/use-dictation.test.ts": 425,
-  "electron/main.cjs": 369,
+  "electron/main.cjs": 355,
   "lib/import.ts": 391,
   "lib/library.ts": 391,
   "components/ReplyBox.tsx": 357,

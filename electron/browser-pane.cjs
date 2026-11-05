@@ -16,6 +16,9 @@ const { failedUrl, watchLoadFailures } = require("./pane-error.cjs");
 const { authorizeThreadOpen, originOf, rememberBoardOrigin } = require("./pane-origins.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { appsDir, attachWebContentsView, createAppReload } = require("./app-reload.cjs");
+const { normalizeUrl } = require("./pane-url.cjs");
+const { replayEscape } = require("./pane-escape.cjs");
+const { findInPage, stopFind, watchFind } = require("./pane-find.cjs");
 
 // Chrome's zoom steps, as percentages; Zoom In/Out walk them.
 const ZOOM_STEPS = [25, 33, 50, 67, 75, 80, 90, 100, 110, 125, 150, 175, 200, 250, 300, 400, 500];
@@ -105,19 +108,10 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     onContents?.(wc);
     // Before the first load, so the console and network buffers catch it from the start.
     cdp.tryAttach(wc);
-    // A focused page swallows keys the board never sees, so Escape is replayed into the board too,
-    // where it closes the newest layer as usual. A fullscreen video keeps it to leave fullscreen.
-    let fullscreen = false;
-    wc.on("enter-html-full-screen", () => (fullscreen = true));
-    wc.on("leave-html-full-screen", () => (fullscreen = false));
-    wc.on("before-input-event", (_e, input) => {
-      if (input.type !== "keyDown" || input.key !== "Escape" || fullscreen) return;
-      if (input.shift || input.control || input.alt || input.meta) return;
-      const board = boardContents();
-      if (!board) return;
-      board.focus();
-      board.sendInputEvent({ type: "keyDown", keyCode: "Escape" });
-      board.sendInputEvent({ type: "keyUp", keyCode: "Escape" });
+    replayEscape(wc, boardContents);
+    // Matches go to the board's find bar while this is the page on screen (electron/pane-find.cjs).
+    watchFind(wc, (found) => {
+      if (key === active) boardContents()?.send("browser:found", found);
     });
     // Trackpad pinch magnifies like Safari; Cmd+scroll changes the page zoom.
     wc.setVisualZoomLevelLimits(1, 4).catch(() => {});
@@ -223,14 +217,6 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
       height: Math.max(0, Math.round(rect.height)),
     };
     layout();
-  }
-
-  function normalizeUrl(raw) {
-    const url = String(raw || "").trim();
-    if (/^(https?|file|about):/i.test(url)) return url;
-    if (/^(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/i.test(url)) return `http://${url}`;
-    if (/^[a-z][a-z0-9+.-]*:/i.test(url)) throw new Error(`Can't open ${url} in the browser pane`);
-    return `https://${url}`;
   }
 
   // Weft's own server (see self-url.cjs for what counts).
@@ -376,6 +362,13 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     forward: () => views.get(active)?.webContents.navigationHistory.goForward(),
     reload: () => views.get(active)?.webContents.reload(),
     zoom: (action) => zoomContents(views.get(active)?.webContents, action),
+    find: (text, opts) => findInPage(views.get(active)?.webContents, text, opts),
+    stopFind: () => stopFind(views.get(active)?.webContents),
+    // ⌘F on a focused page (electron/menus.cjs): the board opens its find bar and takes the keys.
+    openFind: () => {
+      boardContents()?.focus();
+      boardContents()?.send("browser:find");
+    },
     // True for any card's page, so the app menu's zoom keys reach the pane's toolbar too.
     owns: (wc) => [...views.values()].some((v) => v.webContents === wc),
     startControlServer,

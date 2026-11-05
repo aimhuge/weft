@@ -40,6 +40,7 @@ export const FIXED_SHORTCUTS: CatalogEntry[] = [
   { id: "strike", keys: ["mod+shift+s"], description: "Strikethrough", group: "Writing" },
   { id: "inline-code", keys: ["mod+e"], description: "Inline code", group: "Writing" },
   { id: "terminal-split", keys: ["mod+\\"], description: "Split the terminal", group: "Terminal & browser" },
+  { id: "find-in-page", keys: ["mod+f"], description: "Find in the browser pane's page (when the page has focus)", group: "Terminal & browser", desktop: true },
   { id: "zoom-in", keys: ["mod++"], description: "Zoom in", group: "Terminal & browser", desktop: true },
   { id: "zoom-out", keys: ["mod+-"], description: "Zoom out", group: "Terminal & browser", desktop: true },
   { id: "zoom-reset", keys: ["mod+0"], description: "Actual size", group: "Terminal & browser", desktop: true },

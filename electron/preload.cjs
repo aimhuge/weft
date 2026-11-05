@@ -24,6 +24,10 @@ contextBridge.exposeInMainWorld("weft", {
     forward: () => ipcRenderer.send("browser:forward"),
     reload: () => ipcRenderer.send("browser:reload"),
     zoom: (action) => ipcRenderer.send("browser:zoom", action),
+    find: (text, opts) => ipcRenderer.send("browser:find", text, opts),
+    stopFind: () => ipcRenderer.send("browser:stop-find"),
+    onFind: (callback) => listen("browser:find", callback),
+    onFound: (callback) => listen("browser:found", callback),
     onState: (callback) => listen("browser:state", callback),
   },
   dialog: {
@@ -61,6 +65,7 @@ contextBridge.exposeInMainWorld("weft", {
     overview: (folders) => ipcRenderer.invoke("vault:overview", folders),
     scan: (folder) => ipcRenderer.invoke("vault:scan", folder),
     import: (folder, picks) => ipcRenderer.invoke("vault:import", folder, picks),
+    locate: (folder) => ipcRenderer.invoke("vault:locate", folder),
     reveal: (id, name, environment) => ipcRenderer.invoke("vault:reveal", id, name, environment),
     copy: (id, name, environment) => ipcRenderer.invoke("vault:copy", id, name, environment),
     set: (folder, name, environment, value) => ipcRenderer.invoke("vault:set", folder, name, environment, value),

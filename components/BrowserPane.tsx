@@ -7,10 +7,12 @@ import { appFor } from "@/lib/mini-apps";
 import { paneAddress } from "@/lib/app-share-types";
 import { useAnyOverlay } from "@/lib/overlay";
 import { useMiniApps } from "@/lib/use-mini-apps";
+import { usePaneFind } from "@/lib/use-pane-find";
 import Icon, { Spinner } from "./Icon";
 import AppShareButton from "./AppShareButton";
 import SaveAppButton from "./SaveAppButton";
 import ZoomMenu from "./ZoomMenu";
+import PaneFindBar from "./PaneFindBar";
 
 const HIDDEN = { x: 0, y: 0, width: 0, height: 0 };
 // The page itself is a native Electron view laid over the placeholder below;
@@ -45,6 +47,7 @@ export default function BrowserPane({
   const hide = obscured || overlay || resizing;
   // A shell from before zoom reporting sends no zoom.
   const zoom = state.zoom ?? 100;
+  const find = usePaneFind(state.url);
 
   useEffect(() => {
     const bridge = window.weft;
@@ -116,7 +119,11 @@ export default function BrowserPane({
         <button className={nav} disabled={!state.url} onClick={() => window.weft?.browser.reload()} aria-label="Reload">
           {state.loading ? <Spinner size={13} /> : <Icon name="reload" size={15} />}
         </button>
-        <AddressInput desktop={desktop} url={state.url} app={app} />
+        {find.open ? (
+          <PaneFindBar url={state.url} focus={find.focus} onClose={find.close} />
+        ) : (
+          <AddressInput desktop={desktop} url={state.url} app={app} />
+        )}
         {/* Save as app: the page joins the left rail below Services (components/AppsRail.tsx). */}
         {desktop && <SaveAppButton url={state.url} title={state.title} />}
         {/* Share an app: shown for a saved app on the board's own pane (no card actions). */}
@@ -184,7 +191,7 @@ function AddressInput({
         }
       }}
       disabled={!desktop}
-      placeholder="Type a URL, or ask an agent to open one"
+      placeholder="Search or type a URL"
       className={`mx-1 min-w-0 flex-1 rounded-md border border-line bg-canvas px-2.5 py-1 text-[12px] text-ink outline-none placeholder:font-sans placeholder:text-faint focus:border-accent ${isName ? "font-sans" : "font-mono"}`}
     />
   );

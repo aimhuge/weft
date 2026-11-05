@@ -64,6 +64,12 @@ export interface ShellBridge {
     // "in", "out", "reset", or a percentage.
     zoom(action: "in" | "out" | "reset" | number): void;
     onState(callback: (state: BrowserState) => void): () => void;
+    // Find in page (electron/pane-find.cjs): next steps to the next match (or the previous, with forward false).
+    find?(text: string, opts?: { forward?: boolean; next?: boolean }): void;
+    stopFind?(): void;
+    // ⌘F on the pane's page; the toolbar opens its find bar.
+    onFind?(callback: () => void): () => void;
+    onFound?(callback: (found: { active: number; matches: number }) => void): () => void;
   };
   dialog: {
     // A native folder picker; resolves to null when cancelled.
