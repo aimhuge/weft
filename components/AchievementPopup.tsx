@@ -3,6 +3,7 @@
 import type { Badge } from "@/lib/game-badges";
 import type { GameState } from "@/lib/game-server";
 import { loreFor, type Lore } from "@/lib/level-lore";
+import { useOverlay } from "@/lib/overlay";
 import { readMuted, VoicePlayer, writeMuted } from "@/lib/welcome-voice";
 import Confetti from "./Confetti";
 import Modal from "./Modal";
@@ -23,6 +24,8 @@ export default function AchievementPopup({ achievement, onProfile, onClose }: { 
   const { fresh, level } = achievement;
   const heading = fresh.length === 0 ? "Level up!" : fresh.length === 1 ? "Achievement unlocked!" : `${fresh.length} achievements unlocked!`;
   const lore = level ? loreFor(level.level, level.title) : null;
+  // The browser pane is a native view drawn above every page element, so it steps aside while the popup is up.
+  useOverlay(true);
 
   return (
     <>
