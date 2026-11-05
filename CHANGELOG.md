@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **A team's projects sync to the team.** When a team links a GitHub repo in Settings → Teams, every member's synced cards for that repo now go to the team instead of each person's own workspace, so `weft.zip/<team>/board` shows everyone's work on it in one place. Folders sync only after their owner switches Sync on, and turning Sync off and on again moves a folder's older cards into the team. Teammates can read these cards but can't drive another person's Mac (`lib/cloud-sync-route.ts`, `lib/cloud-sync-upload.ts`, `lib/cloud-inbox-cards.ts`, `supabase/migrations/20261105065328_team_orgs_for_repos.sql`).
+
 ## [0.7.4] - 2026-11-04
 
 ### Changed
