@@ -26,7 +26,7 @@ describe("sweepResults", () => {
 
   it("removes nothing when nothing is old, and throws when the bucket fails", async () => {
     const none = storage(() => ({ data: [{ name: "b", created_at: fresh }], error: null }));
-    expect(await sweepResults(none as never, "org-1")).toBe(0);
+    expect(await sweepResults(none as never, "org-1", NOW)).toBe(0);
     expect(none.remove).not.toHaveBeenCalled();
     await expect(sweepResults(storage(() => ({ data: null, error: { message: "list failed" } })) as never, "org-1", NOW)).rejects.toThrow("list failed");
     const broken = storage(() => ({ data: [{ name: "a", created_at: old }], error: null }), { error: { message: "remove failed" } });

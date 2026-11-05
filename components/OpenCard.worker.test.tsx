@@ -171,7 +171,7 @@ describe("the note under a worker card's thread", () => {
   it("isn't there for a card on this Mac", () => {
     queued.count = 3;
     setup({ card: { ...card, cwd: "/r" }, worker: undefined });
-    expect(seen.get("thread")!.footer).toBeNull();
+    expect(note()).toBe("");
   });
 });
 

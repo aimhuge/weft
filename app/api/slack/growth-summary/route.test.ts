@@ -50,7 +50,7 @@ describe("POST", () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
       ok: true,
-      url: "https://weft.zip/apps/growth",
+      url: "https://weft.zip/@fotoflo/apps/growth",
       lines: [
         "3 new in 7 days (9 in 30)",
         "12 accounts, 5 signed in this week",
@@ -75,7 +75,7 @@ describe("POST", () => {
     vi.mocked(growthOverview).mockResolvedValue(null);
     const res = await POST(req(WRITE));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, url: "https://weft.zip/apps/growth", lines: [] });
+    expect(await res.json()).toEqual({ ok: true, url: "https://weft.zip/@fotoflo/apps/growth", lines: [] });
   });
 
   it("refuses a write without the board's token", async () => {
@@ -103,7 +103,7 @@ describe("GET", () => {
     const res = await GET(req(READ));
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      url: "https://weft.zip/apps/growth",
+      url: "https://weft.zip/@fotoflo/apps/growth",
       lines: [
         "3 new in 7 days (9 in 30)",
         "12 accounts, 5 signed in this week",
