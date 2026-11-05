@@ -52,7 +52,8 @@ function besideClick(click, workArea, size) {
 
 function claudeBinary() {
   const pkg = require.resolve(`@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/package.json`);
-  return path.join(path.dirname(pkg), "claude").replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
+  const name = process.platform === "win32" ? "claude.exe" : "claude";
+  return path.join(path.dirname(pkg), name).replace(`app.asar${path.sep}`, `app.asar.unpacked${path.sep}`);
 }
 
 function registerClaudeSignIn(ipcMain, { isBoard, loadPty, partition }) {

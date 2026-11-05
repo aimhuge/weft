@@ -10,6 +10,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { dirSize } from "./dir-size.mjs";
 import { DEPS_FILE, writeDepsFile } from "./server-patch-deps.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
@@ -17,6 +18,7 @@ const distDir = process.argv[2] || process.env.WEFT_DIST || ".next-dist";
 const dist = path.join(ROOT, distDir);
 const standalone = path.join(dist, "standalone");
 const platformPkg = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
+const CLAUDE = process.platform === "win32" ? "claude.exe" : "claude";
 
 function fail(message) {
   console.error(`prepare-standalone: ${message}`);
@@ -53,16 +55,16 @@ console.log(`Copied ${distDir}/static and public/ into ${path.relative(ROOT, sta
 for (const pkg of ["@anthropic-ai/claude-agent-sdk", platformPkg]) {
   const target = path.join(standalone, "node_modules", pkg);
   const source = path.join(ROOT, "node_modules", pkg);
-  const marker = pkg === platformPkg ? "claude" : "package.json";
+  const marker = pkg === platformPkg ? CLAUDE : "package.json";
   if (!fs.existsSync(path.join(target, marker))) {
     if (!fs.existsSync(source)) fail(`${pkg} isn't installed in node_modules. Run pnpm install.`);
     console.log(`Tracing missed ${pkg}; copying it in`);
     copyDir(source, target);
   }
 }
-const binary = path.join(standalone, "node_modules", platformPkg, "claude");
+const binary = path.join(standalone, "node_modules", platformPkg, CLAUDE);
 fs.chmodSync(binary, 0o755);
-const sourceSize = fs.statSync(path.join(ROOT, "node_modules", platformPkg, "claude")).size;
+const sourceSize = fs.statSync(path.join(ROOT, "node_modules", platformPkg, CLAUDE)).size;
 if (fs.statSync(binary).size !== sourceSize) fail(`${binary} is incomplete (size differs from node_modules).`);
 try {
   fs.accessSync(binary, fs.constants.X_OK);
@@ -100,5 +102,4 @@ checkLinks(standalone);
 const deps = writeDepsFile(standalone);
 console.log(`Wrote ${DEPS_FILE}: ${deps.files} files, ${deps.hash.slice(0, 12)}`);
 
-const size = execFileSync("du", ["-sh", standalone], { encoding: "utf8" }).split("\t")[0];
-console.log(`Standalone server ready: ${path.relative(ROOT, standalone)} (${size})`);
+console.log(`Standalone server ready: ${path.relative(ROOT, standalone)} (${dirSize(standalone)})`);

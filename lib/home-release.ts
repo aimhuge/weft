@@ -1,5 +1,5 @@
 import { cacheLife } from "next/cache";
-import { FEED, parseFeed, type Release } from "./home";
+import { FEED, WINDOWS_ARM_FEED, WINDOWS_FEED, parseFeed, windowsInstallerUrl, type Release } from "./home";
 
 const RELEASE_FEED_TIMEOUT_MS = 3_000;
 
@@ -18,6 +18,20 @@ export async function latestRelease(fetchFn: typeof fetch = fetch): Promise<Rele
     });
     if (!res.ok) return null;
     return parseFeed(await res.json());
+  } catch {
+    return null;
+  }
+}
+
+// The newest Windows installer for weft.zip/download/windows (x64, or arm64 with ?arch=arm64), cached like
+// latestRelease; null until a release carries one (the link then goes to the releases page).
+export async function latestWindowsInstaller(arch: "x64" | "arm64" = "x64", fetchFn: typeof fetch = fetch): Promise<string | null> {
+  "use cache";
+  cacheLife("minutes");
+  try {
+    const res = await fetchFn(arch === "arm64" ? WINDOWS_ARM_FEED : WINDOWS_FEED, { signal: AbortSignal.timeout(RELEASE_FEED_TIMEOUT_MS) });
+    if (!res.ok) return null;
+    return windowsInstallerUrl(await res.text());
   } catch {
     return null;
   }

@@ -2,7 +2,8 @@ name: Release
 
 # Push a vX.Y.Z tag (after bumping package.json and adding a CHANGELOG.md section) and this builds the Mac
 # app, signs and notarizes it, and publishes a GitHub release with the dmg, the zip and update.json, the feed
-# every installed Weft checks (electron/updater.cjs). docs/architecture/updates.md lists the secrets.
+# every installed Weft checks (electron/updater.cjs). docs/architecture/updates.md lists the secrets. The windows
+# job then adds the Windows installer and latest.yml (windows.yml).
 on:
   push:
     tags: ["v*"]
@@ -70,3 +71,12 @@ jobs:
             "dist/Weft-$VERSION-arm64.dmg" \
             "dist/Weft-$VERSION-arm64.zip" \
             dist/update.json
+
+  # The Windows installer, on the release the mac job just published (windows.yml; unsigned, its own runner).
+  # It runs after mac and only adds assets, so a Windows failure never holds the Mac release back.
+  windows:
+    needs: mac
+    uses: ./.github/workflows/windows.yml
+    with:
+      tag: ${{ github.ref_name }}
+    secrets: inherit

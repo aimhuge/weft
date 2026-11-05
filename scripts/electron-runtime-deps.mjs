@@ -22,7 +22,7 @@ const ELECTRON_DIR = path.join(ROOT, "electron");
 
 // Packages that need more than "the whole folder": a native binary, a prebuild, a subset of files.
 const NATIVE_EXTRA = {
-  "node-pty": ["node_modules/node-pty/package.json", "node_modules/node-pty/lib/**/*", "node_modules/node-pty/prebuilds/darwin-${arch}/**/*", "node_modules/node-pty/build/Release/**/*"],
+  "node-pty": ["node_modules/node-pty/package.json", "node_modules/node-pty/lib/**/*", "node_modules/node-pty/prebuilds/${platform}-${arch}/**/*", "node_modules/node-pty/build/Release/**/*"],
 };
 
 const builtins = new Set([...builtinModules, ...builtinModules.map((m) => `node:${m}`)]);
@@ -134,6 +134,11 @@ function directRequires() {
   return found;
 }
 
+// Packages Electron main can reach but the app never has: an optional peer that only dev tools depend on, so
+// electron-builder (production dependencies only) leaves it out whatever build.files says. debug loads
+// supports-color inside a try and colours nothing without it.
+const NOT_SHIPPED = new Set(["supports-color"]);
+
 /**
  * The closure: the direct requires and everything they pull in at runtime.
  *
@@ -148,7 +153,7 @@ export function runtimeClosure() {
     if (closure.has(name)) continue;
     if (!fs.existsSync(path.join(ROOT, "node_modules", name, "package.json"))) continue;
     closure.add(name);
-    for (const dep of runtimeRequires(name)) if (!closure.has(dep)) queue.push(dep);
+    for (const dep of runtimeRequires(name)) if (!closure.has(dep) && !NOT_SHIPPED.has(dep)) queue.push(dep);
   }
   return closure;
 }

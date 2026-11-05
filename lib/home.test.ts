@@ -11,6 +11,7 @@ import {
   isWebEnabled,
   loadHome,
   parseFeed,
+  windowsInstallerUrl,
 } from "./home";
 
 describe("isDeployed", () => {
@@ -166,5 +167,18 @@ describe("PILLARS", () => {
   it("lists the five things Weft stands on, each with a kicker, title and body", () => {
     expect(PILLARS.map((p) => p.kicker)).toEqual(["Code review", "Copilot", "Social", "Connectors", "Vault"]);
     for (const p of PILLARS) expect(p.title && p.body).toBeTruthy();
+  });
+});
+
+describe("windowsInstallerUrl", () => {
+  it("is the installer latest.yml names, at its version's release", () => {
+    expect(windowsInstallerUrl("version: 0.7.6\npath: Weft-Setup-0.7.6.exe\n")).toBe(`${REPO}/releases/download/v0.7.6/Weft-Setup-0.7.6.exe`);
+    expect(windowsInstallerUrl("version: '1.0.0'\npath: 'Weft-Setup-1.0.0.exe'\n")).toBe(`${REPO}/releases/download/v1.0.0/Weft-Setup-1.0.0.exe`);
+  });
+
+  it("is null without a version or a path", () => {
+    expect(windowsInstallerUrl("path: Weft-Setup-1.exe\n")).toBeNull();
+    expect(windowsInstallerUrl("version: 1\n")).toBeNull();
+    expect(windowsInstallerUrl(undefined)).toBeNull();
   });
 });

@@ -96,3 +96,18 @@ describe("appendToolchain", () => {
     expect(process.env.PATH).toBe("/App/toolchain/bin");
   });
 });
+
+describe("Windows", () => {
+  it("leaves PATH alone: no login shell to ask, and the app already has the user's PATH", async () => {
+    let asked = false;
+    await fixPath({ cacheFile, platform: "win32", readShell: () => ((asked = true), Promise.resolve("/x")) });
+    expect(asked).toBe(false);
+    expect(process.env.PATH).toBe("/usr/bin:/bin");
+  });
+
+  it("appends the toolchain with Windows' ; separator, keeping C:\\ entries whole", () => {
+    process.env.PATH = "C:\\Windows;C:\\Users\\me\\AppData\\Roaming\\npm;C:\\tc";
+    expect(appendToolchain("C:\\tc", { exists: () => true, delimiter: ";" })).toBe(true);
+    expect(process.env.PATH).toBe("C:\\Windows;C:\\Users\\me\\AppData\\Roaming\\npm;C:\\tc");
+  });
+});

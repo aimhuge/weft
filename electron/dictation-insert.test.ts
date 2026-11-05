@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-const { createDictationInsert, spaced, TEXT_ROLES, FOCUS_SCRIPT, PROBE_SCRIPT } = await import("./dictation-insert.cjs");
+const { createDictationInsert, spaced, TEXT_ROLES, FOCUS_SCRIPT, PROBE_SCRIPT, WIN_PASTE } = await import("./dictation-insert.cjs");
 
 type ExecCb = (err: Error | null, stdout?: string) => void;
 
@@ -11,6 +11,7 @@ interface Opts {
   out?: string;
   execErr?: Error | null;
   mac?: boolean | undefined;
+  win?: boolean;
 }
 
 function setup(opts: Opts = {}) {
@@ -22,7 +23,7 @@ function setup(opts: Opts = {}) {
   const webContents = { getFocusedWebContents: vi.fn(() => contents) };
   const execFile = vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: ExecCb) => cb(execErr, out));
   const deps = { clipboard, systemPreferences, BaseWindow, webContents, execFile };
-  const deliver = createDictationInsert(mac === undefined ? deps : { ...deps, mac });
+  const deliver = createDictationInsert({ ...(mac === undefined ? deps : { ...deps, mac }), win: opts.win ?? false });
   return { deliver, clipboard, systemPreferences, execFile };
 }
 
@@ -116,5 +117,37 @@ describe("deliver into another app", () => {
     const { deliver, execFile } = setup({ mac: undefined });
     expect(await deliver("hi")).toBe(process.platform === "darwin" ? "pasted" : "copied");
     expect(execFile).toHaveBeenCalledTimes(process.platform === "darwin" ? 1 : 0);
+  });
+});
+
+describe("Windows", () => {
+  it("pastes into the focused app with Ctrl+V through a hidden PowerShell, after copying", async () => {
+    const { deliver, execFile, clipboard, systemPreferences } = setup({ mac: false, win: true });
+    expect(await deliver("hi")).toBe("pasted");
+    expect(clipboard.writeText).toHaveBeenCalledWith("hi");
+    expect(execFile).toHaveBeenCalledWith(
+      "powershell.exe",
+      ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", WIN_PASTE],
+      { timeout: 4000, windowsHide: true },
+      expect.any(Function),
+    );
+    expect(WIN_PASTE).toContain("SendKeys('^v')");
+    expect(systemPreferences.isTrustedAccessibilityClient).not.toHaveBeenCalled();
+  });
+
+  it("leaves the text on the clipboard when PowerShell fails", async () => {
+    expect(await setup({ mac: false, win: true, execErr: new Error("blocked") }).deliver("hi")).toBe("copied");
+  });
+
+  it("still inserts straight into a Weft field", async () => {
+    const contents = page({ editable: true, before: "" });
+    const { deliver, execFile } = setup({ mac: false, win: true, focused: true, contents });
+    expect(await deliver("hi")).toBe("inserted");
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it("defaults win to the running platform", () => {
+    const deps = { clipboard: { writeText() {} }, systemPreferences: {}, BaseWindow: {}, webContents: {}, execFile() {} };
+    expect(typeof createDictationInsert(deps)).toBe("function");
   });
 });

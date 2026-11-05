@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("next/cache", () => ({ cacheLife: vi.fn() }));
 
 import { cacheLife } from "next/cache";
-import { FEED } from "./home";
-import { latestRelease } from "./home-release";
+import { FEED, WINDOWS_ARM_FEED, WINDOWS_FEED } from "./home";
+import { latestRelease, latestWindowsInstaller } from "./home-release";
 
 const dmg = "https://github.com/aimhuge/weft/releases/download/v0.3.0/Weft-0.3.0-arm64.dmg";
 const respond = (status: number, body: unknown) =>
@@ -46,5 +46,37 @@ describe("latestRelease", () => {
   it("is null when GitHub can't be reached", async () => {
     const fetchFn = vi.fn(() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
     await expect(latestRelease(fetchFn)).resolves.toBeNull();
+  });
+});
+
+describe("latestWindowsInstaller", () => {
+  const yml = "version: 0.7.6\npath: Weft-Setup-0.7.6-x64.exe\nsha512: abc\n";
+  const text = (status: number, body: string) =>
+    vi.fn(() => Promise.resolve({ ok: status < 400, status, text: () => Promise.resolve(body) })) as unknown as typeof fetch;
+
+  it("points at the installer latest.yml names, on its own release", async () => {
+    const fetchFn = text(200, yml);
+    await expect(latestWindowsInstaller("x64", fetchFn)).resolves.toBe("https://github.com/aimhuge/weft/releases/download/v0.7.6/Weft-Setup-0.7.6-x64.exe");
+    expect(fetchFn).toHaveBeenCalledWith(WINDOWS_FEED, expect.anything());
+  });
+
+  it("reads arm64's own feed for an ARM PC", async () => {
+    const fetchFn = text(200, "version: 0.7.6\npath: Weft-Setup-0.7.6-arm64.exe\n");
+    await expect(latestWindowsInstaller("arm64", fetchFn)).resolves.toBe("https://github.com/aimhuge/weft/releases/download/v0.7.6/Weft-Setup-0.7.6-arm64.exe");
+    expect(fetchFn).toHaveBeenCalledWith(WINDOWS_ARM_FEED, expect.anything());
+  });
+
+  it("is null before a release carries a Windows build, or when GitHub can't be reached", async () => {
+    await expect(latestWindowsInstaller("x64", text(404, "Not Found"))).resolves.toBeNull();
+    await expect(latestWindowsInstaller("x64", vi.fn(() => Promise.reject(new Error("offline"))) as unknown as typeof fetch)).resolves.toBeNull();
+  });
+
+  it("uses the global fetch by default", async () => {
+    vi.stubGlobal("fetch", text(200, "files: []\n"));
+    try {
+      await expect(latestWindowsInstaller()).resolves.toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

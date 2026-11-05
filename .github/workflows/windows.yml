@@ -1,0 +1,109 @@
+name: Windows
+
+# Builds Weft's Windows installers (unsigned NSIS) and puts them on the release beside the Mac dmg, one per arch, each
+# on a runner of its own arch: Weft-Setup-X.Y.Z-x64.exe with latest.yml, Weft-Setup-X.Y.Z-arm64.exe with
+# latest-arm64.yml, and their .blockmaps; the feeds an installed Windows Weft updates from (electron/updater-win.cjs).
+# docs/architecture/windows.md.
+#
+# - Publishing a release (the /release skill's `gh release create`) starts it for that tag.
+# - release.yml calls it once its mac job has published (a release made with GITHUB_TOKEN starts no workflow).
+# - Run by hand with no tag, or on a push to ci/windows, it only builds: the installer stays a run artifact.
+on:
+  release:
+    types: [published]
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload the installer to (empty: build only)"
+        type: string
+        default: ""
+  push:
+    branches: ["ci/windows"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    strategy:
+      fail-fast: false # one arch failing still ships the other
+      matrix:
+        include:
+          - arch: x64
+            runner: windows-latest
+            feed: latest.yml
+          - arch: arm64
+            runner: windows-11-arm
+            feed: latest-arm64.yml
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      TAG: ${{ inputs.tag || github.event.release.tag_name || '' }}
+      UNPACKED: dist/${{ matrix.arch == 'arm64' && 'win-arm64-unpacked' || 'win-unpacked' }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.event.release.tag_name || github.ref }}
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # package.json's scripts are sh (postinstall's `2>/dev/null || true`); cmd.exe can't run them.
+      - name: Run package scripts in Git's bash
+        shell: bash
+        run: pnpm config set script-shell "C:\\Program Files\\Git\\bin\\bash.exe"
+
+      - name: Check the tag matches package.json
+        if: env.TAG != ''
+        shell: bash
+        run: |
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "${TAG#v}" != "$pkg" ]; then echo "Tag $TAG doesn't match package.json $pkg"; exit 1; fi
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build the installer
+        env:
+          # Weft's own Google OAuth client, as on the Mac build (release.yml); without them the build still works.
+          WEFT_GOOGLE_CLIENT_ID: ${{ secrets.WEFT_GOOGLE_CLIENT_ID }}
+          WEFT_GOOGLE_CLIENT_SECRET: ${{ secrets.WEFT_GOOGLE_CLIENT_SECRET }}
+        run: pnpm dist:win
+
+      - name: Check the packaged app
+        shell: bash
+        run: |
+          node scripts/verify-packaged-app.cjs "$UNPACKED/resources/app.asar"
+          bin="$(cygpath -w "$UNPACKED/resources/toolchain/bin")"
+          ls "$UNPACKED/resources/toolchain/bin"
+          for tool in node pnpm claude gog; do cmd //c "$bin\\$tool.cmd --version"; done
+          # Dictation's whisper.cpp: it loads its DLLs and answers.
+          "$UNPACKED/resources/toolchain/whisper/whisper-cli.exe" --help 2>&1 | head -3
+          cat dist/${{ matrix.feed }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: weft-windows-${{ matrix.arch }}
+          path: |
+            dist/Weft-Setup-*.exe
+            dist/Weft-Setup-*.exe.blockmap
+            dist/${{ matrix.feed }}
+          if-no-files-found: error
+
+      - name: Upload to the release
+        if: env.TAG != ''
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${TAG#v}"
+          gh release upload "$TAG" --clobber \
+            "dist/Weft-Setup-$version-${{ matrix.arch }}.exe" \
+            "dist/Weft-Setup-$version-${{ matrix.arch }}.exe.blockmap" \
+            dist/${{ matrix.feed }}

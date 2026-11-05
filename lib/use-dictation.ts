@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { api } from "./client";
+import { sendsWav, toWhisperWav } from "./wav-encode";
 
 // The mic button. It records from the microphone and transcribes on this Mac with whisper.cpp (see
 // lib/transcribe.ts). Without whisper, a normal Chrome tab falls back to the browser's own speech
@@ -112,7 +113,9 @@ export function useDictation(onText: (text: string) => void) {
       setPhase("idle");
       setError(
         name === "NotAllowedError"
-          ? "Weft can't use the microphone. Allow it in System Settings → Privacy & Security → Microphone."
+          ? sendsWav()
+            ? "Weft can't use the microphone. Allow it in Settings → Privacy & security → Microphone."
+            : "Weft can't use the microphone. Allow it in System Settings → Privacy & Security → Microphone."
           : `Couldn't open the microphone: ${(err as Error).message}`,
       );
       return;
@@ -166,7 +169,9 @@ export function useDictation(onText: (text: string) => void) {
       }
       setPhase("transcribing");
       try {
-        const text = await api.transcribe(new Blob(chunks, { type: recorder.mimeType || "audio/webm" }), navigator.language);
+        const recording = new Blob(chunks, { type: recorder.mimeType || "audio/webm" });
+        // Windows has no ffmpeg to transcode webm: the board sends whisper's own WAV (lib/wav-encode.ts).
+        const text = await api.transcribe(sendsWav() ? await toWhisperWav(recording) : recording, navigator.language);
         if (text) onTextRef.current(text);
         else setError("Didn't catch anything. Try again a little closer to the mic.");
       } catch (err) {
