@@ -40,6 +40,15 @@ describe("GET /api/worker-board/page/[sha]", () => {
     expect((await get()).status).toBe(404);
   });
 
+  it("reads a teammate's card's page in the team's workspace, and refuses an org that isn't one", async () => {
+    workerPage.mockResolvedValue({ body: "x", type: "text/plain" });
+    const org = "0b5c7a4e-1111-4222-8333-944445555666";
+    const at = (query: string) => GET(new Request(`http://127.0.0.1:3000/api/worker-board/page/${SHA}${query}`, { headers: { host: "127.0.0.1:3000", "x-weft-token": "1" } }), { params: Promise.resolve({ sha: SHA }) });
+    expect((await at(`?org=${org}`)).status).toBe(200);
+    expect(workerPage).toHaveBeenCalledWith(SHA, undefined, org);
+    expect((await at("?org=../x")).status).toBe(400);
+  });
+
   it("passes on a signed-out read", async () => {
     workerPage.mockRejectedValue(new Error("Sign in to Weft to reach your worker."));
     const res = await get();

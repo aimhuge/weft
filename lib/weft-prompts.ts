@@ -3,6 +3,7 @@ import { AGENT_SOULS, agentOf, WEFT_SOUL_PROMPT } from "./agents";
 import { listAgents, savedAgentsHash } from "./agent-store";
 import { COPILOT_PROMPT } from "./board-tools";
 import { PERSONA_PROMPTS, personaOf } from "./copilot-personas";
+import { BLASTCP_PROMPT } from "./blastcp-tools";
 import { BROWSER_PROMPT, WORKER_BROWSER_PROMPT } from "./browser-tools";
 import { onWorker } from "./worker-pane";
 import { groupWorks, workerToolsPrompt } from "./worker-tools";
@@ -33,6 +34,7 @@ export const WEFT_PINNED_PROMPTS = {
   COPILOT_PROMPT,
   COPILOT_PERSONA_PROMPTS: PERSONA_PROMPTS,
   SECRETS_PROMPT,
+  BLASTCP_PROMPT,
   WEBHOOKS_PROMPT,
   DEVSERVERS_PROMPT,
   GOG_PROMPT,
@@ -74,7 +76,7 @@ const built = new Map<string, string>();
 // The tool groups' own prompts. On a Weft Worker a group whose tools don't work there is left out, and the worker's
 // table (lib/worker-tools.ts) says what doesn't work and why.
 export function toolPrompts(worker = onWorker()): string[] {
-  if (!worker) return [BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT];
+  if (!worker) return [BROWSER_PROMPT, SECRETS_PROMPT, BLASTCP_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT];
   const groups: [string, string][] = [["secrets", SECRETS_PROMPT], ["webhooks", WEBHOOKS_PROMPT], ["devservers", DEVSERVERS_PROMPT], ["gog", GOG_PROMPT]];
   return [WORKER_BROWSER_PROMPT, ...groups.filter(([group]) => groupWorks(group)).map(([, prompt]) => prompt), workerToolsPrompt()];
 }

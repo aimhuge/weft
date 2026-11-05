@@ -6,6 +6,7 @@ import { replaceOutboxHead } from "./cloud-outbox";
 import { withBlobSeal } from "./blob-seal";
 import { cardRows, macRowHost } from "./cloud-sync-cards";
 import { check, isRowError, upsert } from "./cloud-sync-send";
+import { putWithRepo } from "./cloud-cards-repo";
 import { lastPerKey, projectItem, publishes } from "./card-rows";
 import { scrub } from "./cloud-sync-rows";
 import { byOrg, singleRoute, type SyncRoute } from "./cloud-sync-route";
@@ -86,12 +87,14 @@ async function leaveHome(client: SupabaseClient, home: string, cardIds: string[]
 
 // A chunk of cards. When the WAF still blocks it escaped, each card goes alone so only the one it matches
 // is held back; items need their card's row, so that one card still fails the flush, now with a readable error.
+// A database without cloud_cards.repo yet takes them without it (lib/cloud-cards-repo.ts).
 async function putCards(client: SupabaseClient, rows: object[]) {
+  const put = (some: object[]) => putWithRepo((sent) => upsert(client, "cloud_cards", sent), some);
   try {
-    await upsert(client, "cloud_cards", rows);
+    await put(rows);
   } catch (err) {
     if (!isRowError(err) || rows.length === 1) throw err;
-    for (const row of rows) await upsert(client, "cloud_cards", [row]);
+    for (const row of rows) await put([row]);
   }
 }
 

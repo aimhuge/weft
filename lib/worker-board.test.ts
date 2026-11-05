@@ -325,4 +325,10 @@ describe("workerPage", () => {
     expect(await workerPage("a".repeat(64), signedIn(new Blob(["<!doctype html><p>hi"], { type: "text/plain" })).client)).toEqual({ type: "text/html; charset=utf-8", body: "<!doctype html><p>hi" });
     expect((await workerPage("a".repeat(64), signedIn(new Blob(["x"])).client))?.type).toBe("application/octet-stream");
   });
+
+  it("reads a teammate's card's page from the team's workspace it names", async () => {
+    const { client, download } = signedIn(new Blob(["%PDF"], { type: "application/pdf" }));
+    await workerPage("a".repeat(64), client, "team-org");
+    expect(download).toHaveBeenCalledWith(`team-org/${"a".repeat(64)}`);
+  });
 });

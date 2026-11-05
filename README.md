@@ -866,6 +866,9 @@ and admins see every project; a member sees only the ones they've been given.
 A linked project's synced cards go to the team instead of each member's own workspace, so `weft.zip/<team>/board`
 shows everyone's cards for it. A folder syncs only once its owner switches Sync on; turning Sync off and on again moves
 its older cards into the team (docs/architecture/cloud-sync.md#team-projects).
+Your teammates' cards for it show on your desktop board too, inside your own project of the same repo: each with their
+picture and "Zulker's Mac" on the tile. They're read-only: open one to read its thread and pane, but only its owner
+can reply, stop or move it.
 The pencil beside a team you own renames it; its weft.zip address stays the same. The trash deletes it, once you
 type its name, as long as you're in another team too and it has no paid plan still running.
 
@@ -1260,7 +1263,8 @@ them opens it in the browser pane. BlastCP sign-ins last 30 days: one made throu
 last week, and one made in the browser warns and offers Reconnect. Your Weft plan comes with BlastCP: connected with
 your Weft account, your own BlastCP workspace goes on BlastCP Creator while you're on Team, or own a Pro, Open Source
 or Education workspace, and back to BlastCP Free when that ends (a BlastCP plan you pay for yourself is never touched).
-More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
+Every thread can use BlastCP's tools too (`mcp__blastcp__generate_image` and the rest) through that same sign-in, with
+no claude.ai connector to sign in; the token stays in Electron main. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
 
 ## Connectors
 

@@ -18,6 +18,7 @@ const servers = vi.hoisted(() => ({
   secrets: vi.fn<(cardId: () => string | undefined, folder: () => string, title?: () => string | undefined) => { kind: string }>(() => ({ kind: "secrets" })),
   simulator: vi.fn<(cardId: () => string | undefined) => { kind: string }>(() => ({ kind: "simulator" })),
   webhooks: vi.fn<(folder: () => string) => { kind: string }>(() => ({ kind: "webhooks" })),
+  blastcp: vi.fn(() => ({ kind: "blastcp" })),
 }));
 
 vi.mock("./browser-tools", () => ({ browserMcpServer: servers.browser }));
@@ -27,6 +28,7 @@ vi.mock("./devserver-tools", () => ({ devserversMcpServer: servers.devservers })
 vi.mock("./secret-tools", () => ({ secretsMcpServer: servers.secrets }));
 vi.mock("./simulator-tools", () => ({ simulatorMcpServer: servers.simulator }));
 vi.mock("./webhook-tools", () => ({ webhooksMcpServer: servers.webhooks }));
+vi.mock("./blastcp-tools", () => ({ blastcpMcpServer: servers.blastcp }));
 vi.mock("./store", () => ({
   // Read at import by the modules runner-state.ts pulls in (lib/attachments.ts).
   DATA_DIR: "/tmp/weft-api-test-data",
@@ -46,10 +48,10 @@ const spec = (over: Partial<Spec> = {}): Spec =>
 beforeEach(() => vi.clearAllMocks());
 
 describe("weftMcpServers", () => {
-  it("gives a thread the browser, the vault, the webhooks, the dev servers, the board window, the simulators and the board", () => {
+  it("gives a thread the browser, the vault, the webhooks, the dev servers, the board window, the simulators, BlastCP and the board", () => {
     const built = weftMcpServers(spec(), () => "c1");
     expect(Object.keys(built).sort()).toEqual(
-      ["board", "board_view", "browser", "devservers", "secrets", "simulator", "webhooks"].sort(),
+      ["blastcp", "board", "board_view", "browser", "devservers", "secrets", "simulator", "webhooks"].sort(),
     );
     expect(built.browser).toEqual({ kind: "browser" });
     expect(built.secrets).toEqual({ kind: "secrets" });
@@ -57,6 +59,7 @@ describe("weftMcpServers", () => {
     expect(built.devservers).toEqual({ kind: "devservers" });
     expect(built.board_view).toEqual({ kind: "boardView" });
     expect(built.simulator).toEqual({ kind: "simulator" });
+    expect(built.blastcp).toEqual({ kind: "blastcp" });
     expect(built.board).toEqual({ kind: "weft" });
   });
 

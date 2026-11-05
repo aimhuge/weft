@@ -23,7 +23,7 @@ export { toolVerdict };
 export function secretGuardFor(cardId: () => string | undefined = () => undefined): HookCallback {
   return (input) => {
     if (input.hook_event_name !== "PreToolUse") return Promise.resolve({});
-    const why = fromCwd(input.cwd, () => toolVerdict(input.tool_name, input.tool_input, undefined, cardId()));
+    const why = fromCwd(input.cwd, () => toolVerdict(input.tool_name, input.tool_input, undefined, cardId(), input.session_id));
     return Promise.resolve(
       why ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: why } } : {},
     );

@@ -43,7 +43,7 @@ export function needsTty(text: string) {
 
 // Spots a "you need to log in" error in the CLI's output so the board can pop the login dialog.
 export function isNotLoggedInError(text: string): boolean {
-  return /not logged in|not authenticated|please run (?:\/login|codex login)|invalid api key|oauth token has expired|authentication_error/i.test(text);
+  return /not logged in|not authenticated|please run (?:\/login|codex login)|invalid api key|oauth (?:token|session) (?:has )?expired|failed to authenticate|authentication_error/i.test(text);
 }
 
 // Distinct from a transient error or a not-logged-in: when the CLI's last turn hit the

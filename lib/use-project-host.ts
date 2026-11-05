@@ -5,7 +5,7 @@
 // pane's url). On a worker the thread view pages itself in, so the rail reads what it drew (lib/worker-shown.ts), and
 // the pane is the card's last page, or the one the rail reopened, until the card opens another.
 import { useEffect, useMemo, useState } from "react";
-import { hostFor, type ProjectHost } from "./project-host";
+import { hostOf, type ProjectHost } from "./project-host";
 import { useSessionLine } from "./session-lines";
 import { parseWorkerProject } from "./worker-project";
 import type { Card, ThreadItem } from "./types";
@@ -33,7 +33,7 @@ function cardShots(page: string | undefined, thumb: string | undefined): Record<
 }
 
 export function useProjectHost(card: Card, local: { items: ThreadItem[]; pageUrl: string }): OpenHost {
-  const host = hostFor(card.cwd);
+  const host = hostOf(card);
   // An open worker card holds its worker's session line, so its acts and thread take the direct route.
   useSessionLine(parseWorkerProject(card.cwd)?.workerId);
   const shown = useWorkerShown();

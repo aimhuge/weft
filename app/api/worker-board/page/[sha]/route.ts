@@ -14,6 +14,8 @@ import { fail, guard } from "@/lib/guard";
 import { workerPage } from "@/lib/worker-board";
 
 const SHA_RE = /^[0-9a-f]{64}$/;
+// ?org= reads a teammate's card's page from the team's workspace (lib/team-board.ts), not your own.
+const ORG_RE = /^[0-9a-f-]{36}$/;
 
 const PAGE_CSP = "sandbox allow-scripts; default-src https: data: blob: 'unsafe-inline' 'unsafe-eval'; form-action 'none'; base-uri 'none'";
 
@@ -24,9 +26,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ sha: string }> 
   if (denied) return denied;
   await connection();
   const { sha } = await ctx.params;
-  if (!SHA_RE.test(sha)) return new Response("Bad request", { status: 400, headers: NO_STORE });
+  const org = new URL(req.url).searchParams.get("org");
+  if (!SHA_RE.test(sha) || (org !== null && !ORG_RE.test(org))) return new Response("Bad request", { status: 400, headers: NO_STORE });
   try {
-    const got = await workerPage(sha);
+    const got = await workerPage(sha, undefined, org ?? undefined);
     if (!got) return new Response("Not found", { status: 404, headers: NO_STORE });
     return new Response(got.body, { status: 200, headers: { ...HEADERS, "Content-Type": got.type } });
   } catch (err) {

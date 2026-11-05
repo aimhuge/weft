@@ -41,6 +41,7 @@ vi.mock("./cron-client", () => ({ cronApi }));
 vi.mock("./worker-files", () => ({ workerFiles: "worker files" }));
 vi.mock("./project-reads", () => ({ localRead: "local read" }));
 vi.mock("./project-snapshot-view", () => ({ cloudRead: "cloud read" }));
+vi.mock("./team-host", () => ({ teamHostOf: (mark: { org: string }) => ({ kind: "cloud", team: mark.org, can: () => false }) }));
 
 const { cardCan, cloudHost, hostFor, hostOf, localHost, sameHostCards, setHostForEveryCard } = await import("./project-host");
 const { localTransport } = await import("./thread-transport");
@@ -70,6 +71,21 @@ describe("hostFor", () => {
     expect(warmOnLine).toHaveBeenCalledWith("w1", "c1");
     cloudHost.warm("c1");
     expect(warmOnLine).toHaveBeenCalledOnce();
+  });
+});
+
+describe("hostOf a teammate's card", () => {
+  it("is the team's read-only host, whatever folder it's filed under", () => {
+    const team = { org: "org-x", owner: "z", name: "Zulker", device: "d" };
+    expect(hostOf({ cwd: "/Users/me/dev/exitingcom", team })).toMatchObject({ team: "org-x" });
+    expect(cardCan({ cwd: "/Users/me/dev/exitingcom", team }, { desktop: true }, "files")).toBe(false);
+  });
+
+  it("is weft.zip's own host there, which already treats every card as another machine's", () => {
+    const web = { ...cloudHost };
+    const undo = setHostForEveryCard(web);
+    expect(hostOf({ cwd: "/r", team: { org: "o", owner: "z", name: "Z", device: "d" } })).toBe(web);
+    undo();
   });
 });
 

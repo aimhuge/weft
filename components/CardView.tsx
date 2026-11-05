@@ -12,13 +12,13 @@ import ArchiveButton from "./ArchiveButton";
 import CardFooterMeta from "./CardFooterMeta";
 import CronMark, { cronCardClass } from "./CronMark";
 import CardFace from "./CardFace";
-import CardPicture from "./CardPicture";
 import CardProgress, { showsCardProgress } from "./CardProgress";
 import Icon, { Spinner } from "./Icon";
 import { ContinueButton, RestartButton, type ResumeHow } from "./CardResume";
 import CardMarks from "./CardMarks";
 import RestartMark, { restartCardClass } from "./RestartMark";
 import StarButton from "./StarButton";
+import TeamOwnerMark, { TeamCardPicture } from "./TeamOwnerMark";
 
 // Re-exports so existing import sites keep working.
 export { default as BackendBadge } from "./BackendBadge";
@@ -186,7 +186,8 @@ export default function CardView({
           {!readOnly && <RateLimitSwitch card={card} />}
         </div>
         <div className="flex shrink-0 items-start gap-1.5">
-          <CardPicture card={card} />
+          {/* A teammate's card wears their avatar on its picture's corner (components/TeamOwnerMark.tsx). */}
+          <TeamCardPicture card={card} />
         </div>
       </div>
       {progress && <CardProgress card={card} marks={marks} />}
@@ -240,7 +241,9 @@ function CardPrompts({ card, answered, onAnswer, onOpen, onResume }: { card: Car
 }
 
 // The footer's buttons: continue, star, archive and stop. A read-only card (weft.zip) has none.
+// A teammate's card (lib/team-host.ts) shows whose it is there instead.
 function CardActions({ card, readOnly, onResume, onStar, onArchive, onStop }: { card: Card; readOnly: boolean; onResume?: (how: ResumeHow) => void; onStar?: () => void; onArchive?: () => void; onStop: () => void }) {
+  if (card.team) return <TeamOwnerMark mark={card.team} />;
   if (readOnly) return null;
   // The copilot opens like any card but can't be moved, starred or filed under a project.
   const copilot = card.role === "copilot";

@@ -8,6 +8,9 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 vi.mock("./api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
+// Teammates' cards have their own hook and tests (lib/use-team-board.test.ts); here they're whatever the test sets.
+const teamCards = vi.hoisted(() => ({ cards: [] as Card[] }));
+vi.mock("./use-team-board", () => ({ useTeamBoard: () => ({ signedIn: true, cards: teamCards.cards }) }));
 
 const sendWorkerAction = vi.fn<(body: unknown) => Promise<{ commandId: string }>>();
 vi.mock("./worker-transport", () => ({ sendWorkerAction: (body: unknown) => sendWorkerAction(body) }));
@@ -268,6 +271,19 @@ describe("useBoardWorkers", () => {
     expect(result.current.boardCards.map((c) => c.id)).toEqual(["p1", "c1"]);
     dropPending("p1");
     closeLines();
+  });
+
+  it("draws teammates' cards last, and hands them on for the open thread", async () => {
+    vi.useFakeTimers();
+    fetchMock.mockResolvedValue(json(board({ projects: [project()], cards: [card()] })));
+    teamCards.cards = [card({ id: "t1", cwd: "/r", team: { org: "o", owner: "z", name: "Zulker", device: "d" } })];
+    const { result } = renderHook(() => useBoardWorkers([card({ id: "m1", cwd: "/r" })]));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.boardCards.map((c) => c.id)).toEqual(["m1", "c1", "t1"]);
+    expect(result.current.workers.team.map((c) => c.id)).toEqual(["t1"]);
+    teamCards.cards = [];
   });
 
   it("lays this board's marks only on the projects they name", () => {

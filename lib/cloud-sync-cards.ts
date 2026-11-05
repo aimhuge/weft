@@ -4,6 +4,7 @@ import { withBlobSeal } from "./blob-seal";
 import { projectCard, publishes, type RowHost } from "./card-rows";
 import type { BlobSeal, BlobStore, CloudCardRow, OutboxEntry } from "./cloud-sync-types";
 import { deviceId } from "./device-id";
+import { githubRepoOf } from "./repos";
 import { getCard } from "./store";
 import type { Card } from "./types";
 
@@ -24,6 +25,8 @@ export async function cardRows(blobs: BlobStore, orgId: string, pending: OutboxE
       card_id: card.id,
       owner_device: deviceId(),
       folder: card.cwd,
+      // The repo, so a teammate's board files the card under its own checkout (lib/team-board.ts).
+      repo: githubRepoOf(card.cwd)?.toLowerCase() ?? null,
       deleted: false,
       updated_at: new Date(at).toISOString(),
       ...(await projectCard(card, macRowHost(orgId, withBlobSeal(blobs, sealFor(card.id))))),

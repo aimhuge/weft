@@ -118,6 +118,9 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
       if (!blastcp) throw new Error("BlastCP isn't set up in this Weft yet. Restart Weft.");
       return blastcp.connectWeft(String(subjectToken ?? ""), { force: force === true });
     },
+    // mcp__blastcp__*: a thread's tools/list or tools/call, sent on to BlastCP by main with the sealed sign-in
+    // (electron/blastcp-thread.cjs). The token never comes back, only BlastCP's answer or why there isn't one.
+    "POST /blastcp/mcp": ({ method, params }) => blastcpApi()?.forward(String(method ?? ""), params ?? {}) ?? { state: "unavailable" },
     // A mini app's link-preview screenshot (lib/app-preview-capture.ts): the page in a hidden window at 1200×630.
     ...snapshotRoutes(sharedSnapshot),
     // The server asks main to post to Slack, and how the socket is doing (electron/slack.cjs).

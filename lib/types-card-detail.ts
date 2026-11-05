@@ -10,11 +10,23 @@ import type { CopilotPersona } from "./copilot-personas";
 import type { CardShareMode } from "./share-types";
 export type { CardStats, Column };
 
+// A teammate's card drawn on your board under your checkout of its repo (lib/team-board.ts): whose it is, which
+// workspace its rows live in, and the Mac that runs it. Only the board's read sets it; this Mac never stores one.
+export interface TeamMark {
+  org: string;
+  owner: string;
+  name: string;
+  avatar?: string | null;
+  device: string;
+}
+
 export interface Card {
   id: string;
   title: string;
   prompt: string;
   cwd: string;
+  // Set on a teammate's card only: it opens read-only, on the host lib/team-host.ts gives it.
+  team?: TeamMark;
   backend: Backend;
   permissionMode: import("./types-card").PermissionMode;
   // Chosen when the thread was made; left out, the CLI's own default.

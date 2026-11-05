@@ -9,6 +9,9 @@ const h = vi.hoisted(() => ({ card: undefined as { id: string; role?: string; re
 vi.mock("./store", () => ({ DATA_DIR: "/nonexistent/.weft", getCard: (id: string) => (id === h.card?.id ? h.card : undefined) }));
 vi.mock("./settings", () => ({ allowedFolders: () => h.allowed }));
 vi.mock("./project-folders", () => ({ projectFolders: (project: string) => h.folders.get(project) ?? [] }));
+// The session's own project folder in the CLI's home, found by its session id (lib/secret-guard-own-project.ts).
+const OWN_SESSION = "0b9e1a52-1f0e-4c4a-9d55-3a1d2b3c4d5e";
+vi.mock("./secret-guard-own-project", () => ({ ownProjectDirs: (id?: string) => (id === OWN_SESSION ? ["/Users/zzz-guard-test/.claude/projects/-app"] : []) }));
 
 const { folderAsk, folderGuard, folderGuardMatcher, grantedRead, outsideFolder, pathsOf, showPageCall, tilde } = await import("./folder-guard");
 
@@ -218,6 +221,16 @@ describe("folderGuard hook", () => {
     h.allowed = [dir];
     expect(await run("Read", { file_path: path.join(dir, "a.ts") }, "t4")).toEqual({});
     expect(folderAsk("t4")).toBeUndefined();
+  });
+
+  it("stays quiet on this session's own project folder in the CLI's home, and asks for any other session", async () => {
+    const hook = (session: string) =>
+      folderGuard(() => "c1")({ hook_event_name: "PreToolUse", tool_name: "Read", tool_input: { file_path: file }, cwd: project, session_id: session } as never, "tr1", {
+        signal: new AbortController().signal,
+      });
+    const file = `/Users/zzz-guard-test/.claude/projects/-app/${OWN_SESSION}/tool-results/mcp-board-changelog_list.txt`;
+    expect(await hook(OWN_SESSION)).toEqual({});
+    expect(await hook("11111111-2222-4333-8444-555555555555")).toMatchObject({ hookSpecificOutput: { permissionDecision: "ask" } });
   });
 
   it("does nothing for the copilot, an unknown card, other hook events or a call with no id", async () => {

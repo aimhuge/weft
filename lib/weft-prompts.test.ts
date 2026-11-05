@@ -130,6 +130,7 @@ describe("promptsBuild", () => {
     ["./browser-tools", "BROWSER_PROMPT"],
     ["./board-tools", "COPILOT_PROMPT"],
     ["./secret-tools", "SECRETS_PROMPT"],
+    ["./blastcp-tools", "BLASTCP_PROMPT"],
     ["./webhook-tools", "WEBHOOKS_PROMPT"],
     ["./decisions-prompt", "MIGRATIONS_PROMPT"],
     ["./decisions-prompt", "ASK_BUTTONS_PROMPT"],
@@ -171,10 +172,10 @@ describe("promptsBuild", () => {
 
 describe("toolPrompts", () => {
   it("is every tool group's prompt on a Mac", () => {
-    const { BROWSER_PROMPT, SECRETS_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
+    const { BROWSER_PROMPT, SECRETS_PROMPT, BLASTCP_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
     const parts = prompts.toolPrompts(false);
-    expect(parts).toHaveLength(5);
-    expect(parts.slice(0, 2)).toEqual([BROWSER_PROMPT, SECRETS_PROMPT]);
+    expect(parts).toHaveLength(6);
+    expect(parts.slice(0, 3)).toEqual([BROWSER_PROMPT, SECRETS_PROMPT, BLASTCP_PROMPT]);
   });
 
   it("on a worker drops the groups that don't work there and says what doesn't, from lib/worker-tools.ts", () => {
@@ -184,6 +185,8 @@ describe("toolPrompts", () => {
     // The vault tools reach the Mac from a worker, so their prompt stays.
     expect(text).toContain("mcp__secrets__ask_add");
     expect(text).toContain("mcp__webhooks__add_blank");
+    // BlastCP's sign-in is the Mac's, so a worker isn't told to use it.
+    expect(text).not.toContain("mcp__blastcp__generate_image");
     expect(parts.at(-1)).toMatch(/^On this Weft Worker some of Weft's tools don't work yet/);
   });
 });

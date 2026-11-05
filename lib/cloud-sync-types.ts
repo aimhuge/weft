@@ -27,6 +27,8 @@ export interface CloudCardRow {
   // reads it to offer only the folders of the Macs you own as places to start a card.
   owner_user?: string;
   folder: string;
+  // The folder's GitHub repo (owner/name), null without one: what a teammate's board files the card by (lib/team-board.ts).
+  repo?: string | null;
   card: Card;
   deleted: boolean;
   updated_at: string;

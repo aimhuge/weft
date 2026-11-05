@@ -9,6 +9,8 @@ const cards = new Map<string, Card>();
 const DATA = fs.mkdtempSync(path.join(os.tmpdir(), "weft-sync-cards-"));
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), DATA_DIR: DATA }));
 vi.mock("./device-id", () => ({ deviceId: () => "dev1" }));
+const repos = new Map<string, string>();
+vi.mock("./repos", () => ({ githubRepoOf: (folder: string) => repos.get(folder) }));
 
 const { cardRows } = await import("./cloud-sync-cards");
 const { withUploadedPage, withUploadedThumbs } = await import("./card-rows-blobs");
@@ -44,9 +46,16 @@ describe("cardRows", () => {
       { op: "card_deleted", cardId: "b", at: 1 },
     ];
     expect(await cardRows(blobs, "o1", pending, 5000)).toEqual([
-      { org_id: "o1", card_id: "a", owner_device: "dev1", folder: "/sync", card: a, deleted: false, updated_at: new Date(5000).toISOString(), page: null, page_thumb: null, pages: 0 },
+      { org_id: "o1", card_id: "a", owner_device: "dev1", folder: "/sync", repo: null, card: a, deleted: false, updated_at: new Date(5000).toISOString(), page: null, page_thumb: null, pages: 0 },
     ]);
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("names the folder's GitHub repo, lowercased, so a teammate's board files it under its own checkout", async () => {
+    repos.set("/dev/exiting", "Exitingcom/ExitingCom");
+    card("x", { cwd: "/dev/exiting" });
+    const [row] = await cardRows(blobs, "o1", [{ op: "card", cardId: "x", at: 1 }], 0);
+    expect(row?.repo).toBe("exitingcom/exitingcom");
   });
 
   it("uploads the pane capture and puts its ref in the row's copy only", async () => {

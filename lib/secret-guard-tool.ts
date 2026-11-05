@@ -5,9 +5,10 @@
 import { DATA_DIR } from "./store";
 import { refusal } from "./secret-guard-why";
 import { bashVerdict } from "./secret-guard-bash";
-import { expandBraces, isSecretFile, isWorkerHome, searchesCliHome } from "./secret-guard-files";
+import { expandBraces, isSecretFile, isWorkerHome, placedPath, searchesCliHome } from "./secret-guard-files";
 import { CLAUDE_SEGMENT, changesCliSettings } from "./secret-guard-cli-home";
 import { pastedElsewhere, pastedInto, withoutPasted } from "./secret-guard-pasted";
+import { inOwnProject, withoutOwnProject } from "./secret-guard-own-project";
 import { CLONE_REFUSAL, editsClone } from "./worker-clone-guard";
 
 // A file:// URL's path, or "" for any other URL.
@@ -26,25 +27,30 @@ function filePath(url: string): string {
 const FILE_TOOLS = new Set(["Read", "Edit", "MultiEdit", "Write", "NotebookRead", "NotebookEdit"]);
 
 // Why a tool call is turned away, or null to let it run. cardId names the thread's card, so a Read of an
-// attachment its user pasted gets through (lib/secret-guard-pasted.ts).
-export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR, cardId?: string): string | null {
+// attachment its user pasted gets through (lib/secret-guard-pasted.ts). sessionId is the hook call's own: its
+// project folder in the CLI's home opens to read (lib/secret-guard-own-project.ts).
+export function toolVerdict(toolName: string, input: unknown, dataDir = DATA_DIR, cardId?: string, sessionId?: string): string | null {
   const fields = (input ?? {}) as Record<string, unknown>;
   const str = (key: string) => (typeof fields[key] === "string" ? fields[key] : "");
-  if (FILE_TOOLS.has(toolName)) return fileVerdict(toolName, str("file_path") || str("notebook_path") || str("path"), dataDir, cardId);
+  const mine = (file: string) => inOwnProject(placedPath(file), sessionId);
+  if (FILE_TOOLS.has(toolName)) {
+    const file = str("file_path") || str("notebook_path") || str("path");
+    return toolName === "Read" && mine(file) ? null : fileVerdict(toolName, file, dataDir, cardId);
+  }
   switch (toolName) {
     case "Grep":
       // ripgrep's globs match dotfiles, so `*.local` reaches .env.local.
-      return patternReason(str("path"), expandBraces(str("glob")), dataDir);
+      return patternReason(str("path"), expandBraces(str("glob")), dataDir, mine);
     case "Glob":
       // A pattern is a name too: `.env*` and `**/.env` reach a .env file.
-      return patternReason(str("path"), expandBraces(str("pattern")), dataDir);
+      return patternReason(str("path"), expandBraces(str("pattern")), dataDir, mine);
     case "LS":
       // Listing a folder is reading what is in it; a worker's home lists only names (isWorkerHome).
-      return isWorkerHome(str("path")) ? null : pathReason(str("path"), dataDir);
+      return isWorkerHome(str("path")) || mine(str("path")) ? null : pathReason(str("path"), dataDir);
     case "mcp__browser__open_url":
       return pathReason(filePath(str("url")), dataDir);
     case "Bash":
-      return bashVerdict(withoutPasted(str("command"), cardId, dataDir), dataDir);
+      return bashVerdict(withoutOwnProject(withoutPasted(str("command"), cardId, dataDir), sessionId, placedPath), dataDir);
     default:
       return null;
   }
@@ -72,10 +78,11 @@ function pathReason(file: string, dataDir: string): string | null {
 
 // A glob or a search pattern is a name too: `.env*` and `**/.env` reach a .env
 // file, so each candidate is read as a literal name. One that names `.claude` is sealed when the search starts
-// where it reaches the CLI's own folder (`.claude/**` from home), and open from a project.
-function patternReason(root: string, globs: string[], dataDir: string): string | null {
-  const intoCli = searchesCliHome(root);
-  const hit = [root, ...globs].find((p) => p && (isSecretFile(p, dataDir, true) || (intoCli && CLAUDE_SEGMENT.test(p))));
+// where it reaches the CLI's own folder (`.claude/**` from home), and open from a project. A root or pattern inside the
+// session's own project folder in the CLI's home (mine) is open.
+function patternReason(root: string, globs: string[], dataDir: string, mine: (p: string) => boolean): string | null {
+  const intoCli = !mine(root) && searchesCliHome(root);
+  const hit = [root, ...globs].find((p) => p && !mine(p) && (isSecretFile(p, dataDir, true) || (intoCli && CLAUDE_SEGMENT.test(p))));
   return hit ? reason(hit, true) : null;
 }
 

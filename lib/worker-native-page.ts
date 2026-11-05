@@ -7,11 +7,12 @@
 import { useEffect, useRef } from "react";
 import type { SharePane } from "@/lib/share-types";
 
-const PROXIED = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/api\/worker-board\/page\/([0-9a-f]{64})(#.*)?$/;
+const PROXIED = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d+\/api\/worker-board\/page\/([0-9a-f]{64})(?:\?org=[0-9a-f-]{36})?(#.*)?$/;
 
 // Where the native pane loads `pane`, given the board's own origin; null when the board's WebPane draws it instead.
-export function nativePageUrl(pane: SharePane | null, origin: string): string | null {
-  if (pane?.kind === "blob") return `${origin}/api/worker-board/page/${pane.ref.replace(/^blob:sha256:/, "")}${pane.hash}`;
+// `org` reads a teammate's card's page from the team's workspace (lib/team-board.ts).
+export function nativePageUrl(pane: SharePane | null, origin: string, org?: string): string | null {
+  if (pane?.kind === "blob") return `${origin}/api/worker-board/page/${pane.ref.replace(/^blob:sha256:/, "")}${org ? `?org=${org}` : ""}${pane.hash}`;
   if (pane?.kind === "site") return pane.url;
   return null;
 }

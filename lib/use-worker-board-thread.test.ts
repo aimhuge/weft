@@ -10,7 +10,7 @@ vi.mock("./worker-transport", () => ({ sendWorkerAction: (body: unknown) => send
 const hostAct = vi.fn<(verb: string, args: unknown) => Promise<void>>(() => Promise.resolve());
 vi.mock("./project-host", () => ({ hostOf: () => ({ act: (verb: string, args: unknown) => hostAct(verb, args) }) }));
 
-const { openWorkerThread, workerThreadHandlers } = await import("./use-worker-board");
+const { openWorkerThread, teamThreadHandlers, workerThreadHandlers } = await import("./use-worker-board");
 const { forget } = await import("./optimistic-cards");
 
 const project = (over: Record<string, unknown> = {}) => ({ path: "worker://w1/ling", workerId: "w1", worker: "m1mini", folder: "ling", status: "online", ...over }) as WorkerProject;
@@ -44,6 +44,34 @@ describe("openWorkerThread", () => {
   it("says the worker is offline when its project says so", () => {
     const open = openWorkerThread({ projects: [project({ status: "offline" })], cards: [card()] }, "c1", ctx);
     expect(open?.worker.status).toBe("offline");
+  });
+});
+
+describe("a teammate's card", () => {
+  const ctx = { select: vi.fn(), notify: vi.fn() };
+  const mate = card({ id: "t1", cwd: "/Users/me/dev/exitingcom", team: { org: "o", owner: "z", name: "Zulker Nayeen", device: "d" } });
+
+  it("opens on their Mac, read-only, before any worker card", () => {
+    const open = openWorkerThread({ projects: [], cards: [], team: [mate] }, "t1", ctx);
+    expect(open?.worker).toEqual({ name: "Zulker's Mac", status: "online" });
+    expect(open?.card).toBe(mate);
+    expect(Object.keys(open?.handlers ?? {}).sort()).toEqual(["onAnswer", "onClose", "onDeleted", "onSend"]);
+  });
+
+  it("only closes: sending and answering do nothing", async () => {
+    const handlers = teamThreadHandlers(ctx);
+    await handlers.onSend();
+    await handlers.onAnswer();
+    expect(sendWorkerAction).not.toHaveBeenCalled();
+    handlers.onClose();
+    handlers.onDeleted();
+    expect(ctx.select).toHaveBeenCalledTimes(2);
+    expect(ctx.select).toHaveBeenCalledWith(null);
+  });
+
+  it("falls through to the worker cards when the open one isn't a teammate's", () => {
+    expect(openWorkerThread({ projects: [], cards: [], team: [mate] }, "c1", ctx)).toBeNull();
+    expect(openWorkerThread({ projects: [], cards: [], team: [{ ...mate, team: undefined }] }, "t1", ctx)).toBeNull();
   });
 });
 

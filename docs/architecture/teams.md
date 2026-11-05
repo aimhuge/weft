@@ -165,7 +165,9 @@ project and decide who else does; a member sees only the projects granted to the
 - `components/team/ProjectAccess.tsx`: **Access · 2 of 3** on each project row (managers only, and only when the team
   has plain members) opens a checklist of the members; a tick shows at once and goes back with the reason if refused.
 - A linked project's synced cards go to the team rather than each member's personal workspace
-  ([cloud-sync.md](cloud-sync.md#team-projects)).
+  ([cloud-sync.md](cloud-sync.md#team-projects)), and each member's desktop board shows the others' cards for it inside
+  their own checkout of the repo, read-only, with whose Mac runs each
+  ([cloud-sync.md](cloud-sync.md#team-projects-on-the-desktop-board)).
 - What a grant gates today is the team page's project list. Synced cards (`cloud_cards`) and the shared vault aren't
   scoped by project yet; when they are, they should read `org_project_members` the same way.
 

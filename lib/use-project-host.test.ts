@@ -7,7 +7,7 @@ import type { Card, ThreadItem } from "./types";
 
 const local = vi.hoisted(() => ({ kind: "local", can: () => true }));
 const cloud = vi.hoisted(() => ({ kind: "cloud", can: () => false }));
-vi.mock("./project-host", () => ({ hostFor: (cwd: string) => (cwd.startsWith("worker://") ? cloud : local) }));
+vi.mock("./project-host", () => ({ hostOf: (card: { cwd: string }) => (card.cwd.startsWith("worker://") ? cloud : local) }));
 
 const { useProjectHost } = await import("./use-project-host");
 const { useShownItems } = await import("./worker-shown");

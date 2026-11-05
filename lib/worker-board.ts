@@ -12,8 +12,8 @@ import { createBlobStore } from "./blob-store";
 import { switchQa } from "./qa-switch";
 import { answerCommand, replyCommand, stopCommand, type GrantScope, type NewCommand } from "./cloud-commands";
 import { syncOrgId } from "./cloud-sync";
-import { BLOB_REF_PREFIX, THREAD_PAGE_SIZE, type BlobSeal } from "./cloud-sync-types";
-import { pageFromRows } from "./cloud-thread-page";
+import { BLOB_REF_PREFIX, type BlobSeal } from "./cloud-sync-types";
+import { threadPageIn, toolOutputIn } from "./cloud-thread-read";
 import { hostCommand, textArgOf } from "./host-command";
 import { DATA_DIR } from "./store";
 import type { ThreadPage } from "./thread-page";
@@ -25,7 +25,7 @@ import { LINE_PURPOSE, type LineOffer } from "./host-line-protocol";
 import { lanAnswer } from "./lan-offer";
 import { EMPTY_WORKER_BOARD, workerProjectPath, type WorkerBoard, type WorkerProject, type WorkerProjectStatus } from "./worker-project";
 import { liveStatus, type PresenceRead } from "./worker-presence";
-import { cardBlobSeal, openCardRows, workerBlobSeal, openedBlob, openItemRows, openOutput, openPageAssets } from "./worker-board-open";
+import { cardBlobSeal, openCardRows, workerBlobSeal, openedBlob, openPageAssets } from "./worker-board-open";
 import { SEALED_PAGE_HTML } from "./blob-seal";
 import { presenceWatch, type PresenceWatch } from "./worker-presence-watch";
 import { macHint } from "./host-facts";
@@ -145,34 +145,23 @@ function readMarks(rows: CardRow[], from: string | null, since: string | undefin
   return { asOf, delta, removed };
 }
 
-// One page of a worker card's thread, the page the web board's transport reads. Null when it can't be read.
-// With `after`, only the items with a seq past it (the poll's delta, lib/worker-poll.ts); when none is, an empty page that
-// still carries the thread's total, so a rewound thread shows.
+// One page of a worker card's thread, the page the web board's transport reads (lib/cloud-thread-read.ts). Null when it can't be read.
 export async function workerThreadPage(cardId: string, before: number | undefined, client: SupabaseClient = accountClient(), after?: number): Promise<ThreadPage | null> {
   const who = await requireSession(client);
-  let query = client.from("cloud_thread_items").select("card_id, seq, item, at").eq("org_id", who.org).eq("card_id", cardId);
-  if (before !== undefined) query = query.lt("seq", before);
-  if (after !== undefined) query = query.gt("seq", after);
-  const { data, error } = await query.order("seq", { ascending: false }).limit(THREAD_PAGE_SIZE);
-  if (error) return null;
-  if (after === undefined || data.length) return pageFromRows(cardId, await openItemRows(who.org, data));
-  const head = await client.from("cloud_thread_items").select("seq").eq("org_id", who.org).eq("card_id", cardId).order("seq", { ascending: false }).limit(1);
-  if (head.error) return null;
-  return { items: [], start: after + 1, total: head.data.length ? (head.data[0] as { seq: number }).seq + 1 : 0 };
+  return threadPageIn(client, who.org, cardId, before, after);
 }
 
 // The full result of a tool call whose result was cut out of its item.
 export async function workerToolOutput(cardId: string, toolId: string, client: SupabaseClient = accountClient()): Promise<string> {
   const who = await requireSession(client);
-  const { data, error } = await client.from("cloud_tool_outputs").select("result").eq("org_id", who.org).eq("card_id", cardId).eq("tool_id", toolId).maybeSingle<{ result: string }>();
-  if (error || !data) throw new Error("That output isn't there.");
-  return openOutput(who.org, cardId, toolId, data.result);
+  return toolOutputIn(client, who.org, cardId, toolId);
 }
 
 // A page a worker card opened, for the desktop board's pane: the bytes through the account's own session, an HTML page's
 // assets signed the same way (lib/blob-page-sign.ts). Null when it isn't there or isn't yours to read.
-export async function workerPage(sha: string, client: SupabaseClient = accountClient()): Promise<{ body: BodyInit; type: string } | null> {
-  const who = await requireSession(client);
+// `org` names a team's workspace for a teammate's card (lib/team-board.ts); RLS on the bucket is the gate.
+export async function workerPage(sha: string, client: SupabaseClient = accountClient(), org?: string): Promise<{ body: BodyInit; type: string } | null> {
+  const who = org ? { org } : await requireSession(client);
   // A sealed page opens here, its sealed assets inline as data: URLs; one that won't open is the 🔒 page.
   const got = await openedBlob(client, who.org, sha);
   if (got === undefined) return null;

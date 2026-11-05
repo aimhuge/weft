@@ -8,6 +8,7 @@ import { proseOf } from "./shell-text";
 import { allowedFolders } from "./settings";
 import { scratchDirs } from "./show-dir";
 import { DATA_DIR, getCard } from "./store";
+import { ownProjectDirs } from "./secret-guard-own-project";
 import { worktreesRoot } from "./worktrees";
 import type { PromptReason } from "./types";
 
@@ -239,7 +240,9 @@ export function folderGuard(cardId: () => string | undefined): HookCallback {
     if (input.hook_event_name !== "PreToolUse" || !toolUseId) return Promise.resolve({});
     const card = getCard(cardId() ?? "");
     if (!card || card.role === "copilot") return Promise.resolve({});
-    const out = outsideFolder(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, input.cwd, grantedFor(card.id));
+    // The session's own project folder in the CLI's home, which the secret guard opens to read (lib/secret-guard-own-project.ts).
+    const granted = [...grantedFor(card.id), ...ownProjectDirs(input.session_id)];
+    const out = outsideFolder(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, input.cwd, granted);
     if (!out) return Promise.resolve({});
     const where = tilde(out.directory);
     const question = `Outside the project: ${out.verb} ${where}`;

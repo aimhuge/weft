@@ -244,6 +244,52 @@ error fails the flush, so a team's card never lands at home by accident.
 - A teammate can read the team's cards but not drive them: `cloud_commands` inserts need a device you own and the
   inbox runs only its own user's commands.
 
+### Team projects on the desktop board
+
+Status: built 2026-11-05; `team_orgs_for_repos` and `cloud_cards.repo` applied to prod the same day. Cards synced before
+then have no repo until they change (or the folder's Sync is turned off and on).
+
+Your teammates' cards for a linked project show on **your** desktop board, inside your own project of the same repo
+(the `~/dev/exitingcom` chip), not only on `weft.zip/<team>/board`. They are read-only, on purpose (above).
+
+```
+Zulker's Mac ── flush ──▶ cloud_cards (org = team, repo = exitingcom/exitingcom)
+                                     │  RLS: members read
+your Mac: /api/team-board ◀──────────┘  repo → your folder for it → Card.team
+```
+
+- **The repo on each row.** `folder` is a path on its owner's Mac and differs per teammate, so `cloud_cards.repo`
+  (`supabase/migrations/20261105065331_cloud_cards_repo.sql`, nullable, indexed on `(org_id, repo)`, no backfill) names
+  the GitHub repo, lowercased: `cardRows` in `lib/cloud-sync-cards.ts` sets it from `githubRepoOf(card.cwd)`. The app
+  ships ahead of the migration: a database without the column refuses the row with PGRST204, and `putWithRepo`
+  (`lib/cloud-cards-repo.ts`) sends the rows again without it and leaves it out until a restart. A Worker's publisher
+  doesn't set it yet, so a teammate's worker cards stay on weft.zip.
+- **The read.** `lib/team-board.ts` `readTeamBoard`, signed in as you (`accountClient`, so RLS decides): this Mac's
+  projects (`listProjects`) → their GitHub repos (`repoFolders`, kept a minute; when two folders share a repo the most
+  recently used wins) → `teamOrgsFor` (the same cached `team_orgs_for_repos` answer the flush uses) → per team, the
+  `cloud_cards` rows in those repos whose `owner_user` isn't you, not deleted, not a copilot, at most `TEAM_CARD_LIMIT`
+  per team. Sealed cards open with this Mac's ring for that org (`openCardRows`); without the key they draw their 🔒
+  stand-in. Owners' names and pictures come from `profiles` ("profiles: read teammates"). Each card gets `cwd` = your
+  folder and `team: { org, owner, name, avatar, device }` (`TeamMark`, `lib/types-card-detail.ts`). With `since`, only
+  the rows changed after it (2 s overlap), deletes as `removed`; a database without the column reads as no cards.
+- **The route.** `GET /api/team-board` (`app/api/team-board/route.ts`, guarded): the board, `?since=`, and
+  `?org=&card=` for a thread page (`before`, `after`) or `&tool=` for a cut output. There is no POST. The thread reads
+  are `lib/cloud-thread-read.ts` (`threadPageIn`, `toolOutputIn`), shared with the worker board, in the card's own org.
+  A page the card wrote loads through `/api/worker-board/page/<sha>?org=<team>` (`workerPage` with an org).
+- **The board.** `lib/use-team-board.ts` polls every 5 s while there are cards and the window is visible, once a
+  minute otherwise, and at once when it comes back on screen; a whole read every `FULL_READ_EVERY_MS`
+  (`mergeTeamBoard` in `lib/team-board-types.ts`). `useBoardWorkers` appends the cards to `boardCards` and passes them
+  on as `workers.team`, so `components/Board.tsx` didn't change. They never enter the local store or `cards`.
+- **The read-only host.** `hostOf(card)` (`lib/project-host.ts`) gives a card with `team` the team's host
+  (`teamHostOf`, `lib/team-host.ts`, one per org) before looking at its folder, so no call site asks whose card it is:
+  every `act` refuses with `READ_ONLY`, `can()` is false for every feature, the menu keeps only Open, and the thread
+  transport pages and polls through the team route with `stop` refused. The tile is CardView's `readOnly` (no drag,
+  answer, stop, star or archive), with `TeamOwnerMark` (avatar or initial + "Zulker's Mac") where its buttons would be;
+  a list row only opens. `openWorkerThread` opens it with `teamThreadHandlers` (close only); `OpenCard` passes
+  `readOnly` to the thread panel (no reply box, no answers) and draws `components/TeamPane.tsx` in the pane column.
+- **Gaps.** Pictures inside a teammate's thread are signed in your own workspace (`useWorkerView`), so they don't load
+  yet; Share… and Save as app aren't offered for them; a teammate's Worker cards have no repo yet.
+
 ## Ownership
 
 The Mac running a card owns it: `owner_user` is the account that runs it and the only one that may write its rows,

@@ -46,7 +46,7 @@ export function useBoardCards(deps: BoardCardsDeps): BoardCardRenderers {
 
   // A card's own controls act on its host, this Mac or a worker (lib/card-handlers-host.ts).
   const renderCard = useCallback(
-    (card: Card) => <CardView guardName={card.title} {...shared(card)} restartRequested={restartRequestedBy === card.id} {...handlersFor(card, ctx)} />,
+    (card: Card) => <CardView guardName={card.title} {...shared(card)} restartRequested={restartRequestedBy === card.id} {...handlersFor(card, ctx)} readOnly={Boolean(card.team)} />,
     [CardView, shared, restartRequestedBy, ctx],
   );
 
@@ -55,8 +55,9 @@ export function useBoardCards(deps: BoardCardsDeps): BoardCardRenderers {
   const foldersFor = useCallback((card: Card) => (hostOf(card).can("folder") ? knownFolders(sameHostCards(cards, card)) : undefined), [cards]);
 
   // A worker card moves only with a signed approval, which its host asks Touch ID for (lib/widen-signer.ts).
+  // A teammate's card (lib/team-host.ts) only opens: it runs on their Mac.
   const renderRow = useCallback(
-    (card: Card, column: Column, nest?: RowNest) => (
+    (card: Card, column: Column, nest?: RowNest) => card.team ? <CardRow column={column} nest={nest} {...shared(card)} onOpen={() => ctx.openCard(card)} /> : (
       <CardRow
         column={column}
         nest={nest}

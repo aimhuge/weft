@@ -92,7 +92,8 @@ afterEach(() => {
 });
 
 describe("isNotLoggedInError", () => {
-  it.each(["Not logged in", "Please run /login", "Invalid API key", "OAuth token has expired", "authentication_error"])(
+  it.each(["Not logged in", "Please run /login", "Invalid API key", "OAuth token has expired", "authentication_error",
+    "Failed to authenticate: OAuth session expired and could not be refreshed"])(
     "spots %j",
     (text) => {
       expect(login.isNotLoggedInError(`Error: ${text} · try again`)).toBe(true);

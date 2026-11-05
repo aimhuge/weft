@@ -6,6 +6,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { ORIGIN, WEFT_CLIENT, exchangeWeft, signIn } = require("./blastcp-oauth.cjs");
 const { readTokenRecord, requireKeychain, writeToken } = require("./provider-token.cjs");
+const { createBlastcpThread } = require("./blastcp-thread.cjs");
 
 const TOKEN_FILE = "blastcp-token.json";
 const LINKS_FILE = "blastcp-links.json";
@@ -149,7 +150,12 @@ function createBlastcp({ dataDir, safeStorage, fetch: fetchImpl = globalThis.fet
     return Array.isArray(data?.posts) ? data.posts.map(postOf) : [];
   }
 
+  // A thread's mcp__blastcp__* calls, forwarded with the sign-in (electron/blastcp-thread.cjs).
+  const thread = createBlastcpThread({ dataDir, fetch: fetchImpl, session: () => (fs.existsSync(tokenFile) ? saved() : null) });
+
   return {
+    forward: thread.forward,
+
     // Whether you're connected and as whom, and each folder's property with its posts. A folder whose
     // property can't be read keeps its link with an error, so you can still unlink it.
     /** @returns {Promise<import("../lib/blastcp-view").BlastcpStatus>} */

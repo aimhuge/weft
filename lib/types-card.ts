@@ -219,7 +219,7 @@ export type { PendingPermission, PromptReason };
 // Card and CardIssue live in lib/types-card-detail.ts to keep this file under the line limit.
 // Re-exported here so `./types` and direct importers keep working.
 export type { Card } from "./types-card-detail";
-export type { CardBreak, CardIssue, CardWorktree } from "./types-card-detail";
+export type { CardBreak, CardIssue, CardWorktree, TeamMark } from "./types-card-detail";
 
 export type BoardEvent =
   | { type: "card"; card: Card }

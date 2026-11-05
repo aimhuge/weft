@@ -34,7 +34,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `vercel.md` — the ▲ rail drawer: token in the Keychain, `.vercel/project.json`, env push from the vault, deploys, `vercel_events` Realtime.
 - `supabase.md` — the Supabase rail drawer: token in the Keychain, `supabase/.temp/project-ref`, state, unapplied migrations, the Migrate card.
 - `cloudflare.md` — the orange-cloud rail drawer: API token in the Keychain, Worker/Pages links in `~/.weft/cloudflare-links.json`, wrangler `account_id` and deploys.
-- `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`.
+- `blastcp.md` — the BlastCP rail drawer: OAuth+PKCE, MCP-tool reads, `~/.weft/blastcp-links.json`; every thread's `mcp__blastcp__*` tools relayed through main's sealed sign-in (`lib/blastcp-tools.ts`, `electron/blastcp-thread.cjs`).
 - `connectors.md` — Settings → Connectors: CLIs your threads use for your own accounts; gog (Google Workspace) shipped in the toolchain, its OAuth client and browser sign-in; and GitHub on a Weft Worker (P1): user tokens minted on weft.zip under a per-worker grant a Mac signed (the chain of trust: Mac approval keys trusted by an emailed link or a vouch), the git credential helper and gh wrapper on the box.
 - `manual-qa.md` — Local Simulator mode (was Manual QA): a worker's build on a simulator on your Mac, with the worker's agent driving it (`lib/device-call.ts`, `lib/device-calls.ts`, `lib/device-build.ts`, `lib/qa-grants.ts`, `lib/qa-switch.ts`, `lib/worker-device.ts`, `lib/worker-device-link.ts`, `lib/simulator-crashes.ts`, `app/api/worker-build`, the pane header's host chip `components/web-board/HostChip.tsx` with `lib/host-chip.ts` and `components/use-local-simulator.ts`, `public.device_calls`, `POST /qa/approve`).
 - `simulators.md` — `mcp__simulator__*`: iOS simulators and Android emulators through simctl, adb and AXe, the live view in the pane, Settings → Connectors → Simulators.
@@ -193,7 +193,8 @@ When a new doc lands in this folder, add it here on the same change.
   rules live in `lib/secret-guard-files.ts` — a `.env`, a Weft Worker's home (`reachesWorkerHome`), the `~/.weft` data folder (save `~/.weft/show/`, the pages threads
   render in the pane, `~/.weft/apps/`, the mini apps, and `~/.weft/scout/`; symlinks followed, `..` folded; an attachment the user
   pasted into the card opens to Read through `lib/secret-guard-pasted.ts`), the CLI's own `~/.claude` transcripts (save a
-  project's `memory/` folder, `inMemoryDir`), a worker's home save a bare listing of it (`isWorkerHome`); words a command takes as
+  project's `memory/` folder, `inMemoryDir`, and the session's own whole project folder to read, found by its session id,
+  through `lib/secret-guard-own-project.ts`; thread-guards.md#the-sessions-own-project-folder), a worker's home save a bare listing of it (`isWorkerHome`); words a command takes as
   text, a PR body or a commit message, aren't paths (`lib/shell-text.ts`), and `lib/secret-guard-why.ts` words each refusal for what was refused —
   `lib/secret-guard-bash.ts` for the shell (with `lib/secret-guard-credentials.ts`: no `gh auth token`, `gog auth tokens export`,
   `git credential fill` or the CLIs' token files), and `lib/secret-guard-tool.ts` for the file tools (Read, Edit, Write, Glob,

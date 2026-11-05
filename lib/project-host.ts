@@ -28,6 +28,7 @@ import { actOnWorker, workerToolSource, workerTransport } from "./worker-transpo
 import { parseWorkerProject } from "./worker-project";
 import { actOnLine, lineFiles, lineTransport, warmOnLine } from "./line-host";
 import { canSignWiden } from "./widen-signer";
+import { teamHostOf } from "./team-host";
 
 // This Mac's own features, which another host offers only once it has a verb or a stream for them. `files` is the
 // editor and the thread's file links (H4), `shots` the show rail's page pictures (lib/page-shots.ts), `pane` the native
@@ -191,11 +192,13 @@ export function hostFor(project: string | null | undefined): ProjectHost {
   return worker ? cloudHostOf(worker.workerId) : localHost;
 }
 
-export const hostOf = (card: Pick<Card, "cwd">) => hostFor(card.cwd);
+// A teammate's card (Card.team, lib/team-board.ts) sits in your own project's folder but runs on their Mac: its host is
+// the read-only one, whatever its folder says (lib/team-host.ts).
+export const hostOf = (card: Pick<Card, "cwd" | "team">) => (card.team && !everyCard ? teamHostOf(card.team) : hostFor(card.cwd));
 
 // Whether an open card's panel offers a feature: its transport reaches the card's host (this Mac's always, a worker's
 // card edits too; never weft.zip's) and that host has it.
-export const cardCan = (card: Pick<Card, "cwd">, transport: Pick<ThreadTransport, "desktop" | "cardEdits">, feature: HostFeature) =>
+export const cardCan = (card: Pick<Card, "cwd" | "team">, transport: Pick<ThreadTransport, "desktop" | "cardEdits">, feature: HostFeature) =>
   (transport.desktop || Boolean(transport.cardEdits)) && hostOf(card).can(feature);
 
 // The cards whose plan readings say when the card's own CLI plan resets (Send later's default times, lib/schedule.ts):

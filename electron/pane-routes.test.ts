@@ -24,6 +24,15 @@ describe("paneRoutes", () => {
       "POST /vercel/status", "POST /supabase/status", "POST /vercel/env-push", "POST /account-settings/sign", "POST /lan-line/keys", "POST /lan-line/sign"]) expect(keys).toContain(key);
   });
 
+  it("hands a thread's BlastCP request to main's forward, and says unavailable before BlastCP is set up", async () => {
+    const forward = vi.fn(() => Promise.resolve({ state: "ok", result: {} }));
+    const { routes } = make({ blastcpApi: () => ({ forward }) });
+    await expect(routes["POST /blastcp/mcp"]!({ method: "tools/call", params: { name: "whoami" } })).resolves.toEqual({ state: "ok", result: {} });
+    await routes["POST /blastcp/mcp"]!({});
+    expect(forward).toHaveBeenLastCalledWith("", {});
+    expect(make().routes["POST /blastcp/mcp"]!({ method: "tools/list" })).toEqual({ state: "unavailable" });
+  });
+
   it("asks a person before a tunnel opens, and passes on their answer", async () => {
     for (const allowed of [true, false]) {
       const promptTouchID = vi.fn(() => (allowed ? Promise.resolve() : Promise.reject(new Error("no"))));

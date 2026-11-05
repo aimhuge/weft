@@ -18,6 +18,8 @@ import { onLineEvents, onLineFlips } from "./session-lines";
 import type { LineEvent } from "./host-line-protocol";
 import { allOnLines, lineUp, readSnapshot, withSnapshot } from "./worker-board-line";
 import { pendingSnapshot, settlePending, subscribePending, withPending } from "./worker-pending-cards";
+import { useTeamBoard } from "./use-team-board";
+import { teamMacLabel } from "./team-board-types";
 
 // A card change off a worker's session line, laid over the cards read last: the card keeps the board's worker:// path,
 // and one the board hasn't read yet waits for the next read, which knows its project.
@@ -132,16 +134,19 @@ export function useWorkerBoard(): WorkerBoard {
 // Each worker project carries this board's pin and hide for it (lib/worker-project-marks.ts), and a new thread on its way
 // to a worker is drawn among them (lib/worker-pending-cards.ts).
 const NO_PENDING: Card[] = [];
+// Your teammates' cards for your projects (lib/use-team-board.ts) are drawn here too, filed under your own folders, and
+// ride along in `workers.team` so the open one finds its thread (openWorkerThread).
 export function useBoardWorkers(cards: Card[]) {
   const read = useWorkerBoard();
+  const team = useTeamBoard().cards;
   const marks = useSyncExternalStore(subscribeWorkerMarks, workerMarksSnapshot, () => "{}");
   const pending = useSyncExternalStore(subscribePending, pendingSnapshot, () => NO_PENDING);
   const workers = useMemo(() => {
     const marked = withMarks(read, readWorkerMarks(marks));
     return pending.length ? { ...marked, cards: withPending(marked.cards, pending) } : marked;
   }, [read, marks, pending]);
-  const boardCards = useMemo(() => [...cards, ...workers.cards], [cards, workers.cards]);
-  return { workers, boardCards };
+  const boardCards = useMemo(() => [...cards, ...workers.cards, ...team], [cards, workers.cards, team]);
+  return { workers: { ...workers, team }, boardCards };
 }
 
 export function withMarks(board: WorkerBoard, marks: Record<string, WorkerMarks>): WorkerBoard {
@@ -155,7 +160,10 @@ interface ThreadCtx {
 }
 
 // The open worker card, the worker it runs on and what its thread can do. Null when the open card isn't a worker's.
-export function openWorkerThread(board: Pick<WorkerBoard, "cards" | "projects">, selectedId: string | null, ctx: ThreadCtx) {
+// A teammate's card opens read-only (lib/team-host.ts): it can only be closed.
+export function openWorkerThread(board: Pick<WorkerBoard, "cards" | "projects"> & { team?: Card[] }, selectedId: string | null, ctx: ThreadCtx) {
+  const mate = board.team?.find((c) => c.id === selectedId);
+  if (mate?.team) return { card: mate, worker: { name: teamMacLabel(mate.team), status: "online" as const }, handlers: teamThreadHandlers(ctx) };
   const card = board.cards.find((c) => c.id === selectedId);
   if (!card) return null;
   const project = board.projects.find((p) => p.path === card.cwd);
@@ -164,6 +172,12 @@ export function openWorkerThread(board: Pick<WorkerBoard, "cards" | "projects">,
 }
 
 export type WorkerThread = NonNullable<ReturnType<typeof openWorkerThread>>;
+
+// A teammate's card's thread: nothing to send or answer (ThreadPanel is readOnly for it), only closing.
+export function teamThreadHandlers(ctx: ThreadCtx) {
+  const none = () => Promise.resolve();
+  return { onSend: none, onAnswer: none, onDeleted: () => ctx.select(null), onClose: () => ctx.select(null) };
+}
 
 // A worker card's thread actions, in the shape ThreadPanel takes: send and answer go out as commands, a rename as a
 // host verb (lib/project-host.ts), drawn at once and taken back if the worker refuses. What only the machine running the

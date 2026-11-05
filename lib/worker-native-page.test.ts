@@ -28,6 +28,13 @@ describe("nativePageUrl", () => {
     expect(nativePageUrl(paneFromUrl(`blob:sha256:${SHA}`), ORIGIN)).toBe(`${ORIGIN}/api/worker-board/page/${SHA}`);
   });
 
+  it("reads a teammate's card's page from the team's workspace", () => {
+    const org = "0b5c7a4e-1111-4222-8333-944445555666";
+    const url = nativePageUrl(paneFromUrl(`blob:sha256:${SHA}#s2`), ORIGIN, org);
+    expect(url).toBe(`${ORIGIN}/api/worker-board/page/${SHA}?org=${org}#s2`);
+    expect(savedPageUrl(url as string)).toBe(`blob:sha256:${SHA}#s2`);
+  });
+
   it("opens a site as it is, and leaves the rest to the board's pane", () => {
     expect(nativePageUrl(paneFromUrl("https://example.com/x"), ORIGIN)).toBe("https://example.com/x");
     expect(nativePageUrl(paneFromUrl("http://localhost:3000/"), ORIGIN)).toBeNull();

@@ -432,6 +432,34 @@ search root holds the CLI's folder. A project's `.claude/settings*.json` still c
 Write/Edit refuse it, and in Bash so does naming it or the `.claude` folder itself, or redirecting into it, since its
 hooks are the guard.
 
+### The session's own project folder
+
+A thread reads its own project's folder in the CLI's home, `~/.claude/projects/<project>/`, whole
+(`lib/secret-guard-own-project.ts`, 2026-11-04). When an MCP tool's answer overflows the context (`changelog_list` with 158
+entries, ~80k chars), Claude Code saves it to `<project>/<session-id>/tool-results/<name>.txt` and tells the thread to read
+it in chunks; with the folder sealed the thread never saw the answer. The user chose the whole project over just
+`tool-results`: its sessions' transcripts and memory open too.
+
+- **Which project**: the one holding the hook call's own `session_id` (`<id>.jsonl` or `<id>/`, `ownProjectDirs`, cached
+  per session), never the cwd: a thread can `cd` into another repo, but can't change the session id the CLI hands its
+  hooks. No session id (Codex and Goose through `lib/guards/decide.ts`, the cardless scout), a non-UUID, or one the CLI
+  hasn't written yet opens nothing.
+- **Reads only**: Read, LS, and a Grep or Glob rooted or patterned inside it (`toolVerdict`'s `mine`). Write and Edit
+  still meet the seal. In Bash, `withoutOwnProject` swaps each of the project's plain *files* for a `/tmp` stand-in
+  before `bashVerdict` reads the line, so `head -c 20000 <result>` and `jq` run; a folder is never swapped, so
+  `cd <project>; cat ../other/x.jsonl` and `rm -rf <project>` stay refused.
+- **Never past it**: a `..` in the name is refused before folding, and a path must land inside both where it's named and
+  where it really is (a link to another project or to `settings.json` stays sealed). Other projects, the CLI's settings,
+  hooks and skills stay sealed.
+- **The folder gate** counts it as the card's own (`ownProjectDirs` joins the granted folders in `folderGuard`), so a
+  Read there doesn't ask "Outside the project".
+- The trade-off: a transcript holds every value its thread saw in plaintext, so a thread can now read what earlier
+  threads of the same project saw. Other projects' transcripts stay sealed.
+
+`changelog_list` pages too (`pageOf` in `lib/changelog-tool.ts`): 40 entries a page (`limit` up to 100, `offset` for the
+next), each line clipped to 300 chars, a footer naming the next offset, and `mine: true` for the card's own entries, so its
+answer stays under the size the CLI spills to a file.
+
 ## Credential CLIs
 
 A thread can run the user's own CLIs, and some of them print the sign-in they hold. Their output lands in the

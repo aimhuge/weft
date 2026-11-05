@@ -31,6 +31,8 @@ const CardWorkspace = guarded(() => import("./CardWorkspace"), { what: "card wor
 const EditorColumn = guarded(() => import("./EditorColumn"), { what: "editor column" });
 // A worker card's pane: the page it opened, framed through this Mac's server, or its live screen.
 const WorkerPane = guarded(() => import("./WorkerPane"), { what: "worker pane", className: "m-3 w-[360px] self-start" });
+// A teammate's card's pane: its page, read-only (lib/team-host.ts).
+const TeamPane = guarded(() => import("./TeamPane"), { what: "teammate's pane", className: "m-3 w-[360px] self-start" });
 
 // The backdrop and the window: framed while a card or New thread is open, else `contents` so the
 // children (none) take no space. `bottom` stops the window above an open terminal drawer. The framed
@@ -134,6 +136,8 @@ export default function OpenCard(props: OpenCardProps) {
                       expanded
                       actions={marks}
                     />
+                  ) : card.team ? (
+                    <TeamPane card={{ ...card, team: card.team }} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} onClose={closePane} />
                   ) : (
                     <WorkerPane card={card} worker={props.worker} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} marks={marks} onClose={closePane} />
                   )
@@ -174,6 +178,8 @@ function Workspace({ card, handlers, items, streaming, resets, editTitle, worksp
             items={items}
             streaming={streaming}
             {...handlers}
+            // A teammate's card (lib/team-host.ts): no reply box and no answers; it runs on their Mac.
+            readOnly={Boolean(card.team)}
             onArchive={onArchive}
             onOpenSettings={onOpenSettings}
             editorOpen={files && workspace.layout.open.editor}
