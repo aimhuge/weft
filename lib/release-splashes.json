@@ -1,4 +1,11 @@
 {
+  "0.7.6": {
+    "lines": [
+      "Weft runs on Windows now, on Intel or ARM: install it once and it updates itself, like on the Mac.",
+      "Dictate on Windows too: whisper ships inside Weft, so there's nothing else to install.",
+      "Take over a teammate's card: ask them to hand it over, or take it now and pick up where they left off."
+    ]
+  },
   "0.7.5": {
     "lines": [
       "A linked project's cards sync to your team, so the team's board holds everyone's work, not one person's.",
