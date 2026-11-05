@@ -124,8 +124,10 @@ describe("with a key", () => {
     });
   });
 
-  it("goes back through weft.zip/auth/desktop when running inside the desktop app", async () => {
+  it("goes back through weft.zip/auth/desktop when running inside the desktop app on macOS", async () => {
     vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:9");
+    const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
+    Object.defineProperty(process, "platform", { ...platform, value: "darwin" });
     try {
       const account = await load();
       auth.signInWithOAuth.mockResolvedValue({ data: { url: "https://gh/login" }, error: null });
@@ -141,6 +143,19 @@ describe("with a key", () => {
         options: { emailRedirectTo: "https://weft.zip/auth/desktop", shouldCreateUser: true },
       });
       expect(account.weftCallbackUrl()).toBe("weft://account-callback");
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+      vi.stubEnv("WEFT_SHELL_URL", "");
+    }
+  });
+
+  it("comes straight back to the loopback callback inside the desktop app on Windows and Linux", async () => {
+    vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:9");
+    try {
+      const account = await load();
+      expect(account.redirectUrl("http://127.0.0.1:57598/", "win32")).toBe("http://127.0.0.1:57598/api/auth/callback");
+      expect(account.redirectUrl("http://127.0.0.1:57598", "linux")).toBe("http://127.0.0.1:57598/api/auth/callback");
+      expect(account.redirectUrl("http://127.0.0.1:57598", "darwin")).toBe("https://weft.zip/auth/desktop");
     } finally {
       vi.stubEnv("WEFT_SHELL_URL", "");
     }

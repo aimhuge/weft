@@ -91,11 +91,15 @@ export async function accountView(): Promise<AccountView> {
 import { desktopReturnUrl } from "./account-callback";
 export { ACCOUNT_CALLBACK_HOST, WEEFT_PROTOCOL, weftCallbackUrl, desktopReturnUrl } from "./account-callback";
 
-// Where Supabase sends the browser back to. The desktop app goes through weft.zip/auth/desktop, which
-// opens weft://account-callback with the code (and offers a button for when the browser wants a click),
-// so the URL doesn't depend on the dev port; plain `next dev` uses the loopback HTTP origin instead.
-export function redirectUrl(origin: string): string {
-  if (process.env.WEFT_SHELL_URL) return desktopReturnUrl();
+// Where Supabase sends the browser back to. The desktop app on macOS goes through weft.zip/auth/desktop,
+// which opens weft://account-callback with the code (and offers a button for when the browser wants a
+// click), so the URL doesn't depend on the port. Everywhere else (Windows, Linux, plain `next dev`) it
+// comes straight back to this server's loopback callback, the way CLIs do (RFC 8252): the weft:// leg
+// there hangs on the dev Electron being the scheme's handler, the browser's "Open app?" click and a
+// second-instance hand-off, and Windows sign-ins kept dying on it. The port changes each launch, which
+// only matters if Weft restarts in the middle of a sign-in.
+export function redirectUrl(origin: string, platform: NodeJS.Platform = process.platform): string {
+  if (process.env.WEFT_SHELL_URL && platform === "darwin") return desktopReturnUrl();
   return `${origin.replace(/\/+$/, "")}${CALLBACK_PATH}`;
 }
 

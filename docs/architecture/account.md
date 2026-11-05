@@ -29,6 +29,18 @@ This is a custom URL scheme Weft registers with the OS. The dev server's HTTP po
 Weft restart, so a `http://127.0.0.1:PORT/...` redirect would break after each launch; the `weft://`
 scheme doesn't carry a port, so the URL is permanent.
 
+**Windows and Linux skip `weft://` altogether** (`redirectUrl` in `lib/account.ts` checks
+`process.platform`): Supabase sends the browser straight back to this server's loopback
+`http://127.0.0.1:PORT/api/auth/callback`, the native-app flow of RFC 8252 that `gh` and `gcloud` use.
+Inside the desktop app (`WEFT_SHELL_URL` set) that route renders the "Signed in to Weft" page
+(`finishDesktopSignIn` in `lib/desktop-sign-in.ts`, shared with `/api/auth/weft-callback`) instead of
+redirecting into a board the browser has no token for, and the board picks the session up by polling.
+The `weft://` leg there kept failing: it depends on the dev Electron being registered as the
+scheme's handler, the browser's "Open app?" click and a second-instance hand-off, and a Windows tab
+reached weft.zip/auth/desktop with the app still signed out after the fix below. The port changes per
+launch, which only breaks a sign-in Weft restarts in the middle of; Supabase's allow-list carries
+`http://127.0.0.1:*/api/auth/callback`. The rest of this section is the macOS path.
+
 Supabase doesn't redirect to `weft://` directly, though: its `redirectTo` is
 `https://weft.zip/auth/desktop` (`desktopReturnUrl` in `lib/account-callback.ts`), a page
 (`app/auth/desktop/route.ts`, `lib/desktop-return.ts`) that forwards `code` / `error*` to
@@ -66,7 +78,8 @@ loopback HTTP origin for plain `next dev` (no Electron, no `weft://` handler at 
    `redirectTo: weft://account-callback?next=…` and `skipBrowserRedirect: true`.
 3. The hook opens the Supabase authorize URL in the system browser via `openExternal()`.
 4. The user authorizes on GitHub. GitHub → Supabase → `weft://account-callback?code=…&next=…`.
-5. The OS hands the URL to the Weft app: `open-url` (mac) or `second-instance` (Linux/Windows).
+5. The OS hands the URL to the Weft app: `open-url` (mac) or `second-instance` (Linux/Windows,
+   only for links other than sign-in now: their sign-in lands on the loopback callback, above).
 6. `handleLink` in `electron/main.cjs` sees the link is for the account callback and hands it to
    `accountLink.handle()` (built by `createAccountLink()` in `electron/account-link.cjs`). The handler
    parses the query string with `accountCallbackBody()` and POSTs it to `/api/auth/weft-callback`

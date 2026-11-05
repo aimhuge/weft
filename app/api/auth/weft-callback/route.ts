@@ -11,8 +11,9 @@
 // extracts from the HTML (electron/account-link.cjs:extractErrorMessage) before
 // showing it in a native dialog.
 import { NextResponse } from "next/server";
-import { accountView, finishSignIn } from "@/lib/account";
+import { accountView } from "@/lib/account";
 import { accountPage } from "@/lib/account-page";
+import { finishDesktopSignIn } from "@/lib/desktop-sign-in";
 import { guard } from "@/lib/guard";
 
 export async function POST(req: Request) {
@@ -27,15 +28,7 @@ export async function POST(req: Request) {
   } catch {
     return accountPage("Couldn't sign in to Weft", "Expected a JSON body with the OAuth query string.", false);
   }
-  const failed = body.error_description || body.error;
-  if (failed) return accountPage("Couldn't sign in to Weft", failed, false);
-  try {
-    const user = await finishSignIn(body.code ?? "");
-    const who = user.email ?? user.name;
-    return accountPage("Signed in to Weft", `${who ? `You're signed in as ${who}. ` : ""}You can close this tab and go back to Weft.`, true);
-  } catch (err) {
-    return accountPage("Couldn't sign in to Weft", err instanceof Error ? err.message : String(err), false);
-  }
+  return finishDesktopSignIn(body);
 }
 
 // GET returns the current view, so a status check from main doesn't need POST.

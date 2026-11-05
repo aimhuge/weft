@@ -80,4 +80,18 @@ describe("/api/auth/callback", () => {
     expect(res.status).toBe(303);
     expect(res.headers.get("location")).toBe("http://127.0.0.1:1000/app");
   });
+
+  it("leaves the system browser on the result page inside the desktop app (Windows and Linux land here)", async () => {
+    vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:9");
+    finishSignIn.mockResolvedValueOnce({ id: "u1", email: "ada@b.co", name: "Ada" });
+    const { GET } = await load();
+    const res = await GET(makeRequest("http://127.0.0.1:57598/api/auth/callback?code=ok"));
+    expect(finishSignIn).toHaveBeenCalledWith("ok");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain("Signed in to Weft");
+
+    const denied = await GET(makeRequest("http://127.0.0.1:57598/api/auth/callback?error=access_denied"));
+    expect(denied.status).toBe(400);
+    expect(await denied.text()).toContain("access_denied");
+  });
 });
