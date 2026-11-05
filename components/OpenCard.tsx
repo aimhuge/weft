@@ -33,6 +33,10 @@ const EditorColumn = guarded(() => import("./EditorColumn"), { what: "editor col
 const WorkerPane = guarded(() => import("./WorkerPane"), { what: "worker pane", className: "m-3 w-[360px] self-start" });
 // A teammate's card's pane: its page, read-only (lib/team-host.ts).
 const TeamPane = guarded(() => import("./TeamPane"), { what: "teammate's pane", className: "m-3 w-[360px] self-start" });
+// Where a teammate's card's reply box would be: whose Mac runs it, and Continue here (lib/team-takeover.ts).
+const TeamTakeoverBar = guarded(() => import("./TeamTakeoverBar"), { inline: true, what: "takeover bar" });
+// On your own card, a teammate's ask for it (lib/handover.ts).
+const HandoverAskBar = guarded(() => import("./HandoverAskBar"), { inline: true, what: "handover ask" });
 
 // The backdrop and the window: framed while a card or New thread is open, else `contents` so the
 // children (none) take no space. `bottom` stops the window above an open terminal drawer. The framed
@@ -86,6 +90,13 @@ function WorkerNote({ worker, cardId }: { worker?: ProjectWorker; cardId: string
   return <p className="shrink-0 border-t border-line px-4 py-2 text-[12.5px] text-faint">{worker?.status === "offline" ? `${name} is offline. ` : ""}{waits}</p>;
 }
 
+// Under the thread: a teammate's card's Take over bar, a teammate's ask for one of yours, or a worker's queue.
+function CardFooter({ card, worker, cloud }: { card: Card; worker?: ProjectWorker; cloud: boolean }) {
+  if (card.team) return <TeamTakeoverBar card={{ ...card, team: card.team }} />;
+  if (card.handoverAsk) return <HandoverAskBar card={{ ...card, handoverAsk: card.handoverAsk }} />;
+  return cloud ? <WorkerNote worker={worker} cardId={card.id} /> : null;
+}
+
 // Where the editor would be, for a card whose files are on another machine: said once, not a silent empty column.
 function NotOnHost({ onClose }: { onClose: () => void }) {
   return (
@@ -120,7 +131,7 @@ export default function OpenCard(props: OpenCardProps) {
                 {...props}
                 onShare={share}
                 files={host.can("files")}
-                footer={host.kind === "cloud" ? <WorkerNote worker={props.worker} cardId={card.id} /> : null}
+                footer={<CardFooter card={card} worker={props.worker} cloud={host.kind === "cloud"} />}
                 editor={host.can("files") ? <EditorColumn cardId={card.id} cwd={card.cwd} onClose={closeEditor} /> : <NotOnHost onClose={closeEditor} />}
                 pane={
                   host.can("pane") ? (

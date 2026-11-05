@@ -2,8 +2,10 @@
 // project you've checked out here whose GitHub repo a team you're in has linked syncs to that team
 // (lib/cloud-sync-route.ts), and so do your teammates' checkouts of it. This reads their rows back, by repo
 // (cloud_cards.repo), since `folder` is a path on their Mac, and files each card under your own folder for that repo,
-// marked with whose it is (Card.team). Signed in as you (lib/account.ts), so RLS decides; nothing here writes, and no
-// teammate's card is ever copied into the local store. Their threads read through lib/cloud-thread-read.ts.
+// marked with whose it is (Card.team). Signed in as you (lib/account.ts), so RLS decides; nothing here writes to the
+// cloud, and no teammate's card is ever copied into the local store. Their threads read through lib/cloud-thread-read.ts.
+// A card taken over (lib/team-takeover.ts) carries who took it; one you took is left off, since your own card has it
+// now; and the rest of cards changing hands (your taken cards, asks for a handover) is lib/team-board-side.ts.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import { teamOrgsFor } from "./cloud-sync-route";
@@ -11,8 +13,10 @@ import { threadPageIn, toolOutputIn } from "./cloud-thread-read";
 import { githubRepoOf } from "./repos";
 import { listProjects } from "./settings";
 import type { TeamBoard } from "./team-board-types";
+import { applySide, handoverStates, readSide, sideUsers } from "./team-board-side";
+import { takeoversOf, type TakeoverRow } from "./team-takeover-marks";
 import type { ThreadPage } from "./thread-page";
-import type { Card } from "./types";
+import type { Card, HandoverState } from "./types";
 import { openCardRows } from "./worker-board-open";
 
 // The cards one read takes per workspace, newest first.
@@ -78,8 +82,11 @@ async function profiles(client: SupabaseClient, ids: string[]): Promise<Map<stri
 }
 
 // A row as the board draws it: under your folder for its repo, marked with its team, owner and Mac.
-export function teamCard(row: TeamRow, org: string, folder: string, who: Profile | undefined): Card {
-  return { ...row.card, cwd: folder, team: { org, owner: row.owner_user, name: who?.display_name?.trim() || "A teammate", avatar: who?.avatar_url ?? null, device: row.owner_device } };
+const nameOf = (who: Profile | undefined) => who?.display_name?.trim() || "A teammate";
+
+export function teamCard(row: TeamRow, org: string, folder: string, who: Profile | undefined, taken?: { row: TakeoverRow; who?: Profile }, handover?: HandoverState): Card {
+  const marks = { ...(taken ? { takenOver: { name: nameOf(taken.who), at: taken.row.at } } : {}), ...(handover ? { handover } : {}) };
+  return { ...row.card, cwd: folder, team: { org, owner: row.owner_user, name: nameOf(who), avatar: who?.avatar_url ?? null, device: row.owner_device, ...marks } };
 }
 
 // Whether a row is drawn: a live card that isn't its owner's copilot.
@@ -102,15 +109,26 @@ export async function readTeamBoard(client: SupabaseClient = accountClient(), si
   if (!mine.size) return { signedIn: true, cards: [] };
   const teams = byTeam(await teamOrgsFor(client, [...mine.keys()], now));
   const from = since && Number.isFinite(Date.parse(since)) ? new Date(Date.parse(since) - SINCE_OVERLAP_MS).toISOString() : null;
-  const reads = await Promise.all([...teams].map(async ([org, repos]) => ({ org, rows: await teamRows(client, org, repos, uid, from) })));
-  const all = reads.flatMap(({ org, rows }) => rows.map((row) => ({ org, row })));
-  const who = await profiles(client, [...new Set(all.map((r) => r.row.owner_user))]);
-  const cards = all.filter((r) => drawn(r.row) && mine.has(r.row.repo)).map((r) => teamCard(r.row, r.org, mine.get(r.row.repo) as string, who.get(r.row.owner_user)));
+  const reads = await Promise.all([...teams].map(async ([org, repos]) => {
+    const [rows, taken] = await Promise.all([teamRows(client, org, repos, uid, from), takeoversOf(client, org)]);
+    return { org, rows, taken };
+  }));
+  const orgs = [...teams.keys()];
+  const side = await readSide(client, uid, orgs, now);
+  const all = reads.flatMap(({ org, rows, taken }) => rows.map((row) => ({ org, row, taken: taken.get(row.card_id) })));
+  const who = await profiles(client, [...new Set([...all.flatMap((r) => [r.row.owner_user, ...(r.taken ? [r.taken.by_user] : [])]), ...sideUsers(side)])]);
+  applySide(side, orgs, (user) => nameOf(who.get(user)), client);
+  const asks = handoverStates(side.mine);
+  // A card you took over is yours now, on your board as your own card: its original is left off.
+  const shown = (r: (typeof all)[number]) => drawn(r.row) && r.taken?.by_user !== uid;
+  const cards = all
+    .filter((r) => shown(r) && mine.has(r.row.repo))
+    .map((r) => teamCard(r.row, r.org, mine.get(r.row.repo) as string, who.get(r.row.owner_user), r.taken && { row: r.taken, who: who.get(r.taken.by_user) }, asks.get(r.row.card_id)));
   const stamps = all.flatMap((r) => (r.row.updated_at ? [Date.parse(r.row.updated_at)] : [])).filter(Number.isFinite);
   const asOf = stamps.length ? new Date(Math.max(...stamps)).toISOString() : from ? since : undefined;
   // A changed read that filled a team's limit is sent whole, like the worker board's.
   const delta = from !== null && reads.every((r) => r.rows.length < TEAM_CARD_LIMIT);
-  const removed = delta ? all.filter((r) => !drawn(r.row)).map((r) => r.row.card_id) : [];
+  const removed = delta ? all.filter((r) => !shown(r)).map((r) => r.row.card_id) : [];
   return { signedIn: true, cards, ...(asOf ? { asOf } : {}), ...(delta ? { delta: true, removed } : {}) };
 }
 

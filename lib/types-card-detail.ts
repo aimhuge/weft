@@ -18,6 +18,43 @@ export interface TeamMark {
   name: string;
   avatar?: string | null;
   device: string;
+  // A teammate continued it on their own Mac (lib/team-takeover.ts): who, and when.
+  takenOver?: TakeoverMark;
+  // Your ask for this card (lib/handover.ts), while it's open: where it stands, and the branch once it's pushed.
+  handover?: HandoverState;
+}
+
+export type HandoverStatus = "asked" | "pushing" | "pushed" | "failed" | "declined" | "cancelled" | "taken";
+
+export interface HandoverState {
+  id: string;
+  status: HandoverStatus;
+  branch?: string;
+  note?: string;
+}
+
+// On the owner's Mac: a teammate asks for this card (cloud_handovers), until it's answered.
+export interface HandoverAsk {
+  id: string;
+  org: string;
+  name: string;
+  at: string;
+}
+
+// Who took a card over and when (cloud_card_takeovers): drawn on the original wherever it shows.
+export interface TakeoverMark {
+  name: string;
+  at: string;
+}
+
+// A card you continued from a teammate's (lib/team-takeover.ts): which one, in which workspace, and whose it was.
+export interface TakenFrom {
+  org: string;
+  card: string;
+  owner: string;
+  name: string;
+  // The branch their Mac pushed the card's work to, when they handed it over (lib/handover.ts).
+  branch?: string;
 }
 
 export interface Card {
@@ -27,6 +64,10 @@ export interface Card {
   cwd: string;
   // Set on a teammate's card only: it opens read-only, on the host lib/team-host.ts gives it.
   team?: TeamMark;
+  // Continued here from a teammate's card; and on the owner's Mac, the teammate who took this one over.
+  takenFrom?: TakenFrom;
+  takenOverBy?: TakeoverMark;
+  handoverAsk?: HandoverAsk;
   backend: Backend;
   permissionMode: import("./types-card").PermissionMode;
   // Chosen when the thread was made; left out, the CLI's own default.

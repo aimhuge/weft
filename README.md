@@ -868,7 +868,12 @@ shows everyone's cards for it. A folder syncs only once its owner switches Sync 
 its older cards into the team (docs/architecture/cloud-sync.md#team-projects).
 Your teammates' cards for it show on your desktop board too, inside your own project of the same repo: each with their
 picture and "Zulker's Mac" on the tile. They're read-only: open one to read its thread and pane, but only its owner
-can reply, stop or move it.
+can reply, stop or move it. To pick one up yourself, open it: **Ask Zulker** shows them your ask on their card, and
+when they click **Hand it over** their Mac pushes the card's work to a branch and yours starts your card from it, on
+its own. **Take over now** doesn't wait, for when they're offline: your card starts from what they've pushed already.
+Either way it's a new card of yours in your checkout of the repo, with their thread as its history and a brief of
+what's done and what's open; their card stays theirs and says "Alex has it" on every board, theirs included
+(docs/architecture/cloud-sync.md#taking-over-a-teammates-card, #asking-for-a-handover).
 The pencil beside a team you own renames it; its weft.zip address stays the same. The trash deletes it, once you
 type its name, as long as you're in another team too and it has no paid plan still running.
 

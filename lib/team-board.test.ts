@@ -4,6 +4,8 @@ import type { Card } from "./types";
 const teamOrgsFor = vi.hoisted(() => vi.fn());
 const threadPageIn = vi.hoisted(() => vi.fn());
 const toolOutputIn = vi.hoisted(() => vi.fn());
+const marks = vi.hoisted(() => ({ takeoversOf: vi.fn() }));
+const side = vi.hoisted(() => ({ readSide: vi.fn(), applySide: vi.fn(), sideUsers: vi.fn(), handoverStates: vi.fn() }));
 const repos = new Map<string, string>();
 
 vi.mock("./account", () => ({ accountClient: () => ({ default: true, auth: { getSession: () => Promise.resolve({ data: { session: null } }) } }) }));
@@ -11,6 +13,8 @@ vi.mock("./cloud-sync-route", () => ({ teamOrgsFor }));
 vi.mock("./cloud-thread-read", () => ({ threadPageIn, toolOutputIn }));
 vi.mock("./repos", () => ({ githubRepoOf: (folder: string) => repos.get(folder) }));
 vi.mock("./settings", () => ({ listProjects: () => [{ path: "/dev/exiting" }, { path: "/dev/exiting-2" }, { path: "/tmp/plain" }] }));
+vi.mock("./team-takeover-marks", () => marks);
+vi.mock("./team-board-side", () => side);
 vi.mock("./worker-board-open", () => ({ openCardRows: (_org: string, rows: unknown[]) => Promise.resolve(rows) }));
 
 import { forgetRepoFolders, readTeamBoard, repoFolders, teamCard, teamThreadPage, teamToolOutput, TEAM_CARD_LIMIT } from "./team-board";
@@ -53,6 +57,11 @@ beforeEach(() => {
   repos.set("/dev/exiting", "Exitingcom/exitingcom");
   repos.set("/dev/exiting-2", "exitingcom/exitingcom");
   teamOrgsFor.mockReset().mockResolvedValue(new Map([["exitingcom/exitingcom", "org-x"]]));
+  marks.takeoversOf.mockReset().mockResolvedValue(new Map());
+  side.readSide.mockReset().mockResolvedValue({ taken: [], asks: [], mine: [] });
+  side.applySide.mockReset();
+  side.sideUsers.mockReset().mockReturnValue([]);
+  side.handoverStates.mockReset().mockReturnValue(new Map());
 });
 
 describe("repoFolders", () => {
@@ -179,5 +188,44 @@ describe("the thread", () => {
     expect(threadPageIn).toHaveBeenCalledWith(expect.objectContaining({ default: true }), "org-x", "z1", 10, undefined);
     expect(await teamToolOutput("org-x", "z1", "t1")).toBe("out");
     expect(toolOutputIn).toHaveBeenCalledWith(expect.objectContaining({ default: true }), "org-x", "z1", "t1");
+  });
+});
+
+describe("readTeamBoard with takeovers", () => {
+  const taken = (card: string, by: string) => ({ org_id: "org-x", card_id: card, by_user: by, at: "2026-11-05T08:00:00.000Z" });
+  const twoProfiles = { data: [...profiles.data, { id: "alex", display_name: "Alex Miller", avatar_url: null }], error: null };
+
+  it("marks a card a teammate took over with who took it", async () => {
+    marks.takeoversOf.mockResolvedValue(new Map([["z1", taken("z1", "alex")]]));
+    const { c } = client("me", (table) => (table === "profiles" ? twoProfiles : { data: [row("z1"), row("z2")], error: null }));
+    const board = await readTeamBoard(c, undefined, 0);
+    expect(marks.takeoversOf).toHaveBeenCalledWith(c, "org-x");
+    expect(board.cards.find((x) => x.id === "z1")?.team?.takenOver).toEqual({ name: "Alex Miller", at: "2026-11-05T08:00:00.000Z" });
+    expect(board.cards.find((x) => x.id === "z2")?.team?.takenOver).toBeUndefined();
+  });
+
+  it("leaves off a card you took over, and says it's gone on a changed read", async () => {
+    marks.takeoversOf.mockResolvedValue(new Map([["z1", taken("z1", "me")]]));
+    const { c } = client("me", (table) => (table === "profiles" ? profiles : { data: [row("z1"), row("z2")], error: null }));
+    const board = await readTeamBoard(c, "2026-11-05T05:00:00.000Z", 0);
+    expect(board.cards.map((x) => x.id)).toEqual(["z2"]);
+    expect(board.removed).toEqual(["z1"]);
+  });
+
+  it("reads and applies the side, names its users, and draws your ask on its card", async () => {
+    const sideRead = { taken: [], asks: [], mine: [] };
+    side.readSide.mockResolvedValue(sideRead);
+    side.sideUsers.mockReturnValue(["alex"]);
+    side.handoverStates.mockReturnValue(new Map([["z1", { id: "h1", status: "asked" }]]));
+    const { c, seen } = client("me", (table) => (table === "profiles" ? twoProfiles : { data: [row("z1"), row("z2")], error: null }));
+    const board = await readTeamBoard(c, undefined, 5);
+    expect(side.readSide).toHaveBeenCalledWith(c, "me", ["org-x"], 5);
+    expect(seen.find((q) => q.table === "profiles")?.calls).toContainEqual(["in", "id", ["zulker", "alex"]]);
+    const [read, orgs, name, passed] = side.applySide.mock.calls[0] as [unknown, string[], (u: string) => string, unknown];
+    expect([read, orgs, passed]).toEqual([sideRead, ["org-x"], c]);
+    expect(name("alex")).toBe("Alex Miller");
+    expect(name("nobody")).toBe("A teammate");
+    expect(board.cards.find((x) => x.id === "z1")?.team?.handover).toEqual({ id: "h1", status: "asked" });
+    expect(board.cards.find((x) => x.id === "z2")?.team?.handover).toBeUndefined();
   });
 });

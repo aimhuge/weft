@@ -18,7 +18,7 @@ import { ContinueButton, RestartButton, type ResumeHow } from "./CardResume";
 import CardMarks from "./CardMarks";
 import RestartMark, { restartCardClass } from "./RestartMark";
 import StarButton from "./StarButton";
-import TeamOwnerMark, { TeamCardPicture } from "./TeamOwnerMark";
+import TeamOwnerMark, { HandoverAskMark, TakenOverMark, TeamCardPicture } from "./TeamOwnerMark";
 
 // Re-exports so existing import sites keep working.
 export { default as BackendBadge } from "./BackendBadge";
@@ -249,6 +249,7 @@ function CardActions({ card, readOnly, onResume, onStar, onArchive, onStop }: { 
   const copilot = card.role === "copilot";
   return (
     <div className="flex shrink-0 items-center">
+      {card.handoverAsk ? <HandoverAskMark name={card.handoverAsk.name} /> : card.takenOverBy && <TakenOverMark taken={card.takenOverBy} />}
       <ContinueButton card={card} onResume={onResume} />
       {!copilot && <StarButton variant="card" starred={Boolean(card.starred)} onClick={onStar} />}
       {(card.column === "done" || card.column === "backlog" || card.archived) && <ArchiveButton archived={Boolean(card.archived)} onClick={onArchive} />}

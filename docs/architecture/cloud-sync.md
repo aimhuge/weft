@@ -273,7 +273,8 @@ your Mac: /api/team-board ◀──────────┘  repo → your fo
   folder and `team: { org, owner, name, avatar, device }` (`TeamMark`, `lib/types-card-detail.ts`). With `since`, only
   the rows changed after it (2 s overlap), deletes as `removed`; a database without the column reads as no cards.
 - **The route.** `GET /api/team-board` (`app/api/team-board/route.ts`, guarded): the board, `?since=`, and
-  `?org=&card=` for a thread page (`before`, `after`) or `&tool=` for a cut output. There is no POST. The thread reads
+  `?org=&card=` for a thread page (`before`, `after`) or `&tool=` for a cut output. Its POST takes a card over (below)
+  and asks nothing of their Mac. The thread reads
   are `lib/cloud-thread-read.ts` (`threadPageIn`, `toolOutputIn`), shared with the worker board, in the card's own org.
   A page the card wrote loads through `/api/worker-board/page/<sha>?org=<team>` (`workerPage` with an org).
 - **The board.** `lib/use-team-board.ts` polls every 5 s while there are cards and the window is visible, once a
@@ -289,6 +290,87 @@ your Mac: /api/team-board ◀──────────┘  repo → your fo
   `readOnly` to the thread panel (no reply box, no answers) and draws `components/TeamPane.tsx` in the pane column.
 - **Gaps.** Pictures inside a teammate's thread are signed in your own workspace (`useWorkerView`), so they don't load
   yet; Share… and Save as app aren't offered for them; a teammate's Worker cards have no repo yet.
+
+### Taking over a teammate's card
+
+Status: built 2026-11-05; `20261105110000_cloud_card_takeovers.sql` applied to prod the same day. A database without
+the table still takes a card over, with no mark.
+
+**Take over now**, on the bar where a teammate's open card would have its reply box (`components/TeamTakeoverBar.tsx`,
+the thread panel's `footer` in `OpenCard`), continues their card as a new card of **yours**; **Ask Zulker** beside it asks
+them first (below). It's a fork, not a
+transfer: their card stays theirs (no write to their rows, nothing sent to their Mac, so it works while their Mac is
+off), and their CLI session and unpushed edits stay where they are.
+
+```
+their card (cloud) ── whole thread + Haiku summary ──▶ your new card (your checkout of the repo, this Mac)
+        ▲                                                     │
+        └── cloud_card_takeovers row (trigger touches the card's updated_at, so every board's next read sees it)
+```
+
+- **The takeover.** `POST /api/team-board { org, card }` (elevated: it starts a turn, so only Weft's own window may ask)
+  → `takeOverTeamCard` (`lib/team-takeover.ts`): reads their row (`openCardRows` for a sealed one), refuses your own card,
+  a deleted one and a repo with no checkout here (`repoFolders`); walks their thread back a page at a time
+  (`wholeThread`, at most `TAKEOVER_ITEMS_MAX`); asks Haiku for the same summary "Send fresh" uses (`summaryPrompt`);
+  makes the card (`createCardFromBody`: their title and tags, your defaults for CLI, model and mode) with
+  `takenFrom: { org, card, owner, name }`; sets its thread to their items plus a `spliced` row holding the brief; and
+  sends its first turn with the brief ahead of the message (`sendMessage`'s `cli`). Then the bar opens it
+  (`openCardById`).
+- **What comes along** (`lib/team-takeover-brief.ts`). `importedItems` drops permission rows and items this Mac couldn't
+  unseal, strips prompt ids and pane pages, drops a tool's pictures, says a cut tool output "stayed on Zulker's Mac", and
+  rewrites `blob:sha256:` refs to say so. `takeoverBrief` names whose card it was and the repo, the summary, what its
+  status line left open, the files their edits touched (repo-relative), and that only what they pushed is reachable:
+  `git fetch` and look for their branch before redoing anything, and ask when it isn't pushed.
+- **The mark.** `cloud_card_takeovers (org_id, card_id, by_user, owner_user, new_card_id, at)`: `by_user` defaults to
+  `auth.uid()` and `owner_user` is copied from `cloud_cards` by a trigger, so neither is a column a client writes (the
+  insert grant is `org_id, card_id, new_card_id`). A member inserts for a card that isn't theirs; members read; the taker
+  may delete their own. An after-insert trigger touches the card's `updated_at`, so changed-cards reads and Realtime hear
+  of it. `lib/team-takeover-marks.ts` reads it back on every `readTeamBoard`: `takeoversOf` (a workspace's, newest per
+  card, read whole rather than by a few hundred ids) sets `TeamMark.takenOver`, so the tile and the bar say "Alex has it";
+  a card **you** took is left off your board (and is in `removed` on a changed read), since your own card has it now;
+  and `takeoversFrom` finds your cards a teammate took, which `noteTakeovers` marks once with `Card.takenOverBy`, drawn as
+  "Alex has it" beside the tile's buttons (`TakenOverMark`).
+- **Gaps.** A new session, not theirs: the brief stands in for the agent's memory. Pictures and pages stay on their
+  Mac. Their card keeps running if they carry on too; nothing stops two people working the same card.
+
+### Asking for a handover
+
+Status: built 2026-11-05 with `20261105120000_cloud_handovers.sql`.
+
+The other way in, for when their unpushed work matters: **Ask Zulker** leaves an ask; their Mac shows it on the card,
+and if they say yes it pushes the card's work to a branch, and your Mac starts your card from it. It's the first thing
+one account's Mac does because another asked, so it only ever happens after the owner clicks yes, on their own Mac, and
+only ever this: push one branch and say which.
+
+```
+you: Ask ──▶ cloud_handovers (asked) ──▶ their board read: Card.handoverAsk, "Alex asks for it" on the tile
+their Mac: Hand it over ──▶ pushing ──▶ git push origin <sha>:weft/handover/<card> ──▶ pushed (branch, sha)
+your board read: pushed ──▶ taken (the lock) ──▶ takeOverTeamCard(…, { branch, sha }) ──▶ your card
+```
+
+- **The ask.** `POST /api/team-board { org, card, ask: true }` → `askHandover` (`lib/handover.ts`) inserts
+  `{ org_id, card_id }`; `by_user` defaults to you and a trigger copies `owner_user` from `cloud_cards`
+  (`private.takeover_owner`). Only the asker and the owner read a row. Every change touches the card's `updated_at`, so
+  changed-cards reads redraw it.
+- **Their side.** Each board read (`lib/team-board-side.ts` `readSide` → `applySide`, called from `readTeamBoard`)
+  reads the asks waiting on your cards (`handoversFor(…, "owner")`) and `noteAsks` puts each on its card as
+  `Card.handoverAsk` (and takes off one called off or answered elsewhere). The tile shows "Alex asks for it"
+  (`HandoverAskMark`), and the open card's footer is `components/HandoverAskBar.tsx`: **Hand it over** / **Not now**,
+  through `POST /api/handover { card, yes }` (elevated) → `answerHandover`. Yes marks it `pushing` (only from `asked`),
+  stops a running card, and `pushCardWork` (`lib/handover-push.ts`) commits the files the card's edits touched
+  (`touchedFiles`, then `git status` keeps the changed, unignored ones) on top of HEAD through a throwaway
+  `GIT_INDEX_FILE` and pushes `<sha>:refs/heads/weft/handover/<card id>` (forced: the branch is Weft's, one per card).
+  Their working tree, real index and branch don't move, so other cards in the tree don't notice; a card with nothing
+  changed pushes HEAD. Then `pushed` with the branch and sha, or `failed` with git's words. RLS lets the owner set only
+  `pushing`, `pushed`, `failed` or `declined`.
+- **Your side.** The same read takes your asks from the last day (`handoversFor(…, "asker")`); `handoverStates` puts the
+  newest per card on its `TeamMark.handover`, and the bar says where it stands (asked, pushing, handed over, not now,
+  failed). `continueHandovers` turns a `pushed` one into your card in the background: it first moves it to `taken`
+  (only from `pushed`: the lock, so two reads or two Macs don't start it twice), then `takeOverTeamCard` with
+  `{ branch, sha }`, whose brief says to `git fetch origin <branch>` and bring it in first (`takenFrom.branch` records it);
+  a takeover that fails moves it to `cancelled` with why. RLS lets the asker set only `cancelled` or `taken`.
+- **Gaps.** Their CLI session doesn't travel, only its thread and a brief. Only the files the card's own Edit/Write
+  calls touched go in, not files a Bash command changed. Nothing reminds them of an ask beyond the tile and the bar.
 
 ## Ownership
 
