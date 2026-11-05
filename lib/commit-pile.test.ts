@@ -146,7 +146,7 @@ describe("pilePrompt", () => {
     expect(prompt).toContain("weft://commit?change=<n>&label=<url-encoded title>&message=<url-encoded commit message>&path=<file>&path=<file>");
     expect(prompt).toContain("`&push=1`");
     expect(prompt).toContain("`&done=<that card's id>`");
-    expect(prompt).toContain("`weft-commit` event on window: `detail` is `{ change, ok, hash, pushed, done, failed, error }`");
+    expect(prompt).toContain("`weft-commit` event on window: `detail` is `{ change, ok, hash, pushed, done, failed, error, already }`");
     expect(prompt).toContain("don't commit it yourself unless I ask");
     expect(prompt).not.toMatch(/\bsav(e|ed)\b/i);
   });

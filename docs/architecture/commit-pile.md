@@ -47,6 +47,12 @@ exact paths the page gave, pushes if asked, moves the change's card to Done if a
 result to the page as a `weft-commit` window event. A failure becomes a thread message, so a turn only
 runs when something went wrong.
 
+The page can race a card's own Done, which commits the same files moments before the click. So a path
+that's clean isn't a failure when a commit in the last hour (`RECENT_MS`) touched it (`recentCommit`):
+if every path was taken, the result is ok with `already: true` and that commit's hash (still pushing and
+moving the card if asked); if only some were, the rest are committed. A clean path no recent commit
+touched still fails with "Nothing uncommitted at …".
+
 ## Key files
 
 - `app/api/pile/route.ts` — the endpoint (pile summary with no `prompt`, walk-through prompt with

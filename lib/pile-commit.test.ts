@@ -28,7 +28,7 @@ vi.mock("./runner", () => ({
 
 const store = await import("./store");
 const runner = await import("./runner");
-const { commitFromPage, failureMessage, moveToDone, parseCommitRequest, safePath } = await import("./pile-commit");
+const { commitFromPage, failureMessage, moveToDone, parseCommitRequest, recentCommit, safePath } = await import("./pile-commit");
 
 const SCRIPT = path.resolve(__dirname, "../plugin/skills/done/commit.sh");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "weft-pile-commit-"));
@@ -154,6 +154,48 @@ describe("commitFromPage", () => {
     expect(git(root, "rev-parse", "HEAD")).toBe(before);
     expect(store.appendThread).toHaveBeenCalledWith("pile", expect.objectContaining({ isError: true, summary: "m (2 files) · commit failed" }));
     expect(runner.sendUserMessage).toHaveBeenCalledWith("pile", expect.stringContaining("couldn't be committed"));
+  });
+
+  it("takes paths its card's own Done just committed as already committed, then pushes and moves the card", async () => {
+    const { root, remote } = repo();
+    cards.set("pile", card("pile", { cwd: root }));
+    cards.set("c1", card("c1"));
+    git(root, "add", "a.ts", "b.ts");
+    git(root, "commit", "-q", "-m", "feat: by the card");
+    const hash = git(root, "rev-parse", "--short", "HEAD");
+    const result = await commitFromPage("pile", { message: "feat: ab", paths: ["a.ts", "b.ts"], push: true, done: "c1", change: "4" }, SCRIPT);
+    expect(result).toEqual({ ok: true, change: "4", hash, already: true, pushed: true, done: true });
+    expect(git(root, "rev-parse", "--short", "HEAD")).toBe(hash);
+    expect(git(remote, "rev-parse", "--short", "main")).toBe(hash);
+    expect(store.appendThread).toHaveBeenCalledWith(
+      "pile",
+      expect.objectContaining({ isError: false, summary: `${hash} feat: ab (2 files) · already committed · pushed · card moved to Done`, result: `already in ${hash}` }),
+    );
+    expect(runner.sendUserMessage).not.toHaveBeenCalled();
+  });
+
+  it("commits the rest when a recent commit already took some of the paths", async () => {
+    const { root } = repo();
+    cards.set("pile", card("pile", { cwd: root }));
+    git(root, "commit", "-q", "-am", "feat: a by the card");
+    const result = await commitFromPage("pile", { message: "feat: b", paths: ["a.ts", "b.ts"], push: false }, SCRIPT);
+    expect(result).toMatchObject({ ok: true, hash: git(root, "rev-parse", "--short", "HEAD") });
+    expect(result.already).toBeUndefined();
+    expect(git(root, "show", "--name-only", "--format=", "HEAD")).toBe("b.ts");
+    expect(git(root, "status", "--porcelain")).toBe("");
+  });
+
+  it("counts only commits inside the window, so a path never changed (or changed long ago) still fails", async () => {
+    const { root } = repo();
+    cards.set("pile", card("pile", { cwd: root }));
+    git(root, "checkout", "-q", "a.ts");
+    const result = await commitFromPage("pile", { message: "m", paths: ["a.ts"], push: false }, SCRIPT);
+    expect(result.ok).toBe(true);
+    expect(result.already).toBe(true);
+    // The same path with a window that ends before its commit: never changed as far as the page knows.
+    expect(await recentCommit(root, ["a.ts", "nope.ts"], Date.now() + 60_000)).toEqual({ hash: undefined, missing: ["a.ts", "nope.ts"] });
+    const old = await recentCommit(root, ["a.ts", "nope.ts"]);
+    expect(old).toEqual({ hash: git(root, "rev-parse", "--short", "HEAD"), missing: ["nope.ts"] });
   });
 
   it("hands a refused commit to the thread with git's words", async () => {

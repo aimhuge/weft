@@ -37,6 +37,8 @@ export interface CommitResult {
   hash?: string;
   pushed?: boolean;
   done?: boolean;
+  // Every path was already in a recent commit (the card's own Done got there first): hash is that commit.
+  already?: boolean;
   // The step that failed.
   failed?: "commit" | "push" | "done";
   error?: string;
@@ -92,27 +94,21 @@ export function moveToDone(id: string) {
   archiveWhenIdle(id);
 }
 
-async function attempt(cardId: string, req: CommitRequest, script: string): Promise<CommitResult> {
-  const card = getCard(cardId);
-  if (!card) throw new Error("No such card.");
-  const root = repoRoot(card.cwd);
-  const result: CommitResult = { ok: false, change: req.change };
-  // Only files that are uncommitted right now: a stale page can't commit something it never showed.
-  const pile = new Set(readPile(root)?.files.map((f) => f.path));
-  const gone = req.paths.filter((p) => !pile.has(p));
-  if (gone.length) return { ...result, failed: "commit", error: `Nothing uncommitted at ${gone.join(", ")}.` };
-  try {
-    await run("bash", [script, req.message, ...req.paths], { cwd: root, timeout: 300_000, maxBuffer: 8 << 20 });
-  } catch (err) {
-    return { ...result, failed: "commit", error: output(err) };
-  }
-  // Those files' changes are in, so no card's claim on them stands (lib/claims.ts).
-  releaseClaims(req.paths.map((p) => path.join(root, p)));
-  result.hash = (await run("git", ["-C", root, "rev-parse", "--short", "HEAD"])).stdout.trim();
-  // The change's card shipped: its changelog drafts are committed now (lib/changelog-stamp.ts).
-  stampAfterCommit(req.done, root, head(root));
-  // And CHANGELOG.md goes in right after, before the push below (lib/changelog-write.ts).
-  await writeChangelog(root, req.label ?? req.message);
+// How far back a clean path's commit still counts as the one the page meant (a walk-through lives about that long).
+export const RECENT_MS = 60 * 60 * 1000;
+
+// The latest commit since `since` touching these paths, and which of them no such commit touched. A page
+// can race a card's Done, which commits the same files moments before the click: that's no failure.
+export async function recentCommit(root: string, paths: string[], since = Date.now() - RECENT_MS) {
+  const args = ["-C", root, "-c", "core.quotePath=false", "log", `--since=@${Math.floor(since / 1000)}`, "--format=%x00%h", "--name-only", "--", ...paths];
+  const out = (await run("git", args)).stdout;
+  const touched = new Set(out.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("\0")));
+  const hash = out.match(/\0(\w+)/)?.[1];
+  return { hash, missing: paths.filter((p) => !touched.has(p)) };
+}
+
+// Push and move to Done after a commit (or an earlier one), as the request asked.
+async function finish(root: string, req: CommitRequest, result: CommitResult): Promise<CommitResult> {
   if (req.push) {
     try {
       await run("git", ["-C", root, "push"], { timeout: 120_000 });
@@ -132,9 +128,44 @@ async function attempt(cardId: string, req: CommitRequest, script: string): Prom
   return { ...result, ok: true };
 }
 
+async function attempt(cardId: string, req: CommitRequest, script: string): Promise<CommitResult> {
+  const card = getCard(cardId);
+  if (!card) throw new Error("No such card.");
+  const root = repoRoot(card.cwd);
+  const result: CommitResult = { ok: false, change: req.change };
+  // Only files that are uncommitted right now: a stale page can't commit something it never showed.
+  const pile = new Set(readPile(root)?.files.map((f) => f.path));
+  const gone = req.paths.filter((p) => !pile.has(p));
+  if (gone.length) {
+    const recent = await recentCommit(root, gone);
+    const never = recent.missing;
+    if (never.length) return { ...result, failed: "commit", error: `Nothing uncommitted at ${never.join(", ")}.` };
+    if (gone.length === req.paths.length) {
+      releaseClaims(req.paths.map((p) => path.join(root, p)));
+      return finish(root, req, { ...result, hash: recent.hash, already: true });
+    }
+  }
+  // Commit what's still uncommitted; a path a recent commit already took needs nothing more.
+  const paths = req.paths.filter((p) => pile.has(p));
+  try {
+    await run("bash", [script, req.message, ...paths], { cwd: root, timeout: 300_000, maxBuffer: 8 << 20 });
+  } catch (err) {
+    return { ...result, failed: "commit", error: output(err) };
+  }
+  // Those files' changes are in, so no card's claim on them stands (lib/claims.ts).
+  releaseClaims(req.paths.map((p) => path.join(root, p)));
+  result.hash = (await run("git", ["-C", root, "rev-parse", "--short", "HEAD"])).stdout.trim();
+  // The change's card shipped: its changelog drafts are committed now (lib/changelog-stamp.ts).
+  stampAfterCommit(req.done, root, head(root));
+  // And CHANGELOG.md goes in right after, before the push below (lib/changelog-write.ts).
+  await writeChangelog(root, req.label ?? req.message);
+  return finish(root, req, result);
+}
+
 function summary(req: CommitRequest, r: CommitResult) {
   const files = `${req.paths.length} file${req.paths.length === 1 ? "" : "s"}`;
   const parts = [r.hash ? `${r.hash} ${req.message} (${files})` : `${req.message} (${files})`];
+  if (r.already) parts.push("already committed");
   if (r.pushed) parts.push("pushed");
   if (r.done) parts.push("card moved to Done");
   if (r.failed) parts.push(`${r.failed} failed`);
@@ -165,7 +196,7 @@ export function commitFromPage(cardId: string, req: CommitRequest, script: strin
       name: "Commit",
       summary: summary(req, result),
       action: "Committed from the page",
-      result: result.ok ? `git commit -- ${req.paths.join(" ")}` : (result.error ?? "failed"),
+      result: result.ok ? (result.already ? `already in ${result.hash}` : `git commit -- ${req.paths.join(" ")}`) : (result.error ?? "failed"),
       isError: !result.ok,
       at: Date.now(),
     });

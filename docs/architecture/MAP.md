@@ -318,7 +318,8 @@ When a new doc lands in this folder, add it here on the same change.
   (`components/LimitBoardPanel.tsx`, `/api/league?board=`).
 - `lib/commit-pile.ts` + `app/api/pile` + `components/PileBadge.tsx`: the header's "+N/-N" uncommitted counter and the card it
   starts to commit that pile one Review card at a time; its page's Commit buttons are `weft://commit` links
-  (`electron/page-links.cjs`) that `lib/pile-commit.ts` runs with no turn (commit by path, push, move to Done).
+  (`electron/page-links.cjs`) that `lib/pile-commit.ts` runs with no turn (commit by path, push, move to Done); paths
+  a commit in the last hour already took (the card's own Done got there first) come back ok with `already` and that hash.
   The Review column's "Review all" button starts the same card through the shared `lib/pile-review.ts`
   helper.
 - `lib/sprint-plan.ts` + `app/api/sprint` + `components/BacklogBadge.tsx`: the "☰ N" Backlog counter beside it and the card it starts,
