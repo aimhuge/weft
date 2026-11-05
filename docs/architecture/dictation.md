@@ -1,7 +1,7 @@
 # Dictation
 
 The mic button and its shortcut (`lib/use-dictation.ts`) record from the microphone and send the recording to
-`POST /api/transcribe`, which turns it into text on this Mac with whisper.cpp (`lib/transcribe.ts`). Nothing leaves the Mac.
+`POST /api/transcribe`, which turns it into text on this computer with whisper.cpp (`lib/transcribe.ts`). Nothing leaves the machine.
 In the desktop app the shortcut works in every app, through a floating pill (below); on weft.zip the composer records on its own.
 
 ## Anywhere
@@ -56,6 +56,12 @@ Measured on an M5 with large-v3-turbo and a 9-second prompt: **4.8 s** before, *
   so a recording skips the ~0.85 s model load and Metal start a fresh CLI pays. Concurrent starts share one spawn; it stops after
   5 idle minutes (`IDLE_MS`) and when Weft's server exits, so its 1-2 GB is only held while you dictate. If the server fails, the
   same recording goes through the CLI.
+
+## Windows
+
+Same pipeline, with whisper.cpp bundled in the installer (`toolchain/whisper`), the board sending a 16 kHz mono WAV
+(`lib/wav-encode.ts`) so ffmpeg isn't needed, and text pasted into other apps with Ctrl+V through a hidden PowerShell
+(`electron/dictation-insert.cjs`). Details: docs/architecture/windows.md#dictation.
 
 ## The model
 

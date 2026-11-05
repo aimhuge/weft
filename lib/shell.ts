@@ -5,6 +5,8 @@ import { findSecret } from "./secret-detect";
 import { bashVerdict } from "./secret-guard";
 import { appendThread, getCard, getThread, replaceThreadItem } from "./store";
 import type { ThreadItem } from "./types";
+import { killGroup } from "./cli-process";
+import { isWindows, shellPlan } from "./win-command";
 import { workDir } from "./work-dir";
 
 // "!" in a thread's reply box: your own shell command, run in the card's folder like Claude Code's bash
@@ -55,19 +57,20 @@ export function runShell(cardId: string, command: string): number {
   let ended = false;
 
   // Its own process group, so the timeout stops what it started too (a pipeline, a dev server).
-  const proc = spawn(/*turbopackIgnore: true*/ process.env.SHELL || "/bin/zsh", ["-c", command], {
+  // $SHELL -c on a Mac, cmd.exe on Windows (lib/win-command.ts).
+  const shell = shellPlan(command);
+  const proc = spawn(/*turbopackIgnore: true*/ shell.command, shell.args, {
     cwd,
     env: { ...cliEnv(), TERM: "dumb", NO_COLOR: "1", GIT_PAGER: "cat", PAGER: "cat" },
     stdio: ["ignore", "pipe", "pipe"],
-    detached: true,
+    detached: !isWindows(),
+    windowsHide: true,
+    windowsVerbatimArguments: shell.windowsVerbatimArguments,
   });
   const timer = setTimeout(() => {
     timedOut = true;
-    try {
-      if (proc.pid) process.kill(-proc.pid, "SIGKILL");
-    } catch {
-      proc.kill("SIGKILL");
-    }
+    // Its whole group (taskkill /T on Windows, lib/cli-process.ts); the shell alone when that fails.
+    if (!proc.pid || !killGroup(proc.pid, "SIGKILL")) proc.kill("SIGKILL");
   }, SHELL_TIMEOUT_MS);
   const finish = (exitCode: number | null, extra = "") => {
     if (ended) return;

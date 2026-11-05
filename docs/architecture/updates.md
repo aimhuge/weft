@@ -56,7 +56,11 @@ The whole run, as it works today (commit, bump, splash, tag, build on a mini, pu
   hardened runtime with `build/entitlements.mac.plist`, and notarized;
 - `pnpm dist:linux` (on a Linux box) builds `Weft-X.Y.Z-<arch>.AppImage` and `.deb`: unsigned, no auto-update feed yet. `bundle-toolchain.mjs` writes wrappers that find `resources/` and the `weft` binary instead of `Contents/`; `node-pty` has no Linux prebuild, so it is taken from `build/Release` after `pnpm install` compiles it;
 - checks the signature with `codesign` and Gatekeeper with `spctl`;
-- publishes a GitHub release with the dmg, the zip and `update.json`.
+- publishes a GitHub release with the dmg, the zip and `update.json`;
+- then its `windows` job (`.github/workflows/windows.yml`, also started by any published release) builds the unsigned
+  `Weft-Setup-X.Y.Z-x64.exe` (`windows-latest`) and `-arm64.exe` (`windows-11-arm`) and adds each, its `.blockmap` and
+  its feed (`latest.yml`, `latest-arm64.yml`) to the release. Windows updates through electron-updater from its arch's
+  feed, not Squirrel (docs/architecture/windows.md).
 
 Local `pnpm dist` stays an unsigned `--dir` build (`CSC_IDENTITY_AUTO_DISCOVERY=false`, so no certificate in your
 keychain gets picked up by accident). A local signed dmg is `NODE_ENV=production pnpm dist:release`: it signs with

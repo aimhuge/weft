@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { Backend } from "./types";
+import { findOnWindowsPath, isWindows } from "./win-command";
 
 const paths: Partial<Record<Backend, string>> = {};
 
@@ -9,10 +10,14 @@ export function executableFor(backend: Backend) {
   if (!paths[backend]) {
     const command = backend === "puku" ? "puku-cli" : backend === "goose" ? "goose" : "codex";
     try {
-      paths[backend] = execFileSync("/usr/bin/which", [command], { encoding: "utf8" }).trim();
+      paths[backend] = isWindows() ? findOnWindowsPath(command) || fail() : execFileSync("/usr/bin/which", [command], { encoding: "utf8" }).trim();
     } catch {
       throw new Error(`${command} isn't on this app's PATH.`);
     }
   }
   return paths[backend];
+}
+
+function fail(): never {
+  throw new Error("not found");
 }

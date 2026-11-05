@@ -136,6 +136,8 @@ async function boot() {
   await startup.show("Finding your command-line tools…");
   await fixPath();
   if (app.isPackaged) appendToolchain(path.join(process.resourcesPath, "toolchain", "bin"));
+  // Windows' dictation: the bundled whisper.cpp (scripts/bundle-toolchain.mjs), found by lib/transcribe.ts on PATH.
+  if (app.isPackaged) appendToolchain(path.join(process.resourcesPath, "toolchain", "whisper"));
   timer.mark("path");
   // The app checks its own bundle, and installs the toolchain's trees after an update
   // (electron/boot-deps.cjs): a bundle missing a package says so here, instead of dying on a

@@ -13,7 +13,10 @@ const { builtinModules } = require("node:module");
 
 const asarPath = path.resolve(process.argv[2]);
 const asar = require("@electron/asar");
-const entries = new Set(asar.listPackage(asarPath));
+// The archive's paths with "/" on every OS: listPackage gives "\node_modules\…" on Windows. extract() turns them back,
+// since @electron/asar walks a path by path.sep.
+const entries = new Set(asar.listPackage(asarPath).map((entry) => entry.split(path.sep).join("/")));
+const extract = (entry) => asar.extractFile(asarPath, entry.replace(/^\//, "").split("/").join(path.sep));
 
 // The packages Electron main needs, from the same source of truth the build uses.
 const closure = require("./electron-runtime-deps.mjs");
@@ -40,7 +43,7 @@ try {
     if (cache.has(entry)) return cache.get(entry).exports;
     const inner = { exports: {} };
     cache.set(entry, inner);
-    const source = asar.extractFile(asarPath, entry.replace(/^\//, "")).toString("utf8");
+    const source = extract(entry).toString("utf8");
     const dir = path.posix.dirname(entry);
     const fn = new Function("exports", "require", "module", "__filename", "__dirname", source);
     fn(inner.exports, (spec) => requireInArchive(spec, dir), inner, entry, dir);
@@ -61,14 +64,14 @@ try {
     const dir = `/node_modules/${spec}`;
     const manifest = `${dir}/package.json`;
     if (!entries.has(manifest)) throw new Error(`Cannot find module '${spec}'`);
-    const pkg = JSON.parse(asar.extractFile(asarPath, manifest.replace(/^\//, "")).toString("utf8"));
+    const pkg = JSON.parse(extract(manifest).toString("utf8"));
     const main = pkg.main || "index.js";
     const entry = `${dir}/${main.replace(/^\.\//, "")}`;
     if (!entries.has(entry)) throw new Error(`Cannot find module '${spec}' (no ${entry})`);
     return loadArchiveFile(entry);
   };
 
-  const source = asar.extractFile(asarPath, "electron/account-client.cjs").toString("utf8");
+  const source = extract("electron/account-client.cjs").toString("utf8");
   const loaded = { exports: {} };
   const fn = new Function("exports", "require", "module", "__filename", "__dirname", source);
   fn(loaded.exports, (spec) => requireInArchive(spec, "/electron"), loaded, "/electron/account-client.cjs", "/electron");

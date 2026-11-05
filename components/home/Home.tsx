@@ -38,7 +38,23 @@ export default async function Home() {
                 {download.label}
               </a>
             </div>
-            <p className="wz-note wz-rise wz-d2">{download.note}</p>
+            <p className="wz-note wz-rise wz-d2">
+              {download.note}
+              {release && (
+                <>
+                  {" "}
+                  {/* app/download/windows: the newest unsigned Weft-Setup-X.exe (docs/architecture/windows.md). */}
+                  {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a route handler's 302 to a file, not a page */}
+                  <a href="/download/windows" data-track="download_clicked" data-track-version={`${release.version}-windows`}>
+                    On Windows?
+                  </a>{" "}
+                  {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a route handler's 302 to a file, not a page */}
+                  <a href="/download/windows?arch=arm64" data-track="download_clicked" data-track-version={`${release.version}-windows-arm64`}>
+                    (ARM)
+                  </a>
+                </>
+              )}
+            </p>
           </div>
         </header>
 

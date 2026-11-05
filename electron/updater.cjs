@@ -6,7 +6,8 @@
 // the update also lands on the next quit. An unsigned build, or any Squirrel failure, falls back to
 // "Download Weft X…", which opens the release page. A ready update installs on its own only when nobody would
 // notice: no thread running and nobody at the Mac for AWAY_SECONDS. A click asks first when threads are running.
-// Dev mode never checks on its own (`npm run desktop` updates with git pull).
+// Dev mode never checks on its own (`npm run desktop` updates with git pull). Windows swaps Squirrel for
+// electron-updater's NSIS updater and update.json for latest.yml (updater-win.cjs).
 const FEED = process.env.WEFT_UPDATE_FEED || "https://github.com/aimhuge/weft/releases/latest/download/update.json";
 const RELEASES = "https://github.com/aimhuge/weft/releases";
 const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
@@ -250,6 +251,8 @@ function createAppUpdater({ getServer, onChange, openWindow }) {
     currentVersion: app.getVersion(),
     packaged: app.isPackaged,
     autoUpdater,
+    // Windows: electron-updater and latest.yml in Squirrel's place (updater-win.cjs).
+    ...require("./updater-win.cjs").windowsUpdaterOptions(),
     countRunning: async () => {
       const server = getServer();
       if (!server) return null;

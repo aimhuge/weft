@@ -34,6 +34,11 @@ tell application "System Events"
   return "none:" & r
 end tell`;
 
+// Windows: Ctrl+V into whatever has focus, through a hidden PowerShell (WScript.Shell's SendKeys). Windows needs no
+// Accessibility grant for it, and can't tell a text box from anything else the way macOS's AXFocusedUIElement can,
+// so the text is always pasted; Ctrl+V where nothing takes text does nothing, and the clipboard still has it.
+const WIN_PASTE = "(New-Object -ComObject WScript.Shell).SendKeys('^v')";
+
 // Runs in the focused Weft page: whether the caret is in something that takes text, and whether the text needs a space
 // in front so it doesn't run into the word before it.
 const PROBE_SCRIPT = `(() => {
@@ -56,7 +61,9 @@ function spaced(text, before) {
   return before && !/\s/.test(before) && !/^\s/.test(text) ? ` ${text}` : text;
 }
 
-function createDictationInsert({ clipboard, systemPreferences, BaseWindow, webContents, execFile, mac = process.platform === "darwin" }) {
+function createDictationInsert({
+  clipboard, systemPreferences, BaseWindow, webContents, execFile, mac = process.platform === "darwin", win = process.platform === "win32",
+}) {
   let askedForAccess = false;
 
   function runScript(script) {
@@ -79,7 +86,15 @@ function createDictationInsert({ clipboard, systemPreferences, BaseWindow, webCo
     return "inserted";
   }
 
+  function pasteOnWindows() {
+    const args = ["-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", WIN_PASTE];
+    return new Promise((resolve) => {
+      execFile("powershell.exe", args, { timeout: 4000, windowsHide: true }, (err) => resolve(err ? "copied" : "pasted"));
+    });
+  }
+
   async function intoOtherApp() {
+    if (win) return pasteOnWindows();
     if (!mac) return "copied";
     if (!systemPreferences.isTrustedAccessibilityClient(false)) {
       // macOS shows its own "allow Accessibility" prompt, once a launch; until then the clipboard does the job.
@@ -100,4 +115,4 @@ function createDictationInsert({ clipboard, systemPreferences, BaseWindow, webCo
   };
 }
 
-module.exports = { createDictationInsert, spaced, TEXT_ROLES, FOCUS_SCRIPT, PROBE_SCRIPT };
+module.exports = { createDictationInsert, spaced, TEXT_ROLES, FOCUS_SCRIPT, PROBE_SCRIPT, WIN_PASTE };

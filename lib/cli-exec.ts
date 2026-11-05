@@ -3,6 +3,7 @@
 // The tools run as plain programs, no shell, so nothing a thread passes is parsed twice.
 
 import { execFile, execFileSync } from "node:child_process";
+import { findOnWindowsPath, isWindows, spawnPlan } from "./win-command";
 
 /**
  * The path of a command on PATH, or null when it isn't there.
@@ -11,6 +12,7 @@ import { execFile, execFileSync } from "node:child_process";
  * keeps the toolchain on it), so the caller says which PATH to look in.
  */
 export function whichBin(name: string, { env = process.env }: { env?: NodeJS.ProcessEnv } = {}): string | null {
+  if (isWindows()) return findOnWindowsPath(name, { env });
   try {
     return execFileSync("/usr/bin/which", [name], { encoding: "utf8", env }).trim() || null;
   } catch {
@@ -42,7 +44,10 @@ export type RunOptions = {
  */
 export function runCli(bin: string, args: string[], { timeout, env, encoding = "utf8", maxBuffer, input, name = null }: RunOptions = {}): Promise<string | Buffer> {
   return new Promise((resolve, reject) => {
-    const child = execFile(bin, args, { timeout, env, encoding, maxBuffer } as Parameters<typeof execFile>[2], (err, stdout, stderr) => {
+    // A Windows .cmd shim (the toolchain's gog.cmd, an npm global) runs through cmd.exe (lib/win-command.ts).
+    const plan = spawnPlan(bin, args, { env: env ?? process.env });
+    const opts = { timeout, env, encoding, maxBuffer, windowsVerbatimArguments: plan.windowsVerbatimArguments };
+    const child = execFile(plan.command, plan.args, opts as Parameters<typeof execFile>[2], (err, stdout, stderr) => {
       if (!err) {
         resolve(stdout);
         return;

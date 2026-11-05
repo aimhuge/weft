@@ -73,5 +73,5 @@ export function defaultExecFile(bin: string, args: string[], _opts: unknown, cb:
   }
   const out = args[args.length - 1];
   if (bin.endsWith("ffmpeg") && out !== undefined) fs.writeFileSync(out, Buffer.alloc(44 + 32_000 * 2));
-  cb(null, { stdout: bin.endsWith("whisper-cli") ? sys.stdout : "", stderr: "" });
+  cb(null, { stdout: /whisper-cli(\.exe)?$/.test(bin) ? sys.stdout : "", stderr: "" });
 }

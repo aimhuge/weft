@@ -3,6 +3,7 @@ import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sd
 import { bindCap, dropCap } from "./connector-env";
 import { globalSingleton } from "./global-singleton";
 import { findDescendantGroups, signalGroups } from "./process-tree";
+import { isWindows, killTree, spawnPlan } from "./win-command";
 
 // Starts a thread's CLI in a process group of its own, so ending it ends everything it started.
 // puku-cli is a `node` wrapper whose `Puku` child outlives it: killing only the wrapper (all the
@@ -16,8 +17,13 @@ const STDERR_TAIL = 2_000;
 // The process groups of every CLI this server started that may still have a live process.
 export const groups = globalSingleton("__weftCliGroups", () => new Set<number>());
 
-// Signals the whole group; false once nothing in it is left.
+// Signals the whole group; false once nothing in it is left. Windows has no process groups: taskkill ends the tree.
 export function killGroup(pgid: number, signal: NodeJS.Signals): boolean {
+  if (isWindows()) {
+    if (killTree(pgid)) return true;
+    groups.delete(pgid);
+    return false;
+  }
   try {
     process.kill(-pgid, signal);
     return true;
@@ -33,6 +39,11 @@ export function endGroup(pgid: number) {
   const children = findDescendantGroups(pgid);
   signalGroups(children, "SIGTERM");
   const alive = killGroup(pgid, "SIGTERM");
+  // Windows' taskkill /F already ended the tree, and a second one later could hit a reused pid.
+  if (isWindows()) {
+    groups.delete(pgid);
+    return;
+  }
   if (!alive && !children.length) return;
   setTimeout(() => {
     signalGroups(children, "SIGKILL");
@@ -65,12 +76,15 @@ export interface CliProcess extends SpawnedProcess {
 
 // The SDK's spawnClaudeCodeProcess hook: its own spawn, plus `detached` for a process group of its own.
 export function spawnCli(options: SpawnOptions, onStderr?: (text: string) => void): CliProcess {
-  const child = spawn(options.command, options.args, {
+  // An npm-installed CLI on Windows is a .cmd shim, which only cmd.exe runs (lib/win-command.ts).
+  const plan = spawnPlan(options.command, options.args, { env: options.env });
+  const child = spawn(plan.command, plan.args, {
     cwd: options.cwd,
     env: options.env as NodeJS.ProcessEnv,
     stdio: ["pipe", "pipe", "pipe"],
-    detached: true,
+    detached: !isWindows(),
     windowsHide: true,
+    windowsVerbatimArguments: plan.windowsVerbatimArguments,
   });
   const pgid = child.pid;
   if (pgid) groups.add(pgid);

@@ -55,6 +55,10 @@ Open a plan page in the pane first (one card per step below) and tick them off a
 
 - `node scripts/release-feed.mjs X.Y.Z dist` writes `dist/update.json` and `dist/release-notes.md`.
 - `gh release create vX.Y.Z -R aimhuge/weft --title "Weft X.Y.Z" --notes-file dist/release-notes.md dist/Weft-X.Y.Z-arm64.dmg dist/Weft-X.Y.Z-arm64.zip dist/update.json`
+- Publishing starts `.github/workflows/windows.yml` (the Windows installer, ~20 minutes): `gh run list -R aimhuge/weft -w windows.yml -L 1`.
+  Don't cancel it with release.yml's run. When it's green the release carries `Weft-Setup-X.Y.Z-x64.exe` and `-arm64.exe`, their `.blockmap`s
+  and `latest.yml` + `latest-arm64.yml`, and `curl -sL https://github.com/aimhuge/weft/releases/latest/download/latest.yml` names X.Y.Z.
+  If it failed, the Mac release still stands; rerun it with `gh workflow run windows.yml -R aimhuge/weft -f tag=vX.Y.Z`.
 - Check: `curl -sL https://github.com/aimhuge/weft/releases/latest/download/update.json` names X.Y.Z. Installed Wefts
   check 30s after launch and every 4 hours, or now with Weft → (or File →) Check for Updates….
 

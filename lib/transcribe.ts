@@ -8,9 +8,12 @@ import { whisperLanguage } from "./dictation-languages";
 import { readDictationPrefs, vocabularyPrompt } from "./dictation-prefs";
 import { downloadState, MODEL_FILE, serverModel } from "./whisper-model";
 import { serverTranscribe, warmServer } from "./whisper-server";
+import { findOnWindowsPath, isWindows } from "./win-command";
 
 // Dictation runs whisper.cpp on this machine: the desktop app's Chromium has no speech service, and
 // local transcription keeps what you say on your Mac. Needs `brew install whisper-cpp ffmpeg` and a model.
+// On Windows whisper.cpp ships inside Weft (scripts/bundle-toolchain.mjs) and the board sends 16 kHz WAV
+// (lib/wav-encode.ts), so there's no ffmpeg to install; the model downloads from Settings → Dictation.
 
 const run = promisify(execFile);
 
@@ -34,6 +37,7 @@ const MODELS = [
 ];
 
 function which(bin: string) {
+  if (isWindows()) return findOnWindowsPath(bin);
   try {
     return execFileSync("/usr/bin/which", [bin], { encoding: "utf8" }).trim() || null;
   } catch {
@@ -43,8 +47,17 @@ function which(bin: string) {
 
 interface Tools {
   whisper: string;
-  ffmpeg: string;
+  // Null on Windows, where recordings arrive as WAV whisper reads as they are.
+  ffmpeg: string | null;
   model: string;
+}
+
+// Why dictation can't run yet, in this OS's words.
+function missing(win: boolean, whisper: string | null, ffmpeg: string | null, model: string | undefined) {
+  if (!whisper) return win ? "Dictation needs whisper.cpp, which comes with Weft: reinstall Weft to get it back" : "Dictation needs whisper.cpp: brew install whisper-cpp";
+  if (!ffmpeg && !win) return "Dictation needs ffmpeg: brew install ffmpeg";
+  if (!model) return win ? "Dictation needs a whisper model: turn on Advanced in Settings → Dictation to download one" : `Dictation needs a whisper model, e.g. ggml-base.en.bin in ${BREW}`;
+  return undefined;
 }
 
 let cached: { tools: Tools | null; reason?: string; at: number } | undefined;
@@ -55,11 +68,8 @@ function tools(): { tools: Tools | null; reason?: string } {
   const whisper = which("whisper-cli");
   const ffmpeg = which("ffmpeg");
   const model = MODELS.find((m) => m && fs.existsSync(m));
-  let reason: string | undefined;
-  if (!whisper) reason = "Dictation needs whisper.cpp: brew install whisper-cpp";
-  else if (!ffmpeg) reason = "Dictation needs ffmpeg: brew install ffmpeg";
-  else if (!model) reason = `Dictation needs a whisper model, e.g. ggml-base.en.bin in ${BREW}`;
-  cached = { tools: whisper && ffmpeg && model ? { whisper, ffmpeg, model } : null, reason, at: Date.now() };
+  const reason = missing(isWindows(), whisper, ffmpeg, model);
+  cached = { tools: !reason && whisper && model ? { whisper, ffmpeg, model } : null, reason, at: Date.now() };
   return cached;
 }
 
@@ -148,12 +158,18 @@ export async function transcribe(audio: Buffer, ext = "webm", requested?: string
   if (!found) throw new Error(reason);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `weft-dictation-${randomUUID().slice(0, 8)}-`));
   try {
-    const input = path.join(dir, `input.${ext.replace(/[^a-z0-9]/gi, "") || "webm"}`);
     const wav = path.join(dir, "audio.wav");
-    fs.writeFileSync(input, audio);
-    await run(found.ffmpeg, ["-y", "-loglevel", "error", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], {
-      timeout: 60_000,
-    });
+    if (ext === "wav") {
+      // Already 16 kHz mono 16-bit from the board (lib/wav-encode.ts): whisper reads it as it is.
+      fs.writeFileSync(wav, audio);
+    } else {
+      if (!found.ffmpeg) throw new Error(`Dictation needs ffmpeg to read a ${ext} recording`);
+      const input = path.join(dir, `input.${ext.replace(/[^a-z0-9]/gi, "") || "webm"}`);
+      fs.writeFileSync(input, audio);
+      await run(found.ffmpeg, ["-y", "-loglevel", "error", "-i", input, "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", wav], {
+        timeout: 60_000,
+      });
+    }
     const prefs = readDictationPrefs();
     const language = whisperLanguage(prefs.language, requested);
     const prompt = vocabularyPrompt(prefs.vocabulary);

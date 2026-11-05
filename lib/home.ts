@@ -177,3 +177,17 @@ async function defaultImporter(): Promise<{ default: HomeComponent }> {
 export function _resetLoadHomeCacheForTests(): void {
   cached = null;
 }
+
+// The Windows installer's feed: latest.yml, which the release's Windows job uploads beside Weft-Setup-X.exe
+// (.github/workflows/windows.yml). It lands minutes after the Mac dmg, so it's read on its own.
+export const WINDOWS_FEED = `${RELEASES}/latest/download/latest.yml`;
+// arm64's own installer and feed, built on an arm64 runner beside the x64 one.
+export const WINDOWS_ARM_FEED = `${RELEASES}/latest/download/latest-arm64.yml`;
+
+// The installer latest.yml names, at its version's own release; null when it names none.
+export function windowsInstallerUrl(yml: string | null | undefined): string | null {
+  const text = yml ?? "";
+  const version = /^version:\s*['"]?([^'"\s]+)/m.exec(text)?.[1];
+  const file = /^path:\s*['"]?([^'"\s]+)/m.exec(text)?.[1];
+  return version && file ? `${RELEASES}/download/v${version}/${file}` : null;
+}
