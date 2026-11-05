@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-11-05
+
 ### Added
 
 - **The vault finds env files outside the project.** Weft now looks for `.env` files in copies beside the project (`~/dev/weft-build` next to `~/dev/weft`) and in the repo's git worktrees, and the 🔐 nudge says what it found for names the vault lacks, with **Import all** to take them in one click. **Locate…** opens a file dialog for an env file anywhere on the Mac (any name, like `prod.env`) and Weft remembers it for that vault. Main files: `electron/env-sources.cjs`, `lib/vault-locate.ts`, `components/VaultDrawer.tsx`.
