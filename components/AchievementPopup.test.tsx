@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Badge } from "@/lib/game-badges";
+import { useAnyOverlay } from "@/lib/overlay";
 import AchievementPopup from "./AchievementPopup";
 import "./test-utils";
 
@@ -29,6 +30,24 @@ function setup(achievement: Parameters<typeof AchievementPopup>[0]["achievement"
 }
 
 describe("AchievementPopup", () => {
+  it("hides the native browser pane while it's up, so the pane never draws over it", () => {
+    let covered = false;
+    function Probe() {
+      covered = useAnyOverlay();
+      return null;
+    }
+    const { unmount } = render(
+      <>
+        <Probe />
+        <AchievementPopup achievement={{ fresh: [badge("a", "Guarded")], level: null }} onProfile={vi.fn()} onClose={vi.fn()} />
+      </>,
+    );
+    expect(covered).toBe(true);
+    unmount();
+    render(<Probe />);
+    expect(covered).toBe(false);
+  });
+
   it("opens a level-up on its rank's picture with the episode and a line of story", () => {
     setup({ fresh: [], level });
     const popup = screen.getByRole("dialog", { name: "Level up!" });
