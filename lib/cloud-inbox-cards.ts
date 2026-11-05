@@ -14,6 +14,7 @@ import { signedAgent, type WidenCheck } from "./create-widen";
 import { networkStartMode } from "./cloud-new-card-mode";
 import { macReceive } from "./cloud-inbox-receive";
 import { syncNow, syncOrgId } from "./cloud-sync";
+import { orgForFolder } from "./cloud-sync-route";
 import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
 import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
@@ -116,7 +117,7 @@ export function syncFolderFor(name: string): string | null {
 
 // A new card from the web: its pasted files brought over first, its mode (named, or this Mac's default) held to the same
 // rule as a mode change (lib/cloud-new-card-mode.ts), and one asked for in Backlog made and left there.
-async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown) => Promise<string>): Promise<string> {
+async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown, orgId?: string) => Promise<string>): Promise<string> {
   // A card a Weft Worker sent never starts itself here: Backlog, `default`, for the user to start (lib/worker-origin.ts).
   if (sentByWorker(command.payload)) return made(createCardFromBody(holdWorkerCard(newCardBody(command))));
   const body = newCardBody(command);
@@ -127,7 +128,7 @@ async function newCard(command: CloudCommandRow, receive: (text: string, payload
     defaultMode: defaultPermissionMode,
     refusal: async (permissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,
   });
-  if (typeof body.prompt === "string") body.prompt = await receive(body.prompt, command.payload);
+  if (typeof body.prompt === "string") body.prompt = await receive(body.prompt, command.payload, command.org_id);
   return made(body.start === false ? createCardFromBody(body) : await startFeatureCard(body));
 }
 
@@ -138,15 +139,17 @@ function made(card: { id: string }): string {
 }
 
 // Every kind runs only for a command made by the account signed in here, in a folder switched on in Settings → Sync,
-// for the workspace this Mac syncs to. A new card may name its folder by project name (a run sent to this Mac as a
+// for the workspace this Mac syncs that folder to. A new card may name its folder by project name (a run sent to this Mac as a
 // worker); the rest name the path.
 function macCheck(client: SupabaseClient, uid: string) {
   return async (command: CloudCommandRow): Promise<CloudCommandRow> => {
     if (command.created_by !== uid) throw new Error("That request wasn't made by the account signed in on this Mac.");
     const folder = command.kind === "new_card" ? syncFolderFor(command.folder) : syncFolders().includes(command.folder) ? command.folder : null;
     if (!folder) throw new Error(`${command.folder} isn't switched on in Settings → Sync on this Mac.`);
-    const org = await syncOrgId(client, uid);
-    if (org !== command.org_id) throw new Error("That workspace isn't the one this Mac syncs its cards to.");
+    // Its workspace is the one this folder's cards sync to: a team that linked its project, or home.
+    const home = await syncOrgId(client, uid);
+    const org = home ? await orgForFolder(client, home, folder) : null;
+    if (org !== command.org_id) throw new Error("That workspace isn't the one this Mac syncs this project's cards to.");
     return { ...command, folder };
   };
 }

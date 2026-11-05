@@ -10,6 +10,7 @@ import { accountClient } from "./account";
 import { appendOutbox, compactOutbox, readOutbox, replaceOutboxHead } from "./cloud-outbox";
 import type { BlobStore, OutboxEntry } from "./cloud-sync-types";
 import { uploadPending } from "./cloud-sync-upload";
+import { forgetRoutes, routeFor } from "./cloud-sync-route";
 import { globalSingleton } from "./global-singleton";
 import { syncFolders } from "./settings";
 import { getCard, getThread, listCards } from "./store";
@@ -66,7 +67,7 @@ interface SyncState {
   getClient: () => SupabaseClient | null;
 }
 
-// The workspace this Mac's cards go to; the inbox checks a command is for it (lib/cloud-inbox.ts).
+// This Mac's personal workspace: where its cards go unless a team linked their project (lib/cloud-sync-route.ts).
 export function syncOrgId(client: SupabaseClient, userId: string): Promise<string | null> {
   return resolveOrgId(state(), client, userId);
 }
@@ -75,6 +76,7 @@ export function syncOrgId(client: SupabaseClient, userId: string): Promise<strin
 // (Settings → Teams, through app/api/account/team).
 export function forgetSyncOrg(): void {
   state().orgs.clear();
+  forgetRoutes();
 }
 
 function safeAccountClient(): SupabaseClient | null {
@@ -225,7 +227,9 @@ async function flush(ctx: Ctx) {
     s.lastSignedOut = false;
     s.lastNoWorkspace = false;
     // uploadPending drops what it ships from the outbox as it goes, so a failure keeps only the rest.
-    const skipped = await uploadPending(ctx, client, orgId, pending, (n) => (s.uploaded += n));
+    // A team's linked project goes to the team, the rest home (lib/cloud-sync-route.ts).
+    const route = await routeFor(client, orgId, pending, ctx.now());
+    const skipped = await uploadPending(ctx, client, route, pending, (n) => (s.uploaded += n));
     s.lastSyncAt = ctx.now();
     // Rows the server refused for good are skipped so they can't hold the backlog back; say so rather than hide it.
     s.lastError = skipped ? `Skipped ${skipped.count} item${skipped.count === 1 ? "" : "s"} the server refused: ${skipped.message}` : null;

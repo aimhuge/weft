@@ -222,6 +222,28 @@ drops the review panel and Send later; the web's `footer` (WebReplyStatus) stand
 desktop's too; a pasted image, dictation and the `/skill` typeahead call the local server's routes, which weft.zip refuses, so
 there they fail (a paste shows the refusal) until the transport carries an upload.
 
+## Team projects
+
+A synced folder whose GitHub repo a team you're in has linked (Settings → Teams → Projects, `public.org_projects`) syncs
+to that team, so every member reads it on `weft.zip/<team>/board`; any other folder syncs to your personal workspace, as
+before. `lib/cloud-sync-route.ts` decides per card in each flush: the card's folder → `githubRepoOf` → the team, from
+`public.team_orgs_for_repos(repos)` (`supabase/migrations/20261105065328_team_orgs_for_repos.sql`, security definer:
+it answers only for the repos asked and only in teams the caller is in, so it never lists a team's other projects; a
+repo linked in two of them goes to the oldest link). Answers are kept a minute (`ROUTE_TTL_MS`), so a new link reaches
+the Macs within one; `forgetSyncOrg` drops them. A database without the function routes everything home; any other
+error fails the flush, so a team's card never lands at home by accident.
+
+- `uploadPending` (`lib/cloud-sync-upload.ts`) takes the route: cards, items and tool outputs go to each card's own
+  workspace, sealed with that workspace's key (asked once a flush). A card that now goes to a team marks its home copy
+  deleted, so the personal board doesn't keep a stale one. A delete is marked in every workspace the Mac sends to.
+- The inbox (`macCheck` in `lib/cloud-inbox-cards.ts`) takes a command for the workspace that folder routes to, and a
+  pasted file comes down from the command's own workspace (`macReceive`, `lib/cloud-inbox-receive.ts`).
+- Only folders switched on in Sync are routed: linking a repo never uploads a folder its owner left off.
+- `syncOrgId` stays the personal workspace: Workers, mini apps and the workers' board still read it.
+- Moving a folder's old cards into the team: turn its Sync off and on (`queueFolder` re-uploads them, now to the team).
+- A teammate can read the team's cards but not drive them: `cloud_commands` inserts need a device you own and the
+  inbox runs only its own user's commands.
+
 ## Ownership
 
 The Mac running a card owns it: `owner_user` is the account that runs it and the only one that may write its rows,

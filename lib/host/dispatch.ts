@@ -36,7 +36,7 @@ export interface CardRules {
   // This card / Always on this host (lib/folder-grant.ts).
   grant(cardId: string, directory: string, scope: GrantScope): void;
   // The files a typed text pastes, brought onto this host first (a worker; lib/attachment-transfer.ts).
-  receive?(text: string, payload: unknown): Promise<string>;
+  receive?(text: string, payload: unknown, orgId?: string): Promise<string>;
   // Why an answer can't go through: a Mac's approval rule, a signed answer only from a paired phone.
   approve?(command: CloudCommandRow, answer: AnswerPayload, card: Card): Promise<string | null>;
   // Why a verb that grants power can't run from the web here, if it can't (a Mac with a phone paired).
@@ -109,7 +109,7 @@ const NO_HOST_VERBS = "This host takes its settings only from its own window.";
 export function cardKinds(rules: CardRules) {
   async function received(command: CloudCommandRow, args: Record<string, unknown>, field: string | undefined) {
     const typed = field ? args[field] : undefined;
-    return rules.receive && typeof typed === "string" ? { ...args, [field as string]: await rules.receive(typed, command.payload) } : args;
+    return rules.receive && typeof typed === "string" ? { ...args, [field as string]: await rules.receive(typed, command.payload, command.org_id) } : args;
   }
 
   async function verb(name: HostVerb, args: Record<string, unknown>): Promise<unknown> {

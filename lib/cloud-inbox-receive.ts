@@ -31,10 +31,11 @@ async function plainBytes(raw: Uint8Array, org: string, sha: string, keyring: ty
 }
 
 export function macReceive(client: SupabaseClient, uid: string, { dir = () => path.join(DATA_DIR, "attachments"), read = readBlob, keyring = macKeyring }: MacReceiveDeps = {}) {
-  return async (text: string, payload: unknown): Promise<string> => {
+  // The files are in the blobs of the workspace the command came through: a team's, for a project it linked.
+  return async (text: string, payload: unknown, orgId?: string): Promise<string> => {
     const refs = attachmentsOf(payload);
     if (!refs) return text;
-    const org = await syncOrgId(client, uid);
+    const org = orgId ?? (await syncOrgId(client, uid));
     if (!org) throw new Error("This Mac doesn't sync to a workspace, so it can't bring the files over.");
     return receiveAttachments(text, refs, dir(), async (sha) => {
       const got = await read(client, org, sha);

@@ -863,6 +863,9 @@ You can be in many teams. **Settings → Teams** lists every one with your role 
 click another to manage its projects, members and invites below the list, or **New team** to make one you own.
 Owners and admins choose who sees each project: **Access** on a project's row ticks the members who get it. Owners
 and admins see every project; a member sees only the ones they've been given.
+A linked project's synced cards go to the team instead of each member's own workspace, so `weft.zip/<team>/board`
+shows everyone's cards for it. A folder syncs only once its owner switches Sync on; turning Sync off and on again moves
+its older cards into the team (docs/architecture/cloud-sync.md#team-projects).
 The pencil beside a team you own renames it; its weft.zip address stays the same. The trash deletes it, once you
 type its name, as long as you're in another team too and it has no paid plan still running.
 
