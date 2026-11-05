@@ -92,7 +92,7 @@ export function VaultSection({
         {!v.shared && !v.join && (
           <ShareOffer
             folder={v.folder}
-            org={shareTargets(orgs)[0] ?? null}
+            org={shareTargets(orgs, repoOf(v.id))[0] ?? null}
             orgs={orgs}
             bridge={bridge}
             label={v.label}

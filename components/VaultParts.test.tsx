@@ -107,7 +107,7 @@ describe("ShareOffer", () => {
     expect(share).not.toHaveBeenCalled();
   });
 
-  it("is hidden when the user is the only member of the workspace", () => {
+  it("is hidden when there is no workspace to share with", () => {
     const { container } = render(
       <ShareOffer folder="/dev/web" org={null} orgs={[org({ members: 1 })]} bridge={bridge()} label="o/web" repo="o/web" onShared={vi.fn()} notify={vi.fn()} />,
     );
@@ -163,9 +163,17 @@ describe("ShareOffer", () => {
 });
 
 describe("shareTargets", () => {
-  it("leaves out a workspace the user is the only member of", () => {
-    expect(shareTargets([org({ members: 1 })])).toEqual([]);
-    expect(shareTargets([org({ members: 2 }), org({ id: "o2", name: "Beta", members: 1 })])).toHaveLength(1);
+  it("keeps a workspace of one: sharing there reaches the user's own other Macs", () => {
+    expect(shareTargets([org({ members: 1 })])).toHaveLength(1);
+    expect(shareTargets([org({ members: 0 }), org({ id: "o2", admin: false })])).toEqual([]);
+  });
+
+  it("puts the workspace named like the repo's owner first", () => {
+    const exiting = org({ id: "ex", slug: "exiting", name: "Exiting.com", members: 3 });
+    const aimhuge = org({ id: "ah", slug: "aimhuge-x1", name: "AimHuge", members: 1 });
+    expect(shareTargets([exiting, aimhuge], "aimhuge/weft").map((o) => o.id)).toEqual(["ah", "ex"]);
+    expect(shareTargets([exiting, org({ id: "s", slug: "fotoflo", name: "Mine" })], "fotoflo/app")[0]!.id).toBe("s");
+    expect(shareTargets([exiting, aimhuge]).map((o) => o.id)).toEqual(["ex", "ah"]);
   });
 });
 

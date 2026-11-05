@@ -50,10 +50,13 @@ export interface VaultShared {
   recoveryShownAt: string | null;
 }
 
-// The workspaces the user can share a local vault with: the ones they're in that have someone
-// else in them. A personal workspace (a team of one) stays local — there's nobody to share with.
-export function shareTargets(orgs: VaultOrg[]): VaultOrg[] {
-  return orgs.filter((o) => o.members > 1 && o.admin !== false);
+// The workspaces the user can share a local vault with, best first. A workspace of one counts: sharing there is
+// how the vault reaches your own other Macs. The one named like the repo's owner (aimhuge/weft → AimHuge) comes
+// first, so Share… doesn't default to some other team the user happens to be in.
+export function shareTargets(orgs: VaultOrg[], repo = ""): VaultOrg[] {
+  const owner = repo.split("/")[0]?.toLowerCase() ?? "";
+  const own = (o: VaultOrg) => Boolean(owner) && (o.slug.toLowerCase() === owner || o.name.toLowerCase().replace(/[^a-z0-9]/g, "") === owner.replace(/[^a-z0-9]/g, ""));
+  return orgs.filter((o) => o.members > 0 && o.admin !== false).sort((a, b) => Number(own(b)) - Number(own(a)));
 }
 
 // The badge's tooltip: which key version the vault is on, and when it was bumped.

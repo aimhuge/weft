@@ -61,7 +61,7 @@ export function ShareOffer({
   const [picked, setPicked] = useState(org?.id ?? "");
   const share = bridge?.share?.bind(bridge);
   if (!share || !org) return null;
-  const choices = shareTargets(orgs ?? []);
+  const choices = shareTargets(orgs ?? [], repo);
   const chosen = choices.find((o) => o.id === picked) ?? org;
 
   const run = async () => {
