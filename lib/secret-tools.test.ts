@@ -40,7 +40,8 @@ describe("secretsMcpServer", () => {
     expect(st.SECRETS_PROMPT).toContain("mcp__secrets__push_to_vercel");
     expect(st.SECRETS_PROMPT).toContain("mcp__secrets__add_blank");
     expect(st.SECRETS_PROMPT).toContain("mcp__secrets__set_value");
-    expect(server.tools.map((t) => t.name)).toEqual(["list", "fill_field", "push_to_vercel", "set_value", "request_access", "add_blank", "ask_add", "run"]);
+    expect(st.SECRETS_PROMPT).toContain("mcp__secrets__set_values once");
+    expect(server.tools.map((t) => t.name)).toEqual(["list", "fill_field", "push_to_vercel", "set_value", "set_values", "request_access", "add_blank", "ask_add", "run"]);
   });
 
   it("lists names for the card's folder, or another project's", async () => {

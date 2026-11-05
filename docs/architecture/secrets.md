@@ -121,6 +121,29 @@ Most projects already have their secrets in `.env.local`, so that's how a vault 
 - **Committed file?** If git tracks the `.env` file (`git ls-files`), warn loudly: those values are in
   history, so rotate them at the provider instead of just importing.
 
+### Found elsewhere: copies, worktrees and Locate…
+
+A project's values often live outside its folder: a second checkout beside it (`~/dev/weft-build` next to `~/dev/weft`),
+a git worktree, or a file kept somewhere else entirely. `electron/env-sources.cjs` finds them, in main:
+
+- **Nearby, found every scan**: sibling folders whose name is the project's plus a separator (`weft-build`, `app.old`,
+  either way round) and the repo's worktrees (read from `.git/worktrees/*/gitdir`, from either side), at most 12, never
+  Weft's own pool in `~/.weft/worktrees`. Only their valued files count: a copy's `.env.example` isn't this project's list.
+- **Locate…** (the vault's header and the import preview): main's own file dialog, hidden files shown. Any file name
+  works (`prod.env` feeds development; `.env.production.local` still says production). A file with no `NAME=value` line
+  isn't kept, so a stray pick never becomes a source. Picks are remembered per vault in `~/.weft/env-sources.json`
+  (mode 0600, paths only) and logged as `locate` in the audit log.
+- **Still main's choice, never the board's**: the board can't name a path; importPicks reads only files main found, so
+  `../../etc/passwd` is still refused.
+- **In the preview** they're their own groups, by path from the project (`../weft-build/.env.local`). A row starts
+  ticked only when the vault has no value for it and nothing nearer does (the project's own file, then the first file
+  elsewhere), so a stale copy never overwrites. git's tracked check runs on the project's own files only.
+- **In the nudge** they count only names the vault holds no value for (blanks included), so a stale copy can't nag.
+  The nudge carries **Import all**: the preview's ticked rows with no preview (`lib/vault-locate.ts`), and a toast
+  naming the files and what's left to review.
+- **The intake never takes them in** with no click (`electron/vault-intake.cjs`): they're the nudge's to offer, and
+  their names still become blanks.
+
 ### Project intake: taken in when a project opens
 
 Picking a project on the board (or the saved one coming back on reconnect) runs an intake in the background,
@@ -204,6 +227,19 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   only that environment. The answer is `{ ok, added? | replaced?, label }` and the thread is told "Added / Set / Replaced
   the value of NAME … (env)"; the value is never echoed or logged. It did pass through the thread's context once, as the tool's input, since the
   thread made it: keys the user gets from a provider stay blanks for them to fill in.
+- `mcp__secrets__set_values(secrets[{name, value, environment?, replace?}], environment?, project?)` (built): the same
+  writes as `set_value`, several at once under **one** Touch ID, because a thread setting a project up used to raise a
+  prompt per generated secret (the user asked for them grouped). `lib/secret-set-many.ts` posts `POST /secrets/set-many`;
+  `fillMany` in `electron/vault-routes.cjs` plans every entry the way `fillBlank` does (add, fill a blank, overwrite only
+  with a real `replace: true`, otherwise left alone as `filled`), refuses a bad list before any prompt (empty, over 20,
+  a nameless or valueless entry, the same name and environment twice), and asks `vault.confirm` once: "let a thread
+  store 4 secrets in owner/repo: add NEW (development), NEW (production); set BLANK (development); overwrite PRICE
+  (production) with new values". A batch with one write keeps `set_value`'s own wording, and one where every name is
+  already filled asks nothing. A no writes nothing. Then each goes through `vault.setValue` (its own audit line and
+  managed `.env.local` refresh). The answer is names only, `{ ok, label, added, set, replaced, filled }`, and the thread
+  is told what happened to each and how to overwrite the ones left alone. The same grouping covers several webhooks'
+  relay secrets: `vault.sendValues(folder, names, env, reason, send)` is `sendValue` for several names under one
+  prompt, nothing asked or sent if any name has no value (docs/architecture/webhooks.md).
 - `mcp__secrets__run(command, why, names, environment?, cwd?, timeout_seconds?, project?)` (built): a command with vault
   values in its env, for a thread that never sees them. The motivating case: `DATABASE_URL` is in the vault and a thread
   runs `npm run job` or a migration.

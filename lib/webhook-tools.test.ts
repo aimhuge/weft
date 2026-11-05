@@ -11,6 +11,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
   tool: (name: string, _description: string, _schema: unknown, handler: Handler) => ({ name, handler }),
 }));
 vi.mock("./webhook-forward", () => ({ createRelay: vi.fn() }));
+vi.mock("./webhook-relays", () => ({ createRelays: vi.fn() }));
 
 // The registry is real, in a temp dir; only the desktop shell (fetch) and the relay are faked.
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-webhook-tools-"));
@@ -20,6 +21,7 @@ vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
 const wt = await import("./webhook-tools");
 const registry = await import("./webhooks");
 const { createRelay } = await import("./webhook-forward");
+const { createRelays } = await import("./webhook-relays");
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
@@ -36,6 +38,7 @@ const said = (r: Result) => r.content[0]?.text;
 beforeEach(() => {
   fetchMock.mockReset();
   vi.mocked(createRelay).mockReset();
+  vi.mocked(createRelays).mockReset();
   fs.rmSync(path.join(dir, "webhooks.json"), { force: true });
 });
 
@@ -126,6 +129,37 @@ describe("webhooksMcpServer", () => {
     const none = await run("relay", { name: "paypal" });
     expect(none.isError).toBe(true);
     expect(said(none)).toContain("No webhook “paypal” in this project");
+  });
+
+  it("relays several webhooks in one call, saying which got a URL and why the others didn't", async () => {
+    const a = registry.addWebhook({ folder: "/proj", name: "stripe", target: "/s", hint: "Stripe dashboard" }).hook;
+    const b = registry.addWebhook({ folder: "/proj", name: "github", target: "/g" }).hook;
+    vi.mocked(createRelays).mockResolvedValueOnce([{ id: a.id, hook: { ...a, url: "https://weft.zip/h/r1" } }, { id: b.id, error: "GH has no value in the vault yet." }]);
+    const r = await run("relay", { name: "stripe", names: ["github", "Stripe", "paypal"] });
+    expect(createRelays).toHaveBeenCalledWith([a.id, b.id]);
+    expect(createRelay).not.toHaveBeenCalled();
+    expect([r.isError, said(r)]).toEqual([
+      false,
+      [
+        "1 of 3 webhooks have a public URL:",
+        "- stripe: https://weft.zip/h/r1 (register it: Stripe dashboard), forwarding to http://localhost:3000/s",
+        "- github: no relay. GH has no value in the vault yet.",
+        "- paypal: no relay. No webhook “paypal” in this project. mcp__webhooks__list shows them; add one with mcp__webhooks__add_blank.",
+        "Register each with its provider; deliveries forward while Weft runs. Once one is registered, call mcp__webhooks__mark_registered.",
+      ].join("\n"),
+    ]);
+  });
+
+  it("is an error when none of several gets a relay, or no name is given", async () => {
+    const out = await run("relay", { names: ["paypal", "venmo"] });
+    expect(out.isError).toBe(true);
+    expect(said(out)).toMatch(/^0 of 2 webhooks/);
+    expect(createRelays).not.toHaveBeenCalled();
+    // One name in names is the single path.
+    const a = registry.addWebhook({ folder: "/proj", name: "stripe", target: "/s" }).hook;
+    vi.mocked(createRelay).mockResolvedValueOnce({ ...a, url: "https://weft.zip/h/r1" });
+    expect(said(await run("relay", { names: ["stripe"] }))).toMatch(/^stripe has a public URL/);
+    expect([(await run("relay", {})).isError, said(await run("relay", {}))]).toEqual([true, "Name the webhook to relay (name), or several (names)."]);
   });
 
   it("marks a webhook registered", async () => {

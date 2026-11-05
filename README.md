@@ -55,7 +55,8 @@ port.
 - **Closing the window keeps Weft running**, with your threads' CLIs open, so conversations stay
   alive. ⌘Q quits. Opening Weft again just brings the existing window forward.
 - **⌃⌥Space** opens the copilot from any app. In the app: ⌘N new thread, ⌘J copilot, ⇧⌘B
-  browser pane, ⌘F find cards, ⌘, settings, ⌘1 board, ⌘2 copilot.
+  browser pane, ⌘F find cards (or find in the page, when the browser pane's page has focus), ⌘, settings,
+  ⌘1 board, ⌘2 copilot.
 - **Shortcuts sheet**: `?` (or the "? Shortcuts" link in the footer) lists every shortcut in the app,
   board, thread, composer, terminal and app menu, and searches them by what they do or by key ("archive",
   "cmd k", "esc"). Hold ⌘ on the board for a moment, or Shift, and a card lists what that modifier does.
@@ -125,6 +126,9 @@ port.
   orange ripple shows where each click lands. It can `wait_for` something to appear, check a phone or tablet layout
   with `set_viewport`, and read the page's `console_logs` and `network_errors` when something breaks, all in the pane
   you're watching, where you're logged in (docs/architecture/agent-browser.md).
+- **Search and find in the browser pane**: words typed in the pane's address bar search the web (a host or URL
+  still opens as one), and ⌘F on the page swaps the address bar for a find bar: matches highlighted, a count,
+  Enter / ⇧Enter or ⌘G / ⇧⌘G to step, Escape to close.
 - **Browser pane zoom**: the % button in the pane's toolbar zooms the page (Chrome's steps, plus
   50–200% presets); ⌘+ / ⌘− / ⌘0 and ⌘+scroll work on the page too, and a trackpad pinch magnifies.
 - **Failed loads say why**: a page that won't load in the browser pane (say a card's dev server stopped) shows Weft's
@@ -892,6 +896,10 @@ four characters showing.
   thread, and previews each name as new, same, differs or missing before anything is written. `.env` is offered
   unticked, `.env.example` brings names only (shown as missing until filled), `NEXT_PUBLIC_*` gets a public tag,
   short-lived `vercel env pull` values are skipped, and a file git tracks gets a warning to rotate its values.
+- **Your `.env` doesn't have to be in the project.** Weft also looks in copies beside it (`~/dev/weft-build` next to
+  `~/dev/weft`) and in the repo's git worktrees, and the nudge says what it found there for names the vault lacks
+  ("Found 18 secrets in ../weft-build/.env.local") with **Import all** to take them in one click. **Locate…** opens a
+  file dialog for an env file anywhere on the Mac (any name, like `prod.env`); Weft remembers it for that vault.
 - **Opening a project takes it in.** Pick a project on the board and Weft moves the new values in its untracked
   `.env` files into 🔐 with no click (never over a value the vault holds, never from a file git tracks: those get
   "rotate" instead). The keys its code reads, the names `.env.example` lists and the webhook routes it serves come
@@ -923,7 +931,10 @@ four characters showing.
 - **Threads store values they made or got themselves.** A signing secret it generated, or new price ids from a
   Stripe sandbox: `mcp__secrets__set_value` adds the name or fills its blank, and with `replace: true` overwrites
   the old value. Touch ID asks every time and says which it is ("let a thread overwrite the production value of
-  STRIPE_PRICE_PRO (aimhuge/weft) with a new one").
+  STRIPE_PRICE_PRO (aimhuge/weft) with a new one"). Setting a project up with several at once, the thread calls
+  `mcp__secrets__set_values` and you approve them all with **one** Touch ID that lists every name and environment
+  and says which ones overwrite. Several webhooks' relay URLs come the same way: `mcp__webhooks__relay` with
+  `names` seals all their signing secrets under one approval.
 - **Threads fill fields for you without seeing the value.** A thread lists the vault's names
   (`mcp__secrets__list`), opens the page in the browser pane and calls `mcp__secrets__fill_field`: Touch ID asks
   "let a thread type GITHUB_CLIENT_SECRET (aimhuge/weft) into supabase.com", then the value goes into the field,

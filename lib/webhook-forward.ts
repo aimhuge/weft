@@ -19,7 +19,7 @@ export const relayUrl = (relayId: string) => `${RELAY_ORIGIN}/api/hooks/${relayI
 
 export const FORWARD_TIMEOUT_MS = 30_000;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const SIGN_IN = "Sign in to your Weft account first: relay URLs come through it.";
+export const SIGN_IN = "Sign in to your Weft account first: relay URLs come through it.";
 const NO_PROVIDER =
   "A relay URL only works when Weft knows the provider whose signature it will check. Name the webhook one of stripe, github, vercel or svix (Resend and Clerk are svix), or set its provider, then try again.";
 const NO_SECRET =
@@ -56,7 +56,7 @@ export async function relaySignedIn(): Promise<boolean> {
   }
 }
 
-function requireHook(id: string): Webhook {
+export function requireHook(id: string): Webhook {
   const hook = getWebhook(id);
   if (!hook) throw new Error("That webhook is gone.");
   return hook;
@@ -71,37 +71,51 @@ export async function createRelay(id: string): Promise<Webhook> {
   if (!(await relaySignedIn())) throw new Error(SIGN_IN);
   const hook = requireHook(id);
   if (hook.relayId) return hook;
+  const { provider, secret } = relayable(hook);
+  // Seal the vault secret for the relay row. Denied or missing here means no relay, not an unsigned one.
+  const sealed = (await shell("/webhooks/relay-seal", { folder: hook.folder, name: secret, environment: "development", provider })) as Sealed & {
+    denied?: boolean;
+    missing?: boolean;
+  };
+  if (sealed.denied) throw new Error(NO_TOUCH_ID);
+  if (sealed.missing || !isSealed(sealed)) throw new Error(noValue(secret));
+  const next = await insertRelay(hook, provider, sealed);
+  await refreshWebhookRelay();
+  return next;
+}
+
+// The ciphertext trio main hands back for one secret (electron/relay-seal.cjs).
+export interface Sealed {
+  secret_ciphertext?: string;
+  secret_nonce?: string;
+  secret_key_id?: string;
+}
+
+export const NO_TOUCH_ID = "Weft didn't get your Touch ID, so no relay was created.";
+export const noValue = (secret: string) => `${secret} has no value in the vault yet — add it in 🔐, then call relay again.`;
+export const isSealed = (s: Sealed | undefined): s is Required<Sealed> => Boolean(s?.secret_ciphertext && s.secret_nonce && s.secret_key_id);
+
+// What a relay row needs from the webhook: a provider whose signature the relay checks, and its secret's vault name.
+export function relayable(hook: Webhook): { provider: string; secret: string } {
   const provider = providerFor(hook);
   if (!provider) throw new Error(NO_PROVIDER);
   if (!hook.secret) throw new Error(NO_SECRET);
-  // Seal the vault secret for the relay row. Denied or missing here means no relay, not an unsigned one.
-  const sealed = (await shell("/webhooks/relay-seal", { folder: hook.folder, name: hook.secret, environment: "development", provider })) as {
-    denied?: boolean;
-    missing?: boolean;
-    secret_ciphertext?: string;
-    secret_nonce?: string;
-    secret_key_id?: string;
-  };
-  if (sealed.denied) throw new Error("Weft didn't get your Touch ID, so no relay was created.");
-  if (sealed.missing || !sealed.secret_ciphertext || !sealed.secret_nonce || !sealed.secret_key_id)
-    throw new Error(`${hook.secret} has no value in the vault yet — add it in 🔐, then call relay again.`);
+  return { provider, secret: hook.secret };
+}
+
+// The relay row on Weft's Supabase, and the webhook's public URL from its id. The caller refreshes the listener.
+export async function insertRelay(hook: Webhook, provider: string, sealed: Required<Sealed>): Promise<Webhook> {
   const { data, error } = await accountClient()
     .from("webhook_relays")
-    .insert({
-      name: hook.name,
-      provider,
-      secret_ciphertext: sealed.secret_ciphertext,
-      secret_nonce: sealed.secret_nonce,
-      secret_key_id: sealed.secret_key_id,
-    })
+    .insert({ name: hook.name, provider, ...pickSealed(sealed) })
     .select("id")
     .single();
   if (error) throw new Error(error.message);
   const relayId = String(data.id);
-  const next = setRelay(id, { relayId, url: relayUrl(relayId) });
-  await refreshWebhookRelay();
-  return next;
+  return setRelay(hook.id, { relayId, url: relayUrl(relayId) });
 }
+
+const pickSealed = ({ secret_ciphertext, secret_nonce, secret_key_id }: Required<Sealed>) => ({ secret_ciphertext, secret_nonce, secret_key_id });
 
 // Takes the public URL away: the relay row goes (its undelivered rows with it). Signed out, there's only the local record to drop.
 export async function removeRelay(id: string): Promise<Webhook> {

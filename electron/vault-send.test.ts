@@ -53,3 +53,27 @@ describe("sendValue", () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+
+describe("sendValues", () => {
+  it("sends several values to code in main after ONE Touch ID, and none when a name is missing or the user says no", async () => {
+    const folder = project({ "README.md": "hi" });
+    const { vault, prompt } = make();
+    await vault.setValue(folder, "A", "development", "a-value");
+    await vault.setValue(folder, "B", "development", "b-value");
+    prompt.mockClear();
+    const send = vi.fn((values: Record<string, string>) => Promise.resolve({ sealed: Object.keys(values) }));
+    const reason = (label: string) => `seal A and B (${label})`;
+    expect(await vault.sendValues(folder, ["A", "B"], "development", reason, send)).toEqual({ sealed: ["A", "B"], label: "Owner/Repo" });
+    expect(send).toHaveBeenCalledWith({ A: "a-value", B: "b-value" });
+    expect(prompt).toHaveBeenCalledTimes(1);
+    expect(prompt).toHaveBeenCalledWith("seal A and B (Owner/Repo)");
+
+    send.mockClear();
+    prompt.mockClear();
+    expect(await vault.sendValues(folder, ["A", "NOPE"], "development", reason, send)).toEqual({ missing: ["NOPE"], label: "Owner/Repo" });
+    expect(prompt).not.toHaveBeenCalled();
+    prompt.mockResolvedValue(false);
+    expect(await vault.sendValues(folder, ["A", "B"], "development", reason, send)).toEqual({ denied: true, label: "Owner/Repo" });
+    expect(send).not.toHaveBeenCalled();
+  });
+});

@@ -90,7 +90,14 @@ own signature.
   replay window). Comparisons are constant-time. An unknown provider is refused.
 - **Where the secret lives.** The signing secret is in the user's 🔐 vault and can't be read on Vercel. The local
   Weft seals it on the way in: `electron/relay-secret.cjs` AES-256-GCM under `WEFT_RELAY_SECRET_KEY` (64 hex
-  chars), after one Touch ID (`vault.sendValue`, `POST /webhooks/relay-seal` on the control server). The plaintext
+  chars), after one Touch ID (`vault.sendValue`, `POST /webhooks/relay-seal` on the control server, both in
+  `electron/relay-seal.cjs`). Several webhooks at once (`mcp__webhooks__relay` with `names`, `createRelays` in
+  `lib/webhook-relays.ts`) go under one Touch ID per project folder: the server first drops webhooks whose secret
+  is still a blank (`/secrets/list`, names only) so one blank doesn't sink the rest, then `POST
+  /webhooks/relay-seal-many` asks `vault.sendValues` once ("seal 3 webhook signing secrets (owner/repo,
+  development) and store them on the relay: stripe STRIPE_WEBHOOK_SECRET, …") and hands back a trio per secret
+  name; each webhook then gets its own row, and one that can't (no provider, no secret, a denial, a failed insert)
+  is reported by name while the rest still relay. The plaintext
   never crosses IPC, never reaches the Next server and never reaches the thread. The deployed relay opens it with
   the same key (`lib/relay-secret.ts`); `secret_key_id` lets the key rotate without losing rows, and an unknown
   key id refuses the delivery.

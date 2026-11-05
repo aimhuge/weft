@@ -21,7 +21,7 @@ export function intakePrompt(folder: string, r: IntakeResult): string {
       "These names are blanks in the 🔐 vault, waiting for a value:",
       ...d.blanks.map((b) => `- ${b.name} (from ${b.source})${b.hint ? `: ${b.hint}` : ""}`),
       "",
-      "For each one: check the code that reads it still needs it (drop the blank if not), then open the provider's page in the browser pane and show me where to get the value. A value I'd make up myself (a signing or cron secret), generate and store with mcp__secrets__set_value. Never ask me to paste a value into the thread.",
+      "For each one: check the code that reads it still needs it (drop the blank if not), then open the provider's page in the browser pane and show me where to get the value. A value I'd make up myself (a signing or cron secret), generate and store with mcp__secrets__set_value, or all of them at once with mcp__secrets__set_values so I approve them with one Touch ID. Never ask me to paste a value into the thread.",
     );
   }
   if (d?.hooks.length) {

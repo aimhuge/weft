@@ -9,20 +9,73 @@ const { auditOutbox, markAuditSynced } = require("./keychain-audit.cjs");
 // there, fills a blank, and overwrites a value only with replace (set_value's replace: true), so a thread can't
 // overwrite one by accident. Touch ID every time through vault.confirm, never a thread's fill unlock: this is a
 // write, and the prompt says which of the three it is, naming the environment.
+function reasonFor(action, name, label, environment) {
+  return {
+    added: `let a thread add ${name} (${label}, ${environment})`,
+    set: `let a thread set ${name} (${label}, ${environment})`,
+    replaced: `let a thread overwrite the ${environment} value of ${name} (${label}) with a new one`,
+  }[action];
+}
+
 async function fillBlank(vault, folder, name, environment, value, replace = false) {
   if (!value) throw new Error(`Give a value for ${name}.`);
   const { label, secrets } = await vault.names(folder);
   const entry = secrets.find((s) => s.name === name && s.environment === environment);
   const action = !entry ? "added" : entry.missing ? "set" : "replaced";
   if (action === "replaced" && !replace) return { filled: true, label };
-  const reason = {
-    added: `let a thread add ${name} (${label}, ${environment})`,
-    set: `let a thread set ${name} (${label}, ${environment})`,
-    replaced: `let a thread overwrite the ${environment} value of ${name} (${label}) with a new one`,
-  }[action];
-  if (!(await vault.confirm(reason))) return { denied: true, label };
+  if (!(await vault.confirm(reasonFor(action, name, label, environment)))) return { denied: true, label };
   await vault.setValue(folder, name, environment, value, { source: "a thread" });
   return action === "set" ? { ok: true, label } : { ok: true, [action]: true, label };
+}
+
+// Several values a thread made, stored after ONE Touch ID (mcp__secrets__set_values): the user asked for setup's
+// writes to come as one question, not one per secret. Each entry is planned like fillBlank's (add, set, overwrite
+// with replace, or skipped as filled without it), then a single vault.confirm names every write with its
+// environment and says which overwrite. Nothing is written unless the user says yes; values are never in the prompt.
+const MAX_MANY = 20;
+const named = (list) => list.map((e) => `${e.name} (${e.environment})`).join(", ");
+
+function planMany(secrets, entries) {
+  if (!Array.isArray(entries) || !entries.length) throw new Error("Give at least one {name, value}.");
+  if (entries.length > MAX_MANY) throw new Error(`At most ${MAX_MANY} secrets in one call.`);
+  const seen = new Set();
+  return entries.map((e) => {
+    const name = String(e?.name ?? "").trim();
+    if (!name) throw new Error("Every secret needs a name.");
+    const environment = String(e.environment || "development");
+    const value = String(e.value ?? "");
+    if (!value) throw new Error(`Give a value for ${name}.`);
+    if (seen.has(`${name}\n${environment}`)) throw new Error(`${name} (${environment}) is in the list twice.`);
+    seen.add(`${name}\n${environment}`);
+    const entry = secrets.find((s) => s.name === name && s.environment === environment);
+    const action = !entry ? "added" : entry.missing ? "set" : e.replace === true ? "replaced" : "filled";
+    return { name, environment, value, action };
+  });
+}
+
+function manyReason(label, writes) {
+  const of = (action) => writes.filter((w) => w.action === action);
+  const parts = [
+    of("added").length && `add ${named(of("added"))}`,
+    of("set").length && `set ${named(of("set"))}`,
+    of("replaced").length && `overwrite ${named(of("replaced"))} with new values`,
+  ].filter(Boolean);
+  return `let a thread store ${writes.length} secrets in ${label}: ${parts.join("; ")}`;
+}
+
+async function fillMany(vault, folder, entries) {
+  const { label, secrets } = await vault.names(folder);
+  const plan = planMany(secrets, entries);
+  const pick = (list, action) => list.filter((w) => w.action === action).map(({ name, environment }) => ({ name, environment }));
+  const filled = pick(plan, "filled");
+  const writes = plan.filter((w) => w.action !== "filled");
+  if (!writes.length) return { label, filled };
+  // One write keeps fillBlank's own wording, so a batch of one reads as it always has.
+  const one = writes.length === 1 && writes[0];
+  const reason = one ? reasonFor(one.action, one.name, label, one.environment) : manyReason(label, writes);
+  if (!(await vault.confirm(reason))) return { denied: true, label, filled };
+  for (const w of writes) await vault.setValue(folder, w.name, w.environment, w.value, { source: "a thread" });
+  return { ok: true, label, added: pick(writes, "added"), set: pick(writes, "set"), replaced: pick(writes, "replaced"), filled };
 }
 
 // A key a thread is blocked on (mcp__secrets__ask_add), or one a fill or run found missing: the name goes in as a
@@ -47,6 +100,8 @@ function vaultRoutes(getVault) {
       vault().addBlanks(String(folder), Array.isArray(names) ? names.map(String) : [], [env(environment)], { source: "a thread", hint: hint ? String(hint).slice(0, 400) : undefined }),
     "POST /secrets/set": ({ folder, name, value, environment, replace }) =>
       fillBlank(vault(), String(folder), String(name), env(environment), String(value ?? ""), replace === true),
+    // mcp__secrets__set_values: several at once, one Touch ID for the lot.
+    "POST /secrets/set-many": ({ folder, secrets }) => fillMany(vault(), String(folder), secrets),
     // The ask's input shows in the thread itself (components/SecretAskInput.tsx).
     "POST /secrets/ask-add": ({ folder, name, environment }) => askAdd(getVault(), String(folder), String(name), env(environment)),
     // A thread asking for standing access to the vault (mcp__secrets__request_access, electron/vault-grants.cjs):
@@ -66,4 +121,4 @@ function vaultRoutes(getVault) {
   };
 }
 
-module.exports = { vaultRoutes, fillBlank, askAdd };
+module.exports = { vaultRoutes, fillBlank, fillMany, askAdd };

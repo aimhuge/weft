@@ -2,12 +2,13 @@ import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
 import { createRelay } from "./webhook-forward";
+import { createRelays } from "./webhook-relays";
 import { addWebhook, listWebhooks, updateWebhook, type Webhook } from "./webhooks";
 
 // The 🪝 webhooks for threads (docs/architecture/webhooks.md): a thread records the routes providers post to as
 // blanks, the rail counts them, and the user (or the thread) registers them when ready. These run in the Next
 // server, so they use lib/webhooks.ts directly; only ask_add reaches the board, through the desktop shell.
-export const WEBHOOKS_PROMPT = `When the code you write receives webhooks (a route a provider such as Stripe, GitHub or Resend posts to), record each one as soon as you know its route with mcp__webhooks__add_blank: a name, the route (a path like /api/stripe/webhook), the provider's events, a hint where to register it, and the vault name of its signing secret. The user sees the blanks counted on 🪝 on the left rail. A dev server on localhost can't be reached from outside, so call mcp__webhooks__relay for a public URL on Weft that forwards deliveries to it while Weft runs, and register that URL with the provider yourself when you can (its CLI or API, or its dashboard in the browser pane), then call mcp__webhooks__mark_registered. Only when you're blocked on a webhook being registered right now, call mcp__webhooks__ask_add: it adds the blank too and opens the 🪝 drawer on it. Never invent a tunnel (ngrok and the like) when relay will do.`;
+export const WEBHOOKS_PROMPT = `When the code you write receives webhooks (a route a provider such as Stripe, GitHub or Resend posts to), record each one as soon as you know its route with mcp__webhooks__add_blank: a name, the route (a path like /api/stripe/webhook), the provider's events, a hint where to register it, and the vault name of its signing secret. The user sees the blanks counted on 🪝 on the left rail. A dev server on localhost can't be reached from outside, so call mcp__webhooks__relay for a public URL on Weft that forwards deliveries to it while Weft runs (for several webhooks, one call with names, so the user approves every secret with one Touch ID), and register that URL with the provider yourself when you can (its CLI or API, or its dashboard in the browser pane), then call mcp__webhooks__mark_registered. Only when you're blocked on a webhook being registered right now, call mcp__webhooks__ask_add: it adds the blank too and opens the 🪝 drawer on it. Never invent a tunnel (ngrok and the like) when relay will do.`;
 
 const PROJECT = z.string().optional().describe("Absolute path of the project the webhook belongs to; defaults to this thread's folder");
 const NAME = z.string().min(1).max(60).describe("What it's for, e.g. stripe; one per name in a project");
@@ -48,6 +49,30 @@ async function record(folder: string, a: AddArgs) {
   const added = addWebhook({ folder, name: a.name, target: a.target, events: a.events, hint: a.hint, secret: a.secret, provider: a.provider });
   if (a.secret) await shell("/secrets/add-blank", { folder, names: [a.secret], environment: "development", hint: a.hint }).catch(() => null);
   return added;
+}
+
+const relayed = (hook: Webhook) => `${hook.name}: ${hook.url}${hook.hint ? ` (register it: ${hook.hint})` : ""}, forwarding to ${hook.target}`;
+
+// Several webhooks' public URLs under one Touch ID per project (lib/webhook-relays.ts); one that can't get a relay says why.
+async function relayMany(folder: string, names: string[]) {
+  const found = names.map((name) => {
+    try {
+      return { name, id: findHook(folder, name).id };
+    } catch (err) {
+      return { name, error: (err as Error).message };
+    }
+  });
+  const ids = found.flatMap((f) => (f.id ? [f.id] : []));
+  const results = ids.length ? await createRelays(ids) : [];
+  const lines = found.map((f) => {
+    const r = f.id ? results[ids.indexOf(f.id)] : undefined;
+    return r?.hook ? `- ${relayed(r.hook)}` : `- ${f.name}: no relay. ${r?.error ?? f.error}`;
+  });
+  const ok = results.filter((r) => r.hook).length;
+  const body = `${ok} of ${names.length} webhooks have a public URL:\n${lines.join("\n")}`;
+  return ok
+    ? text(`${body}\nRegister each with its provider; deliveries forward while Weft runs. Once one is registered, call mcp__webhooks__mark_registered.`)
+    : text(body, true);
 }
 
 /** mcp__webhooks__*. folder is the card's project, read when a tool runs. */
@@ -91,11 +116,16 @@ export function webhooksMcpServer(folder: () => string) {
       ),
       tool(
         "relay",
-        "Give a webhook a public URL on Weft to register with the provider (paste it into its dashboard, or use its CLI or API). Deliveries forward to the webhook's target while Weft runs. Needs the user signed in to a Weft account, and the webhook must name a known provider (stripe, github, vercel, svix — Resend and Clerk are svix) plus the vault name of its signing secret, since the relay only accepts deliveries carrying the provider's signature. The user approves the secret being sealed with one Touch ID.",
-        { name: NAME, project: PROJECT },
-        ({ name, project }) =>
+        "Give a webhook a public URL on Weft to register with the provider (paste it into its dashboard, or use its CLI or API). Deliveries forward to the webhook's target while Weft runs. Needs the user signed in to a Weft account, and the webhook must name a known provider (stripe, github, vercel, svix — Resend and Clerk are svix) plus the vault name of its signing secret, since the relay only accepts deliveries carrying the provider's signature. The user approves the secret being sealed with one Touch ID. For several webhooks, pass names instead: one Touch ID seals all their secrets.",
+        { name: NAME.optional(), names: z.array(NAME).min(1).max(20).optional().describe("Several webhooks at once, e.g. [\"stripe\", \"github\"]: one Touch ID for all"), project: PROJECT },
+        ({ name, names, project }) =>
           attempt(async () => {
-            const hook = await createRelay(findHook(where(project), name).id);
+            // Names match case-insensitively (findHook), so "Stripe" and "stripe" are one webhook.
+            const all = [...new Map([...(name ? [name] : []), ...(names ?? [])].map((n) => [n.trim().toLowerCase(), n])).values()];
+            const [only] = all;
+            if (!only) return text("Name the webhook to relay (name), or several (names).", true);
+            if (all.length > 1) return relayMany(where(project), all);
+            const hook = await createRelay(findHook(where(project), only).id);
             return text(
               `${hook.name} has a public URL: ${hook.url}\nRegister it with the provider${hook.hint ? ` (${hook.hint})` : ""}. Deliveries forward to ${hook.target} while Weft runs. Once it's registered, call mcp__webhooks__mark_registered.`,
             );
