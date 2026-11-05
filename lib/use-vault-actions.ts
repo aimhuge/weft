@@ -19,6 +19,7 @@ import {
   type VaultSecret,
   type VaultSummary,
 } from "@/lib/vault-view";
+import { importAllFrom, locateEmptyText } from "@/lib/vault-locate";
 import type { Editing, RowAction } from "@/lib/vault-row-types";
 
 // The drawer state and the actions the layout buttons trigger, returned by useVaultActions.
@@ -48,6 +49,10 @@ export interface VaultActions {
   toggleImport: (key: string) => void;
   // Finish the import, with the take-over offer ticked.
   finishImport: () => Promise<void>;
+  // The nudge's Import all: the preview's ticked rows, with no preview.
+  importAll: (v: VaultSummary) => Promise<void>;
+  // Locate…: pick an env file in main's dialog, then preview what it holds.
+  locate: (v: VaultSummary) => Promise<void>;
   // The Add / Change save handler.
   save: (e: Editing) => Promise<void>;
   // The dialog's remove button: delete from each ticked environment.
@@ -94,6 +99,21 @@ export function useVaultActions(bridge: VaultBridge | null, overview: { vaults: 
       notify(err);
     }
   }, [bridge, notify]);
+
+  const importAll = useCallback(async (v: VaultSummary) => {
+    if (bridge) await change(async () => notify(await importAllFrom(bridge, v.folder)));
+  }, [bridge, change, notify]);
+
+  const locate = useCallback(async (v: VaultSummary) => {
+    if (!bridge?.locate) return;
+    try {
+      const found = await bridge.locate(v.folder);
+      if (found?.empty) notify(locateEmptyText(found.file));
+      else if (found) await startImport(v);
+    } catch (err) {
+      notify(err);
+    }
+  }, [bridge, notify, startImport]);
 
   const act = useCallback(async (v: VaultSummary, s: VaultSecret, action: SecretAction | RowAction) => {
     if (!bridge) return;
@@ -193,6 +213,8 @@ export function useVaultActions(bridge: VaultBridge | null, overview: { vaults: 
     startImport,
     toggleImport,
     finishImport,
+    importAll,
+    locate,
     save,
     removeFromVault,
     lock,

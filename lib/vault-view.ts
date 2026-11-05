@@ -63,6 +63,8 @@ export interface ImportFile {
   // git tracks it, so its values are in history already.
   tracked: boolean;
   vercel: boolean;
+  // Found beside the project (another copy of it, a git worktree) or located by hand, not in the folder itself.
+  elsewhere?: boolean;
 }
 
 export interface ImportScan {
@@ -72,6 +74,9 @@ export interface ImportScan {
   rows: ImportRow[];
 }
 
+// null when you cancelled; empty when the file had no NAME=value lines. file is relative to the project.
+export type LocateResult = { file: string; empty?: boolean } | null;
+
 export type RevealResult = { value: string } | { denied: true } | { missing: true };
 
 // window.weft.vault, from electron/preload.cjs.
@@ -80,6 +85,8 @@ export interface VaultBridge extends KeychainBridge {
   overview(folders: string[]): Promise<VaultOverview>;
   scan(folder: string): Promise<ImportScan>;
   import(folder: string, picks: { file: string; name: string }[]): Promise<{ imported: number }>;
+  // Locate…: main's file dialog picks an env file for the vault to read from then on. Missing in older shells.
+  locate?: (folder: string) => Promise<LocateResult>;
   reveal(id: string, name: string, environment: string): Promise<RevealResult>;
   copy(id: string, name: string, environment: string): Promise<{ copied: true } | { denied: true } | { missing: true }>;
   set(folder: string, name: string, environment: string, value: string): Promise<{ saved: true }>;

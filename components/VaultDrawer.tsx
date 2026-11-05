@@ -78,21 +78,8 @@ export default function VaultDrawer({
   // The select names a vault by its first folder, so a second clone of the same repo still selects it.
   const filterValue = (filter && inProject[0]?.folder) || "";
 
-  if (actions.importing) {
-    const importing = actions.importing;
-    return (
-      <ImportPreview
-        scan={importing.scan}
-        picked={importing.picked}
-        busy={actions.busy}
-        onToggle={actions.toggleImport}
-        onImport={() => void actions.finishImport()}
-        onClose={() => actions.setImporting(null)}
-        manage={importing.manage}
-        onManage={(on) => actions.setImporting({ ...importing, manage: on })}
-      />
-    );
-  }
+  const locatable = bridge.locate !== undefined;
+  if (actions.importing) return <PreviewFor importing={actions.importing} actions={actions} vaults={all} locatable={locatable} />;
 
   const editing = actions.editing;
   const form = editing && (
@@ -104,13 +91,31 @@ export default function VaultDrawer({
       <RemoveFor actions={actions} />
       <ProjectFilter vaults={all} value={filterValue} picked={pick?.top === project} onPick={(folder) => setPick({ top: project, folder })} />
       <VaultSearch query={query} onQuery={setQuery} />
-      <VaultList shown={shown} query={query} form={form} actions={actions} notify={notify} />
+      <VaultList shown={shown} query={query} form={form} actions={actions} notify={notify} locatable={locatable} />
     </div>
   );
 }
 
+// The .env import preview, with Locate… for the vault it was opened on when the shell can open main's dialog.
+function PreviewFor({ importing, actions, vaults, locatable }: { importing: NonNullable<VaultActions["importing"]>; actions: VaultActions; vaults: VaultSummary[]; locatable: boolean }) {
+  const into = locatable ? vaults.find((v) => v.folders.includes(importing.folder)) : undefined;
+  return (
+    <ImportPreview
+      scan={importing.scan}
+      picked={importing.picked}
+      busy={actions.busy}
+      onToggle={actions.toggleImport}
+      onImport={() => void actions.finishImport()}
+      onClose={() => actions.setImporting(null)}
+      manage={importing.manage}
+      onManage={(on) => actions.setImporting({ ...importing, manage: on })}
+      onLocate={into ? () => void actions.locate(into) : undefined}
+    />
+  );
+}
+
 // The scrolling list under the filters: each shown vault's section, a note when the search matches nothing, and Lock now.
-function VaultList({ shown, query, form, actions, notify }: { shown: VaultSummary[]; query: string; form: React.ReactNode; actions: VaultActions; notify: (err: unknown) => void }) {
+function VaultList({ shown, query, form, actions, notify, locatable }: { shown: VaultSummary[]; query: string; form: React.ReactNode; actions: VaultActions; notify: (err: unknown) => void; locatable: boolean }) {
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
       {query.trim() && !shown.length && <Note>No secrets match “{query.trim()}”.</Note>}
@@ -124,6 +129,8 @@ function VaultList({ shown, query, form, actions, notify }: { shown: VaultSummar
           revealed={actions.revealed}
           onAdd={() => actions.setEditing(newSecret(v))}
           onImport={() => void actions.startImport(v)}
+          onImportAll={() => void actions.importAll(v)}
+          onLocate={locatable ? () => void actions.locate(v) : undefined}
           onAct={(s, action: RowAction) => void actions.act(v, s, action)}
           onMenu={(s, e) => void actions.menu(v, s, e)}
           notify={notify}

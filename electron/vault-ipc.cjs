@@ -11,6 +11,7 @@ function registerVault(ipcMain, { vault, isBoard }) {
     });
   handle("vault:overview", (folders) => vault.overview(Array.isArray(folders) ? folders.filter((f) => typeof f === "string") : []));
   handle("vault:scan", (folder) => vault.scan(String(folder)));
+  handle("vault:locate", (folder) => vault.locate(String(folder)));
   handle("vault:import", (folder, picks) => vault.importPicks(String(folder), Array.isArray(picks) ? picks : [], { by: "you" }));
   handle("vault:reveal", (id, name, env) => vault.reveal(String(id), String(name), String(env)));
   handle("vault:copy", (id, name, env) => vault.copy(String(id), String(name), String(env)));

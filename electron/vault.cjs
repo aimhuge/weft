@@ -3,7 +3,8 @@
 // copied. It answers the board window only; pane pages are agent-driven and can be any site.
 const fs = require("node:fs");
 const path = require("node:path");
-const { findEnvFiles, envFileKind, isVercelPull, parseEnv, shortLived } = require("./dotenv.cjs");
+const { shortLived } = require("./dotenv.cjs");
+const { createLocated, freeFrom, locateFile, openEnvDialog, readEnvFiles, valuedIn } = require("./env-sources.cjs");
 const { loadDeviceKey } = require("./device-key.cjs");
 const { createVaultStore, tailOf } = require("./vault-store.cjs");
 const { MANAGED_FILE, createEnvWatcher, ignoreLocalEnv, isManaged, planWrite, readOrNull, renderEnv, writeFileAtomic } = require("./env-writeback.cjs");
@@ -23,7 +24,7 @@ const NUDGE_FILES = new Set([".env.local", ".env.development.local"]);
 
 // audit records one line per use of a value or write (electron/keychain-audit.cjs); grants are threads' standing
 // access (electron/vault-grants.cjs).
-function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = git, now = Date.now, setTimer = setTimeout, onChange = (folder) => void folder, watch = fs.watch, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), grants = createGrants({ now }) }) {
+function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = git, now = Date.now, setTimer = setTimeout, onChange = (folder) => void folder, watch = fs.watch, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), grants = createGrants({ now }), pickFile = /** @type {import("./env-sources.cjs").PickFile} */ (async () => null) }) {
   // .env.local files Weft writes from the vault; a hand edit tells the board to look again (onChange).
   const watcher = createEnvWatcher({ onEdit: onChange, watch });
   let store;
@@ -32,6 +33,8 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
   // Threads get their own approvals, one per card, site and vault: the drawer being unlocked never lets a
   // thread in, and a yes for one site never covers another.
   const threadUnlocks = new Map();
+  // Env files you located by hand, per vault; nearby copies are found fresh each time (electron/env-sources.cjs).
+  const located = createLocated({ file: path.join(dataDir, "env-sources.json") });
 
   async function storeReady() {
     if (!store) {
@@ -58,28 +61,26 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
     return true;
   };
 
-  // The project's .env files, parsed. Only files findEnvFiles lists, so a request can't name another path.
-  function readFiles(folder) {
-    return findEnvFiles(folder).map((file) => {
-      const text = fs.readFileSync(path.join(folder, file), "utf8");
-      return { file, kind: envFileKind(file), vercel: isVercelPull(text), entries: parseEnv(text) };
-    });
-  }
+  // The project's .env files, then the ones found or located elsewhere, parsed. Only files main found itself, so a
+  // request can't name another path. Weft's own worktree pool is never looked in.
+  const readFiles = (folder, id) => readEnvFiles(folder, located.get(id), { skip: [path.join(dataDir, "worktrees")] });
 
   function status(have, value) {
     if (have === undefined) return "new";
     return have === value ? "same" : "differs";
   }
 
-  // Values in the nudge files that the vault doesn't hold yet, or holds differently. s is null with no vault yet.
+  // Values in the nudge files that the vault doesn't hold yet, or holds differently; from a file elsewhere, only the
+  // ones it doesn't hold at all (a stale copy shouldn't nag). s is null with no vault yet.
   function nudge(folder, id, s) {
     const pending = new Set();
     let file;
-    for (const f of readFiles(folder)) {
-      if (!NUDGE_FILES.has(path.basename(f.file))) continue;
+    for (const f of readFiles(folder, id)) {
+      if (!f.elsewhere && !NUDGE_FILES.has(path.basename(f.file))) continue;
       for (const e of f.entries) {
         if ((f.vercel && shortLived(e.name)) || pending.has(e.name)) continue;
-        if (s?.exists(id) && s.get(id, e.name, f.kind.environment) === e.value) continue;
+        const have = s?.exists(id) ? s.get(id, e.name, f.kind.environment) : undefined;
+        if (have === e.value || (f.elsewhere && have !== undefined)) continue;
         pending.add(e.name);
         file ??= f.file;
       }
@@ -161,12 +162,15 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const { id, label } = await idOf(folder);
       const s = await storeReady();
       const has = s.exists(id);
-      const files = readFiles(folder);
-      // git ls-files with no paths lists every file, so only ask when there are some.
-      const listed = files.length ? await run(folder, ["ls-files", "--", ...files.map((f) => f.file)]) : null;
+      const files = readFiles(folder, id);
+      const own = files.filter((f) => !f.elsewhere).map((f) => f.file);
+      // git ls-files with no paths lists every file, so only ask when there are some (and only for the project's own).
+      const listed = own.length ? await run(folder, ["ls-files", "--", ...own]) : null;
       const tracked = new Set((listed ?? "").split("\n").filter(Boolean));
-      const valued = new Set(files.filter((f) => !f.kind.namesOnly).flatMap((f) => f.entries.map((e) => `${f.kind.environment}\n${e.name}`)));
+      const valued = valuedIn(files);
       const rows = [];
+      // A file elsewhere ticks only names nothing nearer holds: never over the vault's value or the project's own.
+      const taken = valuedIn(files.filter((f) => !f.elsewhere));
       for (const f of files) {
         for (const e of f.entries) {
           const environment = f.kind.environment;
@@ -176,13 +180,14 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
           }
           const st = status(has ? s.get(id, e.name, environment) : undefined, e.value);
           const skipped = f.vercel && shortLived(e.name);
-          rows.push({ file: f.file, name: e.name, environment, status: st, tail: tailOf(e.value), public: e.name.startsWith("NEXT_PUBLIC_"), ticked: f.kind.ticked && st !== "same" && !skipped, skipped });
+          const free = freeFrom(f, st, `${environment}\n${e.name}`, taken);
+          rows.push({ file: f.file, name: e.name, environment, status: st, tail: tailOf(e.value), public: e.name.startsWith("NEXT_PUBLIC_"), ticked: f.kind.ticked && st !== "same" && !skipped && free, skipped });
         }
       }
       return {
         id,
         label,
-        files: files.map((f) => ({ file: f.file, environment: f.kind.environment, namesOnly: f.kind.namesOnly, tracked: tracked.has(f.file), vercel: f.vercel })),
+        files: files.map((f) => ({ file: f.file, environment: f.kind.environment, namesOnly: f.kind.namesOnly, tracked: tracked.has(f.file), vercel: f.vercel, elsewhere: f.elsewhere })),
         rows,
       };
     },
@@ -195,7 +200,7 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const s = await storeReady();
       const wanted = new Set(picks.map((p) => `${p.file}\n${p.name}`));
       const entries = [];
-      for (const f of readFiles(folder)) {
+      for (const f of readFiles(folder, id)) {
         for (const e of f.entries) {
           if (!wanted.has(`${f.file}\n${e.name}`)) continue;
           entries.push({ name: e.name, environment: f.kind.environment, value: f.kind.namesOnly ? null : e.value, source: f.file });
@@ -205,6 +210,11 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       refreshManaged(id);
       if (entries.length) log({ action: "import", by, vault: label, names: [...new Set(entries.map((e) => e.name))], detail: [...new Set(entries.map((e) => e.source))].join(", ") });
       return { imported: entries.length };
+    },
+
+    // Locate…: a file you pick in main's dialog joins this vault's import from then on.
+    async locate(folder) {
+      return locateFile({ pickFile, located, folder, ...(await idOf(folder)), log });
     },
 
     async reveal(id, name, environment) {
@@ -325,6 +335,17 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       return { ...(await send(values[name])), label };
     },
 
+    // sendValue for several names under ONE Touch ID (several webhooks' relay secrets, electron/relay-seal.cjs).
+    // Every name needs a value, or nothing is asked or sent. send gets { NAME: value }; what it returns comes back.
+    async sendValues(folder, names, environment, reason, send) {
+      const { label, values, missing } = await this.valuesFor(folder, names, environment, false);
+      const line = { action: "send", by: "weft", vault: label, names, environment, detail: reason(label) };
+      if (missing.length) return log({ ...line, outcome: "missing" }) && { missing, label };
+      if (!(await prompt(reason(label)))) return log({ ...line, outcome: "denied" }) && { denied: true, label };
+      log(line);
+      return { ...(await send(values)), label };
+    },
+
     // A Touch ID with no unlock cache, for a write a thread asks for (electron/vault-routes.cjs).
     // A no is a line in the audit log; a yes is the write's own line.
     async confirm(reason) {
@@ -371,7 +392,7 @@ function setupVault({ ipcMain, dataDir, window, board }) {
     const contents = board();
     if (contents && !contents.isDestroyed()) contents.send("vault:changed", folder);
   };
-  const vault = createVault({ dataDir, safeStorage: keychainFor("vault key"), sodium: require("./vault-crypto.cjs"), clipboard, prompt: touchIdPrompt({ systemPreferences, dialog, window }), onChange, audit });
+  const vault = createVault({ dataDir, safeStorage: keychainFor("vault key"), sodium: require("./vault-crypto.cjs"), clipboard, prompt: touchIdPrompt({ systemPreferences, dialog, window }), onChange, audit, pickFile: openEnvDialog(dialog, window) });
   registerVault(ipcMain, { vault, isBoard: (sender) => Boolean(sender) && sender === board() });
   return vault;
 }

@@ -8,7 +8,7 @@ import { cleanBlanks, intakeVault as untyped } from "./vault-intake.cjs";
 // presence is real (findEnvFiles reads the folder); what the vault's scan says about it is the fake's.
 
 type Row = { file: string; name: string; environment: string; status: string; ticked: boolean };
-type File = { file: string; tracked?: boolean; namesOnly?: boolean };
+type File = { file: string; tracked?: boolean; namesOnly?: boolean; elsewhere?: boolean };
 
 function folder(withEnv: boolean) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-vault-intake-"));
@@ -33,6 +33,15 @@ const intakeVault = untyped as (vault: unknown, folder: string, opts?: { blanks?
 const row = (name: string, status = "new", over: Partial<Row> = {}): Row => ({ file: ".env.local", name, environment: "development", status, ticked: true, ...over });
 
 describe("intakeVault", () => {
+  it("never takes in a file found beside the project, and leaves its names to become blanks", async () => {
+    const away = "../app-build/.env.local";
+    const vault = fakeVault({ files: [{ file: ".env.local" }, { file: away, elsewhere: true }], rows: [row("OWN"), row("KEY", "new", { file: away })] });
+    const result = await intakeVault(vault, folder(true), { blanks: [{ name: "KEY", source: "lib/x.ts" }] });
+    expect(vault.importPicks).toHaveBeenCalledWith(expect.any(String), [{ file: ".env.local", name: "OWN" }]);
+    expect((result.imported as { name: string }[]).map((r) => r.name)).toEqual(["OWN"]);
+    expect(result.blanked).toEqual(["KEY"]);
+  });
+
   it("does nothing in a folder with no .env file and no blanks", async () => {
     const vault = fakeVault();
     expect(await intakeVault(vault, folder(false))).toEqual({ imported: [], blanked: [], tracked: [], keys: [] });

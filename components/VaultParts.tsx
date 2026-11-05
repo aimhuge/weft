@@ -150,6 +150,7 @@ export function ImportPreview({
   onClose,
   manage,
   onManage,
+  onLocate,
 }: {
   scan: ImportScan;
   picked: Set<string>;
@@ -161,6 +162,8 @@ export function ImportPreview({
   // after the import. null hides it.
   manage?: boolean | null;
   onManage?: (on: boolean) => void;
+  // Locate…: pick an env file anywhere, and the preview shows it too. Absent in an older shell.
+  onLocate?: () => void;
 }) {
   const warning = trackedWarning(scan);
   return (
@@ -170,10 +173,15 @@ export function ImportPreview({
           <Icon name="back" size={13} />
         </button>
         <span className="min-w-0 flex-1 truncate font-medium text-ink">Import into {scan.label}</span>
+        {onLocate && (
+          <button onClick={onLocate} className="rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-sunken hover:text-ink">
+            Locate…
+          </button>
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
         {warning && <p className="mx-1 mt-2 rounded-md border border-warn/40 bg-warn-soft px-2 py-1.5 text-[11px] leading-snug text-warn">{warning}</p>}
-        {scan.rows.length === 0 && <Note>No .env files here (looked in the folder, apps/* and packages/*).</Note>}
+        {scan.rows.length === 0 && <Note>No .env files found (looked in the folder, apps/*, packages/*, copies beside it and its worktrees). Locate… picks one from anywhere.</Note>}
         {importGroups(scan).map((group) => (
           <section key={group.file}>
             <h3 className="px-1.5 pb-1 pt-2.5 text-[10.5px] font-semibold uppercase tracking-wider text-faint">

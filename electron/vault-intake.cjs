@@ -25,13 +25,15 @@ async function intakeVault(vault, folder, { blanks = [], skip = [] } = {}) {
   if (!hasFiles && !blanks.length) return { imported: [], blanked: [], tracked: [], keys: [] };
   const scan = hasFiles ? await vault.scan(folder) : { files: [], rows: [] };
   const trackedFiles = new Set(scan.files.filter((f) => f.tracked && !f.namesOnly).map((f) => f.file));
-  const fresh = scan.rows.filter((r) => r.ticked && r.status === "new" && !skipped.has(importKey(r)));
+  // A file found beside the project (another copy, a worktree) is the nudge's to offer, never taken in silently.
+  const elsewhere = new Set(scan.files.filter((f) => f.elsewhere).map((f) => f.file));
+  const fresh = scan.rows.filter((r) => r.ticked && r.status === "new" && !skipped.has(importKey(r)) && !elsewhere.has(r.file));
   const picks = fresh.filter((r) => !trackedFiles.has(r.file));
   if (picks.length) await vault.importPicks(folder, picks.map(({ file, name }) => ({ file, name })));
 
   // A name any .env file holds a value for is the import's business, not a blank's.
   const { secrets } = await vault.names(folder);
-  const known = new Set([...secrets.map((s) => s.name), ...scan.rows.filter((r) => r.status !== "missing").map((r) => r.name)]);
+  const known = new Set([...secrets.map((s) => s.name), ...scan.rows.filter((r) => r.status !== "missing" && !elsewhere.has(r.file)).map((r) => r.name)]);
   const wanted = blanks.filter((b, i) => !known.has(b.name) && !skipped.has(blankKey(b.name)) && blanks.findIndex((o) => o.name === b.name) === i);
   const groups = new Map();
   for (const b of wanted) {
