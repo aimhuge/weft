@@ -1,4 +1,11 @@
 {
+  "0.7.5": {
+    "lines": [
+      "A linked project's cards sync to your team, so the team's board holds everyone's work, not one person's.",
+      "Turn on a folder's Sync and it joins the team too; switch it off and on again and its older cards move over.",
+      "Your teammates' cards for a linked project show on your desktop board, read-only, with whose Mac runs each."
+    ]
+  },
   "0.7.3": {
     "lines": [
       "Give Weft a project and one button installs the deps, asks for your keys, and shows the app.",
