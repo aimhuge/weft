@@ -5,14 +5,16 @@
 // when it last ran. A click on its status runs it now or switches it on or off; its toggle folds open the cards its
 // runs made, drawn as the board's own rows so each one opens. The band folds like the others.
 import { useState } from "react";
+import { untilNext } from "@/lib/cron-form";
 import { describeCron } from "@/lib/cron-schedule";
+import { activeCount, isLiveCron } from "@/lib/crons-view";
 import { folderName } from "@/lib/format";
 import type { CronRow } from "@/lib/list-crons";
-import { untilNext } from "@/lib/list-crons";
 import type { CronsState } from "@/lib/use-crons";
 import type { Card, Column } from "@/lib/types";
 import { LIST_GRID } from "./list-grid";
 import { AgeCell, Chevron, type RowNest } from "./CardRowCells";
+import SheetRow from "./SheetRow";
 import { SheetPopover } from "@aimhuge/sheet/client";
 import "./crons.css";
 
@@ -29,7 +31,7 @@ export interface SheetCronsProps {
 export default function SheetCrons({ rows, collapsed, onFold, now, crons, renderRow, notify }: SheetCronsProps) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   if (!rows.length) return null;
-  const on = rows.filter((r) => r.cron.enabled && r.cron.nextAt !== undefined).length;
+  const on = activeCount(rows.map((r) => r.cron));
   const toggle = (id: string) =>
     setOpen((cur) => {
       const next = new Set(cur);
@@ -56,10 +58,9 @@ export default function SheetCrons({ rows, collapsed, onFold, now, crons, render
             <CronLine row={row} now={now} expanded={open.has(row.cron.id)} onToggle={() => toggle(row.cron.id)} crons={crons} notify={notify} />
             {open.has(row.cron.id) &&
               row.runs.map((card) => (
-                <div key={card.id} className="sheet-row sheet-row-nested flex">
-                  <span className="sheet-gutter" aria-hidden />
-                  <div className="min-w-0 flex-1">{renderRow(card, card.column, { depth: 1, kids: 0, expanded: false, onToggle: () => {} })}</div>
-                </div>
+                <SheetRow key={card.id} className="sheet-row-nested">
+                  {renderRow(card, card.column, { depth: 1, kids: 0, expanded: false, onToggle: () => {} })}
+                </SheetRow>
               ))}
           </div>
         ))}
@@ -69,7 +70,7 @@ export default function SheetCrons({ rows, collapsed, onFold, now, crons, render
 
 function CronLine({ row, now, expanded, onToggle, crons, notify }: { row: CronRow; now: number; expanded: boolean; onToggle: () => void; crons: SheetCronsProps["crons"]; notify?: (err: unknown) => void }) {
   const { cron, runs } = row;
-  const live = cron.enabled && cron.nextAt !== undefined;
+  const live = isLiveCron(cron);
   const last = cron.runs.at(-1)?.at ?? cron.createdAt;
   return (
     <div className="sheet-row sheet-cron-row flex" data-cron-row>

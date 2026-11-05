@@ -5,6 +5,7 @@ import path from "node:path";
 import { latestStored, readFiles, storeSkill, type StoredSkill } from "./skill-cache";
 import { downloadSkill, localNames, REGISTRY } from "./skill-registry";
 import { remoteTarget, reviewState } from "./skill-review";
+import { isDangerous } from "./skill-verdict";
 import type { RemoteSkillPreview, SkillScan } from "./types";
 
 // A skill from skills.sh, from preview to install. Both go through Weft's own copy (lib/skill-cache.ts):
@@ -61,8 +62,7 @@ export async function installSkill(id: string, { force = false }: { force?: bool
   const { scan } = stored;
   const target = remoteTarget(id, hash);
   const review = target ? reviewState(target) : undefined;
-  const unsafe = scan.verdict === "danger" || (review?.status === "done" && review.review.verdict === "unsafe");
-  if (unsafe && !force) throw new SkillInstallError("Weft's scan found something dangerous in this skill.", 409, scan);
+  if (isDangerous(scan, review) && !force) throw new SkillInstallError("Weft's scan found something dangerous in this skill.", 409, scan);
   const root = userSkillsDir();
   const dir = path.join(root, name);
   if (fs.existsSync(dir)) throw new SkillInstallError(`You already have a skill named ${name}.`, 409, scan);

@@ -3,21 +3,26 @@
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api-client";
 import { folderName } from "@/lib/format";
+import { hostFor } from "@/lib/project-host";
+import type { BacklogSummary } from "@/lib/project-reads";
+import { workerSprintPrompt } from "@/lib/sprint-worker";
+import type { Card } from "@/lib/types";
 import Icon from "./Icon";
 import Tip from "./Tip";
-
-type BacklogSummary = { root: string; count: number; active: number };
 
 // "☰ 7" beside the uncommitted counter: the Backlog cards waiting in the project in view's repo.
 // Click to start a card that plans them into sprints and starts each sprint on your OK (lib/sprint-plan.ts).
 // `refresh` changes when cards move or turns end, so the count follows the board.
 export default function BacklogBadge({
   cwd,
+  cards = [],
   refresh,
   onStart,
   onError,
 }: {
   cwd?: string | null;
+  // The board's cards: a worker project's plan is written from these, as this Mac's is from its store.
+  cards?: Card[];
   refresh?: unknown;
   onStart: (cwd: string, prompt: string, title: string) => Promise<string | undefined>;
   onError: (err: unknown) => void;
@@ -28,10 +33,10 @@ export default function BacklogBadge({
   useEffect(() => {
     if (!cwd) return;
     let live = true;
-    apiFetch(`/api/sprint?cwd=${encodeURIComponent(cwd)}`)
-      .then((r) => r.json() as Promise<{ backlog: BacklogSummary | null }>)
-      .then((d) => {
-        if (live) setLoaded({ cwd, backlog: d.backlog });
+    hostFor(cwd)
+      .read("backlog", cwd)
+      .then((backlog) => {
+        if (live) setLoaded({ cwd, backlog });
       })
       .catch(() => {});
     return () => {
@@ -44,6 +49,15 @@ export default function BacklogBadge({
 
   async function start() {
     if (busy || !cwd) return;
+    // This Mac writes the plan from its store and points it at its server. A host that can't take that but publishes
+    // its reads (a worker) gets one from its snapshot and the board's cards, for a card there (lib/sprint-worker.ts).
+    const host = hostFor(cwd);
+    if (!host.can("projectActs")) {
+      if (!host.can("reads") || !b.count) throw new Error("Nothing in Backlog to plan.");
+      const w = workerSprintPrompt(b, cards, cwd, Date.now());
+      await onStart(cwd, w.prompt, w.title);
+      return;
+    }
     setBusy(true);
     try {
       const r = await apiFetch(`/api/sprint?cwd=${encodeURIComponent(cwd)}&prompt=1`);

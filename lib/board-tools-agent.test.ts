@@ -9,6 +9,11 @@ vi.mock("./store", async (importOriginal) => ({
 vi.mock("./folders", () => ({ resolveFolder: vi.fn((folder: string) => folder) }));
 vi.mock("./settings", async (importOriginal) => ({ ...(await importOriginal<typeof import("./settings")>()), touchProject: vi.fn() }));
 
+vi.mock("./agent-store", async () => {
+  const { BUILT_IN_AGENTS } = await import("./agents");
+  return { listAgents: () => BUILT_IN_AGENTS, projectAgent: (cwd: string) => (cwd === "/docs" ? "copywriter" : undefined) };
+});
+
 const { createBoardCard } = await import("./board-tools");
 
 describe("createBoardCard with an agent", () => {
@@ -16,5 +21,10 @@ describe("createBoardCard with an agent", () => {
     expect(createBoardCard({ prompt: "x", folder: "/w", permissionMode: "auto", agent: "copywriter" }).agent).toBe("copywriter");
     expect(createBoardCard({ prompt: "x", folder: "/w", permissionMode: "auto", agent: "builder" })).not.toHaveProperty("agent");
     expect(createBoardCard({ prompt: "x", folder: "/w", permissionMode: "auto" })).not.toHaveProperty("agent");
+  });
+
+  it("starts as the project's default when it names none", () => {
+    expect(createBoardCard({ prompt: "x", folder: "/docs", permissionMode: "auto" }).agent).toBe("copywriter");
+    expect(createBoardCard({ prompt: "x", folder: "/docs", permissionMode: "auto", agent: "builder" })).not.toHaveProperty("agent");
   });
 });

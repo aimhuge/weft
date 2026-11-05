@@ -4,6 +4,23 @@ The deployed Weft at weft.zip sends analytics to two places: Google Analytics 4 
 (every Mac runs the same Next app on localhost, in `next dev`) never calls home, even with the PostHog keys
 in its env: a builder's board, prompts and replies stay on their Mac.
 
+## Consent
+
+Nothing that sets an analytics cookie or records a session loads until the visitor says yes. `components/ConsentBanner.tsx`
+(mounted by `app/layout.tsx` when `isDeployed()`, hidden on local hosts) asks once, in a small bar in the bottom-left
+corner, and `lib/consent.ts` keeps the answer in `localStorage` (`weft-analytics-consent`: `granted` or `denied`) and
+announces it with a `weft:consent` window event. One rule for every visitor, not an EU/UK geo check.
+
+- **PostHog:** `startAnalytics()` calls `posthog.init` through `whenConsented()`: at once for a returning yes, else on the
+  banner's event. A later no calls `opt_out_capturing()`.
+- **GA4:** the server-rendered snippet sets up the `gtag` queue, and only appends gtag.js on a yes.
+- **Changing your mind:** the privacy policy's Cookies section (`app/privacy/page.tsx#cookies`, `components/ConsentChoice.tsx`);
+  yes → no reloads the page, since gtag.js can't be unloaded.
+- `ThemeSync`'s identify runs on mount, so a visitor who accepts mid-visit is identified from their next page load.
+
+Server-side events (`$ai_generation`, the onboarding stats' forwarder, OTLP logs) don't use browser cookies and aren't
+behind the banner; the privacy policy covers them.
+
 ## The gate
 
 - **Browser:** `lib/analytics-gate.ts` `isLocalHost()` refuses localhost, 127.0.0.1, ::1, `*.localhost` and
@@ -18,8 +35,8 @@ in its env: a builder's board, prompts and replies stay on their Mac.
 
 ## Google Analytics 4
 
-`components/GoogleAnalytics.tsx` is a server component that emits gtag.js for `G-L9YCWJ4LZ2` on every weft.zip
-page (home, `/faq`, `/@user`, `/s/…`, `/a/…`, the web board). GA4's enhanced measurement sends `page_view` on load and
+`components/GoogleAnalytics.tsx` is a server component that emits the gtag snippet for `G-L9YCWJ4LZ2` (gtag.js itself
+after consent) on every weft.zip page (home, `/faq`, `/@user`, `/s/…`, `/a/…`, the web board). GA4's enhanced measurement sends `page_view` on load and
 on client-side navigations. Named events come in through `window.gtag` from `track()`.
 
 ## PostHog
@@ -66,6 +83,9 @@ The one exception to "a local Weft never calls home": the welcome's steps, as an
 - **Path:** the board's `trackOnboarding()` (`lib/telemetry-client.ts`) → local `POST /api/telemetry` → the Mac forwards to
   `https://weft.zip/api/telemetry/collect` (`forwardOnboarding()`, dropped when off or offline, never queued) → the deployed
   Weft captures it with posthog-node (`captureOnboarding()`, `lib/telemetry-send.ts`). The Mac never holds a PostHog key.
+- **Abuse cap:** the collector has no login, so `lib/telemetry-limit.ts` answers first: 60 posts a minute per address
+  (hashed, in-process windows from `lib/fixed-window.ts`, 429 with `retry-after`), and 403 for a post with an `Origin`
+  other than weft.zip's. The Mac posts from Node, which sends no `Origin`, so only a cross-site browser post carries one.
 - **Where they fire:** `lib/use-onboarding-stats.ts` (started, steps), `lib/use-welcome-tour.ts` (beats, mute, the tour bar's moves),
   `components/WelcomeLoop.tsx` (sign-in), `components/WelcomeIntro.tsx` (CLI log in), `components/WelcomeDialog.tsx`
   (projects answered, first thread, skip).
@@ -76,6 +96,7 @@ The rest of the desktop funnel (first card, first Done) still isn't tracked.
 
 - `lib/analytics-gate.ts`: `posthogConfig()`, `isLocalHost()`.
 - `lib/analytics-server.ts`: `serverPosthogConfig()`.
+- `lib/consent.ts`: `readConsent()`, `writeConsent()`, `whenConsented()`; `components/ConsentBanner.tsx`, `components/ConsentChoice.tsx`.
 - `lib/analytics.ts`: `startAnalytics()`, `analyticsOn()`, `track()`, `trackClick()`.
 - `instrumentation-client.ts`, `instrumentation.ts`, `lib/ai-observability.ts`.
 - `components/GoogleAnalytics.tsx`, `app/layout.tsx`, `components/home/Home.tsx` (the download button's `data-track`).

@@ -135,8 +135,27 @@ describe("Roster", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove Grace" }));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Grace"));
     await waitFor(() => expect(actions.remove).toHaveBeenCalledTimes(1));
-    expect(actions.remove).toHaveBeenCalledWith("u2");
+    // The rotate box is on by default, so the removal asks for the vault keys to be turned.
+    expect(actions.remove).toHaveBeenCalledWith("u2", true);
     expect(await screen.findByText("Removed.")).toBeInTheDocument();
+  });
+
+  it("asks to turn the shared vaults' keys when the rotate box is ticked", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<Roster members={[grace]} canManage roleOptions={options} currentUserId="u1" actions={actions} />);
+    expect(screen.getByRole("checkbox", { name: /Rotate shared vaults/i })).toBeChecked();
+    await userEvent.click(screen.getByRole("button", { name: "Remove Grace" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("turn the shared vaults"));
+  });
+
+  it("doesn't ask to turn the keys when the rotate box is unticked", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<Roster members={[grace]} canManage roleOptions={options} currentUserId="u1" actions={actions} />);
+    await userEvent.click(screen.getByRole("checkbox", { name: /Rotate shared vaults/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Remove Grace" }));
+    expect(confirm).toHaveBeenCalledWith(expect.not.stringContaining("turn the shared vaults"));
+    await waitFor(() => expect(actions.remove).toHaveBeenCalledTimes(1));
+    expect(actions.remove).toHaveBeenCalledWith("u2", false);
   });
 
   it("Remove button does not call actions.remove when the visitor cancels the confirm", async () => {

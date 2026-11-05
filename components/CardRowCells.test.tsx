@@ -5,7 +5,7 @@
 import { fireEvent, render } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { Card } from "@/lib/types";
-import { ActionsCell, AgeCell, Chevron, StageCell, TONE, TagsCell, TitleCell, type RowNest } from "./CardRowCells";
+import { ActionsCell, AgeCell, Chevron, StageCell, TagsCell, TitleCell, type RowNest } from "./CardRowCells";
 import { makeCard } from "./test-utils";
 import "./test-utils";
 
@@ -241,15 +241,6 @@ describe("ActionsCell", () => {
   it("has no archive button on a card you can't archive", () => {
     const view = render(<ActionsCell card={makeCard({ column: "review" })} onArchive={vi.fn()} />);
     expect(view.queryByRole("button", { name: "Archive" })).toBeNull();
-  });
-});
-
-describe("TONE", () => {
-  it("gives every column a text tone and a bar tone", () => {
-    for (const [column, tone] of Object.entries(TONE)) {
-      expect(tone.text, column).toMatch(/^text-/);
-      expect(tone.bar, column).toMatch(/^bg-/);
-    }
   });
 });
 

@@ -1,4 +1,5 @@
 import { accountClient } from "./account";
+import { syncBlastcpPlan } from "./blastcp-plan";
 import { shell } from "./browser-tools";
 import type { WeftConnect } from "./blastcp-view";
 
@@ -35,8 +36,11 @@ const g = globalThis as { __weftBlastcpAuto?: { stop: () => void } };
 // Once per server process (from prewarm): on sign-in, then on a timer. Failures log a line and wait for the next try.
 export function startBlastcpAuto(): () => void {
   if (g.__weftBlastcpAuto) return g.__weftBlastcpAuto.stop;
-  const run = () =>
+  // The plan nudge (lib/blastcp-plan.ts) rides the same beat: the exchange only syncs the plan when it runs.
+  const run = () => {
     void connectBlastcpWithWeft().catch((err: unknown) => console.warn(`BlastCP via Weft: ${(err as Error).message}`));
+    void syncBlastcpPlan();
+  };
   let unsubscribe = () => {};
   try {
     // supabase-js warns against awaiting its calls inside this callback, so the swap runs after it.

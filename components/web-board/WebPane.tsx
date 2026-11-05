@@ -4,25 +4,34 @@
 // the same toolbar (back, forward, reload, the URL, close) over the page the card's pane last showed, as the thread
 // tells it (lib/share-types.ts paneFor). A synced ~/.weft/show page is framed sandboxed through
 // app/api/web-board/[orgId]/page/[sha]; a public site is framed as it is; a localhost or file page only exists on the
-// Mac, so the card's latest pane capture stands in for it.
+// Mac, so the card's latest pane capture stands in for it. The desktop board draws this too, for a worker's card
+// (components/WorkerPane.tsx), with orgId null, where its native pane doesn't take the page: the live screen, a page
+// only the worker has, and off the desktop app. It frames through its own server, more tightly, because a frame there
+// shares the board window's session (app/api/worker-board/page/[sha]), and that's why it never frames a public site.
+import { useState, type ReactNode } from "react";
 import type { SharePane } from "@/lib/share-types";
+import type { BoardInput } from "@/lib/worker-commands";
 import Icon from "../Icon";
+import { HostChip, type LocalSimulator } from "./HostChip";
+import { useSealedPage } from "./useSealedPage";
+import { WorkerScreen } from "./WorkerScreen";
 
 const NAV = "rounded-md p-1.5 text-muted disabled:opacity-30";
 const SANDBOX = "allow-scripts allow-popups allow-forms";
+const BOARD_SANDBOX = "allow-scripts";
 
-// What the toolbar's address field reads for each kind of page. A saved page shows its label and a
-// public site its host: the address bar is for a visitor, not a file path.
-function address(pane: SharePane | null): string {
+// Where a saved page is framed from: weft.zip's route, or this Mac's own server on the desktop board.
+function pageSrc(orgId: string | null, pane: { ref: string; hash: string }): string {
+  const sha = pane.ref.replace(/^blob:sha256:/, "");
+  return orgId ? `/api/web-board/${orgId}/page/${sha}${pane.hash}` : `/api/worker-board/page/${sha}${pane.hash}`;
+}
+
+// What the toolbar's address field reads: the real url, like any address bar. A saved page shows the proxied url
+// it's framed from, a site its own url, and a page that never left its machine its label.
+function address(orgId: string | null, pane: SharePane | null): string {
   if (!pane) return "";
-  if (pane.kind === "blob") return pane.label;
-  if (pane.kind === "site") {
-    try {
-      return new URL(pane.url).host || pane.url;
-    } catch {
-      return pane.url;
-    }
-  }
+  if (pane.kind === "blob") return typeof window === "undefined" ? pageSrc(orgId, pane) : new URL(pageSrc(orgId, pane), window.location.origin).href;
+  if (pane.kind === "site") return pane.url;
   return pane.label;
 }
 
@@ -36,19 +45,64 @@ function Snapshot({ src, note }: { src?: string; note: string }) {
   );
 }
 
-function PaneBody({ orgId, pane, thumbUrl }: { orgId: string; pane: SharePane | null; thumbUrl?: string }) {
+type ScreenInputFn = (input: BoardInput) => Promise<void>;
+
+// A React Native or Expo card on a worker, with nothing in the pane yet: start its simulator from here, not from the
+// thread (over another page, the host chip's menu offers the same). The live screen replaces the pane once the worker
+// streams, so "starting" only ends early on a failure.
+function StartSimulator({ onScreenInput }: { onScreenInput: ScreenInputFn }) {
+  const [starting, setStarting] = useState(false);
+  const [failed, setFailed] = useState("");
+  const start = () => {
+    setStarting(true);
+    setFailed("");
+    onScreenInput({ kind: "watch" }).catch((err: unknown) => {
+      setStarting(false);
+      setFailed((err as Error).message);
+    });
+  };
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-2">
+      <button type="button" disabled={starting} onClick={start} className="rounded-lg bg-accent px-3 py-1.5 text-[13px] font-medium text-white disabled:opacity-50">
+        {starting ? "Starting simulator…" : "📱 Start simulator"}
+      </button>
+      <p className="max-w-xs text-center text-[12px] text-faint">{failed || "Boots a simulator on the worker and streams it here, so you can tap through the app."}</p>
+    </div>
+  );
+}
+
+// A page sealed with the workspace key, opened in this browser (useSealedPage), under the route's own sandbox.
+function SealedFrame({ page }: { page: Exclude<ReturnType<typeof useSealedPage>, null> }) {
+  if (page === "checking") return <div className="size-full bg-white" />;
+  if (page.kind === "locked") return <Snapshot note="🔒 Sealed — pair this browser to read it." />;
+  if (page.kind === "html") return <iframe title="Card page" srcDoc={page.html} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
+  return <iframe title="Card page" src={page.url} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
+}
+
+function PaneBody({ orgId, pane, thumbUrl, onScreenInput, source, workerId }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onScreenInput?: ScreenInputFn; source?: string; workerId?: string }) {
+  const sealed = useSealedPage(orgId, pane);
+  if (pane?.kind === "screen") return <WorkerScreen pane={pane} onInput={onScreenInput} source={source} workerId={workerId} />;
+  if (sealed) return <SealedFrame page={sealed} />;
   if (pane?.kind === "blob") {
-    const src = `/api/web-board/${orgId}/page/${pane.ref.replace(/^blob:sha256:/, "")}${pane.hash}`;
-    return <iframe title="Card page" src={src} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
+    return <iframe title="Card page" src={pageSrc(orgId, pane)} sandbox={orgId ? SANDBOX : BOARD_SANDBOX} className="size-full border-0 bg-white" />;
   }
+  if (pane?.kind === "site" && !orgId) return <Snapshot note="This card opened a public site. Open ↗ shows it." />;
   if (pane?.kind === "site") return <iframe title="Card page" src={pane.url} sandbox={SANDBOX} className="size-full border-0 bg-white" />;
-  if (pane?.kind === "local") return <Snapshot src={thumbUrl} note="This page runs on the Mac; here's its last capture." />;
+  if (pane?.kind === "local") return <Snapshot src={thumbUrl} note="This page only exists on the machine running this card." />;
   return <Snapshot src={thumbUrl} note="No page open in this card's browser pane." />;
 }
 
 // onClose: the toolbar's X, left out where the thread beside it carries the close (WebThreadPanel, so a phone, where
 // the pane is hidden, still has one).
-export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string; pane: SharePane | null; thumbUrl?: string; onClose?: () => void }) {
+// onScreenInput: taps on a worker's live screen, where this board can send them (the desktop's).
+// actions: extra toolbar controls (the desktop's card marks, Save as app).
+// source: the worker's name, for the host chip and the live screen's "streaming from". mobileApp: the card is a React
+// Native or Expo app, so the host chip offers Start simulator while the pane shows something else. local: Local
+// Simulator mode, on the desktop board only (components/use-local-simulator.ts); the host chip's menu carries it.
+// workerId: the worker whose session line this board holds (the desktop's, or weft.zip's own: lib/web-lines.ts), which
+// can carry the live screen as a track (lib/use-line-screen.ts).
+export function WebPane({ orgId, pane, thumbUrl, onClose, onScreenInput, actions, source, mobileApp, workerId, local }: { orgId: string | null; pane: SharePane | null; thumbUrl?: string; onClose?: () => void; onScreenInput?: ScreenInputFn; actions?: ReactNode; source?: string; mobileApp?: boolean; workerId?: string; local?: LocalSimulator }) {
+  const screen = pane?.kind === "screen" ? { device: pane.device, devices: pane.devices, label: pane.label } : undefined;
   return (
     <section aria-label="Browser pane" className="relative hidden min-w-0 flex-1 flex-col border-l border-line bg-panel md:flex">
       <div className="flex items-center gap-1 border-b border-line px-2 py-1.5">
@@ -63,7 +117,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string; pan
         </button>
         <input
           readOnly
-          value={address(pane)}
+          value={address(orgId, pane)}
           placeholder="No page open"
           aria-label="Page address"
           className="mx-1 min-w-0 flex-1 rounded-md border border-line bg-canvas px-2.5 py-1 font-mono text-[12px] text-ink outline-none placeholder:font-sans placeholder:text-faint"
@@ -73,6 +127,8 @@ export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string; pan
             Open ↗
           </a>
         )}
+        <HostChip worker={source} screen={screen} onScreenInput={onScreenInput} mobileApp={mobileApp} local={local} />
+        {actions}
         {onClose && (
           <button onClick={onClose} aria-label="Close thread" title="Close (Esc)" className="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink">
             <Icon name="x" size={15} />
@@ -80,7 +136,7 @@ export function WebPane({ orgId, pane, thumbUrl, onClose }: { orgId: string; pan
         )}
       </div>
       <div className="relative min-h-0 flex-1 bg-canvas">
-        <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} />
+        {!pane && mobileApp && onScreenInput ? <StartSimulator onScreenInput={onScreenInput} /> : <PaneBody orgId={orgId} pane={pane} thumbUrl={thumbUrl} onScreenInput={onScreenInput} source={source} workerId={workerId} />}
       </div>
     </section>
   );

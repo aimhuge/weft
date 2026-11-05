@@ -25,7 +25,28 @@ function attempt(run: () => string): Promise<Reply> {
 export const lineFor = (e: ChangelogEntry) =>
   `${e.id} | ${e.kind} | ${statusOf(e)}${e.sha ? ` ${e.sha.slice(0, 7)}` : ""}${e.version ? ` ${e.version}` : ""} | ${e.cardTitle ?? "—"} | ${e.text}`;
 
-const FILES = "Repo-relative paths of the files this change is in (e.g. lib/app-preview.ts); only a commit touching one of them stamps the entry, so another card's commit in the shared tree doesn't";
+// A page of the list. A project's unreleased changelog runs to hundreds of entries (158, ~80k chars, on 2026-11-04), past
+// what a tool answer may hold: the CLI saved it to a file the thread couldn't open. So a page holds at most PAGE entries,
+// each clipped to CLIP chars (changelog_edit's answer shows one in full), and says how to get the next.
+export const PAGE = 40;
+const MAX_PAGE = 100;
+const CLIP = 300;
+
+const clipped = (line: string) => (line.length > CLIP ? `${line.slice(0, CLIP - 1)}…` : line);
+
+export function pageOf(entries: ChangelogEntry[], offset = 0, limit = PAGE): string {
+  if (!entries.length) return "No entries yet.";
+  const from = Math.max(0, Math.floor(offset));
+  const size = Math.min(MAX_PAGE, Math.max(1, Math.floor(limit)));
+  const page = entries.slice(from, from + size);
+  const lines = page.map((e) => clipped(lineFor(e)));
+  const shown = from + page.length;
+  if (from === 0 && shown === entries.length) return lines.join("\n");
+  const more = shown < entries.length ? `; pass offset: ${shown} for the next page, or mine: true for this card's own` : "";
+  return [...lines, `(${from + 1}–${shown} of ${entries.length}${more})`].join("\n");
+}
+
+const FILES ="Repo-relative paths of the files this change is in (e.g. lib/app-preview.ts); only a commit touching one of them stamps the entry, so another card's commit in the shared tree doesn't";
 
 // A sha a thread names, as the full sha of a commit in the entry's project; a wrong one is an error, not a stamp.
 function shaFor(id: string, sha: string): string {
@@ -65,15 +86,19 @@ export function changelogTools(getCardId: () => string | undefined, getCwd: () =
     ),
     tool(
       "changelog_list",
-      "List this project's changelog entries not yet released (or every entry with all=true): id | kind | draft/committed/released | card | text. Check it before adding, so you edit your own entry instead of adding a second.",
+      `List this project's changelog entries not yet released (or every entry with all=true): id | kind | draft/committed/released | card | text, ${PAGE} to a page, long texts clipped. Check it before adding, so you edit your own entry instead of adding a second: mine=true lists only this card's.`,
       {
         all: z.boolean().optional().describe("Include released entries"),
+        mine: z.boolean().optional().describe("Only this card's own entries"),
+        offset: z.number().int().min(0).optional().describe("Entries to skip, for the next page"),
+        limit: z.number().int().min(1).max(MAX_PAGE).optional().describe(`Entries per page (default ${PAGE})`),
         folder: z.string().optional().describe("Project folder; defaults to this thread's own folder"),
       },
-      ({ all, folder }) =>
+      ({ all, mine, offset, limit, folder }) =>
         attempt(() => {
-          const entries = entriesFor(project(folder)).filter((e) => all || !e.version);
-          return entries.length ? entries.map(lineFor).join("\n") : "No entries yet.";
+          const own = card()?.id;
+          const entries = entriesFor(project(folder)).filter((e) => (all || !e.version) && (!mine || (own !== undefined && e.cardId === own)));
+          return pageOf(entries, offset, limit);
         }),
     ),
     tool(

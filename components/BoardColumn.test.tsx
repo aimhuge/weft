@@ -23,7 +23,7 @@ const card = (over: Partial<Card> = {}): Card =>
 // renderCard just gives the card a data-card-id so the drop slot can find it.
 const renderStub = (c: Card) => <div data-card-id={c.id}>{c.title}</div>;
 
-function setup(cards: Card[], onReorder?: (id: string, target: string, before: boolean) => void) {
+function setup(cards: Card[], onReorder?: (id: string, target: string, before: boolean) => void, wide?: boolean) {
   return render(
     <BoardColumn
       column={{ id: "backlog", label: "Backlog" }}
@@ -48,9 +48,26 @@ function setup(cards: Card[], onReorder?: (id: string, target: string, before: b
       archiveTip=""
       onArchiveAll={() => {}}
       onAddBacklog={() => {}}
+      wide={wide}
     />,
   );
 }
+
+describe("BoardColumn width", () => {
+  it("lays a wide column's cards out in two columns, in order", () => {
+    const { container } = setup([card({ id: "a" }), card({ id: "b" }), card({ id: "c" })], vi.fn(), true);
+    const section = container.querySelector("section") as HTMLElement;
+    expect(section.className).toContain("w-[540px]");
+    const grid = section.querySelector(".grid-cols-2") as HTMLElement;
+    expect([...grid.querySelectorAll("[data-card-id]")].map((el) => el.getAttribute("data-card-id"))).toEqual(["a", "b", "c"]);
+  });
+
+  it("keeps a narrow column's cards in one", () => {
+    const { container } = setup([card({ id: "a" })]);
+    expect((container.querySelector("section") as HTMLElement).className).toContain("w-[264px]");
+    expect(container.querySelector(".grid-cols-2")).toBeNull();
+  });
+});
 
 describe("BoardColumn drop-onto-card (backlog)", () => {
   it("shows no drop slot when onReorder is not given", () => {

@@ -2,12 +2,13 @@ import type { HookCallback, HookCallbackMatcher } from "@anthropic-ai/claude-age
 import path from "node:path";
 import { bashWrites } from "./bash-writes";
 import { closeWindow, markKnown, markUnknown, openWindow, unknownWriters, writersAt } from "./bash-writers";
-import { ask, forget, realFile, remember } from "./claim-guard";
-import { addClaims, claimKey, clashQuestion, clashWhy, dropClaims, findClash, splitClaim } from "./claims";
+import { releaseOnWrite } from "./blocking";
+import { realFile } from "./claim-guard";
+import { claimPreAnswer, claimPreHook, claimPostCard, forget } from "./claim-hooks";
+import { addClaims, claimFiles, claimKey, dropClaims } from "./claims";
 import { dirtyFiles, repoRoot, writtenAt } from "./dirty-files";
 import { failureNote } from "./failure-owners";
 import { busyInFolder } from "./overlap";
-import { pruneYields } from "./yields";
 import { getCard, listCards, updateCard } from "./store";
 import type { Card } from "./types";
 import { workDir } from "./work-dir";
@@ -31,35 +32,27 @@ const commandOf = (input: unknown) => {
 };
 
 export function bashClaimGuard(cardId: () => string | undefined): HookCallback {
-  return (input, toolUseId) => {
-    if (input.hook_event_name !== "PreToolUse" || !toolUseId) return Promise.resolve({});
+  return async (input, toolUseId) => {
+    if (input.hook_event_name !== "PreToolUse" || !toolUseId) return {};
     const card = getCard(cardId() ?? "");
-    if (!card) return Promise.resolve({});
+    if (!card) return {};
     openWindow(toolUseId, card.id);
-    const keys = bashWrites(commandOf(input.tool_input), input.cwd).map((f) => claimKey(realFile(f)));
-    if (keys.length) pruneYields();
-    const clash = keys.length ? findClash(listCards(), card, keys) : undefined;
-    if (!clash) return Promise.resolve({});
-    const question = clashQuestion(clash);
-    remember(toolUseId, [], question, clashWhy(clash));
-    return Promise.resolve(ask(question));
+    const out = await claimPreHook(card.id, () => bashWrites(commandOf(input.tool_input), input.cwd).map((f) => claimKey(realFile(f))));
+    // A Bash call claims whole files, so there are no symbols for the prompt's preview.
+    return claimPreAnswer(out, toolUseId, []);
   };
 }
-
-// Codex and Goose run no Weft hooks, so a busy one in the tree could have written anything, unseen.
-const UNHOOKED = new Set(["codex", "goose"]);
 
 // This card's claim on each file it wrote (by mtime), skipping the ones another busy card holds. One written
 // while only this card's Bash ran, or that the command line names, is this card's; any other is unknown.
 export function claimWritten(card: Card, written: Map<string, number>, named: Set<string>) {
   const busy = busyInFolder(listCards(), workDir(card), card.id);
-  const held = new Set(busy.flatMap((c) => (c.claims ?? []).map((k) => splitClaim(k).file)));
-  const unseen = busy.some((c) => UNHOOKED.has(c.backend));
+  const held = new Set(busy.flatMap((c) => [...claimFiles(c)]));
   const mine: string[] = [];
   for (const [file, at] of written) {
     if (held.has(file)) continue;
     const writers = writersAt(at);
-    if (named.has(file) || (!unseen && writers.size === 1 && writers.has(card.id))) {
+    if (named.has(file) || (writers.size === 1 && writers.has(card.id))) {
       mine.push(file);
       markKnown(file);
     } else markUnknown(file);
@@ -72,7 +65,7 @@ export function claimWritten(card: Card, written: Map<string, number>, named: Se
 export function releaseClean(root: string, dirty: Set<string>) {
   for (const file of [...unknownWriters()]) if (file.startsWith(root + path.sep) && !dirty.has(file)) markKnown(file);
   for (const card of listCards()) {
-    const clean = new Set((card.claims ?? []).map((k) => splitClaim(k).file).filter((f) => f.startsWith(root + path.sep) && !dirty.has(f)));
+    const clean = new Set([...claimFiles(card)].filter((f) => f.startsWith(root + path.sep) && !dirty.has(f)));
     const kept = clean.size ? dropClaims(card.claims, clean) : undefined;
     if (kept) updateCard(card.id, { claims: kept });
   }
@@ -95,13 +88,16 @@ export function bashClaimRecorder(cardId: () => string | undefined): HookCallbac
     const background = (input.tool_input as { run_in_background?: unknown } | null)?.run_in_background === true;
     const since = toolUseId ? closeWindow(toolUseId, background) : undefined;
     if (toolUseId) forget(toolUseId);
-    const card = getCard(cardId() ?? "");
+    const card = claimPostCard(cardId() ?? "");
     const root = card && repoRoot(input.cwd);
     const dirty = root ? dirtyFiles(root) : undefined;
     if (!card || !root || !dirty) return Promise.resolve({});
     const command = commandOf(input.tool_input);
     if (since !== undefined) claimWritten(card, writtenAt(dirty, since), new Set(bashWrites(command, input.cwd).map(realFile)));
     releaseClean(root, new Set(dirty));
+    // The Bash line wrote files: the cards waiting on this one for those files can redo their edit on
+    // top of the change that just landed (lib/blocking.ts).
+    for (const file of claimFiles(card)) releaseOnWrite(card.id, file);
     const note = failureNote(command, outputOf(input), input.cwd, root, card, listCards(), unknownWriters());
     return Promise.resolve(note ? { hookSpecificOutput: { hookEventName: event, additionalContext: note } } : {});
   };

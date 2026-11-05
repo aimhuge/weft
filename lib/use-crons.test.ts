@@ -26,6 +26,7 @@ vi.mock("./use-events", () => ({
 }));
 
 const { useCrons } = await import("./use-crons");
+const { WORKER_LIST_SETTLE_MS } = await import("./worker-item-id");
 
 const cron = (over: Partial<Cron> = {}): Cron => ({
   id: "c1",
@@ -167,5 +168,48 @@ describe("useCrons", () => {
     cronApi.run.mockResolvedValue(card);
     await act(async () => expect(await result.current.run("c1")).toEqual(card));
     expect(cronApi.run).toHaveBeenCalledWith("c1");
+  });
+
+  it("reads the list again once a worker has republished it, after a cron made there", async () => {
+    cronApi.list.mockResolvedValue([]);
+    const { result } = renderHook(() => useCrons());
+    vi.useFakeTimers();
+    try {
+      act(() => result.current.later());
+      expect(cronApi.list).not.toHaveBeenCalled();
+      await act(async () => vi.advanceTimersByTimeAsync(WORKER_LIST_SETTLE_MS));
+      expect(cronApi.list).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("reads a worker's crons again once it has republished, after a change, a delete or a run", async () => {
+    const w = cron({ id: "worker:w1:k1", worker: "mini" });
+    cronApi.list.mockResolvedValue([w]);
+    const { result } = renderHook(() => useCrons());
+    act(() => stream.onOpen());
+    await waitFor(() => expect(result.current.crons).toHaveLength(1));
+    vi.useFakeTimers();
+    try {
+      cronApi.update.mockResolvedValue(undefined);
+      cronApi.remove.mockResolvedValue(undefined);
+      cronApi.run.mockResolvedValue(undefined);
+      await act(async () => result.current.update(w.id, { enabled: false }));
+      expect(result.current.crons[0]?.enabled).toBe(false);
+      await act(async () => {
+        await result.current.run(w.id);
+        await result.current.remove(w.id);
+      });
+      expect(cronApi.list).toHaveBeenCalledTimes(1);
+      await act(async () => vi.advanceTimersByTimeAsync(WORKER_LIST_SETTLE_MS));
+      expect(cronApi.list).toHaveBeenCalledTimes(4);
+      // This Mac's own needs no second read: its "crons" event says so.
+      await act(async () => result.current.remove("c1"));
+      await act(async () => vi.advanceTimersByTimeAsync(WORKER_LIST_SETTLE_MS));
+      expect(cronApi.list).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

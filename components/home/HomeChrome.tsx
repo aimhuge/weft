@@ -27,7 +27,7 @@ export function HomeFooter() {
         ☕
       </a>{" "}
       by <a href={AIMHUGE}>aimhuge.com</a> · Weft™ is free, with its source on <a href={REPO}>GitHub</a> · <Link href="/faq">FAQ</Link> ·{" "}
-      <Link href="/terms">Terms</Link>
+      <Link href="/terms">Terms</Link> · <Link href="/privacy">Privacy</Link>
     </footer>
   );
 }

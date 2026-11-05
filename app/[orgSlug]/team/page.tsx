@@ -29,6 +29,7 @@ import { WebTeam } from "@/components/team/WebTeam";
 import { isWebEnabled } from "@/lib/home";
 import { teamSnapshot } from "@/lib/team-ops";
 import { requireTeam } from "@/lib/teams";
+import { TeamTabs } from "./devices/TeamTabs";
 
 export const metadata: Metadata = {
   title: "Team",
@@ -50,7 +51,14 @@ async function TeamPageBody({ orgSlug }: { orgSlug: string }) {
   const ctx = await requireTeam(orgSlug, `/${orgSlug}/team`);
   // The same snapshot the JSON API returns (members, pending invites for managers, projects, the viewer's role in
   // each workspace), read through the service client because the tables' RLS is locked to the service role.
-  return <WebTeam orgSlug={orgSlug} snapshot={await teamSnapshot(ctx)} />;
+  // The tab strip above the roster: People (this page) and Devices (the machines this workspace can
+  // share vaults with). The Devices tab leads to its own page, which is a server component like this one.
+  return (
+    <div className="wz-teamPage">
+      <TeamTabs orgSlug={orgSlug} />
+      <WebTeam orgSlug={orgSlug} snapshot={await teamSnapshot(ctx)} />
+    </div>
+  );
 }
 
 function TeamPageFallback() {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CARD_SHARE_MODES, isCardShareMode, newShareId, paneFor, paneFromUrl, seedShareState, SHARE_ID_RE, shareUrl } from "./share-types";
+import { cardShareLink, threadPublicUrl } from "./share-types";
+import { CARD_SHARE_MODES, isCardShareMode, newShareId, paneFor, paneFromUrl, screenPage, screenTopic, seedShareState, SHARE_ID_RE, shareUrl } from "./share-types";
 import type { ThreadItem } from "./types";
 
 const SHA = "a".repeat(64);
@@ -30,6 +31,7 @@ describe("paneFromUrl", () => {
   it("reads an uploaded page with its anchor", () => {
     expect(paneFromUrl(`blob:sha256:${SHA}#step-2`)).toEqual({ kind: "blob", ref: `blob:sha256:${SHA}`, hash: "#step-2", label: "Page" });
     expect(paneFromUrl(` blob:sha256:${SHA} `)).toMatchObject({ kind: "blob", hash: "" });
+    expect(paneFromUrl(`blob:sha256:${SHA}?tab=2#done`)).toMatchObject({ kind: "blob", hash: "?tab=2#done" });
   });
 
   it("refuses a malformed blob ref", () => {
@@ -77,11 +79,60 @@ describe("paneFor", () => {
   });
 });
 
+describe("thread addresses", () => {
+  it("copies the slug address once there's a slug and a username, else /s/<id>", () => {
+    expect(threadPublicUrl("fo", "login")).toBe("https://weft.zip/@fo/threads/login");
+    expect(cardShareLink("abc", "login", "fo")).toBe("https://weft.zip/@fo/threads/login");
+    expect(cardShareLink("abc", null, "fo")).toBe("https://weft.zip/s/abc");
+    expect(cardShareLink("abc", "login", null)).toBe("https://weft.zip/s/abc");
+  });
+});
+
 describe("seedShareState", () => {
   it("draws the remembered share, a private one without it, or the sign-in", () => {
-    expect(seedShareState({ share: { id: "abc", mode: "email", hasPassword: false } }, false)).toEqual({ kind: "ok", id: "abc", url: "https://weft.zip/s/abc", mode: "email", hasPassword: false });
+    expect(seedShareState({ share: { id: "abc", mode: "email", hasPassword: false } }, false)).toEqual({ kind: "ok", id: "abc", url: "https://weft.zip/s/abc", mode: "email", hasPassword: false, slug: null, showChat: true });
     expect(seedShareState({ share: { id: null, mode: "private", hasPassword: false } }, false)).toMatchObject({ url: null });
-    expect(seedShareState({}, false)).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false });
+    expect(seedShareState({}, false)).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true });
+    const memo = { id: "abc", mode: "public" as const, hasPassword: false, url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false };
+    expect(seedShareState({ share: memo }, false)).toMatchObject({ url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false });
     expect(seedShareState({ share: { id: "abc", mode: "public", hasPassword: false } }, true)).toEqual({ kind: "signed-out" });
+  });
+});
+
+describe("a worker's live screen", () => {
+  const token = "0123456789abcdef0123456789abcdef";
+
+  it("round-trips through card.page", () => {
+    const url = screenPage(token, { id: "udid-1", name: "iPhone 17 & co" }, 500);
+    expect(paneFromUrl(url)).toMatchObject({ kind: "screen", token, device: "udid-1", label: "iPhone 17 & co", until: 500 });
+    expect(screenTopic(token)).toBe(`worker-screen:${token}`);
+  });
+
+  it("refuses a malformed one", () => {
+    expect(paneFromUrl("weft-screen:short?device=d&until=1")).toBeNull();
+    expect(paneFromUrl(`weft-screen:${token}?until=1`)).toBeNull();
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=soon`)).toBeNull();
+  });
+
+  it("carries the worker's devices for the pane's menu, and drops a garbled list", () => {
+    const url = screenPage(token, { id: "a", name: "A" }, 1, false, [{ id: "a", name: "A" }, { id: "b", name: "B" }]);
+    expect(paneFromUrl(url)).toMatchObject({ devices: [{ id: "a", name: "A" }, { id: "b", name: "B" }] });
+    expect(paneFromUrl(screenPage(token, { id: "a", name: "A" }, 1))).toMatchObject({ devices: [] });
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1&devices=%7B`)).toMatchObject({ devices: [] });
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1&devices=%7B%7D`)).toMatchObject({ devices: [] });
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1&devices=${encodeURIComponent('[["a","A"],[1,2]]')}`)).toMatchObject({ devices: [{ id: "a", name: "A" }] });
+  });
+
+  it("names the device when the name is missing", () => {
+    expect(paneFromUrl(`weft-screen:${token}?device=d&until=1`)).toMatchObject({ label: "d" });
+  });
+});
+
+describe("a watch's fast flag in card.page", () => {
+  const pane = (fast?: boolean) => paneFromUrl(screenPage("a".repeat(32), { id: "d", name: "n" }, 1, fast));
+
+  it("says when the watch takes a WebRTC offer", () => {
+    expect(pane(true)).toMatchObject({ fast: true });
+    expect(pane()).toMatchObject({ fast: false });
   });
 });

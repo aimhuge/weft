@@ -1,13 +1,18 @@
 import { createHash } from "node:crypto";
 import { AGENT_SOULS, agentOf, WEFT_SOUL_PROMPT } from "./agents";
+import { listAgents, savedAgentsHash } from "./agent-store";
 import { COPILOT_PROMPT } from "./board-tools";
 import { PERSONA_PROMPTS, personaOf } from "./copilot-personas";
-import { BROWSER_PROMPT } from "./browser-tools";
+import { BLASTCP_PROMPT } from "./blastcp-tools";
+import { BROWSER_PROMPT, WORKER_BROWSER_PROMPT } from "./browser-tools";
+import { onWorker } from "./worker-pane";
+import { groupWorks, workerToolsPrompt } from "./worker-tools";
 import { ASK_BUTTONS_PROMPT, decisionsPrompt, MIGRATIONS_PROMPT } from "./decisions-prompt";
 import { DEVSERVERS_PROMPT } from "./devserver-tools";
 import { GOG_PROMPT } from "./gog";
 import { RESTART_PROMPT } from "./env";
 import { REVIEW_PROMPT } from "./review";
+import { ENV_PROMPT } from "./env-block";
 import { SECRETS_PROMPT } from "./secret-tools";
 import { SIMULATOR_PROMPT } from "./simulator-tools";
 import { DEFAULT_THREAD_PROMPT, threadPrompt } from "./settings";
@@ -29,6 +34,7 @@ export const WEFT_PINNED_PROMPTS = {
   COPILOT_PROMPT,
   COPILOT_PERSONA_PROMPTS: PERSONA_PROMPTS,
   SECRETS_PROMPT,
+  BLASTCP_PROMPT,
   WEBHOOKS_PROMPT,
   DEVSERVERS_PROMPT,
   GOG_PROMPT,
@@ -38,6 +44,7 @@ export const WEFT_PINNED_PROMPTS = {
   RESTART_PROMPT,
   DEFAULT_THREAD_PROMPT,
   REVIEW_PROMPT,
+  ENV_PROMPT,
   SUBAGENT_PROMPT: DELEGATE,
   SUBAGENT_CHOOSE_PROMPT: CHOOSE,
 } as const;
@@ -51,28 +58,37 @@ export function pinnedPromptsHash() {
   return PINNED;
 }
 
-// The pinned prompts plus the settings the prompt is built from (thread instructions, subagent model).
+// The pinned prompts plus the settings the prompt is built from (thread instructions, subagent model, the agents you
+// saved in Settings → Agents).
 // The subagent model is the resolved one, so a model that hits its limit invalidates the cached
 // prompt and the thread's next turn names the backup model instead.
 export function promptsBuild() {
-  return `${PINNED}:${sha(`${threadPrompt()}\n${subagentModelFor()}`)}`;
+  return `${PINNED}:${sha(`${threadPrompt()}\n${subagentModelFor()}\n${savedAgentsHash()}`)}`;
 }
 
 export type PromptSpec = { backend: Backend; copilot?: boolean; persona?: string; agent?: string; project?: string };
 
 // An isolated card's thread (docs/architecture/worktrees.md): cwd is its own worktree, and Weft lands the branch on Done.
-export const ISOLATED_PROMPT = `This card is isolated: your working directory is a git worktree of its own (under ~/.weft/worktrees), on its own weft/* branch, made from the project's HEAD. Other cards' half-done edits aren't here, and yours aren't in their folder. Work, test, typecheck and run the dev server here, never in the project folder itself. Commit on this branch as you go (by path or git add -A both fine here; reset and restore only touch your own work). Don't push and don't merge (in /weft:done, commit with commit.sh, then skip push.sh and deploy.mjs: pushing would publish your weft/* branch): when the card moves to Done, Weft commits what's left, rebases your branch on the project's branch and fast-forwards the project to it. If that rebase conflicts, Weft tells you which files; resolve them here and the next Done lands it.`;
+export const ISOLATED_PROMPT = `This card is isolated: your working directory is a git worktree of its own (under ~/.weft/worktrees), on its own branch (weft/* unless the user picked one), made from the project's HEAD or that branch. Other cards' half-done edits aren't here, and yours aren't in their folder. Work, test, typecheck and run the dev server here, never in the project folder itself. Commit on this branch as you go (by path or git add -A both fine here; reset and restore only touch your own work). Don't push and don't merge (in /weft:done, commit with commit.sh, then skip push.sh and deploy.mjs: pushing would publish your branch): when the card moves to Done, Weft commits what's left, rebases your branch on the project's branch and fast-forwards the project to it. If that rebase conflicts, Weft tells you which files; resolve them here and the next Done lands it.`;
 
 const built = new Map<string, string>();
 
+// The tool groups' own prompts. On a Weft Worker a group whose tools don't work there is left out, and the worker's
+// table (lib/worker-tools.ts) says what doesn't work and why.
+export function toolPrompts(worker = onWorker()): string[] {
+  if (!worker) return [BROWSER_PROMPT, SECRETS_PROMPT, BLASTCP_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT];
+  const groups: [string, string][] = [["secrets", SECRETS_PROMPT], ["webhooks", WEBHOOKS_PROMPT], ["devservers", DEVSERVERS_PROMPT], ["gog", GOG_PROMPT]];
+  return [WORKER_BROWSER_PROMPT, ...groups.filter(([group]) => groupWorks(group)).map(([, prompt]) => prompt), workerToolsPrompt()];
+}
+
 // Weft's part of the system prompt. Puku's gateway drops it, so a puku session sends it in its first message (lib/puku-context.ts).
 export function weftSystemPrompt(spec: PromptSpec): string {
-  const key = `${promptsBuild()}|${spec.copilot ? `copilot:${personaOf(spec.persona).id}` : `${spec.backend}:${agentOf(spec.agent).id}`}${spec.project ? "|isolated" : ""}`;
+  const key = `${promptsBuild()}|${spec.copilot ? `copilot:${personaOf(spec.persona).id}` : `${spec.backend}:${agentOf(spec.agent, listAgents()).id}`}${spec.project ? "|isolated" : ""}`;
   const cached = built.get(key);
   if (cached !== undefined) return cached;
   const parts = spec.copilot
-    ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt].filter(Boolean)
-    : [agentOf(spec.agent).soul, BROWSER_PROMPT, SECRETS_PROMPT, WEBHOOKS_PROMPT, DEVSERVERS_PROMPT, GOG_PROMPT, SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
+    ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt, ENV_PROMPT].filter(Boolean)
+    : [agentOf(spec.agent, listAgents()).soul, ...toolPrompts(), SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, ENV_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
   // A settings change makes a new key; the old prompts are of no further use.
   if (built.size >= 8) built.clear();
   const text = parts.join("\n\n");

@@ -3,7 +3,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Finding, ScoutState } from "@/lib/scout-view";
-import { markIntroSeen } from "@/lib/feature-intros";
 import ScoutDialog from "./ScoutDialog";
 
 const finding: Finding = {
@@ -29,7 +28,7 @@ afterEach(cleanup);
 describe("ScoutDialog", () => {
   it("is a titled dialog listing open findings in full", () => {
     setup({ report, running: false });
-    expect(screen.getByRole("dialog", { name: "Code quality · weft · 74%" })).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Code quality · weft · 74% ▶" })).toBeTruthy();
     expect(screen.getByText("Extract the parsing into its own function.")).toBeTruthy();
     expect(screen.getByText(/1 open · ran .* on abcdef1/)).toBeTruthy();
   });
@@ -45,8 +44,6 @@ describe("ScoutDialog", () => {
   });
 
   it("closes from the shared Modal's ✕ and Escape", async () => {
-    // The intro has played before, so it isn't up: Escape belongs to the dialog (lib/use-feature-intro.ts).
-    markIntroSeen("quality");
     const p = setup(null);
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     await userEvent.keyboard("{Escape}");

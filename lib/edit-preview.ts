@@ -1,29 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
+import type { DiffLine, EditPreview } from "./edit-preview-types";
 
 // What a held Edit, MultiEdit, Write or NotebookEdit would change, for the permission prompt
 // (components/PermissionInput.tsx): the file, the symbols it touches, lines added and removed, and a short
 // line diff, so the user reads the change instead of escaped JSON. Built on the server when the prompt
 // is asked (lib/runner-ask.ts); a Write diffs against the file on disk.
 
-export interface DiffLine {
-  kind: "+" | "-" | " ";
-  text: string;
-}
-
-export interface EditPreview {
-  // Relative to the card's folder when inside it.
-  file: string;
-  // Top-level symbols the edit touches (lib/symbols.ts via lib/claim-guard.ts), when known.
-  symbols?: string[];
-  added: number;
-  removed: number;
-  // The first DIFF_CAP lines of the diff; `more` counts the rest.
-  lines: DiffLine[];
-  more: number;
-  // A Write to a file that isn't there yet.
-  creates?: boolean;
-}
+// The preview's shapes live in lib/edit-preview-types.ts (types only, no node:fs), so the thread's items
+// can carry them (lib/types-thread.ts) without dragging this module into the browser chunk. Re-exported
+// here: the server's own imports of "./edit-preview" keep working.
+export type { DiffLine, EditPreview };
 
 export const DIFF_CAP = 40;
 

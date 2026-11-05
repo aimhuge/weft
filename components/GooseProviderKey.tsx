@@ -15,6 +15,7 @@ import { GOOSE_PROVIDERS, PUKU_GOOSE, type GooseProviderView } from "@/lib/goose
 import { useGooseProviders } from "@/lib/use-goose";
 import { useGooseSelection } from "@/lib/use-goose-selection";
 import GooseKeyRow from "./GooseKeyRow";
+import GooseNamedModels from "./GooseNamedModels";
 import GooseSavedKeys from "./GooseSavedKeys";
 
 export interface GooseProviderKeyProps {
@@ -108,6 +109,8 @@ export default function GooseProviderKey({ providerId, modelId, baseUrl }: Goose
       )}
 
       <GooseSavedKeys rows={rows} busy={busy} onUse={(id) => selection.setProvider(id)} />
+
+      <GooseNamedModels />
     </section>
   );
 }

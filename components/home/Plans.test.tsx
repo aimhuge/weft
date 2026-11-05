@@ -55,7 +55,7 @@ describe("Plans", () => {
     }
   });
 
-  it("lists the BlastCP tier each plan includes, from the catalog", () => {
+  it("lists the BlastCP tier each plan includes, and who on it gets it", () => {
     const { container } = render(<Plans />);
     const lists = Array.from(container.querySelectorAll(".wz-planFeatures")).map((l) =>
       Array.from(l.querySelectorAll("li")).map((li) => li.textContent),
@@ -63,12 +63,31 @@ describe("Plans", () => {
     expect(lists).toHaveLength(3);
     expect(lists[0]).toContain("BlastCP Free: 1 brand, 3 channels, 30 posts a month");
     expect(lists[0]).toContain("$0.50 of BlastCP AI generation, once");
+    expect(lists[1]).toContain("BlastCP Creator for the owner: 1 brand, every channel, unlimited posts");
+    expect(lists[2]).toContain("BlastCP Creator for every seat: 1 brand, every channel, unlimited posts");
     for (const list of lists.slice(1)) {
-      expect(list).toContain("BlastCP Creator: 1 brand, every channel, unlimited posts");
       expect(list).toContain("$3 a month of BlastCP AI generation");
       // The closing "Everything in …" stays last, after the BlastCP lines.
       expect(list.at(-1)).toMatch(/^Everything in /);
     }
+  });
+
+  it("links Pro and Team through /billing to Checkout, and Free to the download", () => {
+    const { container } = render(<Plans download={{ label: "Download for Mac", href: "https://example.com/weft.dmg" }} />);
+    const ctas = Array.from(container.querySelectorAll<HTMLAnchorElement>(".wz-planCta")).map((a) => [a.textContent, a.getAttribute("href")]);
+    expect(ctas).toEqual([
+      ["Download for Mac", "https://example.com/weft.dmg"],
+      ["Get Pro", "/billing?plan=pro"],
+      ["Get Team", "/billing?plan=team"],
+    ]);
+    // The featured card's button is the clay one, and each click is counted.
+    expect(container.querySelector(".wz-planFeatured .wz-planCta")?.classList.contains("wz-planCtaFeatured")).toBe(true);
+    expect(container.querySelector('.wz-planCta[href="/billing?plan=team"]')?.getAttribute("data-track")).toBe("plan_clicked");
+  });
+
+  it("leaves Free without a button when the page has no download", () => {
+    const { container } = render(<Plans />);
+    expect(container.querySelectorAll(".wz-planCta")).toHaveLength(2);
   });
 
   it("quotes the free tier cap on Free, from the catalog", () => {
@@ -81,5 +100,10 @@ describe("Plans", () => {
     const names = Array.from(container.querySelectorAll(".wz-accessName")).map((n) => n.firstChild?.textContent);
     expect(names).toEqual(["Startups", "Open source", "Education", "Regional pricing"]);
     expect(container.querySelectorAll(".wz-accessSoon")).toHaveLength(4);
+  });
+
+  it("asks for Cloud Workers requests under the access row", () => {
+    const { container } = render(<Plans />);
+    expect(container.querySelector("#wz-access + #wz-cloud form")?.getAttribute("action")).toBe("/api/cloud-workers/request");
   });
 });

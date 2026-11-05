@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useState } from "react";
+import { FindRevealContext, REVEAL_ALL, useFindReveal } from "@/lib/find-reveal";
 import { formatTokens } from "@/lib/format";
 import { turnId } from "@/lib/show-rail";
 import type { ThreadItem } from "@/lib/types";
@@ -8,6 +9,7 @@ import CrashGuard from "./CrashGuard";
 import Icon from "./Icon";
 import Markdown from "./Markdown";
 import RepeatFromHere from "./RepeatFromHere";
+import { SecretAskBatchProvider } from "./SecretAskBatch";
 import SecretAskInput from "./SecretAskInput";
 import ShellLine from "./ShellLine";
 import ToolLine from "./ToolLine";
@@ -53,8 +55,10 @@ function PermissionLine({ item }: { item: Permission }) {
 }
 
 // A message you edited with ↑ and the turn it started, folded to one line you can open.
-function EditedFold({ items, cardId }: { items: ThreadItem[]; cardId: string }) {
-  const [open, setOpen] = useState(false);
+function EditedFold({ item, cardId }: { item: Extract<ThreadItem, { kind: "edited" }>; cardId: string }) {
+  const [opened, setOpen] = useState(false);
+  const found = useFindReveal([item]);
+  const open = found || opened;
   return (
     <div className="text-[11.5px] text-faint">
       <button
@@ -68,13 +72,15 @@ function EditedFold({ items, cardId }: { items: ThreadItem[]; cardId: string }) 
       </button>
       {open && (
         <div className="mt-2 flex flex-col gap-3 border-l border-line pl-3 opacity-60">
-          {groupThread(items).map((entry) =>
-            entry.kind === "tools" ? (
-              <ToolRun key={entry.key} calls={entry.calls} live={false} cardId={cardId} />
-            ) : (
-              <ThreadMessage key={entry.key} item={entry.item} cardId={cardId} />
-            ),
-          )}
+          <FindRevealContext.Provider value={found ? REVEAL_ALL : null}>
+            {groupThread(item.items).map((entry) =>
+              entry.kind === "tools" ? (
+                <ToolRun key={entry.key} calls={entry.calls} live={false} cardId={cardId} />
+              ) : (
+                <ThreadMessage key={entry.key} item={entry.item} cardId={cardId} />
+              ),
+            )}
+          </FindRevealContext.Provider>
         </div>
       )}
     </div>
@@ -112,7 +118,7 @@ export const ThreadMessage = memo(function ThreadMessage({ item, cardId }: { ite
         </div>
       );
     case "edited":
-      return <EditedFold items={item.items} cardId={cardId} />;
+      return <EditedFold item={item} cardId={cardId} />;
     case "shell":
       return <ShellLine item={item} />;
     case "notification":
@@ -124,7 +130,8 @@ export const ThreadMessage = memo(function ThreadMessage({ item, cardId }: { ite
 
 // Where a cold card's fresh session begins (lib/splice.ts): a divider you can open to read the brief it started from.
 function SplicedLine({ item }: { item: Extract<ThreadItem, { kind: "spliced" }> }) {
-  const [open, setOpen] = useState(false);
+  const [opened, setOpen] = useState(false);
+  const open = useFindReveal([item]) || opened;
   const saved = item.tokens ? ` · ${formatTokens(item.tokens)} not re-sent` : "";
   return (
     <div className="text-[11px] text-faint">
@@ -161,7 +168,7 @@ function NotificationLine({ item }: { item: Extract<ThreadItem, { kind: "notific
 // A "!" command you ran from the reply box (lib/shell.ts). The row is in components/ShellLine.tsx.
 // A thread's messages and tool runs, then the reply streaming in. While ↑ edits a message (editFrom is
 // its index), that message is outlined and the turn it will replace, everything after it, fades. onSend lets
-// a key the thread asked for tell it once the key is in the vault.
+// the keys the thread asked for tell it once they're all in the vault (one message for the lot).
 export function ThreadEntries({
   entries,
   live,
@@ -180,7 +187,7 @@ export function ThreadEntries({
   cardId: string;
 }) {
   return (
-    <>
+    <SecretAskBatchProvider onSend={onSend}>
       {entries.map((entry) => {
         // One message that fails to draw is a chip in its place; the rest of the thread and the reply box stay.
         const row = (
@@ -214,6 +221,6 @@ export function ThreadEntries({
           </CrashGuard>
         </div>
       )}
-    </>
+    </SecretAskBatchProvider>
   );
 }

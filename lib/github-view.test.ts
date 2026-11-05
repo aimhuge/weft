@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { githubTitle, issuesUrl, repoUrl, shownGithubFolders, syncLine, syncToast, type GithubFolder, type GithubStatus } from "./github-view";
 
-const folder = (path: string, over: Partial<GithubFolder> = {}): GithubFolder => ({ folder: path, repo: null, error: null, syncing: false, last: null, instant: false, ...over });
+const folder = (path: string, over: Partial<GithubFolder> = {}): GithubFolder => ({ folder: path, repo: null, error: null, syncing: false, last: null, instant: false, workflow: { landing: "backlog" }, ...over });
 const signedIn = (folders: GithubFolder[]): GithubStatus => ({ account: { login: "fotoflo", url: "https://github.com/fotoflo" }, error: null, weft: true, instantError: null, folders });
 
 describe("github-view", () => {

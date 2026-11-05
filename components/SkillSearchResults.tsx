@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { openCardById } from "@/lib/open-card";
 import { skillRegistry, startSkillThread } from "@/lib/skill-registry-client";
+import { isDangerous } from "@/lib/skill-verdict";
 import { useSkillReview, useSkillSearch } from "@/lib/use-skill-search";
 import type { RemoteSkill, RemoteSkillPreview } from "@/lib/types";
 import { ScanPills, topFindings } from "./SkillScanPill";
@@ -77,7 +78,7 @@ function RemoteDetail({ preview, onInstalled }: { preview: RemoteSkillPreview; o
   const { state, open } = useSkillReview({ id: preview.id, hash: preview.hash }, preview.review);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const risky = preview.scan.verdict === "danger" || (state.status === "done" && state.review.verdict === "unsafe");
+  const risky = isDangerous(preview.scan, state);
   const install = () => {
     if (risky && !window.confirm(`Weft's scan flagged ${preview.name} as dangerous. Install it anyway?`)) return;
     setBusy(true);

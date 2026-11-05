@@ -119,7 +119,7 @@ function commandItems(s: PaletteState, a: PaletteActions): PaletteItem[] {
     ...(doneToArchive.length
       ? [command("archive-done", `Archive all ${doneToArchive.length} in Done`, "archive", () => a.archiveCards(doneToArchive), "shift+e", "clear file")]
       : []),
-    ...(lastArchived.length ? [command("archive-undo", "Undo the last archive", "archive", () => a.unarchive(lastArchived), "z", "unarchive restore")] : []),
+    ...(lastArchived.length ? [command("archive-undo", "Undo the last archive", "archive", () => a.unarchive(lastArchived), "shift+z", "unarchive restore")] : []),
     ...(archivedCount
       ? [command("toggle-archived", `${s.showArchived ? "Hide" : "Show"} ${archivedCount} archived`, "archive", a.toggleShowArchived)]
       : []),

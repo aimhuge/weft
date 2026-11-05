@@ -66,3 +66,14 @@ export function placeBeside(trigger: Area, bubble: Size, area: Area, gap = 10, l
     top: clamp(trigger.top - lift, area.top + MARGIN, area.bottom - bubble.height - MARGIN),
   };
 }
+
+// A toolbar button's menu: under its trigger and ending at the trigger's right edge, slid back inside the area
+// when that would run off it, and no taller than the room below.
+export function placeMenuBelow(trigger: Area, width: number, area: Area, maxHeight: number, gap = 6): Spot & { maxHeight: number } {
+  const top = trigger.bottom + gap;
+  return {
+    left: clamp(trigger.right - width, area.left + MARGIN, area.right - width - MARGIN),
+    top,
+    maxHeight: Math.max(0, Math.min(maxHeight, area.bottom - top - MARGIN)),
+  };
+}

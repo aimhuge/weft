@@ -30,8 +30,8 @@ export function makeService(
   rowsByTable: Record<string, unknown[]> = {},
   errorsByTable: Record<string, { message: string }> = {},
   writesByTable: Record<string, { error: { message: string } | null }> = {},
-): { client: { from: ReturnType<typeof vi.fn> } } {
-  const from = vi.fn((table: string) => {
+): { client: { from: (table: string) => Record<string, unknown> } } {
+  const from = vi.fn((table: string): Record<string, unknown> => {
     const rows = rowsByTable[table] ?? [];
     const err = errorsByTable[table] ?? null;
     const write = writesByTable[table] ?? { error: null };

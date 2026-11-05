@@ -53,6 +53,7 @@ function input(over: Partial<BoardCommandsInput> = {}): BoardCommandsInput {
     cards: [card],
     selected: card,
     selectedId: "a",
+    lastOpenId: "a",
     projectSummaries: [{ path: "/p1" }, { path: "/p2" }] as BoardCommandsInput["projectSummaries"],
     project: "/p1",
     sort: "recent" as BoardCommandsInput["sort"],
@@ -126,6 +127,23 @@ describe("shortcuts", () => {
     expect(c.chooseProject).toHaveBeenLastCalledWith(null);
     call(shortcuts, "stepSort");
     expect(c.chooseSort).toHaveBeenCalledTimes(1);
+  });
+
+  it("reopen the card you had open last, once it's closed", () => {
+    const { c, shortcuts } = run({ selected: null, selectedId: null });
+    expect(call(shortcuts, "reopenLast")).toBeUndefined();
+    expect(c.openCard).toHaveBeenCalledWith(card);
+  });
+
+  it("pass Z on while a card is open, or when the last one is gone", () => {
+    const open = run();
+    expect(call(open.shortcuts, "reopenLast")).toBe(false);
+    cleanup();
+    vi.clearAllMocks();
+    const gone = run({ selected: null, selectedId: null, lastOpenId: "deleted" });
+    expect(call(gone.shortcuts, "reopenLast")).toBe(false);
+    expect(gone.c.openCard).not.toHaveBeenCalled();
+    expect(open.c.openCard).not.toHaveBeenCalled();
   });
 
   it("open the palette with the trimmed query", () => {

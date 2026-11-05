@@ -19,6 +19,7 @@ import Composer, { type ComposerHandle } from "./Composer";
 import { IntroButton, IntroFrame, PlayIntroButton } from "./FeatureIntro";
 import NewThreadHeaderActions from "./NewThreadHeaderActions";
 import { NewCardDialogControls } from "./NewCardDialogControls";
+import { isWorkerProject } from "@/lib/worker-project";
 import { NewCardDialogFooter } from "./NewCardDialogFooter";
 import { RestartRequested } from "./RestartChip";
 import StatusStrip from "./StatusStrip";
@@ -34,6 +35,7 @@ export default function NewCardDialog({
   restart,
   onClose,
   onCreate,
+  onManageAgents,
 }: {
   // The board's cards, to warn when the chosen folder already has busy ones (lib/overlap.ts).
   cards?: Card[];
@@ -47,6 +49,8 @@ export default function NewCardDialog({
   onClose: () => void;
   // stay: started with ⌃↵, so the dialog stays open for the next thread.
   onCreate: (input: NewCardInput, opts?: { stay?: boolean }) => Promise<void>;
+  // Opens Settings → Agents, from the Agent menu's "Manage agents…".
+  onManageAgents?: () => void;
 }) {
   const dialog = useNewCardDialog(home, defaultCwd, recentCwd);
   // ⌘ or ⌃ held: the Start button names what ⌘↵ or ⌃↵ will do.
@@ -58,8 +62,8 @@ export default function NewCardDialog({
   const gate = useStartGate(dialog.backend, dialog.model);
   const composer = useRef<ComposerHandle>(null);
   useEscape(true, onClose);
-  // Its intro plays the first time the dialog opens (lib/feature-intros.ts), in the browser pane on the desktop
-  // beside it (lib/pane-intro.ts) and in a frame over the composer on the web; ▶ by the title plays it again.
+  // Its intro plays when you press ▶ by the title (lib/feature-intros.ts), never on its own: in the browser pane on the
+  // desktop beside it (lib/pane-intro.ts) and in a frame over the composer on the web.
   const inPane = hasPane();
   const intro = useFeatureIntro(inPane ? null : "newthread");
   const playInPane = inPane ? () => playPaneIntro("newthread", NEW_THREAD_PANE) : null;
@@ -88,6 +92,9 @@ export default function NewCardDialog({
 
   return (
     <aside
+      // A thread on a worker gets its start signed for the GitHub connector (lib/worker-folder-repo.ts), so the whole
+      // dialog is the user's alone there: board_view can't type its prompt or press Create (electron/board-view.cjs).
+      data-human-only={isWorkerProject(dialog.cwd) || undefined}
       // Capture, so ⌘B adds to the Backlog before the composer reads it as bold.
       onKeyDownCapture={(e) => {
         if (!isBacklogKey(e, isMac())) return;
@@ -135,8 +142,14 @@ export default function NewCardDialog({
         onPickCli={dialog.pickCliDefault}
         onPickEffort={dialog.setEffort}
         onPickMode={dialog.pickMode}
-        isolate={{ on: dialog.isolated, suggest: suggestIsolate(alsoHere.length, dialog.promptLength), onToggle: dialog.toggleIsolated }}
-        agent={{ value: dialog.agent, onPick: dialog.setAgent }}
+        isolate={{
+          on: dialog.isolated,
+          suggest: suggestIsolate(alsoHere.length, dialog.promptLength),
+          branch: dialog.branch,
+          onSet: dialog.setIsolated,
+          onBranch: dialog.pickBranch,
+        }}
+        agent={{ value: dialog.agent, onPick: dialog.setAgent, onManage: onManageAgents }}
       />
 
       <NewCardDialogFooter

@@ -5,8 +5,10 @@ import "server-only";
 import type { Metadata } from "next";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cleanPreview, type AppPreview } from "./app-preview";
+import { readBlob } from "./blob-read";
 import { loadAppShare, loadAppShareBySlug } from "./app-share-access";
 import { appPublicUrl, appShareUrl, type AppOwner, type CloudAppShareRow } from "./app-share-types";
+import { queueMirror } from "./r2-queue";
 import { SITE } from "./site";
 import { serviceClient } from "./web-session";
 
@@ -76,8 +78,8 @@ export async function shareByline(service: SupabaseClient, share: Pick<CloudAppS
   return data?.name || data?.slug || "weft.zip";
 }
 
-// A blob's bytes from weft-blobs/<org>/<sha>, or null.
+// A blob's bytes from weft-blobs/<org>/<sha> (R2 first, then Supabase: lib/blob-read.ts), or null.
 export async function blobBytes(service: SupabaseClient, orgId: string, sha: string): Promise<ArrayBuffer | null> {
-  const { data } = await service.storage.from("weft-blobs").download(`${orgId}/${sha}`);
-  return data ? data.arrayBuffer() : null;
+  const got = await readBlob(service, orgId, sha, { onUnmirrored: queueMirror(orgId) });
+  return got ? got.bytes : null;
 }

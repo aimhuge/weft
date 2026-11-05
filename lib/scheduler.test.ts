@@ -13,6 +13,8 @@ vi.mock("./store", () => ({
   updateCard: (id: string, patch: Partial<Card>) => Object.assign(cards.get(id)!, patch),
 }));
 vi.mock("./splice", () => ({ prebakeBriefs }));
+const noteClient = vi.fn();
+vi.mock("./turn-client", () => ({ noteClient: (...a: unknown[]) => void noteClient(...a) }));
 vi.mock("./restart-when-idle", () => ({ restartArmed: () => restartArmed }));
 const freeSlots = vi.fn();
 vi.mock("./runner", () => ({
@@ -78,12 +80,40 @@ describe("sendDueMessages", () => {
     expect(cards.get("a")!.scheduled!.map((m) => m.id)).toEqual(["2", "3"]);
   });
 
+  it("says a Send later message is the user's scheduled one, not a first turn's or a restart's held message", () => {
+    noteClient.mockClear();
+    card("a", { turns: 2, scheduled: [{ id: "1", text: "later", at: NOW - 1 }] });
+    card("b", { scheduled: [{ id: "1", text: "first turn", at: NOW - 1 }] });
+    card("c", { turns: 2, scheduled: [{ id: "1", text: "held", at: NOW - 1, afterRestart: true }] });
+    sendDueMessages(NOW);
+    expect(noteClient.mock.calls).toEqual([["a", { app: "scheduled" }]]);
+  });
+
   it("leaves a card with nothing scheduled alone", () => {
     card("empty");
     card("a", { scheduled: [{ id: "1", text: "hi", at: NOW - 1 }] });
     sendDueMessages(NOW);
     expect(sent).toEqual([["a", "hi"]]);
     expect(cards.get("empty")!.scheduled).toBeUndefined();
+  });
+
+  it("calls a restart's held message 'after this turn' once the restart is behind it and the card is mid-turn", () => {
+    card("a", { scheduled: [{ id: "r", text: "held", at: NOW - 1, afterRestart: true }, { id: "t", text: "timed", at: NOW + 1e6 }] });
+    busy.add("a");
+    sendDueMessages(NOW);
+    expect(sent).toEqual([]);
+    expect(cards.get("a")!.scheduled).toEqual([
+      { id: "r", text: "held", at: NOW - 1, afterTurn: true },
+      { id: "t", text: "timed", at: NOW + 1e6 },
+    ]);
+  });
+
+  it("leaves a restart's held message as it is while the restart is still armed", () => {
+    card("a", { scheduled: [{ id: "r", text: "held", at: NOW - 1, afterRestart: true }] });
+    busy.add("a");
+    restartArmed = true;
+    sendDueMessages(NOW);
+    expect(cards.get("a")!.scheduled![0]!.afterRestart).toBe(true);
   });
 
   it("waits while the card is mid-turn", () => {
@@ -167,5 +197,15 @@ describe("startScheduler", () => {
     expect(sent).toEqual([["a", "overdue"], ["a", "soon"]]);
     // Each tick also writes the briefs of cards whose cache is about to lapse (lib/splice.ts).
     expect(prebakeBriefs).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the briefs out on a worker, and still sends what's due", () => {
+    vi.useFakeTimers({ now: NOW });
+    vi.mocked(prebakeBriefs).mockClear();
+    card("a", { scheduled: [{ id: "1", text: "soon", at: NOW + 10_000 }] });
+    startScheduler({ briefs: false });
+    vi.advanceTimersByTime(15_000);
+    expect(sent).toEqual([["a", "soon"]]);
+    expect(prebakeBriefs).not.toHaveBeenCalled();
   });
 });

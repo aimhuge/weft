@@ -125,19 +125,9 @@ export function gooseEnvFor(providerId: string, token: string, extra: { baseUrl?
   if (!provider) throw new Error(`Goose doesn't know a provider called "${providerId}".`);
   const value = token.trim();
   if (!value) throw new Error(`There's no ${provider.label} key saved.`);
-  const env: Record<string, string> = { [provider.envKey]: value };
   const baseUrl = extra.baseUrl?.trim() ?? "";
-  if (provider.id === "custom") {
-    if (!baseUrl) throw new Error("A custom provider needs a base URL (the endpoint's address).");
-    env.GOOSE_PROVIDER__HOST = baseUrl;
-    return env;
-  }
-  // The extras name their variable with the base URL as a placeholder: only the ones that need one are added.
-  // Azure's endpoint, LiteLLM's host and Anthropic's host all come from the catalog's table here.
-  for (const [name, placeholder] of Object.entries(provider.extraEnv ?? {})) {
-    if (placeholder === "__baseUrl__" && baseUrl) env[name] = baseUrl;
-  }
-  return env;
+  if (provider.id === "custom" && !baseUrl) throw new Error("A custom provider needs a base URL (the endpoint's address).");
+  return { [provider.envKey]: value, ...gooseEndpointEnv(provider.id, baseUrl) };
 }
 
 /** The model's id for a provider: what the user saved, else the first curated one, else "". */
@@ -168,6 +158,22 @@ export function setUpGooseModels(providers: GooseProviderView[]): Set<string> {
   return new Set(GOOSE_PROVIDERS.filter((p) => keyed.has(p.id)).flatMap((p) => p.models));
 }
 
+/**
+ * The models the chosen provider serves, as a menu can list them: its curated ids, plus the model
+ * it is actually configured to run when that isn't one of them (a gateway behind the Anthropic API
+ * serves its own ids, e.g. "puku-ai-2.8").
+ *
+ * A provider takes any id when it is a free-model one, so its curated list is a suggestion rather
+ * than the whole truth — which is why the configured model is added even when the list is empty.
+ */
+export function gooseModelsFor(providerId: string, configured = ""): string[] {
+  const provider = providerById(providerId);
+  const models = [...(provider?.models ?? [])];
+  const model = configured.trim();
+  if (model && !models.includes(model)) models.push(model);
+  return models;
+}
+
 /** The toast after a key is saved. */
 export function keySavedText(provider: GooseProviderView): string {
   return `${provider.label} key saved. Weft keeps it in the Keychain and never shows it again.`;
@@ -176,4 +182,20 @@ export function keySavedText(provider: GooseProviderView): string {
 /** The toast after a key is removed. */
 export function keyForgottenText(provider: GooseProviderView): string {
   return `${provider.label} key removed from Weft.`;
+}
+
+/**
+ * The endpoint's own variables for a provider, without its key: GOOSE_PROVIDER__HOST for a custom one, else the
+ * catalog's extras that stand for the base URL (Azure's endpoint, LiteLLM's host, Anthropic's host). Empty with no
+ * endpoint or an unknown provider. A Goose turn with no key grant (a worker, or a Mac where Goose holds its own key)
+ * still runs against the endpoint the settings name.
+ */
+export function gooseEndpointEnv(providerId: string, baseUrl = ""): Record<string, string> {
+  const provider = providerById(providerId);
+  const url = baseUrl.trim();
+  if (!provider || !url) return {};
+  if (provider.id === "custom") return { GOOSE_PROVIDER__HOST: url };
+  // The extras name their variable with the base URL as a placeholder: only the ones that need one are added.
+  const extras = Object.entries(provider.extraEnv ?? {}).filter(([, placeholder]) => placeholder === "__baseUrl__");
+  return Object.fromEntries(extras.map(([name]) => [name, url]));
 }

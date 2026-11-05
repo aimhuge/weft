@@ -8,15 +8,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
-import { answerCommand, newCardCommand, replyCommand, stopCommand, type CloudCommandRow, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
+import { answerCommand, newCardCommand, replyCommand, type CloudCommandRow, type GrantScope, type NewCardForm, type NewCommand } from "@/lib/cloud-commands";
 import { BLOB_BUCKET, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import type { CloudItemChange } from "@/lib/cloud-thread-page";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
 import type { QuestionReply } from "@/lib/types";
 import { applyCardChange, batchBlobRefs, blobPath, buildBlobUrlMap } from "@/lib/web-board";
 import { cardThumbRefs, withThumbUrls } from "@/lib/web-board-thumbs";
+import { dropAnswer, withAnswers, type WebAnswer } from "@/lib/web-answers";
 import { applyCommandChange, isCardCommand, type CloudCommandChange, type WebTarget } from "@/lib/web-commands";
-import { useCloudTransport, type CloudBlobs, type ItemBus } from "./useCloudTransport";
+import { openSealedUrls } from "@/lib/web-blob-open";
+import { loadWebKeyring, openSyncedCard, openSyncedTool, webBlobSeal, webKeyring, webSodium } from "@/lib/web-sync-key";
+import { withAttachments } from "@/lib/web-upload";
+import { useCloudTransport, webUploadsFor, type CloudBlobs, type ItemBus } from "./useCloudTransport";
+import { webClientHint, webLines } from "@/lib/web-lines";
+import { withClientHint } from "@weft/client";
 
 // The status of the Realtime channel; the dot beside the title reflects it.
 export type LiveStatus = "connecting" | "live" | "offline";
@@ -44,9 +50,12 @@ function changeOf<Row>(payload: { eventType: string; new: unknown; old: unknown 
   return change.new || change.old ? change : null;
 }
 
-// Resolve blob refs to signed URLs, 50 to a call. A batch that fails is skipped; the renderer leaves
-// the ref visible instead of crashing.
+// Resolve blob refs to URLs: the server's route first (presigned R2 for blobs copied there, Supabase for the rest;
+// docs/architecture/r2.md), and the browser's own Supabase signing, 50 to a call, when the route can't answer.
+// A batch that fails is skipped; the renderer leaves the ref visible instead of crashing.
 async function signedUrls(client: SupabaseClient, orgId: string, refs: readonly string[]): Promise<Record<string, string>> {
+  const viaServer = await serverUrls(orgId, refs);
+  if (viaServer) return viaServer;
   const out: Record<string, string> = {};
   for (const batch of batchBlobRefs(refs)) {
     try {
@@ -58,6 +67,24 @@ async function signedUrls(client: SupabaseClient, orgId: string, refs: readonly 
     }
   }
   return out;
+}
+
+// POST /api/web-board/[orgId]/blob-urls with the visitor's cookie; null when it isn't there or fails.
+async function serverUrls(orgId: string, refs: readonly string[]): Promise<Record<string, string> | null> {
+  try {
+    const res = await fetch(`/api/web-board/${orgId}/blob-urls`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ refs }) });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { urls?: Record<string, string> };
+    return body.urls && typeof body.urls === "object" ? body.urls : null;
+  } catch {
+    return null;
+  }
+}
+
+// The map with its sealed blobs opened in this browser (lib/web-blob-open.ts), once it holds a workspace key.
+function openedUrls(orgId: string, map: Record<string, string>): Promise<Record<string, string>> {
+  const s = webSodium();
+  return s && webKeyring().size ? openSealedUrls(map, orgId, { s, ring: webKeyring() }) : Promise.resolve(map);
 }
 
 // The open thread's share of the channel: its item changes and reconnects (useCloudTransport's useLive listens).
@@ -82,19 +109,34 @@ function useItemBus() {
 }
 
 export function useWebBoard({ orgId, userId, initialCommands, initialCards, openCardId, initialBlobUrls }: WebBoardInput) {
-  const [cards, setCards] = useState<CloudCardRow[]>(initialCards);
+  const [cards, setCards] = useState<CloudCardRow[]>(() => initialCards.map(openSyncedCard));
   const [activeCardId, setActiveCardId] = useState<string | null>(openCardId);
   const { bus, emit } = useItemBus();
   const [blobUrls, setBlobUrls] = useState<Record<string, string>>(initialBlobUrls);
   const [commands, setCommands] = useState<CloudCommandRow[]>(initialCommands);
+  // Plain Allows and Denies sent from this page, drawn answered before the Mac runs them (lib/web-answers.ts).
+  const [answers, setAnswers] = useState<WebAnswer[]>([]);
   const [live, setLive] = useState<LiveStatus>("connecting");
   const [client] = useState<SupabaseClient>(() => createBrowserClient(SUPABASE_URL, SUPABASE_KEY));
   // Refs already asked for, so one that never resolves isn't asked for again on every change.
   const asked = useRef(new Set(Object.keys(initialBlobUrls)));
+  const firstUrls = useRef(initialBlobUrls);
   // Commands this tab sent: only these open their card when done, not one sent from another tab.
   const sent = useRef(new Set<string>());
   // The card a command made, to open once its row has synced back (the command is "done" a moment before that).
   const openWhenSeen = useRef<string | null>(null);
+
+  // A browser paired from Settings → Sync opens sealed rows (lib/web-sync-key.ts): once its key is in, reopen the
+  // cards already drawn and reload the open thread, which the first render drew as 🔒 like the server did, and open
+  // the sealed pictures among the URLs the server signed.
+  useEffect(() => {
+    void loadWebKeyring(client, orgId, userId).then((opened) => {
+      if (!opened) return;
+      setCards((prev) => prev.map(openSyncedCard));
+      emit("reconnect");
+      void openedUrls(orgId, firstUrls.current).then((map) => setBlobUrls((prev) => ({ ...prev, ...map })));
+    });
+  }, [client, orgId, userId, emit]);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,7 +146,8 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
       .on("postgres_changes", { event: "*", schema: "public", table: "cloud_cards", filter: `org_id=eq.${orgId}` }, (payload: { eventType: string; new: unknown; old: unknown }) => {
         const change = changeOf<CloudCardRow>(payload);
         if (cancelled || !change) return;
-        setCards((prev) => applyCardChange(prev, change as Parameters<typeof applyCardChange>[1]));
+        const opened = change.new ? { ...change, new: openSyncedCard(change.new) } : change;
+        setCards((prev) => applyCardChange(prev, opened as Parameters<typeof applyCardChange>[1]));
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "cloud_thread_items", filter: `org_id=eq.${orgId}` }, (payload: { eventType: string; new: unknown; old: unknown }) => {
         const change = changeOf<CloudThreadItemRow>(payload);
@@ -140,7 +183,7 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
       const missing = refs.filter((r) => !asked.current.has(r));
       if (!missing.length) return;
       for (const r of missing) asked.current.add(r);
-      void signedUrls(client, orgId, missing).then((map) => {
+      void signedUrls(client, orgId, missing).then((signed) => openedUrls(orgId, signed)).then((map) => {
         if (Object.keys(map).length) setBlobUrls((prev) => ({ ...prev, ...map }));
       });
     },
@@ -172,15 +215,25 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     setCardParam(null);
   }, [setCardParam]);
 
-  // Puts a command in for a Mac (lib/cloud-inbox.ts runs it). Resolves to the row, or why it couldn't be sent.
+  // Files pasted in a composer here, up in the workspace's blobs until a row names them (lib/web-upload.ts).
+  const [uploads] = useState(() => webUploadsFor(client, orgId));
+
+  // Puts a command in for a Mac (lib/cloud-inbox.ts runs it), listing the files its text pastes (sealed for a sealed
+  // card, lib/web-upload.ts). Resolves to the row, or why it couldn't be sent.
   const sendCommand = useCallback(
-    async (row: NewCommand): Promise<CloudCommandRow | string> => {
+    async (plain: NewCommand): Promise<CloudCommandRow | string> => {
+      let row: NewCommand;
+      try {
+        row = withClientHint(await withAttachments(plain, uploads, webBlobSeal), webClientHint());
+      } catch (err) {
+        return (err as Error).message;
+      }
       const { data, error } = await client.from("cloud_commands").insert(row).select().single<CloudCommandRow>();
       if (error) return error.message;
       setCommands((prev) => applyCommandChange(prev, { eventType: "INSERT", new: data, old: null }));
       return data;
     },
-    [client],
+    [client, uploads],
   );
 
   // Asks the Mac that owns `target` to start a card. Resolves to why it couldn't be sent, or null once the command is
@@ -214,10 +267,10 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
   useEffect(() => {
     latest.current = cards;
   });
-  const stopRow = useCallback(
-    (cardId: string): NewCommand | string => {
+  const target = useCallback(
+    (cardId: string) => {
       const row = latest.current.find((c) => c.card_id === cardId);
-      return row ? stopCommand({ orgId, device: row.owner_device, folder: row.folder, cardId }) : "That thread isn't on the board anymore.";
+      return row ? { orgId, device: row.owner_device, folder: row.folder, cardId } : "That thread isn't on the board anymore.";
     },
     [orgId],
   );
@@ -225,37 +278,6 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
     const sentRow = await sendCommand(row);
     return typeof sentRow === "string" ? sentRow : null;
   }, [sendCommand]);
-  const transport = useCloudTransport({ client, orgId, bus, stopCommand: stopRow, sendCommand: send });
-
-  // Answers the card's waiting permission request or question on the Mac that runs it, as if clicked there. Resolves
-  // like startCard; how it went shows under the reply box.
-  const answer = useCallback(
-    async (row: CloudCardRow, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply): Promise<string | null> => {
-      const pendingId = row.card.pending?.id;
-      const command = pendingId && answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply });
-      return command ? send(command) : "Nothing is waiting for an answer.";
-    },
-    [orgId, send],
-  );
-
-  // Takes a command back before the Mac has run it, or clears one that failed. A delete the database refuses
-  // leaves it where it is.
-  const dropCommand = useCallback(
-    async (id: string) => {
-      const { error } = await client.from("cloud_commands").delete().eq("id", id);
-      if (!error) setCommands((prev) => prev.filter((c) => c.id !== id));
-    },
-    [client],
-  );
-
-  // A started card opens as soon as it is on the board: when its command says done, or its row lands.
-  useEffect(() => {
-    const id = openWhenSeen.current;
-    if (!id || !cards.some((c) => c.card_id === id)) return;
-    openWhenSeen.current = null;
-    openCard(id);
-  }, [cards, commands, openCard]);
-
   // The full result of a tool call whose result was cut out of its item (cloud_tool_outputs).
   const toolOutput = useCallback(
     async (cardId: string, toolId: string) => {
@@ -267,13 +289,55 @@ export function useWebBoard({ orgId, userId, initialCommands, initialCards, open
         .eq("tool_id", toolId)
         .maybeSingle<{ result: string }>();
       if (error || !data) throw error ?? new Error("no output");
-      return data.result;
+      return openSyncedTool({ org_id: orgId, card_id: cardId, tool_id: toolId, result: data.result });
     },
     [client, orgId],
   );
 
-  // The cards as CardView draws them: a thumb ref becomes its signed URL once it has one.
-  const shown = useMemo(() => withThumbUrls(cards, blobUrls), [cards, blobUrls]);
+  const { transport, host } = useCloudTransport({ client, orgId, bus, target, sendCommand, uploads, tools: toolOutput });
 
-  return { cards: shown, commands, activeCardId, blobs, transport, live, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand };
+  // Answers the card's waiting permission request or question on the Mac that runs it, as if clicked there. Resolves
+  // like startCard; how it went shows under the reply box.
+  const answer = useCallback(
+    async (row: CloudCardRow, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope): Promise<string | null> => {
+      const pendingId = row.card.pending?.id;
+      const command = pendingId ? answerCommand({ orgId, device: row.owner_device, folder: row.folder, cardId: row.card_id }, { pendingId, allow, answers, reply, grant }) : null;
+      if (!pendingId || !command) return "Nothing is waiting for an answer.";
+      // A plain Allow or Deny leaves at once; a form with answers waits, so one that doesn't fit stays filled in.
+      const shown = !answers && !reply && { cardId: row.card_id, pendingId, allow };
+      if (shown) setAnswers((prev) => [...prev, shown]);
+      const failed = await send(command);
+      if (failed && shown) setAnswers((prev) => prev.filter((a) => a !== shown));
+      return failed;
+    },
+    [orgId, send],
+  );
+
+  // Takes a command back before the Mac has run it, or clears one that failed. A delete the database refuses
+  // leaves it where it is.
+  const dropCommand = useCallback(
+    async (id: string) => {
+      const { error } = await client.from("cloud_commands").delete().eq("id", id);
+      if (error) return;
+      setAnswers((prev) => dropAnswer(prev, commands.find((c) => c.id === id)));
+      setCommands((prev) => prev.filter((c) => c.id !== id));
+    },
+    [client, commands],
+  );
+
+  // A started card opens as soon as it is on the board: when its command says done, or its row lands.
+  useEffect(() => {
+    const id = openWhenSeen.current;
+    if (!id || !cards.some((c) => c.card_id === id)) return;
+    openWhenSeen.current = null;
+    openCard(id);
+  }, [cards, commands, openCard]);
+
+  // The cards as CardView draws them: a thumb ref becomes its signed URL once it has one.
+  const shown = useMemo(() => withThumbUrls(withAnswers(cards, answers, commands), blobUrls), [cards, answers, commands, blobUrls]);
+
+  // How this tab opens a worker's session line: it seals the offer itself (lib/web-lines.ts).
+  const lines = useMemo(() => webLines(client, orgId), [client, orgId]);
+
+  return { client, cards: shown, commands, activeCardId, blobs, transport, host, live, send, openCard, closeCard, toolOutput, startCard, sendReply, answer, dropCommand, lines };
 }

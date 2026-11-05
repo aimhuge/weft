@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import { api } from "./client";
 import { DEFAULT_REFRESH_MS, servicesRefreshMs, subscribeServicesRefresh } from "./services-prefs";
 import type { DevLauncher, MachineInfo, ServiceEntry } from "./types";
+import type { WorkerDevGroup } from "./worker-dev-list";
 
 // While the drawer is closed the list is only asked for now and then, for the rail's count.
 export const IDLE_POLL_MS = 30_000;
@@ -13,6 +14,7 @@ export const IDLE_POLL_MS = 30_000;
 export function useServices(active = false) {
   const [services, setServices] = useState<ServiceEntry[]>([]);
   const [launchers, setLaunchers] = useState<DevLauncher[]>([]);
+  const [workers, setWorkers] = useState<WorkerDevGroup[]>([]);
   const [machine, setMachine] = useState<MachineInfo | undefined>();
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +28,7 @@ export function useServices(active = false) {
       if (mine !== latest.current) return;
       setServices(answer.services);
       setLaunchers(answer.launchers ?? []);
+      setWorkers(answer.workers ?? []);
       setMachine(answer.machine);
       setLoaded(true);
       setError(null);
@@ -63,5 +66,5 @@ export function useServices(active = false) {
     return result;
   };
 
-  return { services, launchers, machine, loaded, error, reload, kill, restart, launch, refreshMs };
+  return { services, launchers, workers, machine, loaded, error, reload, kill, restart, launch, refreshMs };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { setBoardMode } from "@/lib/board-prefs";
 import { api } from "@/lib/client";
 import { openNewThread, selectCard } from "@/lib/onboarding-events";
 import { trackOnboarding } from "@/lib/telemetry-client";
@@ -61,13 +61,17 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
       setTicked(ticks);
       setCwd(view.projects.find((p) => ticks.has(p.cwd))?.cwd ?? "");
     };
-    const load = () =>
+    const load = (firstLaunch: boolean) =>
       void loadWelcome()
         .then((view) => {
-          if (live && !view.welcome && view.preview) show(view.preview, false);
+          if (!live || view.welcome || !view.preview) return;
+          // A new install starts on the Regular board; Test it, the same screen on a used board, leaves it be.
+          if (firstLaunch) setBoardMode("regular");
+          show(view.preview, false);
         })
         .catch(() => {});
-    load();
+    load(true);
+    const onTest = () => load(false);
     const onReplay = () =>
       void loadWelcome(true)
         .then((view) => {
@@ -75,11 +79,11 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
         })
         .catch((err: unknown) => report.current?.(err));
     window.addEventListener(REPLAY_EVENT, onReplay);
-    window.addEventListener(TEST_EVENT, load);
+    window.addEventListener(TEST_EVENT, onTest);
     return () => {
       live = false;
       window.removeEventListener(REPLAY_EVENT, onReplay);
-      window.removeEventListener(TEST_EVENT, load);
+      window.removeEventListener(TEST_EVENT, onTest);
     };
   }, []);
 
@@ -111,12 +115,22 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
       })
       .catch(fail);
   };
+  // Next off the sign-in screen, and "Not now" past it without an account: both land on the projects, or straight on
+  // the first thread when there's no history. The sign-in step stays in the list either way — the account is still
+  // offered later, and the answer keeps its place.
   const next = () => {
     if (step === "ready" && account.needed) {
       account.show();
       setStep("account");
-    } else if (hasHistory) setStep("projects");
+      return;
+    }
+    if (hasHistory) setStep("projects");
     else answer(false);
+  };
+  // "Not now" on the sign-in screen: past it without an account.
+  const deferAccount = () => {
+    trackOnboarding("onboarding_account_deferred");
+    next();
   };
   // Start: the thread runs and its card opens; with no folder picked, the New thread dialog takes over with the prompt.
   const start = () => {
@@ -161,7 +175,7 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
     ok.current?.click();
   };
 
-  return createPortal(
+  return (
     <Modal label="Welcome to Weft" onClose={close} layer="top" keepOnBackdrop={!replay} className="w-full max-w-[760px]">
       <div onKeyDown={onKeyDown} className="flex flex-col">
         <WelcomeStepBar steps={steps} step={step} replay={replay} onDismiss={dismiss} />
@@ -181,14 +195,16 @@ export default function WelcomeDialog({ onError }: { onError?: (err: unknown) =>
           bringing={folders.length}
           cwd={cwd}
           canStart={!cwd || Boolean(prompt.trim())}
+          // The sign-in screen doesn't block: Next moves on once you're signed in, and "Not now" moves on without.
           canNext={step !== "account" || account.signedIn}
+          signedIn={account.signedIn}
           onNext={next}
           onAnswer={answer}
           onSkip={dismiss}
           onStart={start}
+          onDefer={deferAccount}
         />
       </div>
-    </Modal>,
-    document.body,
+    </Modal>
   );
 }

@@ -294,6 +294,29 @@ button:disabled {
   cursor: default;
 }
 
+/* Slim scrollbars everywhere: a rounded thumb in the theme's line colour on a clear track, inset by a
+   transparent border so it floats off the edge, and a touch stronger on hover. */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--faint);
+}
+
 /* macOS title bars: the traffic lights sit in window pixels, so these sizes divide by the page's zoom
    (lib/use-title-bar-zoom.ts sets --zoom) to stay clear of them at any View > Zoom. */
 :root {
@@ -535,8 +558,26 @@ button:disabled {
 @media (prefers-reduced-motion: reduce) {
   .achievement-pop,
   .level-hero-art,
-  .level-crawl {
+  .level-crawl,
+  .view-hint-pop {
     animation: none;
+  }
+}
+
+/* The pane that says where Escape just took you (components/ViewHint.tsx): it pops in rather than
+   merely appearing, and carries a wide accent glow so it reads as an announcement, not a tooltip. */
+.view-hint-pop {
+  animation: view-hint-pop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent),
+    0 0 0 4px color-mix(in srgb, var(--accent) 18%, transparent),
+    0 10px 44px 8px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+
+@keyframes view-hint-pop {
+  from {
+    transform: translateY(-10px) scale(0.9);
+    opacity: 0;
   }
 }
 
@@ -584,4 +625,21 @@ html[data-build-error] nextjs-portal {
 /* A card or open thread with files from Finder hovering it (lib/use-file-drop.ts). */
 [data-file-over] {
   box-shadow: inset 0 0 0 2px var(--accent), inset 0 0 0 9999px var(--accent-soft);
+}
+
+/* Find in a thread (lib/find-highlight.ts): every match, and the one you're on. */
+::highlight(thread-find) {
+  background-color: color-mix(in srgb, var(--warn) 28%, transparent);
+}
+::highlight(thread-find-now) {
+  background-color: var(--warn);
+  color: var(--canvas);
+}
+
+/* A Settings card with a menu open rises above the cards after it: each card's backdrop-blur makes it its
+   own stacking context, so without this the menu's z-index stays inside it and the next card paints over
+   the menu. Below the sticky section nav (z-10), so a scrolled card still slides under that. */
+[data-settings-card]:has([role="menu"], [role="listbox"]) {
+  position: relative;
+  z-index: 5;
 }

@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { BrowserState } from "@/lib/client";
+import { clearOfCopilot, useCopilotCover } from "@/lib/copilot-float";
 import { setPaneBox } from "@/lib/float-place";
 import { appFor } from "@/lib/mini-apps";
 import { paneAddress } from "@/lib/app-share-types";
-import { useAnyOverlay } from "@/lib/overlay";
+import { useAnyOverlay, useMenuCover } from "@/lib/overlay";
+import { clearOfMenu } from "@/lib/pane-clear";
 import { useMiniApps } from "@/lib/use-mini-apps";
-import { usePaneFind } from "@/lib/use-pane-find";
 import Icon, { Spinner } from "./Icon";
+import { PaneFindField, usePaneFind } from "./PaneFind";
 import AppShareButton from "./AppShareButton";
+import PaneTabs, { NewTabButton } from "./PaneTabs";
 import SaveAppButton from "./SaveAppButton";
 import ZoomMenu from "./ZoomMenu";
-import PaneFindBar from "./PaneFindBar";
 
 const HIDDEN = { x: 0, y: 0, width: 0, height: 0 };
 // The page itself is a native Electron view laid over the placeholder below;
@@ -27,6 +29,7 @@ export default function BrowserPane({
   onClose,
   rail,
   actions,
+  saveUrl,
 }: {
   desktop: boolean;
   state: BrowserState;
@@ -40,14 +43,26 @@ export default function BrowserPane({
   rail?: ReactNode;
   // The open card's share, star and archive (components/PaneCardMarks.tsx), right of the zoom.
   actions?: ReactNode;
+  // What Save as app saves, when it isn't the address itself (a worker card's page saves its blob ref,
+  // components/WorkerPane.tsx).
+  saveUrl?: string;
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
+  // Bumped by + so the address bar empties and takes focus for the new tab's address.
+  const [fresh, setFresh] = useState(0);
   const overlay = useAnyOverlay();
+  // A full-window overlay (a dialog, an image opened full size) covers the page, so the page goes.
+  // A local menu (this pane's zoom menu, a card's mode picker) covers a small rectangle: the page
+  // stays and steps aside around the menu, which is drawn above the page and would otherwise hide it.
+  const menu = useMenuCover();
   const hide = obscured || overlay || resizing;
+  // The copilot floats over everything, but nothing in the page can cover the native view, so the view
+  // keeps clear of the launcher and steps aside under the peek or the chat (measured on the placeholder,
+  // which stays put).
+  const copilot = useCopilotCover();
   // A shell from before zoom reporting sends no zoom.
   const zoom = state.zoom ?? 100;
-  const find = usePaneFind(state.url);
 
   useEffect(() => {
     const bridge = window.weft;
@@ -55,7 +70,11 @@ export default function BrowserPane({
     if (!bridge || !el) return;
     const report = () => {
       const r = el.getBoundingClientRect();
-      const box = hide ? HIDDEN : { x: r.left, y: r.top, width: r.width, height: r.height };
+      const full = { x: r.left, y: r.top, width: r.width, height: r.height };
+      // The page gives way to a full-window overlay and to the copilot's floating panels, and it
+      // steps around an open menu rather than disappearing under it.
+      const clear = hide ? null : clearOfCopilot(clearOfMenu(full, menu) ?? HIDDEN, copilot);
+      const box = clear ?? HIDDEN;
       bridge.browser.setBounds(box);
       // Hover bubbles keep clear of the native view; they read this rather than asking the shell.
       setPaneBox(box);
@@ -70,7 +89,7 @@ export default function BrowserPane({
       bridge.browser.setBounds(HIDDEN);
       setPaneBox(null);
     };
-  }, [hide, expanded]);
+  }, [hide, expanded, copilot, menu]);
 
   // The native view swallows pointer events, so it's hidden while dragging the divider.
   // The standalone pane sits left of the board (components/StandaloneBrowserPane.tsx), so its divider is its right edge.
@@ -96,6 +115,9 @@ export default function BrowserPane({
   // A saved app's address is a name (use sans), a real page's stays a URL (use mono).
   const apps = useMiniApps();
   const app = appFor(apps, state.url);
+  // ⌘F with the page focused. The field takes the address bar's place: no row is added and the page keeps its size,
+  // so it doesn't reflow under the search, and nothing needs drawing over the native view.
+  const find = usePaneFind({ url: state.url, tab: state.tab });
 
   return (
     <section
@@ -119,15 +141,9 @@ export default function BrowserPane({
         <button className={nav} disabled={!state.url} onClick={() => window.weft?.browser.reload()} aria-label="Reload">
           {state.loading ? <Spinner size={13} /> : <Icon name="reload" size={15} />}
         </button>
-        {find.open ? (
-          <PaneFindBar url={state.url} focus={find.focus} onClose={find.close} />
-        ) : (
-          <AddressInput desktop={desktop} url={state.url} app={app} />
-        )}
-        {/* Save as app: the page joins the left rail below Services (components/AppsRail.tsx). */}
-        {desktop && <SaveAppButton url={state.url} title={state.title} />}
-        {/* Share an app: shown for a saved app on the board's own pane (no card actions). */}
-        {desktop && !actions && <AppShareButton app={app} />}
+        {find.open ? <PaneFindField find={find} /> : <AddressInput desktop={desktop} url={state.url} app={app} fresh={fresh} />}
+        <NewTabButton className={nav} onOpen={() => setFresh((n) => n + 1)} />
+        {desktop && <AppButtons url={saveUrl ?? state.url} title={state.title} app={app} share={!actions} />}
         {/* Only the page's zoom; ⌘+/−/0, ⌘+scroll and pinch work too. Accent when not 100%. */}
         <ZoomMenu zoom={zoom} disabled={!state.url} />
         {actions}
@@ -135,6 +151,7 @@ export default function BrowserPane({
           <Icon name="x" size={15} />
         </button>
       </div>
+      <PaneTabs tabs={state.tabs} current={state.tab} />
       <div className="flex min-h-0 flex-1">
       <div ref={holder} className="relative min-w-0 flex-1 bg-canvas">
         {!desktop ? (
@@ -157,18 +174,42 @@ export default function BrowserPane({
   );
 }
 
+// Save as app: the page joins the left rail below Services (components/AppsRail.tsx). Share an app: shown for a saved
+// app on the board's own pane (no card actions).
+function AppButtons({ url, title, app, share }: { url: string; title: string; app: ReturnType<typeof appFor> | undefined; share: boolean }) {
+  return (
+    <>
+      <SaveAppButton url={url} title={title} />
+      {share && <AppShareButton app={app} />}
+    </>
+  );
+}
+
 // The address bar: the app's name as a placeholder when the page is a saved app, the URL when it isn't,
 // mono for a URL, sans for a name. Focusing it switches to the real URL so a user can edit it.
 function AddressInput({
   desktop,
   url,
   app,
+  fresh,
 }: {
   desktop: boolean;
   url: string | undefined;
   app: ReturnType<typeof appFor> | undefined;
+  // Changes when + opens a new tab: the bar empties and takes focus for its address.
+  fresh: number;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  // A new tab empties the draft as it renders (React's adjust-state-on-prop-change), then the effect focuses it.
+  const [seenFresh, setSeenFresh] = useState(fresh);
+  if (seenFresh !== fresh) {
+    setSeenFresh(fresh);
+    setDraft("");
+  }
+  useEffect(() => {
+    if (fresh) input.current?.focus();
+  }, [fresh]);
   function go(raw: string) {
     const next = raw.trim();
     if (next) void window.weft?.browser.open(next);
@@ -177,9 +218,11 @@ function AddressInput({
   const isName = draft === null && app !== undefined && url !== undefined && url.startsWith("file:");
   return (
     <input
+      ref={input}
       value={value}
       onFocus={(e) => {
-        setDraft(url ?? null);
+        // A new tab's empty draft stays empty; otherwise editing starts from the real URL.
+        setDraft((d) => d ?? url ?? null);
         e.currentTarget.select();
       }}
       onBlur={() => setDraft(null)}

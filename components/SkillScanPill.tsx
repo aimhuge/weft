@@ -1,19 +1,20 @@
 "use client";
 
+import { REVIEW_VERDICT_LABEL, SCAN_VERDICT_LABEL } from "@/lib/skill-verdict";
 import type { SkillReviewState, SkillScan } from "@/lib/types";
 
 // The scan's verdicts as small pills (lib/skill-scan.ts, lib/skill-review.ts), and the findings worth reading.
+// The words come from lib/skill-verdict.ts, so the pill here and the page in the pane call a verdict the same.
 
-const STATIC = { danger: ["Danger", "text-red-500 border-red-500/50"], warn: ["Check", "text-amber-500 border-amber-500/50"], clean: ["Clean", "text-emerald-500 border-emerald-500/50"] } as const;
-const AI = { unsafe: ["AI: unsafe", "text-red-500 border-red-500/50"], caution: ["AI: care", "text-amber-500 border-amber-500/50"], safe: ["AI: safe", "text-emerald-500 border-emerald-500/50"] } as const;
+const STATIC_TONE = { danger: "text-red-500 border-red-500/50", warn: "text-amber-500 border-amber-500/50", clean: "text-emerald-500 border-emerald-500/50" } as const;
+const AI_TONE = { unsafe: "text-red-500 border-red-500/50", caution: "text-amber-500 border-amber-500/50", safe: "text-emerald-500 border-emerald-500/50" } as const;
 const pillClass = "rounded-full border px-1.5 text-[10px] font-semibold leading-[16px]";
 
 export function ScanPills({ scan, review }: { scan: SkillScan; review: SkillReviewState }) {
-  const [label, tone] = STATIC[scan.verdict];
   return (
     <span className="flex flex-wrap items-center gap-1">
-      <span className={`${pillClass} ${tone}`} title="Weft's static scan">{label}</span>
-      {review.status === "done" && <span className={`${pillClass} ${AI[review.review.verdict][1]}`}>{AI[review.review.verdict][0]}</span>}
+      <span className={`${pillClass} ${STATIC_TONE[scan.verdict]}`} title="Weft's static scan">{SCAN_VERDICT_LABEL[scan.verdict]}</span>
+      {review.status === "done" && <span className={`${pillClass} ${AI_TONE[review.review.verdict]}`}>AI: {REVIEW_VERDICT_LABEL[review.review.verdict]}</span>}
       {review.status === "running" && <span className={`${pillClass} border-line text-muted`}>AI reading…</span>}
       <span className={`${pillClass} border-line text-muted`} title={scan.license.file ? `From ${scan.license.file}` : undefined}>
         {scan.license.spdx ?? (scan.license.kind === "none" ? "No license" : "License?")}
@@ -33,7 +34,7 @@ export function ScanBadge({ scan, onOpen }: { scan: SkillScan | undefined; onOpe
   const top = topFindings(scan, 4);
   if (!top.length) return null;
   const danger = scan.verdict === "danger";
-  const title = `${danger ? "Danger" : "Worth a look"}: ${top.map((f) => f.message).join("; ")}. Click for an AI review in the pane.`;
+  const title = `${SCAN_VERDICT_LABEL[danger ? "danger" : "warn"]}: ${top.map((f) => f.message).join("; ")}. Click for an AI review in the pane.`;
   return (
     <button
       type="button"

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "./api-client";
+import { hostFor } from "./project-host";
+import { useSnapshotVersion } from "./project-snapshot-view";
 import type { ScoutState } from "./scout-view";
 
 // While the scout runs, how often the badge looks for its findings.
@@ -14,8 +15,6 @@ async function scoutOf(res: Promise<Response>) {
   return d.scout ?? null;
 }
 
-const read = (cwd: string) => scoutOf(apiFetch(`/api/scout?cwd=${encodeURIComponent(cwd)}`));
-
 // The refactor scout for a folder (app/api/scout): read on mount and on focus, polled while it runs.
 // rescout() starts a fresh run; started(id) marks a finding as handed to a card.
 export function useScout(cwd: string | null | undefined) {
@@ -23,12 +22,16 @@ export function useScout(cwd: string | null | undefined) {
   const [loaded, setLoaded] = useState<{ cwd: string; scout: ScoutState | null } | null>(null);
   const scout = cwd && loaded?.cwd === cwd ? loaded.scout : null;
   const running = !!scout?.running;
+  // A worker's new snapshot reads again (lib/project-snapshot-view.ts); always 0 on this Mac's own projects.
+  const fresh = useSnapshotVersion(cwd);
 
   useEffect(() => {
     if (!cwd) return;
     let live = true;
     const load = () => {
-      read(cwd)
+      // A worker's findings come from its snapshot (lib/project-reads.ts).
+      hostFor(cwd)
+        .read("scout", cwd)
         .then((s) => {
           if (live) setLoaded({ cwd, scout: s });
         })
@@ -43,10 +46,11 @@ export function useScout(cwd: string | null | undefined) {
       window.removeEventListener("focus", load);
       clearInterval(timer);
     };
-  }, [cwd, running]);
+  }, [cwd, running, fresh]);
 
+  // A re-scout runs on this Mac; a worker scouts only when one of its cards asks.
   function post(body: Record<string, string>) {
-    if (!cwd) return;
+    if (!cwd || !hostFor(cwd).can("projectActs")) return;
     scoutOf(fetch("/api/scout", { method: "POST", headers: HEADERS, body: JSON.stringify({ cwd, ...body }) }))
       .then((s) => {
         setLoaded({ cwd, scout: s });

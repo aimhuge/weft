@@ -19,7 +19,10 @@ export function boardViewMcpServer() {
         "Take a screenshot of Weft's own board window (not the browser pane). save_to also writes it as a PNG (absolute path); highlight boxes the element a CSS selector matches. Secret values show as hatched blocks.",
         {
           save_to: z.string().optional().describe(`Absolute path to save the PNG at, e.g. ${SHOW_DIR}/board/dialog.png`),
-          highlight: z.string().optional().describe("CSS selector of the element to box in orange"),
+          highlight: z
+            .string()
+            .optional()
+            .describe('CSS selector of the element to box in orange, or a text selector like :text-is("Continue")'),
         },
         ({ save_to, highlight }) =>
           attempt(async () => {
@@ -32,7 +35,7 @@ export function boardViewMcpServer() {
       ),
       tool(
         "click",
-        "Click the first element matching a CSS selector on Weft's board window. Reveal and copy controls for secrets are refused.",
+        "Click the first element matching a CSS selector on Weft's board window. A text selector works too: :text-is(\"Settings…\"), :has-text(\"menu\"). Reveal and copy controls for secrets are refused.",
         { selector: z.string() },
         ({ selector }) =>
           attempt(async () => {
@@ -42,7 +45,7 @@ export function boardViewMcpServer() {
       ),
       tool(
         "hover",
-        "Move the mouse over the first element matching a CSS selector on Weft's board window, so hover-only controls appear.",
+        "Move the mouse over the first element matching a CSS selector on Weft's board window, so hover-only controls appear. A text selector works too: :text-is(\"Settings…\").",
         { selector: z.string() },
         ({ selector }) =>
           attempt(async () => {
@@ -52,7 +55,7 @@ export function boardViewMcpServer() {
       ),
       tool(
         "type_text",
-        "Replace the contents of the text field matching a CSS selector on Weft's board window with text.",
+        "Replace the contents of the text field matching a CSS selector on Weft's board window with text. A text selector works too: :text-is(\"Search\").",
         { selector: z.string(), text: z.string() },
         ({ selector, text: value }) =>
           attempt(async () => {

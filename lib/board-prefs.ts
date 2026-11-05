@@ -14,6 +14,32 @@ export function setShowBacklog(on: boolean) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+const FOLD_COOKIE = "weft-folded-columns";
+// Before every column could fold, only Backlog could, under its own cookie: a Backlog folded then stays folded
+// until the next fold or open, which carries it over and clears that cookie.
+const OLD_BACKLOG_FOLD = /(?:^|; )weft-backlog-folded=1/;
+
+// The columns folded to a thin strip with their name and count (components/FoldedColumn.tsx), comma-separated:
+// a string so useSyncExternalStore gets the same snapshot until it changes. Read it with isFolded.
+export function foldedColumns(): string {
+  if (typeof document === "undefined") return "";
+  const set = new RegExp(`(?:^|; )${FOLD_COOKIE}=([^;]*)`).exec(document.cookie);
+  if (set?.[1]) return decodeURIComponent(set[1]);
+  return OLD_BACKLOG_FOLD.test(document.cookie) ? "backlog" : "";
+}
+
+export function isFolded(folded: string, column: string): boolean {
+  return folded.split(",").includes(column);
+}
+
+export function setColumnFolded(column: string, fold: boolean) {
+  const rest = foldedColumns().split(",").filter((c) => c && c !== column);
+  const next = fold ? [...rest, column] : rest;
+  document.cookie = `${FOLD_COOKIE}=${encodeURIComponent(next.join(","))}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  document.cookie = "weft-backlog-folded=; path=/; max-age=0";
+  window.dispatchEvent(new Event(EVENT));
+}
+
 const PROGRESS_COOKIE = "weft-show-progress";
 
 // On by default: the header's streak and level chip (components/GameBadge.tsx). Off is quiet mode.
@@ -42,6 +68,23 @@ export function setViewMode(mode: ViewMode) {
   window.dispatchEvent(new Event(EVENT));
 }
 
+// How much of the board shows: everything (advanced), or the columns and cards with the rest stripped off
+// (regular). No cookie is advanced, so an update never changes a board in use; first launch's welcome picks
+// regular for a new install (components/WelcomeDialog.tsx).
+export type BoardMode = "regular" | "advanced";
+
+const MODE_COOKIE = "weft-board-mode";
+
+export function boardMode(): BoardMode {
+  if (typeof document === "undefined") return "advanced";
+  return new RegExp(`(?:^|; )${MODE_COOKIE}=regular`).test(document.cookie) ? "regular" : "advanced";
+}
+
+export function setBoardMode(mode: BoardMode) {
+  document.cookie = `${MODE_COOKIE}=${mode}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  window.dispatchEvent(new Event(EVENT));
+}
+
 const LANE_COOKIE = "weft-copilot-lane";
 const PEEK_COOKIE = "weft-copilot-peek";
 
@@ -65,6 +108,19 @@ export function copilotLanePeek(): boolean {
 
 export function setCopilotLanePeek(peek: boolean) {
   document.cookie = `${PEEK_COOKIE}=${peek ? 1 : 0}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
+  window.dispatchEvent(new Event(EVENT));
+}
+
+const READ_COOKIE = "weft-copilot-read";
+
+// When you last looked at the copilot (its peek or chat), in ms: the launcher's dot lights for a reply after it.
+export function copilotReadAt(): number {
+  if (typeof document === "undefined") return 0;
+  return Number(new RegExp(`(?:^|; )${READ_COOKIE}=(\\d+)`).exec(document.cookie)?.[1] ?? 0);
+}
+
+export function setCopilotReadAt(at: number) {
+  document.cookie = `${READ_COOKIE}=${String(at)}; path=/; max-age=${10 * 365 * 24 * 60 * 60}; SameSite=Lax`;
   window.dispatchEvent(new Event(EVENT));
 }
 

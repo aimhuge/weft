@@ -4,7 +4,13 @@
 // account's name, so a thread's line says whose thread it was), which Mac, and when the database got it.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient, toAccountUser } from "./account";
-import type { AuditEntry } from "./keychain-audit-view";
+import type { AuditEntry, KeychainRecord } from "./keychain-audit-types";
+
+// The record's shape lives in lib/keychain-audit-types.ts (types only), so the board's Keychain access
+// list (lib/use-keychain-access.ts) can name it without dragging this module — which reaches
+// lib/account.ts and node:fs — into the browser chunk. Re-exported here: the server's own imports of
+// "./keychain-audit-record" keep working.
+export type { KeychainRecord };
 
 // Rows read at most: what the card can show before it would page.
 const LIMIT = 500;
@@ -32,9 +38,6 @@ type Row = {
   via: string | null;
   repeat_count: number;
 };
-
-/** What the account has: whether you're signed in, the name lines read as, and the lines newest first. */
-export type KeychainRecord = { signedIn: boolean; owner: string | null; entries: AuditEntry[] };
 
 // A row back as a log line: nulls dropped, so it reads exactly like a line from the Mac.
 export function entryOf(row: Row, owner: string | null): AuditEntry {

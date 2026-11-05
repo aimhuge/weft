@@ -21,7 +21,7 @@ type Options = { values?: Record<string, string>; missing?: string[]; allows?: b
 type Runner = ReturnType<typeof createSecretRun>;
 
 function make({ values = { DATABASE_URL: URL }, missing = [], allows = false, choice = "once", granted = false, audit = undefined as ((entry: Record<string, unknown>) => unknown) | undefined }: Options = {}) {
-  const vault = { valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values, missing })), granted: vi.fn(() => granted) };
+  const vault = { valuesFor: vi.fn(() => Promise.resolve({ id: "github:o/r", label: "o/r", values, missing })), granted: vi.fn(() => granted), grantAfterApproval: vi.fn() };
   const rules = { allows: vi.fn(() => allows), remember: vi.fn() };
   const ask = vi.fn(() => Promise.resolve(choice));
   const auditFn = audit ?? vi.fn();
@@ -58,6 +58,19 @@ describe("createSecretRun.run", () => {
     const covered = make({ allows: true });
     await covered.runner.run({ ...request, argv: PRINT });
     expect(covered.ask).not.toHaveBeenCalled();
+  });
+
+  it("gives the card the hour when the user says yes, and not on a no, a rule or a grant", async () => {
+    for (const choice of ["once", "always"]) {
+      const yes = make({ choice });
+      await yes.runner.run({ ...request, argv: PRINT, thread: "Build card" });
+      expect(yes.vault.grantAfterApproval).toHaveBeenCalledWith({ card: "c1", thread: "Build card", id: "github:o/r", label: "o/r" });
+    }
+    for (const opts of [{ choice: null }, { allows: true }, { granted: true }]) {
+      const no = make(opts);
+      await no.runner.run({ ...request, argv: PRINT });
+      expect(no.vault.grantAfterApproval).not.toHaveBeenCalled();
+    }
   });
 
   it("skips the ask and the rules entirely when the card has a grant", async () => {
@@ -205,6 +218,62 @@ describe("helpers", () => {
     );
   });
 
+  it("describes a worker's run command first, with where it runs, its key, and that the worker's code gets the values", () => {
+    const run = describeRun({ kind: "run", command: "npm run job", cwd: "app", script: "job: node j.js", names: ["K"], environment: "production", label: "o/r", thread: "Deploy", why: "Ship", worker: "m1mini", remote: "git@github.com:o/r.git", fingerprint: "ab12 cd34", firstUse: true });
+    expect(run.message).toBe("A card on the worker m1mini wants to run a command with secrets from o/r.");
+    expect(run.detail.startsWith("Command: npm run job\n\nRuns:\njob: node j.js\n\nIn: app on the Weft Worker m1mini, not this Mac\n\nRepo: git@github.com:o/r.git")).toBe(true);
+    expect(run.detail).toContain("m1mini's key: ab12 cd34 (first seen now: this Mac pins it)");
+    expect(run.detail).toContain("The command and any code it runs on m1mini get these values.");
+    expect(run.detail.endsWith("Card: Deploy\n\nThe thread says why: Ship")).toBe(true);
+    expect(run.detail).not.toContain("Always lasts");
+    expect(run.reason).toBe('run "npm run job" with K (o/r) for "Deploy" on the worker m1mini');
+    expect(run.view).toMatchObject({ worker: "m1mini", remote: "git@github.com:o/r.git", fingerprint: "ab12 cd34", firstUse: true });
+    const bare = describeRun({ kind: "run", command: "x", cwd: "/", names: ["K"], environment: "development", label: "o/r", worker: "m1mini", fingerprint: "ab12" });
+    expect(bare.detail).toContain("m1mini's key: ab12 (pinned)");
+    expect(bare.detail).not.toContain("Repo:");
+    expect(bare.reason).toBe('run "x" with K (o/r) on the worker m1mini');
+    expect(describeRun({ kind: "run", command: "x", cwd: "/", names: ["K"], environment: "development", label: "o/r", worker: "m1mini" }).detail).not.toContain("key:");
+  });
+
+  it("describes a worker's dev server as one start, each restart asking again", () => {
+    const dev = describeRun({ kind: "dev", command: "pnpm dev", cwd: ".", names: ["K"], environment: "development", label: "o/r", thread: "Fix", worker: "m1mini" });
+    expect(dev.message).toBe("Start a dev server on the worker m1mini with o/r's development secrets?");
+    expect(dev.detail).toContain("sealed to that worker for this one start: a restart asks again");
+    expect(dev.detail).toContain("the project's code included");
+    expect(dev.detail).toContain("any process on m1mini can read a running server's env");
+    expect(dev.reason).toBe('start "pnpm dev" with K (o/r) for "Fix" on the worker m1mini');
+  });
+
+  it("routes a worker's ask to main by its id, and says when main can't answer one", async () => {
+    const workerAsk = vi.fn(() => Promise.resolve({ queued: true }));
+    const routes = secretRunRoutes(() => ({ workerAsk }) as never);
+    expect(await routes["POST /secrets/worker-ask"]({ call: "call-1" })).toEqual({ queued: true });
+    expect(await routes["POST /secrets/worker-ask"]({})).toEqual({ queued: true });
+    expect(workerAsk).toHaveBeenLastCalledWith("");
+    const old = secretRunRoutes(() => ({}) as never);
+    expect(() => old["POST /secrets/worker-ask"]({ call: "call-1" })).toThrow("This Mac can't answer a worker's secrets yet.");
+  });
+
+  it("routes a worker card's vault call to main by its id too", async () => {
+    const workerVault = vi.fn(() => Promise.resolve({ label: "o/r", secrets: [] }));
+    const routes = secretRunRoutes(() => ({ workerVault }) as never);
+    expect(await routes["POST /secrets/worker-vault"]({ call: "call-2", tool: "ignored" })).toEqual({ label: "o/r", secrets: [] });
+    expect(workerVault).toHaveBeenCalledWith("call-2");
+    await routes["POST /secrets/worker-vault"]({});
+    expect(workerVault).toHaveBeenLastCalledWith("");
+    expect(() => secretRunRoutes(() => ({}) as never)["POST /secrets/worker-vault"]({ call: "c" })).toThrow("This Mac can't answer a worker's vault calls yet.");
+  });
+
+  it("routes a worker's Goose key ask to main by its id", async () => {
+    const workerGooseKey = vi.fn(() => Promise.resolve({ queued: true }));
+    const routes = secretRunRoutes(() => ({ workerGooseKey }) as never);
+    expect(await routes["POST /secrets/worker-goose-key"]({ call: "call-3", providerId: "ignored" })).toEqual({ queued: true });
+    expect(workerGooseKey).toHaveBeenCalledWith("call-3");
+    await routes["POST /secrets/worker-goose-key"]({});
+    expect(workerGooseKey).toHaveBeenLastCalledWith("");
+    expect(() => secretRunRoutes(() => ({}) as never)["POST /secrets/worker-goose-key"]({ call: "c" })).toThrow("This Mac can't answer a worker's Goose key asks yet.");
+  });
+
   it("asks with a dialog, then Touch ID where there is one", async () => {
     const dialog = { showMessageBox: vi.fn() };
     const win = {};
@@ -219,7 +288,7 @@ describe("helpers", () => {
     expect(touch.promptTouchID).toHaveBeenCalledWith("r");
     dialog.showMessageBox.mockResolvedValueOnce({ response: 2 });
     expect(await ask(req)).toBe("always");
-    expect(dialog.showMessageBox).toHaveBeenCalledWith(win, expect.objectContaining({ buttons: ["Cancel", "Allow once", "Always allow"], message: "m", detail: "d" }));
+    expect(dialog.showMessageBox).toHaveBeenCalledWith(win, expect.objectContaining({ buttons: ["Cancel", "Allow for 1 hour", "Always allow"], message: "m", detail: "d" }));
     touch.promptTouchID.mockRejectedValueOnce(new Error("cancelled"));
     dialog.showMessageBox.mockResolvedValueOnce({ response: 1 });
     expect(await ask(req)).toBeNull();
@@ -246,15 +315,25 @@ describe("helpers", () => {
     expect(dialog.showMessageBox).toHaveBeenCalledTimes(1);
   });
 
-  it("routes the control server's requests, defaulting to the active card", async () => {
+  // The card is the one the server proved, not the one the body names: a body that says "k" can't
+  // borrow another card's grant, and a request that proves nothing runs for nobody (2026-10-28).
+  it("routes the control server's requests under the proven card", async () => {
     const r = { run: vi.fn((b: unknown) => Promise.resolve(b)), devGrant: vi.fn((b: unknown) => Promise.resolve(b)), claim: vi.fn((g: string) => ({ env: g })) } as unknown as Runner;
-    const routes = secretRunRoutes(() => r, () => "active");
-    expect(await routes["POST /secrets/run"]({ command: "x" })).toEqual({ command: "x", key: "active" });
-    expect(await routes["POST /secrets/run"]({ key: "k" })).toEqual({ key: "k" });
-    expect(await routes["POST /secrets/dev-grant"]({ key: "k" })).toEqual({ key: "k" });
+    const routes = secretRunRoutes(() => r, (_body, route) => (route === "/secrets/run" ? "proven" : "also-proven"));
+    expect(await routes["POST /secrets/run"]({ command: "x" }, "/secrets/run")).toEqual({ command: "x", key: "proven" });
+    expect(await routes["POST /secrets/run"]({ key: "k" }, "/secrets/run")).toEqual({ key: "proven" });
+    expect(await routes["POST /secrets/dev-grant"]({ key: "k" }, "/secrets/dev-grant")).toEqual({ key: "also-proven" });
     expect(routes["POST /secrets/claim"]({ grant: "g" }) as unknown).toEqual({ env: "g" });
     const none = secretRunRoutes(() => undefined);
     expect(() => none["POST /secrets/claim"]({})).toThrow("The secrets vault isn't ready yet.");
     expect(() => none["POST /secrets/run"]({})).toThrow();
+  });
+
+  // A request that proves nothing has no card: it runs for nobody rather than for the pane's
+  // active card, which is someone else's (2026-10-28).
+  it("gives an unproven request no card at all", async () => {
+    const r = { run: vi.fn((b: unknown) => Promise.resolve(b)), devGrant: vi.fn((b: unknown) => Promise.resolve(b)) } as unknown as Runner;
+    const routes = secretRunRoutes(() => r, () => "");
+    expect(await routes["POST /secrets/run"]({ command: "x", key: "k" }, "/secrets/run")).toEqual({ command: "x", key: "" });
   });
 });

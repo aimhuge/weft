@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import ts from "typescript";
+import { RUNTIME_PROPS, type UngatedRead, ungatedMessage, ungatedMetadata } from "./prerender-gate";
 
 // Finds what `next build` refuses under cacheComponents (next.config.ts) and nothing else catches: pnpm test, lint,
 // typecheck and `next dev` all pass, then the Vercel build fails. The admin pages' force-dynamic failed it on
@@ -15,6 +16,9 @@ import ts from "typescript";
 //   connection()): supabase-js reads Date.now() as it builds the client, "encountered the unstable value Date.now()
 //   while prerendering". Not a build error: it fires on a cold lambda only (the client is cached after), and left
 //   /invite/[token] on its fallback on 2026-10-18. <Suspense> doesn't help; only connection() does.
+// - a page whose default export returns a static branch on an env gate before its <Suspense>, while generateMetadata
+//   reads params without returning on that gate first: the Mac release build (no VERCEL/WEFT_WEB) refused five share
+//   pages on 2026-11-03 and kept 0.7.1 from packing (lib/prerender-gate.ts).
 // lib/prerender-check.test.ts runs it over the real tree; lib/route-import-guard.ts runs it on each edit to a route
 // file. The TypeScript parser, so comments and strings that mention these never count. Only node: imports and
 // typescript: scripts/import-check-hook.mjs loads this file with Node's type stripping.
@@ -23,7 +27,6 @@ import ts from "typescript";
 const SEGMENT_CONFIGS = new Set(["dynamic", "revalidate", "fetchCache", "dynamicParams"]);
 // Not connection(): app/(admin)/admin/settings/page.tsx awaits it at the top and builds (it marks a route dynamic on purpose).
 const RUNTIME_CALLS = new Set(["cookies", "headers"]);
-const RUNTIME_PROPS = new Set(["params", "searchParams"]);
 // Builds a Supabase client (Date.now()) / moves the render past the prerender (connection(), or a helper awaiting it).
 const CLOCK_CALLS = new Set(["serviceClient"]);
 const REQUEST_BOUND = new Set(["connection", "webClient", "webUser"]);
@@ -53,6 +56,8 @@ export interface PrerenderFacts {
   reads: Read[];
   // The functions that build a service client before anything request-bound.
   clock: string[];
+  // Metadata functions that read params ahead of the gate the page's static branch returns on.
+  ungated: UngatedRead[];
 }
 
 export function prerenderFacts(src: string, file: string): PrerenderFacts {
@@ -60,13 +65,17 @@ export function prerenderFacts(src: string, file: string): PrerenderFacts {
   const sf = ts.createSourceFile(file, src, ts.ScriptTarget.Latest, true, kind);
   const top = topLevel(sf);
   const reads: Read[] = [];
+  const metas: [string, ts.FunctionLikeDeclaration][] = [];
   for (const [name, target] of top.exported) {
     if (name !== "default" && !METADATA_FNS.has(name)) continue;
     const fn = typeof target === "string" ? top.fns.get(target) : target;
     if (fn) reads.push(...runtimeReads(fn).map((what) => ({ fn: name === "default" ? "the default export" : name, what })));
+    if (fn && name !== "default") metas.push([name, fn]);
   }
+  const page = top.exported.get("default");
+  const ungated = ungatedMetadata(typeof page === "string" ? top.fns.get(page) : page, metas, top.fns);
   const clock = [...top.fns].filter(([, fn]) => clockFirst(fn)).map(([name]) => name);
-  return { segmentConfigs: top.segmentConfigs, staticParams: top.exported.has("generateStaticParams"), suspendsChildren: suspendsChildren(sf), reads, clock };
+  return { segmentConfigs: top.segmentConfigs, staticParams: top.exported.has("generateStaticParams"), suspendsChildren: suspendsChildren(sf), reads, clock, ungated };
 }
 
 // A module's top level: its segment config exports, its functions by name, and what it exports, each as the function
@@ -234,7 +243,9 @@ export function prerenderProblems(root: string, file: string, src?: string): Pro
   for (const fn of facts.clock) {
     problems.push({ kind: "blocking", message: `${rel}: ${fn} calls serviceClient() before anything request-bound: "Next.js encountered the unstable value \`Date.now()\` while prerendering" on a cold start. \`await connection()\` (next/server) first, as app/invite/[token]/page.tsx's InviteBody does.` });
   }
-  const reads = facts.reads.filter((r) => !(r.what === "params" && facts.staticParams));
+  for (const u of facts.ungated) problems.push({ kind: "blocking", message: ungatedMessage(rel, u) });
+  // An ungated metadata function's own message says how to fix it; "use cache" on params alone wouldn't.
+  const reads = facts.reads.filter((r) => !(r.what === "params" && facts.staticParams) && !facts.ungated.some((u) => u.fn === r.fn));
   const pageReads = reads.filter((r) => r.fn === "the default export");
   const covered = pageReads.length > 0 && insideSuspense(appDir, file);
   for (const r of covered ? reads.filter((x) => x.fn !== "the default export") : reads) {

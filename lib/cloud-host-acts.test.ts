@@ -1,0 +1,169 @@
+// weft.zip's host verbs (lib/cloud-host-acts.ts): ↑ edit, Send fresh and Send later as `host` rows for the machine
+// that runs the card, each followed to its result (a refusal rejects, one not taken yet is queued), and the "/" list
+// read back from the row's result and kept a few minutes.
+import { describe, expect, it, vi } from "vitest";
+import type { NewCommand } from "./cloud-commands";
+import { cloudHostActs, workerOfTarget, type CloudHostInput } from "./cloud-host-acts";
+import { LineDown, LineLost } from "./session-line-calls";
+import type { CommandResult } from "./worker-command-wait";
+
+const TARGET = { orgId: "org-1", device: "mac-1", folder: "/dev/app", cardId: "c1" };
+// A clock that moves a tick per look, so a host that never answers gives up after a few reads.
+const ticks = () => {
+  let t = 0;
+  return { sleep: () => Promise.resolve(), every: 1, unclaimed: 5, claimed: 5, now: () => t++ };
+};
+
+function setup(reads: CommandResult[] = [{ status: "done", error: null }], over: Partial<CloudHostInput> = {}) {
+  const rows: NewCommand[] = [];
+  const read = vi.fn(() => Promise.resolve(reads.length > 1 ? reads.shift()! : reads[0]!));
+  const acts = cloudHostActs({
+    target: (cardId) => (cardId === "gone" ? "That thread isn't on the board anymore." : { ...TARGET, cardId }),
+    insert: (row) => (rows.push(row), Promise.resolve({ id: `cmd-${rows.length}` })),
+    read,
+    wait: ticks(),
+    queuedWait: ticks(),
+    ...over,
+  });
+  return { acts, rows, read };
+}
+
+const payloads = (rows: NewCommand[]) => rows.map((r) => r.payload);
+const DONE: CommandResult = { status: "done", error: null };
+const PENDING: CommandResult = { status: "pending", error: null };
+
+describe("cloudHostActs", () => {
+  it("sends ↑ edit, Send fresh and Send later as host rows for the card's machine, settled once they ran", async () => {
+    const { acts, rows } = setup();
+    await acts.editLast("c1", "better");
+    await acts.fresh("c1", "again");
+    await expect(acts.schedule("c1", "later", 9_000)).resolves.toBeUndefined();
+    await acts.unschedule("c1", "m1");
+    expect(rows.every((r) => r.kind === "host" && r.target_device === "mac-1" && r.folder === "/dev/app" && r.org_id === "org-1")).toBe(true);
+    expect(payloads(rows)).toEqual([
+      { verb: "card.message.edit", args: { text: "better", id: "c1" } },
+      { verb: "card.fresh", args: { message: "again", id: "c1" } },
+      { verb: "card.schedule", args: { text: "later", at: 9_000, id: "c1" } },
+      { verb: "card.unschedule", args: { messageId: "m1", id: "c1" } },
+    ]);
+  });
+
+  it("sends any verb through act, the card's id always the target's", async () => {
+    const { acts, rows } = setup();
+    await expect(acts.act("card.update", "c1", { body: { starred: true }, id: "other" })).resolves.toBeUndefined();
+    expect(payloads(rows)).toEqual([{ verb: "card.update", args: { body: { starred: true }, id: "c1" } }]);
+  });
+
+  it("rejects with the machine's refusal, so the box can put the text back", async () => {
+    await expect(setup([{ status: "failed", error: "That time has already passed." }]).acts.schedule("c1", "x", 1)).rejects.toThrow("That time has already passed.");
+    await expect(setup([{ status: "failed", error: null }]).acts.editLast("c1", "x")).rejects.toThrow("Your Mac couldn't do that.");
+  });
+
+  it("answers { queued } for one the machine hasn't taken, settling when it runs or is refused", async () => {
+    const ran = setup([PENDING, PENDING, PENDING, PENDING, PENDING, PENDING, PENDING, DONE]);
+    const later = await ran.acts.schedule("c1", "x", 1);
+    await expect(later!.queued).resolves.toBeUndefined();
+    const refused = setup([PENDING, PENDING, PENDING, PENDING, PENDING, PENDING, PENDING, { status: "failed", error: "asleep too long" }]);
+    const held = await refused.acts.schedule("c1", "x", 1);
+    await expect(held!.queued).rejects.toThrow("asleep too long");
+    // An edit doesn't hold the box for a machine that's away: it resolves, and a late refusal shows above the box.
+    await expect(setup([PENDING]).acts.fresh("c1", "x")).resolves.toBeUndefined();
+  });
+
+  it("refuses a card it can't address, and an insert that fails", async () => {
+    await expect(setup().acts.editLast("gone", "x")).rejects.toThrow("That thread isn't on the board anymore.");
+    await expect(setup([DONE], { insert: () => Promise.resolve("permission denied") }).acts.fresh("c1", "x")).rejects.toThrow("permission denied");
+  });
+
+  it("reads the skills back off the row's result, and keeps a card's list for a while", async () => {
+    const { acts, rows, read } = setup([{ status: "claimed", error: null }, { ...DONE, result: { ok: true, cardId: "c1", skills: [["ship", "Ship it", "user"]] } }]);
+    await expect(acts.listSkills("c1")).resolves.toEqual([{ name: "ship", description: "Ship it", source: "user" }]);
+    await acts.listSkills("c1");
+    expect(payloads(rows)).toEqual([{ verb: "skills.list", args: { id: "c1" } }]);
+    expect(read).toHaveBeenCalledWith("cmd-1");
+  });
+
+  it("has no list off a card, and says why when the host refused or never answered", async () => {
+    const none = setup();
+    await expect(none.acts.listSkills(undefined)).resolves.toEqual([]);
+    expect(none.rows).toEqual([]);
+    await expect(setup([{ status: "failed", error: "No such card." }]).acts.listSkills("c1")).rejects.toThrow("No such card.");
+    await expect(setup([{ status: "failed", error: null }]).acts.listSkills("c1")).rejects.toThrow("Couldn't read the skills.");
+    await expect(setup([PENDING]).acts.listSkills("c1")).rejects.toThrow("didn't answer");
+  });
+});
+
+describe("a widening from weft.zip", () => {
+  it("goes to be signed with the passkey instead of as a row, and anything else goes as before", async () => {
+    const widen = vi.fn(() => true);
+    const { acts, rows } = setup(undefined, { widen });
+    await expect(acts.act("card.update", "c1", { body: { agent: "builder" } })).resolves.toBeUndefined();
+    expect(widen).toHaveBeenCalledWith({ target: TARGET, verb: "card.update", args: { body: { agent: "builder" } } });
+    await acts.schedule("c1", "!make", 1);
+    expect(rows).toEqual([]);
+    await acts.act("card.update", "c1", { body: { title: "t" } });
+    expect(rows).toHaveLength(1);
+  });
+
+  it("sends it unsigned with no passkey, or when the card can't be addressed", async () => {
+    const { acts, rows } = setup(undefined, { widen: () => false });
+    await acts.act("card.shell", "c1", { command: "ls" });
+    expect(rows).toHaveLength(1);
+    const gone = setup(undefined, { widen: vi.fn(() => true) });
+    await expect(gone.acts.act("card.shell", "gone", { command: "ls" })).rejects.toThrow(/isn't on the board/);
+  });
+});
+
+describe("a worker's card over its session line", () => {
+  const WORKER = { ...TARGET, device: "worker:w-1" };
+  function online(call: (verb: string, args: Record<string, unknown>) => Promise<unknown>, up = true) {
+    const held = { up: () => up, call: vi.fn(call) };
+    const line = vi.fn((workerId: string) => (workerId === "w-1" ? held : null));
+    const made = setup(undefined, { target: (cardId) => ({ ...WORKER, cardId }), line });
+    return { ...made, held, line };
+  }
+
+  it("goes on the line while it's up, with the card's id, and sends no row", async () => {
+    const { acts, rows, held, line } = online(() => Promise.resolve({ value: null }));
+    await expect(acts.act("card.update", "c1", { body: { starred: true }, id: "other" })).resolves.toBeUndefined();
+    expect(line).toHaveBeenCalledWith("w-1");
+    expect(held.call).toHaveBeenCalledWith("card.update", { body: { starred: true }, id: "c1" });
+    expect(rows).toEqual([]);
+  });
+
+  it("takes the relay when the line is down, or couldn't send it", async () => {
+    const down = online(() => Promise.resolve(), false);
+    await down.acts.act("card.update", "c1", { body: { starred: true } });
+    expect(down.held.call).not.toHaveBeenCalled();
+    expect(down.rows).toHaveLength(1);
+    const unsent = online(() => Promise.reject(new LineDown()));
+    await unsent.acts.act("card.update", "c1", { body: { starred: true } });
+    expect(unsent.rows).toHaveLength(1);
+  });
+
+  it("rejects with the worker's refusal, and never resends a call the line lost", async () => {
+    const refused = online(() => Promise.reject(new Error("A worker doesn't run shell commands from the network.")));
+    await expect(refused.acts.act("card.update", "c1", { body: { starred: true } })).rejects.toThrow("from the network");
+    const lost = online(() => Promise.reject(new LineLost()));
+    await expect(lost.acts.act("card.update", "c1", { body: { starred: true } })).rejects.toBeInstanceOf(LineLost);
+    expect([...refused.rows, ...lost.rows]).toEqual([]);
+  });
+
+  it("never carries a widening or pasted files: those go as rows", async () => {
+    const { acts, rows, held } = online(() => Promise.resolve());
+    await acts.act("card.update", "c1", { body: { agent: "builder" } });
+    await acts.act("card.message.edit", "c1", { text: "see ![shot](/tmp/a.png)" });
+    expect(held.call).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(2);
+  });
+
+  it("leaves a Mac's card on the relay, line or not", async () => {
+    const line = vi.fn(() => ({ up: () => true, call: vi.fn() }));
+    const { acts, rows } = setup(undefined, { line });
+    await acts.act("card.update", "c1", { body: { starred: true } });
+    expect(line).not.toHaveBeenCalled();
+    expect(rows).toHaveLength(1);
+    expect(workerOfTarget("gone")).toBeNull();
+    expect(workerOfTarget(WORKER)).toBe("w-1");
+  });
+});

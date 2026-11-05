@@ -4,26 +4,16 @@ import path from "node:path";
 import { globalSingleton } from "./global-singleton";
 import { looksScratch } from "./scratch";
 import { DATA_DIR, listCards } from "./store";
+import type { Welcome } from "./welcome-types";
 
 // First launch's welcome (components/WelcomeDialog.tsx): whether your Claude Code history counts on
 // your Wefter Profile, and which projects' sessions become cards. Until it's answered the session
 // sync adds no cards (lib/import-sync.ts). Kept in ~/.weft/welcome.json, apart from settings.json.
 
-export interface Welcome {
-  // When it was answered; history is what happened before this.
-  at: number;
-  // Your Claude Code history counts toward XP, streaks and your class. Opt out to start from zero.
-  countHistory: boolean;
-  // Start fresh: sessions that were quiet before `at` stay off the board.
-  fresh: boolean;
-  // Project folders left unticked, whose sessions stay off the board.
-  skip: string[];
-  // A board from before the welcome existed, adopted as it was (history counts, everything imports).
-  legacy?: boolean;
-  // Settings → General's "Test it": show the real welcome again over this answer, which stays in force
-  // (profile, imports) until the welcome is answered anew.
-  test?: boolean;
-}
+// The welcome's shape lives in lib/welcome-types.ts (types only, no node:fs), so the board's welcome
+// dialog can name it without dragging this module into the browser chunk. Re-exported here: the
+// server's own imports of "./welcome" keep working.
+export type { Welcome };
 
 export const WELCOME_FILE = path.join(DATA_DIR, "welcome.json");
 

@@ -1,0 +1,135 @@
+/* Weft Cloud Workers, under the plans (components/home/CloudWorkers.tsx). The access row's dashed look, one card wide:
+   the pitch on the left, the request form on the right, stacked on a phone. The reply lines stay hidden until the
+   route's redirect lands on their anchor (:target), so the page needs no client JS. */
+.wz-cloud {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 28px;
+  margin-top: 16px;
+  padding: 22px 22px 24px;
+  border-radius: 14px;
+  border: 1px dashed rgb(240 153 95 / 0.4);
+  scroll-margin-top: 80px;
+}
+
+/* Same type as the access row's name, chip, headline and body (home.css), under their own names so the plan and
+   access tests keep counting only their own cards. */
+.wz-cloudName {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--clay-2);
+}
+
+.wz-cloudChip {
+  padding: 2px 8px;
+  border-radius: 99px;
+  border: 1px solid rgb(240 153 95 / 0.4);
+  font-size: 10.5px;
+  color: var(--thread-2);
+}
+
+.wz-cloudHeadline {
+  margin: 10px 0 0;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 22px;
+  letter-spacing: -0.02em;
+  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 144;
+}
+
+.wz-cloudBody {
+  margin: 12px 0 0;
+  font-size: 14.5px;
+  color: var(--thread-2);
+  text-wrap: pretty;
+}
+
+.wz-cloudPoints {
+  margin: 12px 0 0;
+  padding-left: 18px;
+  font-size: 14.5px;
+  color: var(--thread-2);
+}
+
+.wz-cloudPoints li + li {
+  margin-top: 4px;
+}
+
+.wz-cloudForm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.wz-cloudLabel {
+  font-size: 13.5px;
+  color: var(--thread-2);
+}
+
+.wz-cloudForm textarea,
+.wz-cloudForm input {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgb(236 229 216 / 0.18);
+  background: rgb(236 229 216 / 0.04);
+  color: var(--thread);
+  font: inherit;
+  font-size: 15px;
+  resize: vertical;
+}
+
+.wz-cloudForm textarea:focus,
+.wz-cloudForm input:focus {
+  outline: none;
+  border-color: var(--clay-2);
+}
+
+.wz-root .wz-cloudCta {
+  align-self: flex-start;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 10px 20px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--clay);
+  color: #1a0e07;
+  font: inherit;
+  font-size: 14.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.wz-root .wz-cloudCta:hover {
+  background: var(--clay-2);
+}
+
+.wz-cloudReply {
+  display: none;
+  margin: 4px 0 0;
+  font-size: 14px;
+  color: var(--clay-2);
+}
+
+.wz-cloudReply:target {
+  display: block;
+}
+
+.wz-cloudReplyFailed {
+  color: var(--thread-2);
+}
+
+@media (max-width: 960px) {
+  .wz-cloud {
+    grid-template-columns: 1fr;
+  }
+}

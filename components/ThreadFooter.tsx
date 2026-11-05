@@ -3,14 +3,17 @@
 // What sits under a thread's messages in ThreadView: a pending permission request (when it isn't a question, which
 // the reply box asks) and the reply box, or just the status strip where the review panel stands in for the box or
 // nothing can be sent. Both read what they can offer from the thread's transport (lib/thread-transport.ts): Wait,
-// folder grants and "!" commands only where the Mac itself runs the card.
+// and "!" commands only where the Mac itself runs the card; a folder grant goes inside the answer on any other machine.
 import type { TrackSend } from "@/lib/use-pending-sends";
 import type { ReactNode } from "react";
 import type { PlanResets } from "@/lib/schedule";
 import { turnCutOff } from "@/lib/reply-mode";
 import { modelOn } from "@/lib/new-thread";
+import type { GrantScope } from "@/lib/cloud-commands";
 import { useThreadTransport } from "@/lib/thread-transport";
 import type { Card } from "@/lib/types";
+import type { CacheState } from "@/lib/types-card";
+import BackendPicker from "./BackendPicker";
 import CrashGuard from "./CrashGuard";
 import ElicitationForm from "./ElicitationForm";
 import { guarded } from "./guarded";
@@ -25,14 +28,19 @@ const ReplyBox = guarded(() => import("./ReplyBox"), { what: "reply box", classN
 
 // The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered;
 // an MCP server's form (lib/elicitation.ts) answers with its values too.
-export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>) => void }) {
-  const { grantFolder, waitPermission, putFirst } = useThreadTransport();
+export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>, grant?: GrantScope) => void }) {
+  const { grantFolder, grantInAnswer, waitPermission, putFirst, putHolderFirst } = useThreadTransport();
   const pending = card.pending;
   if (!pending || pending.questions) return null;
 
   // "This card" / "Always" on an outside-folder prompt: grant the folder and allow the call (lib/folder-guard.ts).
-  // Both go at once, the grant first, so the prompt leaves without waiting on the grant's round trip.
-  const grant = (scope: "card" | "always") => {
+  // Both go at once, the grant first, so the prompt leaves without waiting on the grant's round trip. On another
+  // machine they are one command, and the folder is that machine's to read.
+  const grant = (scope: GrantScope) => {
+    if (grantInAnswer) {
+      answer(true, undefined, scope);
+      return;
+    }
     const dir = pending.readScope?.directory;
     if (!dir || !grantFolder) return;
     void grantFolder(card.id, dir, scope).catch(() => {});
@@ -58,7 +66,9 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
             onAnswer={answer}
             onWait={waitPermission && (() => void waitPermission(card.id, pending.id).catch(() => {}))}
             onFirst={putFirst && (() => void putFirst(card.id, pending.id).catch(() => {}))}
-            onGrant={grantFolder && grant}
+            onOtherFirst={putHolderFirst && (() => void putHolderFirst(card.id, pending.id).catch(() => {}))}
+            onGrant={grantFolder || grantInAnswer ? grant : undefined}
+            elsewhere={grantInAnswer}
           />
         )}
       </div>
@@ -69,7 +79,21 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
 type EditLast = { text: string; canRewind: boolean; fileEdits: number; onEdit: (text: string) => Promise<void> };
 
 // The reply box, or (show false: the review panel stands in, or nothing can be sent) the status strip on its own, so
-// the context and limits stay in view.
+// the context and limits stay in view. The copilot keeps it short: the board's footer already shows the limits, so
+// under its box sits only the model it runs on, to switch; no cold-cache split and no Done (it has no project).
+// The cold-cache split on Send fresh: the reply box asks to resend without the cache, and `track` draws the
+// message in the thread while it is sent (lib/use-pending-sends.ts). Copilot threads have no cache to split.
+function staleSplit(
+  card: Card,
+  fresh: ((cardId: string, message: string) => Promise<void>) | undefined,
+  track?: TrackSend,
+): { cache: CacheState; onFresh: (message: string) => Promise<void> } | undefined {
+  const cache = card.stats?.cache;
+  if (!cache || !fresh) return undefined;
+  const onFresh = (message: string) => (track ? track(message, () => fresh(card.id, message)) : fresh(card.id, message));
+  return { cache, onFresh };
+}
+
 export function ThreadReply({ card, show, live, placeholder, question, scheduling, editLast, onEditing, onSend, track }: {
   card: Card;
   show: boolean;
@@ -86,26 +110,29 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   const transport = useThreadTransport();
   const { shell } = transport;
   const { fresh } = transport;
-  const cache = card.stats?.cache;
-  const status = <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} />;
+  const pilot = card.role === "copilot";
+  // Off this Mac (a worker's card, weft.zip) the plan limits are the card's own, from the CLI that runs it there.
+  const status = pilot ? <BackendPicker card={card} up /> : <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} cardLimits={!transport.desktop} />;
   if (!show) return <div className="shrink-0 border-t border-line px-4 py-1.5">{status}</div>;
   return (
     <ReplyBox key={card.id} question={question} cardId={card.id} cwd={card.cwd} live={live} placeholder={placeholder} suggestion={card.suggestion}
-      midTurn={card.role !== "copilot" && (card.backend === "claude" || card.backend === "puku")}
+      midTurn={!pilot && (card.backend === "claude" || card.backend === "puku")}
       sendLater={scheduling && { backend: card.backend, resets: scheduling.resets, scheduled: card.scheduled ?? [] }}
       status={status}
-      stale={cache && fresh ? { cache, onFresh: (message) => (track ? track(message, () => fresh(card.id, message)) : fresh(card.id, message)) } : undefined}
+      stale={pilot ? undefined : staleSplit(card, fresh, track)}
       cutOff={turnCutOff(card)}
       // No live session: a model/CLI was just switched (lib/backend-switch.ts clears sessionId), or the
       // card was never started. A long-running card whose cache just lapsed still has sessionId set, so
       // this is false there — Continue still works on cold cache with history.
       noPriorContext={!card.sessionId}
+      noDone={pilot}
       fiveHour={card.stats?.fiveHour}
       backend={card.backend}
       // The model the thread runs on: the one it was started with, else the one its session runs on
       // (lib/new-thread.ts modelOn picks the card's own model only when it fits the CLI).
       model={modelOn(card.backend, card.model) ?? card.stats?.runsOn?.model}
       editLast={editLast} onEditing={onEditing}
+      noShell={shell ? undefined : transport.shellRefusal}
       onSend={onSend} onShell={shell && ((command) => shell(card.id, command))} onStop={() => transport.stop(card.id)} />
   );
 }

@@ -13,6 +13,7 @@ vi.mock("@/lib/telemetry-send", () => ({ forwardOnboarding: vi.fn(() => Promise.
 const { GET, POST, PUT } = await import("./route");
 const collect = await import("./collect/route");
 const send = await import("@/lib/telemetry-send");
+const { resetTelemetryLimits, TELEMETRY_PER_MINUTE_PER_IP } = await import("@/lib/telemetry-limit");
 
 const URL_BASE = "http://localhost:3457/api/telemetry";
 const req = (method: string, body?: unknown) =>
@@ -57,5 +58,23 @@ describe("/api/telemetry/collect", () => {
   it("passes null for a body that isn't JSON", async () => {
     await collect.POST(new Request("https://weft.zip/api/telemetry/collect", { method: "POST", body: "nope" }));
     expect(send.captureOnboarding).toHaveBeenCalledWith(null);
+  });
+
+  const post = (headers: Record<string, string>) =>
+    collect.POST(new Request("https://weft.zip/api/telemetry/collect", { method: "POST", headers, body: "{}" }));
+
+  it("turns away a browser post from another site before reading the body", async () => {
+    expect((await post({ origin: "https://evil.example" })).status).toBe(403);
+    expect(send.captureOnboarding).not.toHaveBeenCalled();
+    expect((await post({ origin: "https://weft.zip", "x-forwarded-for": "198.51.100.9" })).status).toBe(204);
+  });
+
+  it("answers 429 with retry-after once one address passes its cap", async () => {
+    resetTelemetryLimits();
+    const headers = { "x-forwarded-for": "203.0.113.7" };
+    for (let i = 0; i < TELEMETRY_PER_MINUTE_PER_IP; i++) expect((await post(headers)).status).toBe(204);
+    const res = await post(headers);
+    expect(res.status).toBe(429);
+    expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(0);
   });
 });

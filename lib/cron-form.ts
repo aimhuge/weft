@@ -120,3 +120,12 @@ export function runLabel(at: number, now = Date.now()): string {
   if (sameDay(at, now + 86_400_000)) return `tomorrow ${time}`;
   return `${d.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" })}, ${time}`;
 }
+
+// "in 5m", "in 3h", "in 2d": how long until the next run. The board's crons say it this way; the
+// list view's ⏰ badge and the Crons band in the sheet use it, and the drawer says runLabel's way.
+export function untilNext(at: number, now: number): string {
+  const m = Math.max(1, Math.round((at - now) / 60_000));
+  if (m < 60) return `in ${m}m`;
+  const h = Math.round(m / 60);
+  return h < 48 ? `in ${h}h` : `in ${Math.round(h / 24)}d`;
+}

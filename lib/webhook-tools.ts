@@ -1,14 +1,16 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
+import { closeTunnel, DEFAULT_HOURS, listTunnels, MAX_HOURS, openTunnel } from "./tunnels";
 import { createRelay } from "./webhook-forward";
-import { createRelays } from "./webhook-relays";
+import { createRelays, type RelayResult } from "./webhook-relays";
+import { createRelayOnWorker } from "./relay-worker";
 import { addWebhook, listWebhooks, updateWebhook, type Webhook } from "./webhooks";
 
 // The 🪝 webhooks for threads (docs/architecture/webhooks.md): a thread records the routes providers post to as
 // blanks, the rail counts them, and the user (or the thread) registers them when ready. These run in the Next
 // server, so they use lib/webhooks.ts directly; only ask_add reaches the board, through the desktop shell.
-export const WEBHOOKS_PROMPT = `When the code you write receives webhooks (a route a provider such as Stripe, GitHub or Resend posts to), record each one as soon as you know its route with mcp__webhooks__add_blank: a name, the route (a path like /api/stripe/webhook), the provider's events, a hint where to register it, and the vault name of its signing secret. The user sees the blanks counted on 🪝 on the left rail. A dev server on localhost can't be reached from outside, so call mcp__webhooks__relay for a public URL on Weft that forwards deliveries to it while Weft runs (for several webhooks, one call with names, so the user approves every secret with one Touch ID), and register that URL with the provider yourself when you can (its CLI or API, or its dashboard in the browser pane), then call mcp__webhooks__mark_registered. Only when you're blocked on a webhook being registered right now, call mcp__webhooks__ask_add: it adds the blank too and opens the 🪝 drawer on it. Never invent a tunnel (ngrok and the like) when relay will do.`;
+export const WEBHOOKS_PROMPT = `When the code you write receives webhooks (a route a provider such as Stripe, GitHub or Resend posts to), record each one as soon as you know its route with mcp__webhooks__add_blank: a name, the route (a path like /api/stripe/webhook), the provider's events, a hint where to register it, and the vault name of its signing secret. The user sees the blanks counted on 🪝 on the left rail. A dev server on localhost can't be reached from outside, so call mcp__webhooks__relay for a public URL on Weft that forwards deliveries to it while Weft runs (for several webhooks, one call with names, so the user approves every secret with one Touch ID), and register that URL with the provider yourself when you can (its CLI or API, or its dashboard in the browser pane), then call mcp__webhooks__mark_registered. Only when you're blocked on a webhook being registered right now, call mcp__webhooks__ask_add: it adds the blank too and opens the 🪝 drawer on it. Never invent a tunnel (ngrok and the like): relay covers a provider's deliveries, and when something else needs a dev server from outside this Mac (a page on a phone, an OAuth callback), mcp__webhooks__tunnel gives it a private address, after the user's Touch ID. Close it with mcp__webhooks__close_tunnel when you're done.`;
 
 const PROJECT = z.string().optional().describe("Absolute path of the project the webhook belongs to; defaults to this thread's folder");
 const NAME = z.string().min(1).max(60).describe("What it's for, e.g. stripe; one per name in a project");
@@ -44,17 +46,27 @@ function findHook(folder: string, name: string): Webhook {
   return hook;
 }
 
-// Records the webhook (and, best effort, its signing secret as a vault blank).
+// Records the webhook, and its signing secret as a vault blank. A blank that couldn't be added (no vault on a Weft
+// Worker, the app closed) doesn't undo the webhook; `vault` says so, for the thread to tell the user.
 async function record(folder: string, a: AddArgs) {
   const added = addWebhook({ folder, name: a.name, target: a.target, events: a.events, hint: a.hint, secret: a.secret, provider: a.provider });
-  if (a.secret) await shell("/secrets/add-blank", { folder, names: [a.secret], environment: "development", hint: a.hint }).catch(() => null);
-  return added;
+  const vault = a.secret
+    ? await shell("/secrets/add-blank", { folder, names: [a.secret], environment: "development", hint: a.hint }).then(
+        () => "",
+        (err: unknown) => ` ${a.secret} isn't in the 🔐 vault as a blank (${err instanceof Error ? err.message : String(err)}): tell the user its name so they add it.`,
+      )
+    : "";
+  return { ...added, vault };
 }
+
+// A worker's relay and tunnel are approved on its owner's Mac (lib/relay-worker.ts, lib/tunnel-worker.ts).
+const onWorker = () => process.env.WEFT_WORKER === "1";
 
 const relayed = (hook: Webhook) => `${hook.name}: ${hook.url}${hook.hint ? ` (register it: ${hook.hint})` : ""}, forwarding to ${hook.target}`;
 
 // Several webhooks' public URLs under one Touch ID per project (lib/webhook-relays.ts); one that can't get a relay says why.
-async function relayMany(folder: string, names: string[]) {
+// On a worker each is approved on the owner's Mac in turn (lib/relay-worker.ts), so there it's one ask per webhook.
+async function relayMany(folder: string, names: string[], cardId: () => string | undefined) {
   const found = names.map((name) => {
     try {
       return { name, id: findHook(folder, name).id };
@@ -63,7 +75,7 @@ async function relayMany(folder: string, names: string[]) {
     }
   });
   const ids = found.flatMap((f) => (f.id ? [f.id] : []));
-  const results = ids.length ? await createRelays(ids) : [];
+  const results = !ids.length ? [] : onWorker() ? await relayEachOnWorker(ids, cardId) : await createRelays(ids);
   const lines = found.map((f) => {
     const r = f.id ? results[ids.indexOf(f.id)] : undefined;
     return r?.hook ? `- ${relayed(r.hook)}` : `- ${f.name}: no relay. ${r?.error ?? f.error}`;
@@ -75,8 +87,14 @@ async function relayMany(folder: string, names: string[]) {
     : text(body, true);
 }
 
-/** mcp__webhooks__*. folder is the card's project, read when a tool runs. */
-export function webhooksMcpServer(folder: () => string) {
+async function relayEachOnWorker(ids: string[], cardId: () => string | undefined): Promise<RelayResult[]> {
+  const out: RelayResult[] = [];
+  for (const id of ids) out.push(await createRelayOnWorker(id, cardId()).then((hook) => ({ id, hook }), (err: unknown) => ({ id, error: (err as Error).message })));
+  return out;
+}
+
+/** mcp__webhooks__*. folder is the card's project and cardId its card, read when a tool runs. */
+export function webhooksMcpServer(folder: () => string, cardId: () => string | undefined = () => undefined) {
   const where = (p?: string) => p ?? folder();
   return createSdkMcpServer({
     name: "webhooks",
@@ -96,9 +114,9 @@ export function webhooksMcpServer(folder: () => string) {
         FIELDS,
         (a) =>
           attempt(async () => {
-            const { hook, existed } = await record(where(a.project), a);
+            const { hook, existed, vault } = await record(where(a.project), a);
             return text(
-              `${hook.name} ${existed ? "is updated" : "is a blank"} on 🪝 now (${hook.target}); the user registers it with the provider when they're ready. Carry on with what doesn't need it. For a public URL that forwards to ${hook.target}, call mcp__webhooks__relay.`,
+              `${hook.name} ${existed ? "is updated" : "is a blank"} on 🪝 now (${hook.target}); the user registers it with the provider when they're ready. Carry on with what doesn't need it. For a public URL that forwards to ${hook.target}, call mcp__webhooks__relay.${vault}`,
             );
           }),
       ),
@@ -109,9 +127,9 @@ export function webhooksMcpServer(folder: () => string) {
         (a) =>
           attempt(async () => {
             const dir = where(a.project);
-            const { hook } = await record(dir, a);
+            const { hook, vault } = await record(dir, a);
             await shell("/webhooks/ask-add", { folder: dir, id: hook.id });
-            return text(`Opened the 🪝 drawer on ${hook.name}. Ask the user to register it with the provider (mcp__webhooks__relay gives it a public URL); mcp__webhooks__list shows when it's registered.`);
+            return text(`Opened the 🪝 drawer on ${hook.name}. Ask the user to register it with the provider (mcp__webhooks__relay gives it a public URL); mcp__webhooks__list shows when it's registered.${vault}`);
           }),
       ),
       tool(
@@ -124,12 +142,33 @@ export function webhooksMcpServer(folder: () => string) {
             const all = [...new Map([...(name ? [name] : []), ...(names ?? [])].map((n) => [n.trim().toLowerCase(), n])).values()];
             const [only] = all;
             if (!only) return text("Name the webhook to relay (name), or several (names).", true);
-            if (all.length > 1) return relayMany(where(project), all);
-            const hook = await createRelay(findHook(where(project), only).id);
+            if (all.length > 1) return relayMany(where(project), all, cardId);
+            const id = findHook(where(project), only).id;
+            const hook = onWorker() ? await createRelayOnWorker(id, cardId()) : await createRelay(id);
+            const reach = onWorker() ? `through this worker's tunnel to ${hook.target}: open one with mcp__webhooks__tunnel, or the provider is told to retry` : `to ${hook.target} while Weft runs`;
             return text(
-              `${hook.name} has a public URL: ${hook.url}\nRegister it with the provider${hook.hint ? ` (${hook.hint})` : ""}. Deliveries forward to ${hook.target} while Weft runs. Once it's registered, call mcp__webhooks__mark_registered.`,
+              `${hook.name} has a public URL: ${hook.url}\nRegister it with the provider${hook.hint ? ` (${hook.hint})` : ""}. Deliveries forward ${reach}. Once it's registered, call mcp__webhooks__mark_registered.`,
             );
           }),
+      ),
+      tool(
+        "tunnel",
+        "Open a private address for a local dev server, reachable from outside this Mac: live pages, hot reload and webhook replies. Only the signed-in owner gets in. The user approves with Touch ID. It closes by itself after hours. Tiny streamed chunks arrive late and all at once, so a streaming AI reply won't type out.",
+        { target: z.string().describe("The dev server, e.g. http://localhost:3000"), hours: z.number().min(0.25).max(MAX_HOURS).optional().describe(`Hours until it closes; defaults to ${DEFAULT_HOURS}`), project: PROJECT },
+        ({ target, hours, project }) =>
+          attempt(async () => {
+            const t = await openTunnel({ folder: where(project), target, hours, cardId: cardId() });
+            return text(`${t.target} is open at ${t.address}, for you only, until ${new Date(t.expiresAt).toLocaleTimeString()}. Relays to this server now answer through it.`);
+          }),
+      ),
+      tool("close_tunnel", "Close this project's tunnel to a local dev server right away.", { target: z.string().describe("The dev server, e.g. http://localhost:3000"), project: PROJECT }, ({ target, project }) =>
+        attempt(async () => {
+          const wanted = new URL(target).origin;
+          const open = listTunnels([where(project)]).find((t) => new URL(t.target).origin === wanted);
+          if (!open) return text(`No tunnel is open to ${target} in this project.`);
+          await closeTunnel(open.id);
+          return text(`Closed the tunnel to ${open.target}.`);
+        }),
       ),
       tool("mark_registered", "Mark a webhook registered, after you registered it with the provider yourself.", { name: NAME, project: PROJECT }, ({ name, project }) =>
         attempt(() => {

@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
-import { patchNow, removeNow } from "@/lib/optimistic-cards";
+import { removeOnHost } from "@/lib/card-handlers-host";
+import { patchNow } from "@/lib/optimistic-cards";
+import { hostOf } from "@/lib/project-host";
 import { modelLabel } from "@/lib/new-thread";
 import { rememberPage } from "@/lib/settings-nav";
 import type { Card } from "@/lib/types";
-import { firstMessageFailed } from "@/lib/first-message-failed";
+import { firstMessageFailed, hostRerunModel } from "@/lib/first-message-failed";
 import type { ThreadItem } from "@/lib/types";
 import Icon from "./Icon";
 
@@ -16,7 +18,10 @@ import Icon from "./Icon";
 // escapes instead: delete the failed card, or rerun it on the backup model set under
 // Settings → Models. We read the backup model from the settings endpoint here so the
 // banner is self-contained — only when the predicate is true does the fetch run, so a
-// healthy thread never hits /api/settings from the banner.
+// healthy thread never hits /api/settings from the banner. The backup model is an account setting that syncs to your
+// workers (packages/weft-client/src/host-settings.ts ACCOUNT_SETTINGS), so a worker's card reruns on it too, the same
+// as a card here: the model goes with card.rerunModel. Where there are no Settings to read (weft.zip), a worker's card
+// reruns on its own CLI's default instead (hostRerunModel).
 //
 // The "Pick a backup model" button calls openSettings — the board-level opener from
 // components/Board.tsx — only when the parent supplies it. Without it (the read-only web
@@ -44,14 +49,17 @@ export default function FirstMessageErrorBanner({
   // (the board passes one when it knows what's open; the banner still deletes).
   onDeleted?: () => void;
 }) {
-  const [backupModel, setBackupModel] = useState<string | null>(null);
+  // Off this Mac (weft.zip leaves openSettings out) there are no settings to read and none to open.
+  const settings = Boolean(openSettings);
+  const remote = hostOf(card).kind === "cloud";
+  const [backupModel, setBackupModel] = useState<string | null>(() => (!settings && remote ? hostRerunModel(card) : null));
   const [busy, setBusy] = useState<null | "rerun" | "delete">(null);
   const [error, setError] = useState<string | null>(null);
   // Only fetch the settings when this banner is going to render. The predicate is
   // re-evaluated each render, so the effect skips cleanly on a healthy thread.
   const visible = firstMessageFailed(card, items);
   useEffect(() => {
-    if (!visible || backupModel !== null) return;
+    if (!visible || !settings || backupModel !== null) return;
     let ignore = false;
     api
       .settings()
@@ -64,8 +72,10 @@ export default function FirstMessageErrorBanner({
     return () => {
       ignore = true;
     };
-  }, [visible, backupModel]);
+  }, [visible, settings, backupModel]);
   if (!visible) return null;
+  // Rerun on the backup model, or pick one in Settings; with neither, the banner only says what went wrong.
+  const canRerun = Boolean(backupModel) || settings;
 
   const rerun = async () => {
     if (!backupModel) {
@@ -78,7 +88,7 @@ export default function FirstMessageErrorBanner({
     setError(null);
     try {
       // The banner goes and the card runs again at once (lib/optimistic-cards.ts); a refusal brings it back.
-      await patchNow(card.id, { column: "running", error: undefined }, () => api.rerunModel(card.id, backupModel));
+      await patchNow(card.id, { column: "running", error: undefined }, () => hostOf(card).act("card.rerunModel", { id: card.id, model: backupModel }));
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -90,7 +100,7 @@ export default function FirstMessageErrorBanner({
     setBusy("delete");
     setError(null);
     try {
-      await removeNow(card.id);
+      await removeOnHost(card);
       onDeleted?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -105,12 +115,17 @@ export default function FirstMessageErrorBanner({
       <Icon name="alert" size={12} className="shrink-0" />
       <span className="min-w-0 flex-1 break-words">{card.error}</span>
       <div className="flex shrink-0 items-center gap-1.5">
-        <button onClick={() => void rerun()} disabled={busy !== null} className={STYLE_PRIMARY}>
-          {label}
-        </button>
-        <button onClick={() => void del()} disabled={busy !== null} aria-label="Delete this card" className={STYLE_DESTRUCTIVE}>
-          <Icon name="trash" size={12} />
-        </button>
+        {canRerun && (
+          <button onClick={() => void rerun()} disabled={busy !== null} className={STYLE_PRIMARY}>
+            {label}
+          </button>
+        )}
+        {/* card.delete on any host; a host without it (none today) leaves the button out. */}
+        {hostOf(card).can("delete") && (
+          <button onClick={() => void del()} disabled={busy !== null} aria-label="Delete this card" className={STYLE_DESTRUCTIVE}>
+            <Icon name="trash" size={12} />
+          </button>
+        )}
       </div>
       {error && <span className="basis-full text-[11.5px] text-danger">{error}</span>}
     </div>

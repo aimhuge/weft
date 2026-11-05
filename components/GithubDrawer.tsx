@@ -1,21 +1,29 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { api } from "@/lib/client";
 import { folderName } from "@/lib/format";
-import { INSTALL_URL, issuesUrl, LOGIN_COMMAND, repoUrl, shownGithubFolders, syncLine, syncToast, type GithubFolder, type GithubStatus } from "@/lib/github-view";
+import { LANDING_LABELS } from "@/lib/issue-landing";
+import { INSTALL_URL, issuesUrl, LOGIN_COMMAND, repoUrl, shownGithubFolders, syncLine, syncToast, workflowOfFolder, type GithubFolder, type GithubStatus, type IssueWorkflow } from "@/lib/github-view";
+import type { Card } from "@/lib/types";
 import GithubLogo from "./GithubLogo";
+import IssueWorkflowPicker from "./IssueWorkflowPicker";
 import { Note } from "./VaultParts";
 
 // The GitHub drawer's body (docs/architecture/github-issues.md): who the gh CLI is signed in as, and per board
-// project its repo and the switch that makes its open issues Backlog cards, synced every 5 minutes. gh keeps its
+// project its repo and the switch that makes its open issues cards, synced every 5 minutes. gh keeps its
 // own token; Weft only runs it. The drawer shows the top bar's project, or all.
+//
+// Under the sync switch: where a new issue's card lands, and how a "run" card works — the skill that
+// validates it first and the agent that does the work (lib/issue-landing.ts).
+
 export default function GithubDrawer({
   status,
   error,
   reload,
   project,
   onOpenUrl,
+  onOpenCard,
   notify,
 }: {
   status: GithubStatus | null;
@@ -24,11 +32,18 @@ export default function GithubDrawer({
   project: string | null;
   // Shows a page in the board's browser pane.
   onOpenUrl: (url: string) => void;
+  // Opens a card's thread — the agent-design thread, once it is on the board.
+  onOpenCard: (card: Card) => void;
   notify: (err: unknown) => void;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   // A folder's switches as you just set them, drawn until the reload after the change brings the server's.
   const [drawn, setDrawn] = useState<Record<string, Partial<GithubFolder>>>({});
+  // A latch for the design thread: two clicks in the same tick both see the same `busy` state, so the
+  // state cannot be the guard. This one is set the moment the click lands.
+  const designing = useRef(false);
+  // The folders that already have a design thread, so the button stays off for them.
+  const [designed, setDesigned] = useState<Record<string, boolean>>({});
 
   if (error) return <Note>{error}</Note>;
   if (!status) return <Note>Asking GitHub…</Note>;
@@ -52,6 +67,31 @@ export default function GithubDrawer({
   }
 
   const sync = (folder: string, show?: Partial<GithubFolder>) => change(folder, async () => notify(syncToast(folder, await api.importIssues(folder))), show);
+
+  // "Design the agent" starts a new thread that asks the questions and writes the soul
+  // (lib/agent-thread.ts), and opens it so the thread is in front of you.
+  //
+  // The brief says what the agent is for; the thread works out the rest by asking. It names the
+  // job, not the answers — the thread is better at deciding what a good soul needs than a form is.
+  //
+  // A folder that already has a design thread keeps its button off: the thread is on the board and
+  // open, and a second click would make a second one. The latch covers the click that lands while
+  // the first request is still in flight.
+  const designAgent = async (folder: string) => {
+    if (designing.current || designed[folder]) return;
+    designing.current = true;
+    setBusy(folder);
+    try {
+      const { card } = await api.designAgent({ project: folder, job: "triages this project's GitHub issues" });
+      setDesigned((d) => ({ ...d, [folder]: true }));
+      onOpenCard(card);
+      notify(`A thread is designing the agent for ${folderName(folder)}`);
+    } finally {
+      designing.current = false;
+      setBusy(null);
+    }
+  };
+
   const shown = shownGithubFolders(status.folders, project);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -98,11 +138,30 @@ export default function GithubDrawer({
               }, { instant: on })
             }
             onOpenUrl={onOpenUrl}
+            designed={Boolean(designed[f.folder])}
+            onDesignAgent={designAgent}
+            onWorkflow={(workflow) =>
+              void change(
+                f.folder,
+                async () => {
+                  await api.setIssueWorkflow(f.folder, workflow);
+                  notify(workflowLine(folderName(f.folder), workflow));
+                },
+                { workflow },
+              )
+            }
           />
         ))}
       </div>
     </div>
   );
+}
+
+// What the toast says after the workflow changed.
+function workflowLine(name: string, workflow: IssueWorkflow) {
+  const where = workflow.landing === "run" ? "run on their own" : workflow.landing === "needs_you" ? "land in Needs you" : "land in Backlog";
+  const how = workflow.landing === "run" && workflow.skill ? ` after ${workflow.skill} checks them` : "";
+  return `New issues for ${name} ${where}${how}`;
 }
 
 function SignIn({ error, onCheck }: { error: string | null; onCheck: () => Promise<void> }) {
@@ -144,6 +203,25 @@ function SignIn({ error, onCheck }: { error: string | null; onCheck: () => Promi
   );
 }
 
+// The "instant" switch: a webhook on the repo sends its issue changes through Weft's Supabase, so
+// the cards follow within seconds. It needs a Weft account to relay them, so without one the switch
+// says so and stays off.
+function InstantSwitch({ folder, busy, weft, onInstant }: { folder: GithubFolder; busy: boolean; weft: boolean; onInstant: (on: boolean) => void }) {
+  return (
+    <label
+      className="flex items-center gap-1.5"
+      title={
+        weft
+          ? "A webhook on the repo sends issue changes through Weft's Supabase, so cards follow within seconds. Needs admin on the repo."
+          : "Instant updates come through your Weft account: sign in from the top bar first"
+      }
+    >
+      <input type="checkbox" checked={folder.instant} disabled={busy || (!weft && !folder.instant)} onChange={() => onInstant(!folder.instant)} className="accent-accent" />
+      <span className={weft ? "text-ink" : "text-faint"}>{weft ? "Instant, by webhook" : "Instant: sign in to Weft first"}</span>
+    </label>
+  );
+}
+
 function FolderSection({
   folder: f,
   busy,
@@ -152,6 +230,9 @@ function FolderSection({
   onStop,
   onInstant,
   onOpenUrl,
+  designed,
+  onDesignAgent,
+  onWorkflow,
 }: {
   folder: GithubFolder;
   busy: boolean;
@@ -161,9 +242,14 @@ function FolderSection({
   onStop: () => void;
   onInstant: (on: boolean) => void;
   onOpenUrl: (url: string) => void;
+  // This folder already has a design thread, so its button stays off.
+  designed: boolean;
+  onDesignAgent: (folder: string) => Promise<void>;
+  onWorkflow: (workflow: IssueWorkflow) => void;
 }) {
   const line = syncLine(f);
   const repo = f.repo;
+  const workflow = workflowOfFolder(f);
   return (
     <section className="mt-2 rounded-lg border border-line bg-card px-2.5 py-2">
       <h3 className="truncate text-[12px] font-semibold text-ink" title={f.folder}>
@@ -177,23 +263,12 @@ function FolderSection({
             <GithubLogo size={12} />
             <span className="truncate">{repo}</span>
           </button>
-          <label className="flex items-center gap-1.5" title="Each open issue becomes a Backlog card, checked every 5 minutes; a closed issue archives a card that never started">
+          <label className="flex items-center gap-1.5" title="Each open issue becomes a card, checked every 5 minutes; a closed issue archives a card that never started">
             <input type="checkbox" checked={f.syncing} disabled={busy} onChange={() => (f.syncing ? onStop() : onSync())} className="accent-accent" />
-            <span className="text-ink">Issues → Backlog cards</span>
+            <span className="text-ink">Issues → {LANDING_LABELS.find((l) => l.id === workflow.landing)?.label ?? "cards"}</span>
           </label>
-          {f.syncing && (
-            <label
-              className="flex items-center gap-1.5"
-              title={
-                weft
-                  ? "A webhook on the repo sends issue changes through Weft's Supabase, so cards follow within seconds. Needs admin on the repo."
-                  : "Instant updates come through your Weft account: sign in from the top bar first"
-              }
-            >
-              <input type="checkbox" checked={f.instant} disabled={busy || (!weft && !f.instant)} onChange={() => onInstant(!f.instant)} className="accent-accent" />
-              <span className={weft ? "text-ink" : "text-faint"}>{weft ? "Instant, by webhook" : "Instant: sign in to Weft first"}</span>
-            </label>
-          )}
+          {f.syncing && <InstantSwitch folder={f} busy={busy} weft={weft} onInstant={onInstant} />}
+          {f.syncing && <IssueWorkflowPicker workflow={workflow} folder={f.folder} busy={busy} designed={designed} onChange={onWorkflow} onDesignAgent={onDesignAgent} />}
           {line && <p className={line.bad ? "text-danger" : "text-faint"}>{busy ? "Syncing…" : line.text}</p>}
           <div className="flex flex-wrap gap-x-2.5 gap-y-0.5">
             {f.syncing && (

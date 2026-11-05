@@ -76,6 +76,19 @@ describe("cliEnv", () => {
     for (const [k, v] of Object.entries(keep)) expect(env[k], k).toBe(v);
   });
 
+  // Loader hooks run code in a thread's process before it runs its own, so they go by name whatever
+  // they hold (2026-10-28).
+  it("strips the loader hooks, and keeps the certificate one", () => {
+    const strip = { NODE_OPTIONS: "--require /tmp/leak.js", LD_PRELOAD: "/tmp/leak.so", LD_AUDIT: "/tmp/audit.so", LD_LIBRARY_PATH: "/tmp", DYLD_INSERT_LIBRARIES: "/tmp/leak.dylib", DYLD_LIBRARY_PATH: "/tmp", DYLD_FRAMEWORK_PATH: "/tmp" };
+    const keep = { NODE_EXTRA_CA_CERTS: "/ca.pem" };
+    for (const [k, v] of Object.entries({ ...strip, ...keep })) vi.stubEnv(k, v);
+
+    const env = cliEnv();
+
+    for (const k of Object.keys(strip)) expect(env, k).not.toHaveProperty(k);
+    for (const [k, v] of Object.entries(keep)) expect(env[k], k).toBe(v);
+  });
+
   it("keeps unrelated and look-alike variables", () => {
     vi.stubEnv("CLAUDE_CONFIG_DIR", "/tmp/claude");
     vi.stubEnv("CLAUDE_PIDS", "keep");
@@ -110,6 +123,16 @@ describe("cliEnv", () => {
     expect(cliEnv().ANTHROPIC_BASE_URL).toBe("https://proxy.example.com");
   });
 
+  // A Weft Worker's CLIs sign in with `claude setup-token`'s token, since no keychain prompt can be answered there.
+  it("keeps Claude Code's OAuth token outside Claude, and drops a Claude session's own", () => {
+    vi.stubEnv("CLAUDECODE", "");
+    vi.stubEnv("CLAUDE_CODE_DESKTOP_APP_VERSION", "");
+    vi.stubEnv("CLAUDE_CODE_OAUTH_TOKEN", "oauth");
+    expect(cliEnv().CLAUDE_CODE_OAUTH_TOKEN).toBe("oauth");
+    vi.stubEnv("CLAUDECODE", "1");
+    expect(cliEnv()).not.toHaveProperty("CLAUDE_CODE_OAUTH_TOKEN");
+  });
+
   it("returns a copy and leaves process.env alone", () => {
     vi.stubEnv("CLAUDECODE", "1");
     vi.stubEnv("CLAUDE_CODE_ENTRYPOINT", "cli");
@@ -131,7 +154,7 @@ describe("guardedCli", () => {
     expect(post[2]?.matcher).toBe("Bash");
     expect(opts.hooks?.PostToolUseFailure?.[0]).toBe(post[2]);
     const pre = opts.hooks?.PreToolUse ?? [];
-    expect(pre[0]).toBe(SECRET_GUARD_MATCHER);
+    expect(pre[0]).toMatchObject({ matcher: SECRET_GUARD_MATCHER.matcher });
     expect(pre[1]?.matcher).toBe("Bash");
     expect(pre[2]).toBe(GIT_GUARD_MATCHER);
     expect(pre[3]).toBe(CHECK_GUARD_MATCHER);

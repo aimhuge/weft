@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import type { Session } from "./runner-state";
 
 const appendThread = vi.fn<(id: string, item: unknown) => void>();
-vi.mock("./store", () => ({ appendThread: (id: string, item: unknown) => appendThread(id, item) }));
+vi.mock("./store", () => ({ appendThread: (id: string, item: unknown) => appendThread(id, item), getCard: () => undefined }));
+const { stripEnvBlock } = await import("./env-block");
 const push = vi.fn<(text: string, uuid?: string) => void>();
 
 const { canSteer, steer, waitingInCli } = await import("./runner-steer");
@@ -30,11 +31,12 @@ describe("steer", () => {
   it("pushes what the CLI gets with an id, and shows your text in the thread marked mid-turn", () => {
     const s = session();
     steer("c1", s, "skip it", "skip it\n\n(shell output)");
-    expect(push.mock.calls[0]?.[0]).toBe("skip it\n\n(shell output)");
+    expect(push.mock.calls[0]?.[0]).toMatch(/^<weft-env>\nhost: /);
+    expect(stripEnvBlock(push.mock.calls[0]?.[0] ?? "")).toBe("skip it\n\n(shell output)");
     expect(s.steered).toEqual(new Set([push.mock.calls[0]?.[1]]));
     expect(appendThread).toHaveBeenCalledWith("c1", expect.objectContaining({ kind: "user", text: "skip it", midTurn: true }));
     steer("c1", s, "and this");
-    expect(push.mock.calls[1]?.[0]).toBe("and this");
+    expect(stripEnvBlock(push.mock.calls[1]?.[0] ?? "")).toBe("and this");
     expect(s.steered?.size).toBe(2);
   });
 });

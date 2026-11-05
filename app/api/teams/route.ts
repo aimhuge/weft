@@ -60,7 +60,7 @@ const role = z.enum(TEAM_ROLES as [TeamRole, ...TeamRole[]]);
 const TeamOpSchema = z.discriminatedUnion("action", [
   z.object({ org: text, action: z.literal("invite"), email: text, role }),
   z.object({ org: text, action: z.literal("role"), userId: text, role }),
-  z.object({ org: text, action: z.literal("remove"), userId: text }),
+  z.object({ org: text, action: z.literal("remove"), userId: text, rotate: z.boolean().optional() }),
   z.object({ org: text, action: z.literal("revoke"), inviteId: text }),
   z.object({ org: text, action: z.literal("link-project"), repo: text }),
   z.object({ org: text, action: z.literal("unlink-project"), repo: text }),

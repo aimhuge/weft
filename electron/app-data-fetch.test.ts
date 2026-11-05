@@ -1,10 +1,13 @@
 // The fetch / env / requestSecret operations for hosted data mini apps
 // (docs/architecture/mini-app-hosting.md). The tests focus on the policy gate, the vault
-// resolution, the Touch ID-less response (a saved app on the Mac doesn't need an env grant
-// for fetch/env/requestSecret the way named reads do), and the IPC layer's frame check.
+// resolution, the env grant (a value leaves the vault for a filled fetch or weft.env only under one,
+// which main asks Touch ID for itself when it's missing), and the IPC layer's frame check.
 
+import fs from "node:fs";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { createAppDataFetch, registerAppDataFetch } from "./app-data-fetch.cjs";
+import { loadGrants, manifestHash, manifestNeeds } from "./app-data-grants.cjs";
 import { frameEvent, makeApp, makeDataDir, makeVault } from "./app-data-test-helpers";
 import type { Manifest } from "./app-data.cjs";
 
@@ -152,6 +155,68 @@ describe("weft.env", () => {
     const ad = createAppDataFetch({ dataDir, vault: makeVault(), fetch: vi.fn(), lookup: lookupAllPublic });
     const out = await ad.env(frameEvent({ url: a.url }));
     expect(out).toEqual({});
+  });
+});
+
+// Threads may edit ~/.weft/apps, so a manifest naming a secret in `public` or `secrets` must not hand
+// its value to the page without the user's yes (docs/architecture/secrets.md, 2026-10-29).
+describe("the env grant behind fetch and env", () => {
+  it("asks Touch ID once, naming every name, saves the grant and then stops asking", async () => {
+    const dataDir = makeDataDir();
+    const a = makeApp(dataDir, "growth", FETCH_MANIFEST);
+    const vault = makeVault({ values: { SUPABASE_PUBLISHABLE_KEY: "sb_pub_x" } });
+    const confirm = vi.spyOn(vault, "confirm");
+    const ad = createAppDataFetch({ dataDir, vault, fetch: vi.fn(), lookup: lookupAllPublic, now: () => 0 });
+    await Promise.all([ad.env(frameEvent({ url: a.url })), ad.env(frameEvent({ url: a.url }))]);
+    await ad.env(frameEvent({ url: a.url }));
+    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm.mock.calls[0]?.[0]).toBe("let 📈 Growth use you/repo's production env (OPENAI_KEY, STRIPE_KEY, SUPABASE_PUBLISHABLE_KEY)");
+    const grant = Object.values(loadGrants(dataDir) as Record<string, unknown>)[0];
+    expect(grant).toMatchObject({ env: "production", needs: ["OPENAI_KEY", "STRIPE_KEY", "SUPABASE_PUBLISHABLE_KEY"], readsHash: manifestHash(FETCH_MANIFEST) });
+  });
+
+  it("hands out nothing when the user says no", async () => {
+    const dataDir = makeDataDir();
+    const a = makeApp(dataDir, "growth", FETCH_MANIFEST);
+    const vault = makeVault({ values: { SUPABASE_PUBLISHABLE_KEY: "sb_pub_x", STRIPE_KEY: "sk_live_1" }, confirm: false });
+    const valuesFor = vi.spyOn(vault, "valuesFor");
+    const fetchMock = vi.fn();
+    const ad = createAppDataFetch({ dataDir, vault, fetch: fetchMock, lookup: lookupAllPublic });
+    await expect(ad.env(frameEvent({ url: a.url }))).rejects.toMatchObject({ kind: "not-granted" });
+    await expect(ad.fetch(frameEvent({ url: a.url }), { url: "https://api.stripe.com/v1/charges", headers: { authorization: "Bearer {{secret:STRIPE_KEY}}" } })).rejects.toBeTruthy();
+    expect(valuesFor).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(loadGrants(dataDir)).toEqual({});
+  });
+
+  it("asks again when a manifest edit adds a public name to a granted app", async () => {
+    const dataDir = makeDataDir();
+    const a = makeApp(dataDir, "growth", FETCH_MANIFEST);
+    const vault = makeVault({ values: { SUPABASE_PUBLISHABLE_KEY: "sb_pub_x", SUPABASE_SECRET_KEY: "sb_secret_x" } });
+    const confirm = vi.spyOn(vault, "confirm");
+    const ad = createAppDataFetch({ dataDir, vault, fetch: vi.fn(), lookup: lookupAllPublic });
+    await ad.env(frameEvent({ url: a.url }));
+    const edited = { ...FETCH_MANIFEST, public: ["SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"] };
+    fs.writeFileSync(path.join(a.folder, "weft-app.json"), JSON.stringify(edited));
+    confirm.mockResolvedValueOnce(false);
+    await expect(ad.env(frameEvent({ url: a.url }))).rejects.toMatchObject({ kind: "not-granted" });
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(confirm.mock.calls[1]?.[0]).toContain("SUPABASE_SECRET_KEY");
+  });
+
+  it("runs a fetch that fills no secret without asking", async () => {
+    const dataDir = makeDataDir();
+    const a = makeApp(dataDir, "growth", FETCH_MANIFEST);
+    const vault = makeVault();
+    const confirm = vi.spyOn(vault, "confirm");
+    const ad = createAppDataFetch({ dataDir, vault, fetch: vi.fn().mockResolvedValue(makeResponse()), lookup: lookupAllPublic });
+    await ad.fetch(frameEvent({ url: a.url }), { url: "https://api.stripe.com/v1/charges" });
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
+  it("covers the reads' names, the fetch policy's and the public ones", () => {
+    expect(manifestNeeds({ ...FETCH_MANIFEST, reads: { daily: { supabase: "growth_daily" } } })).toEqual(["OPENAI_KEY", "STRIPE_KEY", "SUPABASE_PUBLISHABLE_KEY", "SUPABASE_SECRET_KEY"]);
+    expect(manifestNeeds({ ...FETCH_MANIFEST, reads: undefined as never, secrets: ["x"] as never, public: [1, "A"] as never })).toEqual(["A"]);
   });
 });
 

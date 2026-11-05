@@ -1,12 +1,13 @@
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isDoneCommand, skillsForPrompt } from "./automations";
+import { cardModel } from "./new-thread";
 import { lastSent } from "./edit-last";
 import { showStarter } from "./show";
 import { isOpenElsewhere } from "./import";
 import { holdForRestart } from "./restart-when-idle";
 import { sessionRewindPoint } from "./rewind";
-import { addScheduled } from "./schedule";
+import { holdMessage } from "./scheduled-hold";
 import { answerPermission, settle } from "./runner-pending";
 import { needLogin } from "./runner-login";
 import { canSteer, steer } from "./runner-steer";
@@ -21,6 +22,7 @@ import { holdForSlot, releaseSlots, waitingForSlot } from "./thread-slots";
 import { appendThread, foldThread, getCard, getThread, updateCard } from "./store";
 import { takeTaskNote } from "./task-ledger";
 import { takeBreakNote } from "./crash-blame";
+import { turnEnv } from "./turn-env";
 import { dropDenialPrompts } from "./classifier-denial";
 import type { Card, PermissionMode } from "./types";
 import { awaitingWorktree, workDir } from "./work-dir";
@@ -64,16 +66,20 @@ export function setPermissionMode(cardId: string, mode: PermissionMode) {
 // switchSpare also signs its commits as the new model.
 // The stats' runsOn follows the model, so the header's chip and the status strip name the model the
 // thread is on now, not the one it was on when it last reported.
+//
+// The card's model is the id the CLI takes, so a pick's "goose:" prefix comes off here; the card's
+// backend says which CLI it is.
 export function setModel(cardId: string, model: string) {
   const card = getCard(cardId);
   const effort = card?.effort;
   const stats = card?.stats;
+  const id = cardModel(model) ?? model;
   updateCard(cardId, {
-    model,
-    ...(stats ? { stats: { ...stats, runsOn: { model, effort } } } : {}),
+    model: id,
+    ...(stats ? { stats: { ...stats, runsOn: { model: id, effort } } } : {}),
   });
   const session = sessions.get(cardId);
-  if (session) switchSpare(session.query, session.spec, { permissionMode: session.spec.permissionMode, model });
+  if (session) switchSpare(session.query, session.spec, { permissionMode: session.spec.permissionMode, model: id });
 }
 
 // A message that can't go yet waits: for a restart the running turns hold up (it goes after it), for an
@@ -113,9 +119,10 @@ export function sendMessage(cardId: string, text: string, { echo = true, cli = t
   session.turnSeq = (session.turnSeq ?? 0) + 1;
   // puku doesn't run .claude/skills as slash commands, so a /skill message goes as the skill's instructions.
   const forCli = card.backend === "puku" ? skillInvocation(cli, card.cwd, { weft: false }) : cli;
-  // Ahead of it, a note about subagents its CLI lost since the last message (lib/tasks.ts taskNote), and about the time
-  // it broke Weft (lib/crash-blame.ts).
-  session.inbox.push(`${session.preamble ?? ""}${takeTaskNote(cardId)}${takeBreakNote(cardId)}${forCli}`, promptId);
+  // Ahead of it (after a puku session's own context), the <weft-env> block (host, sender, time: lib/turn-env.ts), a note about subagents its CLI lost since
+  // the last message (lib/tasks.ts taskNote), and about the time it broke Weft (lib/crash-blame.ts).
+  const env = turnEnv(cardId, forCli);
+  session.inbox.push(`${session.preamble ?? ""}${env}${takeTaskNote(cardId)}${takeBreakNote(cardId)}${forCli}`, promptId);
   keepSessionId(cardId, session);
   session.preamble = undefined;
   if (!session.spec.copilot) showStarter(cardId, card.title, text).catch(() => {});
@@ -174,7 +181,7 @@ function holdForTurn(card: Card, text: string) {
     steer(card.id, session, text, withShellContext(card.id, text));
     return true;
   }
-  updateCard(card.id, { scheduled: addScheduled(card.scheduled, { id: randomUUID(), text, at: Date.now(), afterTurn: true }) });
+  holdMessage(card, text, { reason: "afterTurn" });
   return true;
 }
 
@@ -247,7 +254,7 @@ export function archiveWhenIdle(cardId: string) {
     hooks.land(cardId);
     return;
   }
-  updateCard(cardId, archiveAfter.has(cardId) ? { wrappingUp: true } : { archived: !getCard(cardId)?.starred });
+  updateCard(cardId, archiveAfter.has(cardId) ? { wrappingUp: true } : { column: "done", archived: !getCard(cardId)?.starred });
 }
 
 function sendQueued(cardId: string) {

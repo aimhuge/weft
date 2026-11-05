@@ -85,14 +85,17 @@ describe("WebBoard desktop chrome", () => {
     await board({ openCardId: "a", initialThread: opened });
     const pane = within(screen.getByRole("region", { name: "Browser pane" }));
     expect(pane.getByTitle("Card page")).toHaveAttribute("src", `/api/web-board/o1/page/${SHA}#login`);
+    // The thread keeps to its share of the row from md up; a bare w-full squeezed the pane to 0px.
+    const thread = screen.getByRole("region", { name: "Browser pane" }).previousElementSibling;
+    expect(thread?.className).toContain("md:w-[44%]");
   });
 
   it("frames a public site with an Open link, and shows the capture for a page only the Mac can reach", async () => {
     const site = [itemRow(0, { kind: "tool", id: "t1", name: "mcp__browser__open_url", summary: "https://example.com/docs", at: 5 } as never, "a")];
     const { unmount } = await board({ openCardId: "a", initialThread: site });
     expect(screen.getByRole("link", { name: /Open ↗/ })).toHaveAttribute("href", "https://example.com/docs");
-    // The address bar shows the site's host, not the whole URL.
-    expect(screen.getByLabelText("Page address")).toHaveValue("example.com");
+    // The address bar shows the site's real url, like any address bar.
+    expect(screen.getByLabelText("Page address")).toHaveValue("https://example.com/docs");
     unmount();
     resetHarness();
     const local = [itemRow(0, { kind: "tool", id: "t1", name: "mcp__browser__open_url", summary: "http://localhost:3000/", at: 5 } as never, "a")];

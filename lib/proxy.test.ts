@@ -58,6 +58,7 @@ describe("proxy (not deployed)", () => {
     // createServerClient is only called on the deployed path; on `next dev` it should never run.
     expect(createServerClient).not.toHaveBeenCalled();
     expect(config.matcher).toContain("/:orgSlug/team/:path*");
+    expect(config.matcher).toContain("/@:username/threads/:slug");
   });
 });
 
@@ -157,6 +158,7 @@ describe("config.matcher", () => {
     expect(config.matcher).toContain("/login");
     expect(config.matcher).toContain("/app");
     expect(config.matcher).toContain("/team");
+    expect(config.matcher).toContain("/billing");
     expect(config.matcher).toContain("/invite/:token*");
     expect(config.matcher).toContain("/:orgSlug/team/:path*");
   });

@@ -1,42 +1,54 @@
-// electron/pane-url.cjs: what the pane's address bar loads for what was typed.
 import { describe, expect, it } from "vitest";
-import { normalizeUrl, SEARCH_URL } from "./pane-url.cjs";
+import { addressBarUrl, normalizeUrl, tabState } from "./pane-url.cjs";
+
+describe("addressBarUrl", () => {
+  const search = (q: string) => `https://www.google.com/search?q=${encodeURIComponent(q)}`;
+
+  it("opens anything that reads as an address", () => {
+    expect(addressBarUrl(" https://a.b/c d ")).toBe("https://a.b/c d");
+    expect(addressBarUrl("file:///a b.html")).toBe("file:///a b.html");
+    expect(addressBarUrl("example.com")).toBe("https://example.com");
+    expect(addressBarUrl("node.js")).toBe("https://node.js");
+    expect(addressBarUrl("example.com/a?b=c")).toBe("https://example.com/a?b=c");
+    expect(addressBarUrl("example.com:8080/a")).toBe("https://example.com:8080/a");
+    expect(addressBarUrl("localhost")).toBe("http://localhost");
+    expect(addressBarUrl("localhost:3000/a")).toBe("http://localhost:3000/a");
+    expect(addressBarUrl("127.0.0.1:3000")).toBe("http://127.0.0.1:3000");
+    expect(addressBarUrl("[::1]:3000")).toBe("http://[::1]:3000");
+  });
+
+  it("searches Google for everything else", () => {
+    expect(addressBarUrl("asdf")).toBe(search("asdf"));
+    expect(addressBarUrl("what is node.js?")).toBe(search("what is node.js?"));
+    expect(addressBarUrl("note: buy milk & eggs")).toBe(search("note: buy milk & eggs"));
+    expect(addressBarUrl("hello.")).toBe(search("hello."));
+    expect(addressBarUrl("c++")).toBe(search("c++"));
+    expect(addressBarUrl(undefined)).toBe(search(""));
+  });
+
+  it("still refuses other schemes", () => {
+    expect(() => addressBarUrl("javascript:alert(1)")).toThrow(/Can't open/);
+  });
+});
 
 describe("normalizeUrl", () => {
-  it("keeps a full URL as it is", () => {
-    expect(normalizeUrl("https://example.com/a?b=1")).toBe("https://example.com/a?b=1");
-    expect(normalizeUrl("HTTP://example.com")).toBe("HTTP://example.com");
-    expect(normalizeUrl("file:///Users/me/page.html")).toBe("file:///Users/me/page.html");
-    expect(normalizeUrl("about:blank")).toBe("about:blank");
+  it("keeps web, file and about addresses and fills in the rest", () => {
+    expect(normalizeUrl(" https://a.b ")).toBe("https://a.b");
+    expect(normalizeUrl("file:///x")).toBe("file:///x");
+    expect(normalizeUrl("localhost:3000/a")).toBe("http://localhost:3000/a");
+    expect(normalizeUrl("example.com")).toBe("https://example.com");
+    expect(normalizeUrl("example.com:8080")).toBe("https://example.com:8080");
+    expect(normalizeUrl(undefined)).toBe("https://");
   });
 
-  it("opens localhost over http", () => {
-    expect(normalizeUrl("localhost:3000/x")).toBe("http://localhost:3000/x");
-    expect(normalizeUrl("127.0.0.1")).toBe("http://127.0.0.1");
-    expect(normalizeUrl("[::1]:5001")).toBe("http://[::1]:5001");
+  it("refuses any other scheme", () => {
+    expect(() => normalizeUrl("javascript:alert(1)")).toThrow(/Can't open/);
   });
+});
 
-  it("opens a host over https", () => {
-    expect(normalizeUrl("  example.com ")).toBe("https://example.com");
-    expect(normalizeUrl("docs.foo.dev/guide?q=1#top")).toBe("https://docs.foo.dev/guide?q=1#top");
-    expect(normalizeUrl("10.0.0.5/admin")).toBe("https://10.0.0.5/admin");
-    expect(normalizeUrl("devbox:8080")).toBe("https://devbox:8080");
-    expect(normalizeUrl("my-host.local:8443/x")).toBe("https://my-host.local:8443/x");
-  });
-
-  it("searches the web for words and phrases", () => {
-    expect(normalizeUrl("nextjs")).toBe(`${SEARCH_URL}nextjs`);
-    expect(normalizeUrl("react useEffect cleanup")).toBe(`${SEARCH_URL}react%20useEffect%20cleanup`);
-    expect(normalizeUrl("what is next.js")).toBe(`${SEARCH_URL}what%20is%20next.js`);
-    expect(normalizeUrl("note: buy milk")).toBe(`${SEARCH_URL}note%3A%20buy%20milk`);
-    expect(normalizeUrl("c++ & rust?")).toBe(`${SEARCH_URL}c%2B%2B%20%26%20rust%3F`);
-    expect(normalizeUrl(".com")).toBe(`${SEARCH_URL}.com`);
-    expect(normalizeUrl(undefined)).toBe(SEARCH_URL);
-  });
-
-  it("refuses other schemes", () => {
-    expect(() => normalizeUrl("javascript:alert(1)")).toThrow("Can't open javascript:alert(1) in the browser pane");
-    expect(() => normalizeUrl("chrome://settings")).toThrow("Can't open");
-    expect(() => normalizeUrl("mailto:a@b.co")).toThrow("Can't open");
+describe("tabState", () => {
+  it("reports a tab's address and title", () => {
+    const view = { webContents: { getURL: () => "https://a.b/", getTitle: () => "A" } };
+    expect(tabState({ id: 3, view })).toEqual({ id: 3, url: "https://a.b/", title: "A" });
   });
 });

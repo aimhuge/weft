@@ -1,26 +1,32 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { FindRevealContext } from "@/lib/find-reveal";
 import { isLive } from "@/lib/format";
 import { isPukuCapError } from "@/lib/billing/upgrade";
 import { openUpgrade } from "@/lib/use-upgrade";
 import { onScrollToTurn, pulse, reportTopTurn, topmostTurn, turnRow, PULSE_MS } from "@/lib/show-events";
 import type { PlanResets } from "@/lib/schedule";
+import type { GrantScope } from "@/lib/cloud-commands";
 import { THREAD_PAGE_SIZE } from "@/lib/cloud-sync-types";
 import { mergeOlderPage, pageThread, type ThreadPage } from "@/lib/thread-page";
 import { useThreadTransport, type ThreadTransport } from "@/lib/thread-transport";
 import type { Card, QuestionReply, ThreadItem } from "@/lib/types";
 import { usePendingSends } from "@/lib/use-pending-sends";
 import { useEditLast } from "@/lib/use-edit-last";
+import { useThreadFind, type ThreadFind } from "@/lib/use-thread-find";
 import { guarded } from "./guarded";
 import { useFileIndex } from "@/lib/use-file-index";
 import { FileIndexContext, FileLinkContext } from "./file-link-context";
 import { Spinner } from "./Icon";
+import FindField from "./FindField";
 import { PermissionRequest, ThreadReply } from "./ThreadFooter";
 import { ThreadEntries, groupThread } from "./ThreadItems";
 import FirstMessageErrorBanner from "./FirstMessageErrorBanner";
 import YouFirst from "./YouFirst";
+import { useAnsweredPrompt } from "@/lib/use-answered-prompt";
 import { firstMessageFailed } from "@/lib/first-message-failed";
+import { useThreadLive } from "@/lib/use-thread-live";
 
 // Loaded in its own CrashGuard (components/guarded.tsx), so a broken strip leaves the thread and its reply box.
 const TaskStrip = guarded(() => import("./TaskStrip"), { what: "subagents", inline: true });
@@ -43,12 +49,29 @@ function questionFor(card: Card, onAnswer: (allow: boolean, answers?: Record<str
   };
 }
 
+// ⌘F's bar, floated over the messages' top corner: it takes no row from a small window.
+function ThreadFindBar({ find }: { find: ThreadFind }) {
+  if (!find.open) return null;
+  return (
+    <FindField
+      query={find.query}
+      count={find.count}
+      focus={find.focus}
+      placeholder="Find in thread"
+      onQuery={find.setQuery}
+      onStep={find.step}
+      onClose={find.close}
+      className="absolute right-4 top-2 z-10 w-64 max-w-[calc(100%-2rem)] shadow-md"
+    />
+  );
+}
+
 // A thread's messages, its pending permission request, and the reply box.
 // The parent supplies a flex column for it to fill.
 export default function ThreadView({
   card,
   items,
-  streaming,
+  streaming: givenStreaming,
   onSend,
   onAnswer,
   empty,
@@ -59,6 +82,7 @@ export default function ThreadView({
   scheduling,
   onOpenSettings,
   onDeleted,
+  findable,
 }: {
   card: Card;
   // The full thread snapshot from the parent; used as the seed on first connect and on reconnect,
@@ -66,8 +90,9 @@ export default function ThreadView({
   items: ThreadItem[];
   streaming: string;
   onSend: (text: string) => Promise<void>;
-  // reply: a question's notes, or what to talk over instead. A rejected promise lets the user answer again.
-  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => unknown;
+  // reply: a question's notes, or what to talk over instead. grant: This card / Always, where it goes inside the
+  // answer (ThreadTransport.grantInAnswer). A rejected promise lets the user answer again.
+  onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => unknown;
   empty?: ReactNode;
   placeholder?: string;
   // Shown above the reply box, or in its place with replaceReply.
@@ -84,9 +109,10 @@ export default function ThreadView({
   // After Delete, the parent (Board) closes the thread. Optional; without it, the banner still deletes
   // the card but the open thread stays mounted with the now-deleted id.
   onDeleted?: () => void;
+  // A card's own thread panel, which answers ⌘F (lib/use-thread-find.ts); the copilot's chat doesn't.
+  findable?: boolean;
 }) {
   // The request already answered here, so a second click can't answer it (or the next one) again.
-  const [answeredId, setAnsweredId] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const live = isLive(card);
@@ -94,7 +120,7 @@ export default function ThreadView({
   // (newest THREAD_PAGE_SIZE) so first paint isn't blank; the server fetch then takes over.
   const [page, setPage] = useState<ThreadPage>(() => pageThread(items, { limit: THREAD_PAGE_SIZE }));
   const [loadingOlder, setLoadingOlder] = useState(false);
-  const answered = answeredId !== null && answeredId === card.pending?.id;
+  const { answered, setAnsweredId } = useAnsweredPrompt(card.pending?.id);
   const transport = useThreadTransport();
   // The folder's files, re-read as the thread grows, so the names it mentions link to the editor column.
   const fileIndex = useFileIndex(card.id, card.cwd, transport.listFiles, page.total);
@@ -118,10 +144,11 @@ export default function ThreadView({
     queueMicrotask(() => void loadPage().catch(() => {}));
   }, [card.id, loadPage]);
 
-  // Live changes land in the loaded window; a reconnect re-pulls the newest page to catch up on any it missed.
-  transport.useLive(card.id, setPage, () => {
+  // Live changes land in the loaded window; a reconnect re-pulls the newest page to catch up on any it missed. The reply
+  // streams in from the board (a local card) or the transport (a worker card's line).
+  const streaming = useThreadLive(transport, card.id, setPage, () => {
     loadPage().catch(() => {});
-  });
+  }, givenStreaming);
 
   // Follow new output unless the user has scrolled up to read.
   useEffect(() => {
@@ -196,11 +223,15 @@ export default function ThreadView({
     }
   }
 
-  function answer(allow: boolean, answers?: Record<string, string>) {
+  function answer(allow: boolean, answers?: Record<string, string>, grant?: GrantScope) {
     if (!card.pending || answered) return;
     setAnsweredId(card.pending.id);
-    void Promise.resolve(onAnswer(allow, answers)).catch(() => setAnsweredId(null));
+    void Promise.resolve(onAnswer(allow, answers, undefined, grant)).catch(() => setAnsweredId(null));
   }
+
+  const stopFollowing = useCallback(() => {
+    stick.current = false;
+  }, []);
 
   async function send(text: string) {
     stick.current = true;
@@ -208,9 +239,22 @@ export default function ThreadView({
   }
 
   const entries = groupThread(transport.useView(sends.items));
+  const find = useThreadFind({
+    enabled: Boolean(findable),
+    cardId: card.id,
+    page,
+    items: sends.items,
+    rowKeys: entries.map((entry) => entry.key),
+    scroller,
+    search: transport.searchThread,
+    loadOlder: loadPage,
+    onJump: stopFollowing,
+  });
 
   return (
     <>
+      <div className="relative flex min-h-0 flex-1 flex-col">
+      <ThreadFindBar find={find} />
       <div
         ref={scroller}
         onScroll={(e) => {
@@ -230,9 +274,12 @@ export default function ThreadView({
           </div>
         )}
         {entries.length === 0 && !live && empty}
-        <FileLinkContext.Provider value={card.id}>
+        {/* File names link to the editor only where the host lists the card's files: elsewhere there's no editor to open. */}
+        <FileLinkContext.Provider value={transport.listFiles ? card.id : null}>
           <FileIndexContext.Provider value={fileIndex}>
-            <ThreadEntries entries={entries} live={live} streaming={streaming} editFrom={editFrom} onSend={send} cardId={card.id} />
+            <FindRevealContext.Provider value={find.reveal}>
+              <ThreadEntries entries={entries} live={live} streaming={streaming} editFrom={editFrom} onSend={send} cardId={card.id} />
+            </FindRevealContext.Provider>
           </FileIndexContext.Provider>
         </FileLinkContext.Provider>
         {card.column === "running" && !streaming && (
@@ -257,6 +304,7 @@ export default function ThreadView({
           openSettings={onOpenSettings}
           onDeleted={onDeleted}
         />
+      </div>
       </div>
 
       {!readOnly && <YouFirst cardId={card.id} />}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { auditNote, auditSentence, auditVia, gapLine, grantLeft, mergeLog, seqGaps, syncLine, type AuditEntry, type VaultGrant } from "./keychain-audit-view";
+import { auditNote, auditSentence, auditVia, gapLine, grantLeft, mergeLog, seqGaps, syncLine } from "./keychain-audit-view";
+import type { AuditEntry, VaultGrant } from "./keychain-audit-types";
 
 // The sentences the Keychain access card and the card menu read (lib/keychain-audit-view.ts).
 

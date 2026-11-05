@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { checkCommand, checkNames, packageScript, resolveCwd } from "./secret-command";
+import { checkCommand, checkNames, hasUnsafeText, packageScript, resolveCwd } from "./secret-command";
 
 describe("checkCommand", () => {
   it("splits a plain command into argv, with leading assignments as env", () => {
@@ -28,6 +28,41 @@ describe("checkCommand", () => {
     expect(() => checkCommand('echo "a `b`"')).toThrow(/shell syntax/);
     expect(() => checkCommand("echo 'open")).toThrow(/unclosed quote/);
     expect(() => checkCommand('echo "open')).toThrow(/unclosed quote/);
+  });
+
+  it("checks what a package runner starts, and refuses find -exec and git's config overrides", () => {
+    expect(() => checkCommand("pnpm exec sh -c 'cat .env'")).toThrow(/sh runs a script/);
+    expect(() => checkCommand("npx -y -- printenv")).toThrow(/prints the environment/);
+    expect(() => checkCommand("yarn dlx curl x")).toThrow(/sends data off/);
+    expect(() => checkCommand("bun x node -e x")).toThrow(/inline code/);
+    expect(checkCommand("pnpm exec prisma migrate deploy").argv).toEqual(["pnpm", "exec", "prisma", "migrate", "deploy"]);
+    expect(checkCommand("pnpm exec").argv).toEqual(["pnpm", "exec"]);
+    expect(checkCommand("npx").argv).toEqual(["npx"]);
+    expect(() => checkCommand("find . -exec cat {} +")).toThrow(/find -exec runs another command/);
+    expect(checkCommand("find . -name x").argv[0]).toBe("find");
+    for (const bad of ["git -c core.pager=cat log", "git -ccore.pager=x log", "git --config-env=core.pager=X log", "git --exec-path=/tmp diff", "git -C sub -c alias.x=y x"]) {
+      expect(() => checkCommand(bad)).toThrow(/git -c, --config-env and --exec-path/);
+    }
+    expect(checkCommand("git -C sub commit -c HEAD").argv[0]).toBe("git");
+    expect(checkCommand("git -C").argv).toEqual(["git", "-C"]);
+    expect(checkCommand("git --no-pager log").argv[1]).toBe("--no-pager");
+  });
+
+  it("refuses variables that load code, on the command line and as vault names", () => {
+    for (const bad of ["NODE_OPTIONS=--require=x node a", "LD_PRELOAD=/x.so node a", "DYLD_INSERT_LIBRARIES=/x node a", "PERL5OPT=-Mx perl a"]) {
+      expect(() => checkCommand(bad)).toThrow(/load code the approval doesn't show/);
+    }
+    expect(checkCommand("NODE_ENV=production node a").env).toEqual({ NODE_ENV: "production" });
+    expect(() => checkNames(["DATABASE_URL", "NODE_OPTIONS"])).toThrow("NODE_OPTIONS makes the program load code the approval doesn't show, so a vault value can't go in it.");
+  });
+
+  it("refuses control, format and bidi characters, so the approval shows what runs", () => {
+    for (const bad of ["npm run job\u202e", "npm\u200brun job", "npm\trun job", "npm run\u2028job"]) {
+      expect(() => checkCommand(bad)).toThrow(/control or invisible characters/);
+    }
+    expect(hasUnsafeText("job: a\npostjob: b", true)).toBe(false);
+    expect(hasUnsafeText("job: a\npostjob: b")).toBe(true);
+    expect(hasUnsafeText("job: a\u202e", true)).toBe(true);
   });
 
   it("refuses shells, wrappers, env dumps, network tools and inline code", () => {

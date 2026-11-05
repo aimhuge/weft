@@ -5,6 +5,7 @@ import type { Card } from "@/lib/types";
 
 const cards = new Map<string, Partial<Card>>();
 vi.mock("@/lib/store", () => ({
+  DATA_DIR: "/weft-data",
   getCard: vi.fn((id: string) => cards.get(id)),
   updateCard: vi.fn((id: string, patch: Partial<Card>) => cards.set(id, { ...cards.get(id), ...patch })),
   deleteCard: vi.fn(),

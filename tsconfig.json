@@ -57,6 +57,7 @@
     "dist",
     "out",
     ".toolchain-dist",
-    ".scratch"
+    ".scratch",
+    "supabase/functions/*/index.ts"
   ]
 }

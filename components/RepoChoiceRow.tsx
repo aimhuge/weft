@@ -2,6 +2,7 @@
 
 // One choice row in the repo picker's list: a pasted path, a repo on this Mac, or a GitHub repo to clone.
 import type { Choice } from "@/lib/repo-picker";
+import CloneProgress from "./CloneProgress";
 import Icon, { Spinner } from "./Icon";
 import { shortPath } from "./RepoPickerButton";
 
@@ -64,7 +65,13 @@ export default function RepoChoiceRow({
             <span className="truncate text-[12.5px] text-ink">{r.fullName}</span>
             {r.private && <span className="shrink-0 rounded border border-line-strong px-1 text-[10px] text-muted">private</span>}
           </span>
-          {r.description && <span className="block truncate text-[11px] text-faint">{r.description}</span>}
+          {cloning ? (
+            <span className="mt-1 block">
+              <CloneProgress fullName={r.fullName} />
+            </span>
+          ) : (
+            r.description && <span className="block truncate text-[11px] text-faint">{r.description}</span>
+          )}
         </span>
         <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted">
           {cloning ? (

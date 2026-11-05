@@ -9,9 +9,15 @@ export function sortCrons(crons: readonly Cron[]): Cron[] {
   return [...crons].sort((a, b) => (a.nextAt ?? Infinity) - (b.nextAt ?? Infinity) || a.name.localeCompare(b.name));
 }
 
+// Whether a cron will run again: it's on, and it has a next run ahead of it. A cron past its end has
+// no next run, so it counts as off however it is switched.
+export function isLiveCron(cron: Cron): boolean {
+  return cron.enabled && cron.nextAt !== undefined;
+}
+
 // The rail's count: crons that will run again.
 export function activeCount(crons: readonly Cron[]): number {
-  return crons.filter((c) => c.enabled && c.nextAt !== undefined).length;
+  return crons.filter(isLiveCron).length;
 }
 
 export function cronsTitle(crons: readonly Cron[]): string {
@@ -52,8 +58,8 @@ export const TONE_LABEL: Record<RunTone, string> = {
   gone: "card deleted",
 };
 
-// One line under the cron's name: its schedule, what each run does and who made it.
+// One line under the cron's name: its schedule, what each run does, who made it and the Weft Worker it fires on.
 export function cronSummary(cron: Cron, sourceTitle?: string): string {
   const what = cron.mode === "fork" ? `forks “${sourceTitle ?? cron.name}”` : "fresh thread";
-  return `${describeCron(cron.expr)} · ${what}${cron.by === "thread" ? " · made by a thread" : ""}`;
+  return `${describeCron(cron.expr)} · ${what}${cron.by === "thread" ? " · made by a thread" : ""}${cron.worker ? ` · on ${cron.worker}` : ""}`;
 }

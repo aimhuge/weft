@@ -36,22 +36,34 @@ vi.mock("@/lib/use-blastcp", () => ({ useBlastcp: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-cloudflare", () => ({ useCloudflare: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-github", () => ({ useGithub: vi.fn(noopDataHook) }));
 vi.mock("@/lib/use-slack", () => ({ useSlack: vi.fn(noopDataHook) }));
-vi.mock("@/lib/use-crons", () => ({ useCrons: () => ({ crons: [], error: null, create: vi.fn(), update: vi.fn(), remove: vi.fn(), run: vi.fn() }) }));
+const cronList = vi.hoisted(() => ({ crons: [] as { id: string; cwd: string }[] }));
+vi.mock("@/lib/use-crons", () => ({ useCrons: () => ({ crons: cronList.crons, error: null, create: vi.fn(), update: vi.fn(), remove: vi.fn(), run: vi.fn() }) }));
 vi.mock("@/lib/use-services", () => ({ useServices: () => ({ services: [], loaded: true, error: null, reload: vi.fn(), kill: vi.fn(), restart: vi.fn(), refreshMs: 2000 }) }));
 
 // Drawers' bodies are stubs — they're gated behind their own open state and
 // the test only checks the rail's nav buttons.
-vi.mock("./VaultDrawer", () => ({ default: () => null }));
-vi.mock("./WebhooksDrawer", () => ({ default: () => null }));
+const { drawn, keep } = vi.hoisted(() => {
+  const drawn = new Map<string, Record<string, unknown>>();
+  const keep = (name: string) => (props: Record<string, unknown>) => {
+    drawn.set(name, props);
+    return null;
+  };
+  return { drawn, keep };
+});
+vi.mock("./VaultDrawer", () => ({ default: keep("vault") }));
+vi.mock("./WebhooksDrawer", () => ({ default: keep("webhooks") }));
+vi.mock("./CronsDrawer", () => ({ default: keep("crons") }));
 vi.mock("./VercelDrawer", () => ({ default: () => null }));
 vi.mock("./SupabaseDrawer", () => ({ default: () => null }));
 vi.mock("./CloudflareDrawer", () => ({ default: () => null }));
 vi.mock("./BlastcpDrawer", () => ({ default: () => null }));
-vi.mock("./GithubDrawer", () => ({ default: () => null }));
+vi.mock("./GithubDrawer", () => ({ default: keep("github") }));
 vi.mock("./SlackDrawer", () => ({ default: () => null }));
-vi.mock("./ServicesDrawer", () => ({ default: () => null }));
+vi.mock("./ServicesDrawer", () => ({ default: keep("services") }));
 vi.mock("./TagsDrawer", () => ({ default: () => null }));
 
+import { setBoardMode } from "@/lib/board-prefs";
+import { useWebhooks } from "@/lib/use-webhooks";
 import SideRail from "./LibraryRail";
 import type { TagCatalog } from "./use-tag-catalog";
 
@@ -81,6 +93,26 @@ const baseProps: Parameters<typeof SideRail>[0] = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  drawn.clear();
+});
+
+// A worker project's per-repo drawers read this Mac's checkout of its repo; Services and GitHub the project itself.
+describe("LibraryRail on a worker project", () => {
+  const worker = { ...baseProps.ctx, project: "worker://w1/app" };
+
+  it("gives the vault this Mac's checkout of the project's repo", () => {
+    render(<SideRail {...baseProps} open="vault" ctx={worker} />);
+    expect(drawn.get("vault")?.project).toBe("/Users/me/dev/app");
+  });
+
+  it("gives Services and GitHub the worker project, and asks GitHub about it", async () => {
+    const { useGithub } = await import("@/lib/use-github");
+    render(<SideRail {...baseProps} open="services" ctx={worker} />);
+    expect(drawn.get("services")?.project).toBe("worker://w1/app");
+    expect(vi.mocked(useGithub)).toHaveBeenCalledWith(["/Users/me/dev/app", "worker://w1/app"], false);
+    render(<SideRail {...baseProps} open="github" ctx={worker} />);
+    expect(drawn.get("github")?.project).toBe("worker://w1/app");
+  });
 });
 
 describe("LibraryRail admin group", () => {
@@ -101,5 +133,37 @@ describe("LibraryRail admin group", () => {
     render(<SideRail {...baseProps} />);
     screen.getByRole("button", { name: "Admin" }).click();
     expect(push).toHaveBeenCalledWith("/admin/users");
+  });
+});
+
+describe("LibraryRail in Regular mode", () => {
+  it("keeps the star and the vault and drops the tools", () => {
+    useSuperAdminGate.mockReturnValue(false);
+    setBoardMode("regular");
+    render(<SideRail {...baseProps} />);
+    for (const name of ["Tags", "Crons", "Webhooks", "Vercel", "Supabase", "GitHub", "Skills", "Services"]) {
+      expect(screen.queryByRole("button", { name })).toBeNull();
+    }
+    expect(screen.getByRole("navigation", { name: "Rail" }).querySelectorAll("button").length).toBe(2);
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
+  });
+});
+
+describe("LibraryRail on a worker project", () => {
+  const ctx = { ...baseProps.ctx, project: "worker://w1/app" };
+
+  it("asks 🪝 for that worker project's webhooks and shows them for it", () => {
+    render(<SideRail {...baseProps} ctx={ctx} open="webhooks" />);
+    expect(useWebhooks).toHaveBeenCalledWith(["worker://w1/app"], true);
+    expect(drawn.get("webhooks")?.project).toBe("worker://w1/app");
+  });
+
+  it("shows ⏰ that worker project's crons only, and every cron on this Mac's projects", () => {
+    cronList.crons = [{ id: "worker:w1:k1", cwd: "worker://w1/app" }, { id: "k2", cwd: "/Users/me/dev/app" }];
+    render(<SideRail {...baseProps} ctx={ctx} open="crons" />);
+    expect((drawn.get("crons")?.crons as { id: string }[]).map((c) => c.id)).toEqual(["worker:w1:k1"]);
+    render(<SideRail {...baseProps} open="crons" />);
+    expect((drawn.get("crons")?.crons as { id: string }[]).map((c) => c.id)).toEqual(["worker:w1:k1", "k2"]);
+    cronList.crons = [];
   });
 });

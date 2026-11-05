@@ -26,7 +26,7 @@ export async function POST(req: Request) {
   if (denied) return denied;
   try {
     const { prompt, picture } = await readRequest(req);
-    const { id, card } = startThemeCard(typeof prompt === "string" ? prompt : "", picture);
+    const { id, card } = await startThemeCard(typeof prompt === "string" ? prompt : "", picture);
     return Response.json({ id, card: getCard(card.id) });
   } catch (err) {
     return fail(err);

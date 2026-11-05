@@ -20,8 +20,8 @@ Having people is the one thing a plan unlocks, and it is a real gate in code, no
 
 An unreadable, missing or non-paying subscription reads as Free rather than letting people in, so a Supabase hiccup
 locks the invite form instead of 500-ing it. One consequence worth knowing: the gate says a workspace *may* have
-members; nothing yet keeps a Team subscription's seat count in step with the roster (no billing page yet), so a Team
-workspace that adds a person is under-charged until that lands.
+members. On Team each person is a seat: adding, inviting in or removing someone moves the Stripe subscription's
+quantity to the member count ([billing.md](billing.md#team-seats)).
 
 ## Where it runs
 
@@ -65,6 +65,12 @@ a gate (/s, /a, /u) call `connection()` themselves (`lib/prerender-check.ts` fla
   trigger and a backfill. Weft keeps its own copy because the package's 0001 replaces `on_auth_user_created`, which
   would drop the name and avatar Weft's trigger fills in. Slugs come from the GitHub login (`private.org_slug_for`),
   skipping the package's reserved words and Weft's root routes.
+- `lib/reserved-slugs.ts`: the one list of names a workspace slug can't take (`RESERVED_WORKSPACE_SLUGS`,
+  `isReservedWorkspaceSlug`): the package's `RESERVED_SLUGS` plus `lib/app-routes.ts` `allReserved()` (every folder under
+  `app/`), so a GitHub user named `privacy` gets `privacy-2`, not a `/privacy/board` that 404s behind the static page.
+  `lib/team-create.ts` `freeSlug()` reads it; `private.org_slug_for` carries the same array
+  (`20261026145850_org_slug_reserved_roots.sql`), and `lib/reserved-slugs.test.ts` fails when the newest migration
+  defining it drifts from the list. A new top-level folder means a new migration redefining the function.
 - `lib/supabase-project.ts`: the project URL and publishable key, with no Node imports so `proxy.ts` can use them.
 - `lib/web-session.ts`: the weft.zip visitor's cookie session (`webClient`, `webUser` from the JWT claims) and the
   service-role client (`serviceClient`, from `SUPABASE_SECRET_KEY`, set on the deployment only).
@@ -158,6 +164,10 @@ project and decide who else does; a member sees only the projects granted to the
   linked after it starts with no members; the admin who links it sees it regardless.
 - `components/team/ProjectAccess.tsx`: **Access · 2 of 3** on each project row (managers only, and only when the team
   has plain members) opens a checklist of the members; a tick shows at once and goes back with the reason if refused.
+- A linked project's synced cards go to the team rather than each member's personal workspace
+  ([cloud-sync.md](cloud-sync.md#team-projects)), and each member's desktop board shows the others' cards for it inside
+  their own checkout of the repo, read-only, with whose Mac runs each
+  ([cloud-sync.md](cloud-sync.md#team-projects-on-the-desktop-board)).
 - What a grant gates today is the team page's project list. Synced cards (`cloud_cards`) and the shared vault aren't
   scoped by project yet; when they are, they should read `org_project_members` the same way.
 

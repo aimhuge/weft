@@ -1,10 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { copilotLaneOpen, copilotLanePeek, showBacklog, subscribeBoardPrefs } from "@/lib/board-prefs";
 import { laneStateFromPrefs, type LaneState } from "@/lib/copilot-lane";
-import { api, type BrowserState } from "@/lib/client";
-import { worktreeParent } from "@/lib/format";
 import { COLUMNS, type Card, type Column, type Project } from "@/lib/types";
 import { useShortcutHint } from "@/lib/hotkeys";
 import { preloadChimes } from "@/lib/chimes";
@@ -17,15 +15,18 @@ import {
   summarizeProjects,
 } from "@/lib/board-view";
 import { useBoardLive } from "@/lib/board-live";
+import { useProjectRoots } from "@/lib/use-project-roots";
 import { useBoardDialogs } from "@/lib/use-board-dialogs";
 import { useOpenCard } from "@/lib/use-open-card";
+import { useAwayOpen } from "@/lib/use-away-open";
 import { useNewThreadPane } from "@/lib/use-new-thread-pane";
-import { filterState, footerFor, headerCounts, openCardOf, workFolder } from "@/lib/board-derive";
+import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, workFolder } from "@/lib/board-derive";
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
 import { useStartupCheck } from "@/lib/use-startup-check";
 import { useNow } from "@/lib/use-now";
 import { useToast } from "@/lib/use-toast";
+import { useCloudSync } from "@/lib/use-cloud-sync";
 import { useCopilotCard } from "@/lib/use-copilot-card";
 import { useBoardCardActions } from "@/lib/use-board-card-actions";
 import { useBoardView } from "@/lib/use-board-view";
@@ -37,15 +38,22 @@ import { removeCard } from "@/lib/use-delete-dialog";
 import { resumeActions } from "@/lib/resume-actions";
 import { useEscape } from "@/lib/use-escape";
 import { useEscapeTogglesView } from "@/lib/use-escape-view";
+import { useViewHint } from "@/lib/use-view-hint";
 import { guarded } from "./guarded";
 import { useBoardCommands } from "./use-board-commands";
 import { filterCards, railPinned, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
 import { TagColors } from "./TagPill";
 import { useTagCatalog } from "./use-tag-catalog";
 import { useBoardMenus } from "./use-board-menus";
+import { projectMenuHandler } from "./project-menu-handler";
 import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
-import { showPage } from "@/lib/board-helpers";
+import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
+import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
+import { localPath, withWorkerProjects } from "@/lib/worker-project";
+import { projectFolders } from "@/lib/board-folders";
+import { useTerminalDrawer } from "@/lib/use-terminal-drawer";
+import { useWorkerNotices } from "@/lib/card-notice";
 import { useThreadHandlers } from "@/lib/thread-handlers";
 import { useBoardCards } from "@/lib/use-board-cards";
 import BoardHeader from "./BoardHeader";
@@ -61,24 +69,17 @@ import BoardProjectBar from "./BoardProjectBar";
 // fails as its module loads, breaks only its own spot on the board.
 const AccountButton = guarded(() => import("./AccountButton"), { inline: true, what: "account button" });
 const CopilotButton = guarded(() => import("./CopilotButton"), { inline: true, what: "copilot button" });
-const CopilotLane = guarded(() => import("./CopilotLane"), { what: "copilot", className: "self-stretch shrink-0" });
+const CopilotLane = guarded(() => import("./CopilotLane"), { what: "copilot", className: "fixed bottom-4 right-4 z-[96]" });
 const EmptyBoardStart = guarded(() => import("./EmptyBoardStart"), { what: "start panel", inline: true });
 const RestartChip = guarded(() => import("./RestartChip"), { inline: true, what: "restart chip" });
 const CardView = guarded(() => import("./CardView"), { what: "card", placeholder: <CardSkeleton /> });
 const HeaderBadges = guarded(() => import("./HeaderBadges"), { inline: true, what: "header badges" });
 
-const CLOSED_BROWSER: BrowserState = {
-  visible: false,
-  url: "",
-  title: "",
-  loading: false,
-  canGoBack: false,
-  canGoForward: false,
-  zoom: 100,
-};
-
 export default function Board() {
   const [cards, setCards] = useState<Card[]>([]);
+  // Your workers' projects and cards, from the cloud rows. `cards` stays this Mac's own, so nothing that acts on a
+  // local card can reach one; only what's drawn reads boardCards (docs/architecture/weft-worker.md).
+  const { workers, boardCards } = useBoardWorkers(cards);
   const [home, setHome] = useState("");
   const [loaded, setLoaded] = useState(false);
   const { toast, setToast, notify } = useToast();
@@ -92,38 +93,38 @@ export default function Board() {
   const [railFilter, setRailFilter] = useState<RailFilter>({});
   const [dragOver, setDragOver] = useState<Column | null>(null);
   const [webBrowserOpen, setWebBrowserOpen] = useState(false);
+  // The four-column workspace for an open card: open/close state, widths, and the divider drag.
+  // Declared before the hooks below that need it (lib/workspace-layout.ts has the rest).
+  const workspace = useWorkspaceLayout();
   // Which card is open, its thread and streaming text, the last one opened, Rename…, unseen moves (lib/use-open-card.ts).
   const {
     selectedId, setSelectedId, lastOpenId, thread, setThread, streaming, setStreaming,
     renameId, setRenameId, unseen, setUnseen, selectedRef, loadThread, select,
-  } = useOpenCard({ setWebBrowserOpen });
+  } = useOpenCard({ setWebBrowserOpen, openPane: () => workspace.setOpen("pane", true) });
   const [browserWidth, setBrowserWidth] = useState(560);
-  const [terminalOpen, setTerminalOpen] = useState(false);
-  const [terminalHeight, setTerminalHeight] = useState(240);
   const { copilot, update: updateCopilot, load: loadCopilot } = useCopilotCard();
   const copilotNeedsYou = copilot?.column === "needs_you";
   const [projects, setProjects] = useState<Project[]>([]);
   // Worktree folder -> its main repo, from the server; the bar shows each worktree's cards under that repo.
-  const [roots, setRoots] = useState<Record<string, string>>({});
+  const { setRoots, resolvedFolders, rootOf, resolveFolders } = useProjectRoots();
   const [showArchived, setShowArchived] = useState(false);
   // New thread, Settings, Share board, Help, the palette, a sign-in and the project menu (lib/use-board-dialogs.ts).
   const {
     showNew, setShowNew, setMenuOpen, showSettings, setShowSettings, sharingBoard, setSharingBoard,
     showHelp, setShowHelp, showPalette, setShowPalette, paletteQuery, setPaletteQuery, login, setLogin, overlay, boardKeys,
   } = useBoardDialogs();
-  // The four-column workspace for an open card: open/close state, widths, and the divider drag.
-  // Declared before the shortcuts below read workspace.toggle (lib/workspace-layout.ts has the rest).
-  const workspace = useWorkspaceLayout();
   // Columns showing all their cards, for the project and filter they were expanded under.
   const [expanded, setExpanded] = useState<{ view: string; columns: Column[] }>({ view: "", columns: [] });
   // Each card's last known column, to notice when one moves.
   const columns = useRef(new Map<string, Column>());
   // Each card's last known error, to chime when a new one appears.
   const errors = useRef(new Map<string, string | undefined>());
-  // Folders the server has already resolved into roots.
-  const resolvedFolders = useRef(new Set<string>());
   const now = useNow();
-  const { desktop, mac, browser } = useDesktopBridge(CLOSED_BROWSER, selectedId, cards);
+  const { desktop, mac, browser } = useDesktopBridge(CLOSED_BROWSER, selectedId, boardCards);
+  // Cloud sync to weft.zip: the projects opted in and how the last flush went. The project's
+  // right-click menu reads both (Sync / Don't Sync, Sync Status), and the avatar menu shares
+  // this one instance instead of polling twice.
+  const sync = useCloudSync();
   useStartupCheck(loaded, setToast);
   // The New thread dialog's splash page in the pane (lib/use-new-thread-pane.ts).
   const paneHeld = useNewThreadPane(showNew, selectedRef, browser.visible);
@@ -131,18 +132,6 @@ export default function Board() {
   // Decode the chime files now, so the first card that moves isn't late to sound.
   useEffect(() => preloadChimes(), []);
 
-  const rootOf = useCallback((cwd: string) => roots[cwd] ?? worktreeParent(cwd) ?? cwd, [roots]);
-
-  // A card or project in a folder the server hasn't seen yet fetches the roots again, in case it's a worktree.
-  const resolveFolders = useCallback((folders: string[]) => {
-    const fresh = folders.filter((f) => !resolvedFolders.current.has(f) && !worktreeParent(f));
-    if (!fresh.length) return;
-    for (const f of fresh) resolvedFolders.current.add(f);
-    api
-      .list()
-      .then((data) => setRoots(data.roots))
-      .catch(() => {});
-  }, []);
 
   // Computed early so the hooks below (actions, toggles, archive) can take it as a dep.
   const laneOpen = useSyncExternalStore(subscribeBoardPrefs, copilotLaneOpen, () => false);
@@ -155,14 +144,14 @@ export default function Board() {
   const latestCwd = latest?.cwd;
 
   // Drag/drop, tag, and the "skip my own move's chime" ref (used by useBoardEvents below).
-  const { ownMoves, move, drop, reorder, tagCard } = useBoardCardActions({ cards, setCards, setDragOver, notify });
+  const { ownMoves, move, drop, reorder, tagCard } = useBoardCardActions({ cards, remote: workers.cards, setCards, setDragOver, notify });
   // Project filter and sort, persisted to a cookie; the card filter clears when the project changes.
   const { project, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
   // The board's layout: cards in columns or in one list (lib/use-view-mode.ts).
   const { mode: viewMode, choose: chooseView } = useViewMode();
   // Archive, unarchive, focus the next card, and the last batch (for Z / Undo).
   const { archiveTarget, archiveCards, toggleArchive, unarchive, lastArchived } = useBoardArchive({
-    cards,
+    cards: boardCards,
     selected,
     selectedIdRef: selectedRef,
     select,
@@ -178,70 +167,77 @@ export default function Board() {
     project,
     latestCwd,
     notify,
+    onSentToWorker: (worker) => setToast(`Sent to ${worker}.`),
   });
-  // Browser, terminal, and copilot-lane state.
-  const { toggleBrowser, toggleTerminal, toggleCopilot, setCopilotState } = useBoardToggles({
+  // Browser and copilot-lane state; the terminal drawer's is useTerminalDrawer, below.
+  const { toggleBrowser, toggleCopilot, setCopilotState } = useBoardToggles({
     selectedRef,
     browserVisible: browser.visible,
     setWebBrowserOpen,
-    setTerminalOpen,
     laneState,
     select,
   });
 
+  const browserOpen = desktop ? browser.visible : webBrowserOpen;
+  // Opens a card that needs you while you're away, and stacks the ones behind it (lib/away-open.ts).
+  const awayMove = useAwayOpen({ select, selectedId, selectedRef, busy: showNew || (browserOpen && !selectedId), columns });
   // Live updates (lib/board-live.ts). The first open (and every reconnect) reloads everything, so nothing is missed.
   useBoardLive({
     columns, errors, ownMoves, selectedRef, resolvedFolders,
     select, setSelectedId, setCards, setUnseen, setThread, setStreaming, setProjects, setLogin, setToast, setHome, setRoots, setLoaded,
-    updateCopilot, loadCopilot, resolveFolders, restart: restartView, loadFromPrefs, loadThread, notify,
+    updateCopilot, loadCopilot, resolveFolders, restart: restartView, loadFromPrefs, loadThread, notify, awayMove,
   });
+  // A worker's card that moves chimes and announces as this Mac's do (lib/card-notice.ts).
+  useWorkerNotices(workers.cards, { ownMoves, selectedRef, select, setUnseen, awayMove });
 
   // Picking another project or changing the filter collapses the columns again (lib/board-derive.ts).
   const { filtering, view } = filterState(project, query, railFilter);
   const expandedColumns = expanded.view === view ? expanded.columns : [];
 
   const byColumn = useMemo(
-    () => groupByColumn(filterCards(cards, railFilter), { project, query, sort, showArchived, reviewFilter }, rootOf),
-    [cards, railFilter, project, query, sort, showArchived, reviewFilter, rootOf],
+    () => groupByColumn(filterCards(boardCards, railFilter), { project, query, sort, showArchived, reviewFilter }, rootOf),
+    [boardCards, railFilter, project, query, sort, showArchived, reviewFilter, rootOf],
   );
-  const archivedCount = cards.filter((c) => c.archived && (!project || rootOf(c.cwd) === project)).length;
+  const archivedCount = boardCards.filter((c) => c.archived && (!project || rootOf(c.cwd) === project)).length;
   // The Done cards on screen that Shift+E and "Archive all" file away.
   const doneToArchive = (byColumn.get("done") ?? []).filter((c) => !c.archived && c.column === "done");
   const { resume, all: resumeAll } = resumeActions(byColumn.get("review") ?? [], notify);
   // Backlog hides unless Settings turns it on, but never hides cards waiting in it.
   const backlogOn = useSyncExternalStore(subscribeBoardPrefs, showBacklog, () => false);
   const visibleColumns = COLUMNS.filter(
-    (c) => c.id !== "backlog" || backlogOn || cards.some((card) => card.column === "backlog" && !card.archived),
+    (c) => c.id !== "backlog" || backlogOn || boardCards.some((card) => card.column === "backlog" && !card.archived),
   );
 
-  const projectSummaries = useMemo(() => summarizeProjects(projects, cards, rootOf), [projects, cards, rootOf]);
+  const projectSummaries = useMemo(() => withWorkerProjects(summarizeProjects(projects, boardCards, rootOf), workers.projects), [projects, boardCards, rootOf, workers.projects]);
+  const localProject = localPath(project);
 
   // The 🔐 drawer's vaults: every project's on the board, so you can add secrets to any of them and copy
   // between them; its filter starts on the selected project.
   const railFolders = useMemo(() => {
     const paths = projects.map((p) => p.path);
-    return project && !paths.includes(project) ? [project, ...paths] : paths;
-  }, [project, projects]);
+    return localProject && !paths.includes(localProject) ? [localProject, ...paths] : paths;
+  }, [localProject, projects]);
 
   // An open card, or the New thread form, fills a framed window with the browser pane beside it.
-  const framed = Boolean(selected) || showNew;
+  const workerThread = openWorkerThread(workers, selectedId, { select, notify });
+  const shown = framedCard(selected, workerThread);
+  const framed = Boolean(shown) || showNew;
   const footer = footerFor(selected);
-  // Each folder has its own shell; with All projects showing, the latest card's folder.
-  const folder = workFolder(selected, project, latest);
-  const terminalCwd = folder ?? home;
-  const browserOpen = desktop ? browser.visible : webBrowserOpen;
-  const counts = headerCounts(cards);
+  // Each folder has its own shell; with All projects showing, the latest card's folder. The badges read a worker's too.
+  const { folder, reads, terminalCwd } = projectFolders(workFolder(selected, project, latest), home);
+  const terminal = useTerminalDrawer({ cwd: terminalCwd, openWorker: workerThread?.worker, project, projects: workers.projects, cardOpen: Boolean(selectedId) });
+  const counts = headerCounts(boardCards);
   // "Switch all" only shows once a thread hit its plan limit.
-  const limitHit = hitPlanLimit(cards);
+  const limitHit = hitPlanLimit(boardCards);
 
   // Shortcuts that act on the board stand down while a dialog or the project menu is up.
 
   // Shortcuts, the command palette and the app menu (components/use-board-commands.ts).
   const { openPalette, paletteItems, findPrompts } = useBoardCommands({
-    cards, selected, selectedId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
+    cards: boardCards, selected, selectedId, lastOpenId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
     dialogs: { showNew, showSettings, showHelp, showPalette, login },
     doneToArchive, lastArchived, archivedCount, showArchived, rootOf, restart: restartView.restart,
-    openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal, toggleColumn: workspace.toggle,
+    openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal: terminal.toggle, toggleColumn: workspace.toggle,
     setShowPalette, setPaletteQuery, setShowHelp, setShowSettings, setSharingBoard, setLibraryOpen, setShowArchived,
     archiveTarget, archiveCards, unarchive, toggleArchive, chooseSort, chooseProject, move, notify, toast: setToast,
   });
@@ -254,9 +250,15 @@ export default function Board() {
   useEscape(browserOpen && !selectedId && !showNew, toggleBrowser, { panel: true });
   // Registered last, so an open rail drawer closes before the browser does.
   useEscape(Boolean(libraryOpen) && !selectedId && !showNew && !railPinned(), () => setLibraryOpen(null), { panel: true });
-  // With nothing left to close, Escape flips board and list view.
+  // With nothing left to close, Escape flips board and list view. The flip pops a little pane
+  // saying where it took you, so the switch isn't silent.
+  const { hint: viewHint, show: showViewHint, clear: clearViewHint } = useViewHint();
   const boardLayers = { thread: Boolean(selectedId), newThread: showNew, browser: browserOpen, drawer: Boolean(libraryOpen) };
-  useEscapeTogglesView(boardLayers, viewMode, chooseView);
+  useEscapeTogglesView(boardLayers, viewMode, chooseView, {
+    onFlip: showViewHint,
+    hintUp: Boolean(viewHint),
+    onDismiss: clearViewHint,
+  });
 
   const tagCatalog = useTagCatalog(cards, notify);
   // Open the editor column automatically when something asks for a file in this card's folder.
@@ -286,11 +288,15 @@ export default function Board() {
     toast: setToast,
     notify,
   });
+  const onProjectMenu = projectMenuHandler({
+    projects: projectSummaries, cards: boardCards, rootOf, openNew, chooseProject, openDrawer: setLibraryOpen, archive: archiveCards, toast: setToast, notify,
+    syncFolders: sync.folders, syncStatus: sync.status, readSync: sync.read,
+  });
   const onTag = (tag: string) => setRailFilter((f) => toggleTag(f, tag));
   const cardCtx = { openCard, resume, move, onCardMenu, toggleStar, toggleArchive, onTag, notify };
   // How the board draws a card, as a card and as a row of the list view (lib/use-board-cards.ts).
   const { renderCard, renderRow } = useBoardCards({
-    cards,
+    cards: boardCards,
     now,
     selectedId,
     lastOpenId,
@@ -316,21 +322,21 @@ export default function Board() {
         mac={mac}
         counts={counts}
         hint={hint}
-        panes={{ browserOpen, terminalOpen, onToggleBrowser: toggleBrowser, onToggleTerminal: toggleTerminal }}
+        panes={{ browserOpen, terminalOpen: terminal.open, onToggleBrowser: toggleBrowser, onToggleTerminal: terminal.toggle }}
         onShareBoard={() => setSharingBoard(true)}
         onOpenSettings={() => setShowSettings(true)}
         onOpenNew={() => openNew()}
         slots={{
           restart: <RestartChip restart={restartView.restart} notify={notify} />,
-          badges: <HeaderBadges cwd={folder} cards={cards} start={improveQuality} notify={notify} toast={setToast} />,
+          badges: <HeaderBadges cwd={reads} cards={boardCards} start={improveQuality} notify={notify} toast={setToast} />,
           copilot: <CopilotButton open={laneOpen} needsYou={copilotNeedsYou} title={hint("copilot", "Copilot")} onClick={toggleCopilot} />,
-          account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} />,
+          account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} project={menuProject(folder, rootOf)} sync={sync} />,
         }}
       />
 
       <BoardProjectBar
         projects={projectSummaries}
-        total={cards.length}
+        total={boardCards.length}
         project={project}
         onProject={chooseProject}
         railFilter={railFilter}
@@ -344,8 +350,12 @@ export default function Board() {
         onSort={chooseSort}
         view={viewMode}
         onView={chooseView}
+        viewHint={viewHint}
+        onDismissViewHint={clearViewHint}
         home={home}
         onMenuOpenChange={setMenuOpen}
+        onProjectMenu={onProjectMenu}
+        onNotice={setToast}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -379,7 +389,7 @@ export default function Board() {
           mode={viewMode}
           columns={visibleColumns}
           byColumn={byColumn}
-          allCards={cards}
+          allCards={boardCards}
           expanded={expandedColumns}
           onExpand={(id) => setExpanded({ view, columns: [...expandedColumns, id] })}
           renderCard={renderCard}
@@ -405,33 +415,22 @@ export default function Board() {
           notify={notify}
         />
         <EmptyBoardStart cards={cards} loaded={loaded} filtering={filtering} />
-        <CopilotLane
-          state={laneState}
-          cards={cards}
-          project={project}
-          onOpenCard={openCard}
-          onHide={() => setCopilotState("hidden")}
-          onPeek={() => setCopilotState("peek")}
-          onOpen={() => setCopilotState("open")}
-          toggleTip={hint("copilot", "Copilot")}
-        />
       </div>
 
       <BoardBottom
         footer={footer}
         onHelp={() => setShowHelp(true)}
-        terminal={{ open: terminalOpen, cwd: terminalCwd, height: terminalHeight, onHeight: setTerminalHeight, onClose: toggleTerminal }}
+        terminal={{ open: terminal.open, cwd: terminalCwd, height: terminal.height, onHeight: terminal.setHeight, onClose: terminal.toggle, away: terminal.away, host: terminal.host }}
       />
 
       <BoardOverlays
         frame={{
-          showNew, selected, cards, home, newCwd, project, restart: restartView.restart, onCreate: create,
+          showNew, framed, selected, workerThread, cards, home, newCwd, project, restart: restartView.restart, onCreate: create,
           onCloseNew: () => setShowNew(false), items: thread, handlers: threadProps, streaming, renameId,
           workspace, desktop, browser, obscured: overlay, browserWidth, onBrowserWidth: setBrowserWidth,
-          onStar: () => selected && toggleStar(selected), onTags: () => selected && editTags(selected),
-          onShare: () => selected && shareCard(selected),
-          onArchive: () => selected && toggleArchive(selected), onOpenSettings: () => setShowSettings(true),
-          bottom: terminalOpen ? terminalHeight + 16 : undefined,
+          ...openCardMarks(shown, { star: toggleStar, tags: editTags, share: shareCard, archive: toggleArchive }),
+          onOpenSettings: () => setShowSettings(true),
+          bottom: terminal.open ? terminal.height + 16 : undefined,
           onBackdrop: () => (showNew ? setShowNew(false) : select(null)),
         }}
         dialogs={{
@@ -442,12 +441,22 @@ export default function Board() {
           sharing, onCloseShare: closeShare,
           sharingBoard, onCloseShareBoard: () => setSharingBoard(false),
           palette: showPalette, paletteQuery, paletteItems, findPrompts,
-          paletteProject: project ? { path: project, name: folderName(project) } : null,
+          paletteProject: localProject ? { path: localProject, name: folderName(localProject) } : null,
           onClosePalette: () => setShowPalette(false),
           login, onCloseLogin: () => setLogin(null),
           switchAllDialog, deleteDialog, newOpen: showNew, onDropCard: openCard, onDropNew: () => openNew(),
           toast, onDismissToast: () => setToast(null),
         }}
+      />
+
+      {/* The copilot floats bottom-right over the board and every dialog (lib/copilot-float.ts). */}
+      <CopilotLane
+        state={laneState}
+        project={localProject}
+        onHide={() => setCopilotState("hidden")}
+        onPeek={() => setCopilotState("peek")}
+        onOpen={() => setCopilotState("open")}
+        toggleTip={hint("copilot", "Copilot")}
       />
     </div>
     </TagColors.Provider>

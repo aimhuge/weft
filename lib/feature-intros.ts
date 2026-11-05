@@ -1,7 +1,7 @@
 // The feature intros: a short narrated video (public/intros/<id>.html, a HyperFrames composition like the welcome
-// tour's) that plays the first time you open each tool drawer on the left rail, the New thread dialog, the code
-// quality dialog and the leagues. components/FeatureIntro.tsx draws it; lib/use-feature-intro.ts decides when it
-// shows. Which ones you've seen live in localStorage, so each plays once on its own; ▶ beside the title plays it again.
+// tour's) for each tool drawer on the left rail, the New thread dialog, the code quality dialog and the leagues.
+// It plays only when you press ▶ beside the title, never on its own. components/FeatureIntro.tsx draws it;
+// lib/use-feature-intro.ts holds its state. Which ones you've watched live in localStorage.
 
 export const INTROS = [
   "vault",

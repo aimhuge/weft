@@ -14,14 +14,14 @@ describe("CopilotEmpty", () => {
   it("shows the board's chips above the starters, hides covered starters, and sends and logs a click", async () => {
     api.copilotSuggestions.mockResolvedValue({
       chips: [{ text: "Commit +4234/-1115 in weft", cardId: "a" }],
-      covers: ["Let's commit all the new stuff"],
+      covers: ["What should I build next?"],
     });
     const onAsk = vi.fn();
     render(<CopilotEmpty onAsk={onAsk} />);
     expect(screen.getByText("Reading your board…")).toBeInTheDocument();
     await userEvent.click(await screen.findByRole("button", { name: "Commit +4234/-1115 in weft" }));
     expect(screen.getByText("From your board")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Let's commit all the new stuff" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "What should I build next?" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Help me get started with Weft" }));
     expect(onAsk.mock.calls).toEqual([["Commit +4234/-1115 in weft"], ["Help me get started with Weft"]]);
     expect(api.copilotChipClicked).toHaveBeenCalledWith("Commit +4234/-1115 in weft");
@@ -36,25 +36,25 @@ describe("CopilotEmpty", () => {
     await vi.waitFor(() => expect(screen.queryByText("Reading your board…")).not.toBeInTheDocument());
     expect(screen.queryByText("From your board")).not.toBeInTheDocument();
     expect(screen.getAllByRole("button")).toHaveLength(7);
-    await userEvent.click(screen.getByRole("button", { name: "Let's commit all the new stuff" }));
-    expect(onAsk).toHaveBeenCalledWith("Let's commit all the new stuff");
+    await userEvent.click(screen.getByRole("button", { name: "What should I build next?" }));
+    expect(onAsk).toHaveBeenCalledWith("What should I build next?");
   });
 
   it("shows only the selected project's chips and account-wide ones, and only their covers hide starters", async () => {
     api.copilotSuggestions.mockResolvedValue({
       chips: [
-        { text: "Commit weft", project: "/dev/weft", covers: ["Let's commit all the new stuff"] },
-        { text: "Fix the groovenfill deploy", project: "/dev/groovenfill", covers: ["How can I improve my codebase?"] },
+        { text: "Commit weft", project: "/dev/weft", covers: ["What should I build next?"] },
+        { text: "Fix the groovenfill deploy", project: "/dev/groovenfill", covers: ["What's worth refactoring?"] },
         { text: "Sign in to Weft" },
       ],
-      covers: ["Let's commit all the new stuff", "How can I improve my codebase?"],
+      covers: ["What should I build next?", "What's worth refactoring?"],
     });
     render(<CopilotEmpty project="/dev/groovenfill" onAsk={() => {}} />);
     expect(await screen.findByRole("button", { name: "Fix the groovenfill deploy" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Sign in to Weft" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Commit weft" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Let's commit all the new stuff" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "How can I improve my codebase?" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "What should I build next?" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "What's worth refactoring?" })).not.toBeInTheDocument();
   });
 
   it("reads the saved project from the view cookie when the board doesn't pass one", async () => {
@@ -67,7 +67,7 @@ describe("CopilotEmpty", () => {
   });
 
   it("ignores covers when there are no board chips", async () => {
-    api.copilotSuggestions.mockResolvedValue({ chips: [], covers: ["Let's commit all the new stuff"] });
+    api.copilotSuggestions.mockResolvedValue({ chips: [], covers: ["What should I build next?"] });
     render(<CopilotEmpty onAsk={() => {}} />);
     await vi.waitFor(() => expect(screen.queryByText("Reading your board…")).not.toBeInTheDocument());
     expect(screen.getAllByRole("button")).toHaveLength(7);

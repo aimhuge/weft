@@ -1,6 +1,17 @@
 import type { NextConfig } from "next";
+import { execFileSync } from "node:child_process";
 import path from "node:path";
 import pkg from "./package.json";
+
+// The short commit this build is made from, so a Mac can report which build it runs (lib/app-version-sync.ts). Empty
+// when there's no git checkout to read.
+const commit = (() => {
+  try {
+    return execFileSync("git", ["rev-parse", "--short=7", "HEAD"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return "";
+  }
+})();
 
 const nextConfig: NextConfig = {
   // NEXT_PUBLIC_SITE_URL is where @aimhuge/teams points invite links (its siteOrigin()); it's inlined at build.
@@ -10,6 +21,7 @@ const nextConfig: NextConfig = {
   // GitHub secrets at release time (.github/workflows/release.yml).
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
+    NEXT_PUBLIC_APP_COMMIT: commit,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://weft.zip",
     ...(process.env.WEFT_GOOGLE_CLIENT_ID ? { WEFT_GOOGLE_CLIENT_ID: process.env.WEFT_GOOGLE_CLIENT_ID } : {}),
     ...(process.env.WEFT_GOOGLE_CLIENT_SECRET ? { WEFT_GOOGLE_CLIENT_SECRET: process.env.WEFT_GOOGLE_CLIENT_SECRET } : {}),
@@ -27,6 +39,8 @@ const nextConfig: NextConfig = {
     "/opengraph-image": ["./public/fonts/fraunces-500.ttf", "./electron/assets/splash-speeder.jpg", "./electron/assets/emblem.png"],
     // A shared mini app's card (lib/app-card-image.tsx): the same font and emblem.
     "/api/a/[id]/og": ["./public/fonts/fraunces-500.ttf", "./electron/assets/emblem.png"],
+    // A shared thread's card draws with the same one (app/api/s/[id]/og).
+    "/api/s/[id]/og": ["./public/fonts/fraunces-500.ttf", "./electron/assets/emblem.png"],
     "/api/apps/share/preview": ["./public/fonts/fraunces-500.ttf", "./electron/assets/emblem.png"],
     ...(process.env.WEFT_STANDALONE
       ? {
@@ -39,12 +53,27 @@ const nextConfig: NextConfig = {
         }
       : {}),
   },
-  // lib/login.ts runs a CLI by a runtime path, which makes tracing pull in the whole project
-  // folder; keep electron-builder's output (dist/) out of it. These globs match anywhere in a path,
-  // so a bare "dist/**" would also drop .next-dist/server/chunks. scripts/prepare-standalone.mjs
-  // prunes the source files that come along.
+  // A fs or spawn call on a runtime path (~/.weft, a user's repo, a CLI home) makes Turbopack trace the whole project
+  // into a server function, which Vercel then uploads. Those calls carry /*turbopackIgnore: true*/; these excludes
+  // drop the rest of what no server function reads from disk. Turbopack matches an exclude anywhere in a path, not
+  // from the project root, so "./lib/**" would also strip node_modules/typescript/lib: only name folders no package
+  // ships at runtime, and keep what outputFileTracingIncludes reads (docs/FAQ.md, electron/assets). Next also matches
+  // them as absolute paths that may stop short of the file, so a bare "dist/**" would drop .next-dist/server/chunks.
+  // scripts/prepare-standalone.mjs prunes the source files that still come along into the desktop build.
   outputFileTracingExcludes: {
-    "/**/*": ["./dist/mac*/**/*", "./dist/Weft-*", "./dist/builder-*"],
+    "/**/*": [
+      "./dist/mac*/**/*",
+      "./dist/Weft-*",
+      "./dist/builder-*",
+      "./electron/*.{cjs,cts,ts,js,json,html}",
+      "./docs/!(FAQ.md)",
+      "./docs/*/**/*",
+      "./node_modules/{electron,electron-builder,electron-publish,electron-winstaller,app-builder-bin,app-builder-lib,dmg-builder,7zip-bin}/**/*",
+      "./node_modules/{@electron,builder-util,builder-util-runtime}/**/*",
+      // weft.zip relays AI work to the desktop and never starts Claude Code, so leave its native binary (~225 MB,
+      // traced into every route that imports the SDK) out of Vercel's functions; the desktop build needs it.
+      ...(process.env.WEFT_STANDALONE ? [] : ["./node_modules/@anthropic-ai/claude-agent-sdk-*/**/*"]),
+    ],
   },
   // weft.zip/@username is a public profile. A route folder can't start with "@" (a parallel-route slot), so the
   // handle is rewritten to app/u/[username]; beforeFiles so the [orgSlug] segment never sees it.
@@ -57,7 +86,11 @@ const nextConfig: NextConfig = {
   // esbuild (lib/app-build.ts, the mini-app bundler) ships the platform binary through package.json exports
   // (node_modules/@esbuild/darwin-arm64/bin/esbuild); when Turbopack resolves it on the server it 500s every
   // route that imports it transitively (2026-10-19). Externalize it the same way.
-  serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "esbuild"],
+  // multicast-dns (lib/lan-offer.ts, the LAN path to a worker) opens a UDP socket: loaded from node_modules as it is.
+  serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "esbuild", "multicast-dns"],
+  // @weft/client (packages/weft-client) is a workspace package that ships TypeScript source, so Next compiles it with
+  // the app's own code instead of loading it from node_modules at runtime.
+  transpilePackages: ["@weft/client"],
   // The "N" dev badge sits over the board's bottom-left corner; compile and runtime errors still show.
   devIndicators: false,
   // The desktop shell loads the app from 127.0.0.1, not localhost.
@@ -86,6 +119,12 @@ const nextConfig: NextConfig = {
         loaders: ["@tailwindcss/turbopack"],
         as: "*.css",
       },
+    },
+    // libsodium-wrappers 0.7.16's ESM build imports a ./libsodium.mjs it doesn't ship; its CommonJS build works
+    // (lib/sodium.ts, docs/architecture/mobile-security.md). In the browser, its `fs`/`path` requires sit behind a
+    // Node check and never run.
+    resolveAlias: {
+      "libsodium-wrappers": "./node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js",
     },
   },
 };

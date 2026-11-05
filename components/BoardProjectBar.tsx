@@ -6,6 +6,7 @@
 import type { Card, Column } from "@/lib/types";
 import { topMatches, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import type { ViewMode } from "@/lib/board-prefs";
+import type { ViewHint } from "@/lib/use-view-hint";
 import type { RailFilter } from "@/lib/rail-view";
 import CrashGuard from "./CrashGuard";
 import ProjectBar from "./ProjectBar";
@@ -34,8 +35,15 @@ export interface BoardProjectBarProps {
   // The board's layout: cards in columns or in one list.
   view: ViewMode;
   onView: (view: ViewMode) => void;
+  // The little pane under the toggle, shown after Escape flips the view.
+  viewHint?: ViewHint | null;
+  onDismissViewHint: () => void;
   home: string;
   onMenuOpenChange: (open: boolean) => void;
+  // A project's right-click menu (components/project-menu-handler.ts); left out on weft.zip.
+  onProjectMenu?: (path: string, e: React.MouseEvent) => Promise<boolean>;
+  // The board's toast, for a clone on a worker that outlasts the project menu.
+  onNotice?: (message: string) => void;
   // "web" is the same bar on weft.zip, where the project menu can only pick a project.
   variant?: "desktop" | "web";
 }
@@ -64,8 +72,12 @@ export default function BoardProjectBar(p: BoardProjectBarProps) {
         onSort={p.onSort}
         view={p.view}
         onView={p.onView}
+        viewHint={p.viewHint}
+        onDismissViewHint={p.onDismissViewHint}
         home={p.home}
         onMenuOpenChange={p.onMenuOpenChange}
+        onProjectMenu={p.onProjectMenu}
+        onNotice={p.onNotice}
         variant={p.variant}
       />
     </CrashGuard>

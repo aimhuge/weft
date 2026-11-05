@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { pendingItem, unsent, type PendingSend } from "./pending-sends";
 import type { ThreadPage } from "./thread-page";
 
@@ -27,9 +27,12 @@ export function usePendingSends(cardId: string, page: ThreadPage) {
       throw err;
     }
   };
-  const shown = unsent(page, pending.filter((p) => p.cardId === cardId)).map(pendingItem);
-  // The page's items with the sends still on their way after them.
-  const items = shown.length ? [...page.items, ...shown] : page.items;
+  // The page's items with the sends still on their way after them. Memoized: a view that keys an effect on the
+  // array (the web board's useCloudView marks items shown) would otherwise loop on a fresh one every render.
+  const items = useMemo(() => {
+    const shown = unsent(page, pending.filter((p) => p.cardId === cardId)).map(pendingItem);
+    return shown.length ? [...page.items, ...shown] : page.items;
+  }, [page, pending, cardId]);
   return { items, track };
 }
 

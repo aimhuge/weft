@@ -8,7 +8,7 @@ import { commitsMessage, pushMessage, type SlackText } from "./slack-messages";
 import { sendToSlack } from "./slack-post";
 import { channelFor, hasChannel } from "./slack-route";
 import { growthWatermark, saveGrowthWatermark, slackSettings } from "./slack-store";
-import type { SlackEvents } from "./slack-types";
+import type { SlackEventKey } from "./slack-types";
 import { listCards } from "./store";
 import { COPILOT_ID } from "./types";
 
@@ -33,7 +33,7 @@ export function boardFolders(): string[] {
 
 // Posts to the channel for that kind (its own, else the project's, else the default) when there is one and
 // that kind of update is switched on.
-function poster(kind: keyof SlackEvents) {
+function poster(kind: SlackEventKey) {
   return (message: SlackText, cwd: string) => {
     const settings = slackSettings();
     const channel = channelFor(settings, cwd, kind);

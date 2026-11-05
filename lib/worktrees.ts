@@ -140,6 +140,32 @@ export async function removeWorktree(root: string, p: string, branch?: string, {
   if (branch?.startsWith("weft/")) await git(root, ["branch", force ? "-D" : "-d", branch], 10_000).catch(() => "");
 }
 
+export interface BranchInfo {
+  name: string;
+  // Unix seconds of its last commit.
+  at: number;
+  // The worktree it's checked out in (the main tree or another), when it is: git won't check it out twice.
+  worktree?: string;
+}
+
+// `git for-each-ref` lines of "<name>\t<worktree path or empty>\t<committer date>".
+export function parseBranches(out: string): BranchInfo[] {
+  return out
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [name = "", worktree = "", at = "0"] = line.split("\t");
+      return { name, at: Number(at) || 0, ...(worktree ? { worktree } : {}) };
+    })
+    .filter((b) => b.name);
+}
+
+// The repo's local branches, the newest commit first: the New thread dialog's branch picker.
+export async function listBranches(root: string): Promise<BranchInfo[]> {
+  const out = await git(root, ["for-each-ref", "--sort=-committerdate", "--format=%(refname:short)%09%(worktreepath)%09%(committerdate:unix)", "refs/heads"], 10_000);
+  return parseBranches(out);
+}
+
 // Uncommitted files in a tree (relative paths), or undefined when git can't say.
 export async function dirtyIn(dir: string): Promise<string[] | undefined> {
   try {

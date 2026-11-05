@@ -4,12 +4,13 @@ import { SEED_SOURCE, SETUP_SOURCE } from "./copilot-setup";
 import { basename } from "node:path";
 import { activeProjects, gatherSections, safeRoot, SOURCES, type Section } from "./copilot-sources";
 import { STARTERS } from "./copilot-starters";
+import { PRODUCT_SOURCES } from "./copilot-sources-product";
 import { complete } from "./haiku";
 import { listCards } from "./store";
 import type { Card } from "./types";
 
 // The copilot's board-made chips: Haiku reads what Weft knows about your work (the open cards in full, lib/copilot-context.ts;
-// cached reads and outside services, lib/copilot-sources.ts) and suggests a few things to ask, most urgent first. The empty
+// cached reads and outside services, lib/copilot-sources.ts) and suggests a few things to ask, about direction more than status. The empty
 // chat shows them above the fixed starters (components/CopilotEmpty.tsx), and hides a starter a chip already covers.
 // Each chip names its project, so one run serves every project chip on the board: switching projects only filters.
 // A run takes ~10-20s, so it is kept until the board changes, refreshed in the background after a move, and at most
@@ -55,10 +56,14 @@ export function contextText(cards: readonly Card[], sections: readonly Section[]
 export function suggestPrompt(context: string, projects: readonly string[] = []) {
   const count = projects.length > 1 ? `up to ${String(PER_PROJECT)} for each project (${projects.join(", ")}), all in one list,` : String(MAX_SUGGESTIONS);
   return `You are the copilot of Weft, a kanban board where each card is an AI coding thread. Columns: backlog, running, needs_you (waiting on the user), review (finished, the user should check), done.
-Suggest ${count} things the user could ask you right now, specific to the facts below, most urgent first:
-1. a card waiting on the user (oldest first), 2. an errored or rate-limited card, 3. finished work to review or commit,
-4. a failed deploy, unapplied migration, blank secret or unregistered webhook blocking something, 5. the next useful step
-(a refactor scout finding, a backlog card, an open PR or issue, keeping the streak, wrapping up late at night).
+Suggest ${count} things the user could ask you right now, specific to the facts below, best first. You are their product
+partner, not a status feed: the board's columns already show what is running, waiting or finished, so never suggest checking on,
+answering or reviewing a card. Lean toward:
+1. what to build next and why (the roadmap, the backlog, what just shipped and what it unlocks),
+2. a refactor worth doing now (a refactor scout finding, a weak code-quality section, a file the latest commits made worse),
+3. the users (their analytics, a feature's effect on behavior), and linking analytics where there are none,
+4. something blocking the work: a failed deploy, unapplied migration, blank secret or unregistered webhook,
+5. shipping what is done: a pile of uncommitted work.
 Rules:
 - Write each as the user would type it, under ${String(MAX_CHARS)} characters, no emoji.
 - Name the card or project, and the concrete thing: numbers, file names, the error.
@@ -126,7 +131,7 @@ function parseChip(raw: unknown, { ids, cardProject, projects }: Known): Chip | 
 type Deps = { ask?: (prompt: string) => Promise<string>; gather?: (cards: readonly Card[]) => Promise<Section[]>; now?: () => number };
 
 // Every source, the setup checks and starter cards included.
-const gatherAll = (cards: readonly Card[]) => gatherSections(cards, [...SOURCES, SETUP_SOURCE, SEED_SOURCE]);
+const gatherAll = (cards: readonly Card[]) => gatherSections(cards, [...PRODUCT_SOURCES, ...SOURCES, SETUP_SOURCE, SEED_SOURCE]);
 
 // Exactly what Haiku would read for this board now (GET /api/copilot/suggestions?context=1).
 export async function boardContext(cards: readonly Card[], deps: Deps = {}): Promise<string> {

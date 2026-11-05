@@ -8,6 +8,7 @@ import type { BrowserState, NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus, ThreadItem } from "@/lib/types";
 import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
 import type { threadHandlers } from "@/lib/thread-handlers";
+import type { WorkerThread } from "@/lib/use-worker-board";
 import type { PaletteItem } from "./CommandPalette";
 import type { TagOption } from "./BoardDialogs";
 import type { LoginView } from "@/lib/types-settings";
@@ -21,7 +22,9 @@ const BoardDialogs = guarded(() => import("./BoardDialogs"), { what: "dialogs", 
 // The framed window's state.
 export interface BoardFrameState {
   showNew: boolean;
+  framed: boolean;
   selected: Card | null;
+  workerThread?: WorkerThread | null;
   cards: Card[];
   home: string;
   newCwd?: string;

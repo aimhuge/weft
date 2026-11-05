@@ -8,7 +8,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 }));
 vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
 vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
-const { setValuesTool, SET_VALUES_PROMPT } = await import("./secret-set-many");
+const { setValuesTool, SET_VALUES_PROMPT, SET_VALUES_ON_WORKER } = await import("./secret-set-many");
 
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
@@ -81,5 +81,27 @@ describe("set_values", () => {
     expect([r.isError, said(r)]).toEqual([true, "The user didn't approve storing A (development), B (preview). Nothing was written. Ask before trying again."]);
     clean(r);
     expect(SET_VALUES_PROMPT).toContain("one Touch ID");
+  });
+
+  it("proves the card it's for, so a grant that names writes can stand in for the Touch ID", async () => {
+    reply({ ok: true, label: "o/r", added: [{ name: "A", environment: "development" }] });
+    const carded = setValuesTool(() => "/proj", () => "c1") as unknown as { handler: Handler };
+    await carded.handler({ secrets: [{ name: "A", value: A }] });
+    const { card, cardSig } = sent().body;
+    expect(card).toBe("c1");
+    expect(cardSig).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("sends a card on a worker to set_value instead, since the vault is the owner's Mac's", async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    vi.stubEnv("WEFT_SHELL_URL", "");
+    try {
+      const r = await t.handler({ secrets: [{ name: "A", value: A }] });
+      expect([r.isError, said(r)]).toEqual([true, SET_VALUES_ON_WORKER]);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.stubEnv("WEFT_WORKER", "");
+      vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
+    }
   });
 });

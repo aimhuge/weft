@@ -218,8 +218,15 @@ describe("restStore", () => {
     const fetch = stub([new Response(JSON.stringify([row]))]);
     expect(await restStore("https://db.example", "sb_secret_x").relay(ID)).toEqual(row);
     const [url, init] = fetch.mock.calls[0] ?? [];
-    expect(url).toBe(`https://db.example/rest/v1/webhook_relays?id=eq.${ID}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id`);
+    expect(url).toBe(`https://db.example/rest/v1/webhook_relays?id=eq.${ID}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id,tunnel_id,tunnel_path,worker_id`);
     expect(init?.headers).toEqual({ apikey: "sb_secret_x", "content-type": "application/json" });
+  });
+
+  it("reads a relay from a database without worker_id yet", async () => {
+    const row = sealed("whsec_test");
+    const fetch = stub([new Response("column webhook_relays.worker_id does not exist", { status: 400 }), new Response(JSON.stringify([row]))]);
+    expect(await restStore("https://db.example", "sb_secret_x").relay(ID)).toEqual(row);
+    expect(fetch.mock.calls[1]?.[0]).toBe(`https://db.example/rest/v1/webhook_relays?id=eq.${ID}&select=id,user_id,name,provider,secret_ciphertext,secret_nonce,secret_key_id,tunnel_id,tunnel_path`);
   });
 
   it("finds no relay, and sends a legacy key as the bearer too", async () => {

@@ -12,13 +12,14 @@ import { vaultRoutes as rawRoutes } from "./vault-routes.cjs";
 const requireCjs = createRequire(import.meta.url);
 const { audit, configureAudit, resetAudit } = requireCjs("./keychain-audit.cjs") as typeof import("./keychain-audit.cjs");
 
-type Route = (body: Record<string, unknown>) => Promise<unknown>;
-const vaultRoutes = (get: () => unknown) =>
-  rawRoutes(get) as unknown as {
+type Route = (body: Record<string, unknown>, route?: string) => Promise<unknown>;
+const vaultRoutes = (get: () => unknown, cardFor: (body: Record<string, unknown>, route: string) => string = () => "c1") =>
+  rawRoutes(get, cardFor) as unknown as {
     "POST /secrets/add-blank": Route;
     "POST /secrets/set": Route;
     "POST /secrets/ask-add": Route;
     "POST /secrets/request-access": Route;
+    "POST /secrets/revoke-card": Route;
     "POST /secrets/audit-outbox": Route;
     "POST /secrets/audit-synced": Route;
   };
@@ -30,7 +31,7 @@ const safeStorage = {
 };
 const VALUE = "generated-signing-secret-0123456789abcdef";
 
-function make() {
+function make(cardFor?: (body: Record<string, unknown>, route: string) => string) {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-data-"));
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), "weft-proj-"));
   const prompt = vi.fn(() => Promise.resolve(true));
@@ -38,7 +39,7 @@ function make() {
   const run = () => Promise.resolve("git@github.com:Owner/Repo.git");
   const clipboard = { writeText: vi.fn(), readText: () => "" };
   const vault = createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run, onChange });
-  const routes = vaultRoutes(() => vault);
+  const routes = vaultRoutes(() => vault, cardFor);
   const set = (body: Record<string, unknown>) => routes["POST /secrets/set"]({ folder, ...body });
   return { vault, folder, dataDir, prompt, onChange, routes, set };
 }
@@ -77,6 +78,9 @@ describe("vaultRoutes", () => {
     expect(prompt.mock.calls.flat().join("\n")).not.toContain(VALUE);
     expect(await vault.valuesFor(folder, ["SIGNING"], "production")).toMatchObject({ values: { SIGNING: VALUE }, missing: [] });
     expect((await vault.valuesFor(folder, ["SIGNING"], "development")).values).toEqual({});
+    // A worker's project names the same vault by its remote, with no folder on this disk (electron/worker-secret.cjs).
+    expect(await vault.valuesForVault({ id: "github:owner/repo", label: "Owner/Repo" }, ["SIGNING", "NOPE"], "production", false)).toMatchObject({ label: "Owner/Repo", values: { SIGNING: VALUE }, missing: ["NOPE"] });
+    expect(await vault.valuesForVault({ id: "github:nobody/none", label: "nobody/none" }, ["SIGNING"], "production", false)).toMatchObject({ values: {}, missing: ["SIGNING"] });
     expect(onChange).toHaveBeenCalledWith(folder);
     // On disk: ciphertext only, in 0600 files.
     const dir = path.join(dataDir, "vault");
@@ -147,11 +151,58 @@ describe("vaultRoutes", () => {
 
   it("grants a thread standing access, naming the card and its reason", async () => {
     const { routes, folder, vault, prompt } = make();
-    const result = (await routes["POST /secrets/request-access"]({ key: "c1", folder, thread: "Build card", why: "Need to run migrations" })) as { granted?: boolean; label: string };
+    const result = (await routes["POST /secrets/request-access"]({ folder, thread: "Build card", why: "Need to run migrations" }, "/secrets/request-access")) as { granted?: boolean; label: string };
     expect(result).toMatchObject({ granted: true, label: "Owner/Repo" });
     expect(prompt).toHaveBeenCalledTimes(1);
     expect(prompt.mock.calls.flat().join("\n")).toContain("Build card");
     expect(vault.grantList()).toEqual([expect.objectContaining({ card: "c1", thread: "Build card", label: "Owner/Repo" })]);
+  });
+
+  // A grant that names writes lets the card store a value and push it to Vercel without asking
+  // again; one that lasts for the thread says so, and ends with the card (2026-10-29).
+  it("passes the writes and the span the thread asked for", async () => {
+    const { routes, folder, vault } = make();
+    await routes["POST /secrets/request-access"]({ folder, thread: "Build card", why: "w", writes: true, span: "thread" }, "/secrets/request-access");
+    expect(vault.grantList()).toEqual([expect.objectContaining({ card: "c1", writes: true, span: "thread" })]);
+  });
+
+  it("asks for no writes and an hour's span when the thread doesn't name them", async () => {
+    const { routes, folder, vault } = make();
+    await routes["POST /secrets/request-access"]({ folder, thread: "Build card", why: "w" }, "/secrets/request-access");
+    expect(vault.grantList()).toEqual([expect.objectContaining({ card: "c1", writes: false, span: "hour" })]);
+  });
+
+  it("asks for an hour's span when the thread names anything but the thread's", async () => {
+    const { routes, folder, vault } = make();
+    await routes["POST /secrets/request-access"]({ folder, thread: "Build card", why: "w", span: "forever" }, "/secrets/request-access");
+    expect(vault.grantList()).toEqual([expect.objectContaining({ card: "c1", span: "hour" })]);
+  });
+
+  // A card's grants end with its work (lib/vault-grant-done.ts).
+  it("ends the card's grants when its work is done", async () => {
+    const { routes, folder, vault } = make();
+    await routes["POST /secrets/request-access"]({ folder, thread: "Build card", why: "w", writes: true }, "/secrets/request-access");
+    expect(vault.grantList()).toHaveLength(1);
+    expect(await routes["POST /secrets/revoke-card"]({}, "/secrets/revoke-card")).toEqual({ revoked: 1 });
+    expect(vault.grantList()).toEqual([]);
+  });
+
+  it("ends nothing when the request proves no card", async () => {
+    const { vault, folder } = make();
+    await vault.grant(folder, { card: "c1", thread: "Build card", by: "you" });
+    const routes = vaultRoutes(() => vault, () => "");
+    expect(await routes["POST /secrets/revoke-card"]({}, "/secrets/revoke-card")).toEqual({ revoked: 0 });
+    expect(vault.grantList()).toHaveLength(1);
+  });
+
+  // The card is the signed one, never the body's key: a body that names another card's id must not
+  // borrow that card's grant (2026-10-28).
+  it("grants the card the request proved, not the card it names", async () => {
+    const { vault, folder, prompt } = make();
+    const routes = vaultRoutes(() => vault, (_body, route) => (route === "/secrets/request-access" ? "proven" : ""));
+    await routes["POST /secrets/request-access"]({ key: "someone-else", folder, thread: "Build card", why: "w" }, "/secrets/request-access");
+    expect(vault.grantList()).toEqual([expect.objectContaining({ card: "proven" })]);
+    expect(prompt).toHaveBeenCalledTimes(1);
   });
 
   it("serves the audit outbox and marks it synced", async () => {
@@ -193,5 +244,61 @@ describe("vaultRoutes", () => {
     await set({ name: "A", value: "a-value" });
     await set({ name: "B", value: "b-value" });
     expect(prompt).toHaveBeenCalledTimes(2);
+  });
+
+  // A card whose grant names writes stores a value it made without asking again: the user
+  // approved its writes up front (electron/vault-grants.cjs, 2026-10-29).
+  describe("a grant that names writes", () => {
+    it("adds a name without asking again", async () => {
+      const { folder, vault, set, prompt } = make();
+      await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", writes: true });
+      prompt.mockClear();
+
+      expect(await set({ name: "NEW", value: VALUE })).toEqual({ ok: true, added: true, label: "Owner/Repo" });
+      expect(prompt).not.toHaveBeenCalled();
+      expect((await vault.valuesFor(folder, ["NEW"], "development")).values).toEqual({ NEW: VALUE });
+    });
+
+    it("fills a blank without asking again", async () => {
+      const { routes, folder, vault, set, prompt } = make();
+      await routes["POST /secrets/add-blank"]({ folder, names: ["SIGNING"], environment: "production" });
+      await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", writes: true });
+      prompt.mockClear();
+
+      expect(await set({ name: "SIGNING", value: VALUE, environment: "production" })).toEqual({ ok: true, label: "Owner/Repo" });
+      expect(prompt).not.toHaveBeenCalled();
+      expect((await vault.valuesFor(folder, ["SIGNING"], "production")).values).toEqual({ SIGNING: VALUE });
+    });
+
+    // An overwrite destroys the value that was there, so it asks even under a grant that names writes.
+    it("still asks before an overwrite", async () => {
+      const { folder, vault, set, prompt } = make();
+      await vault.setValue(folder, "PRICE", "production", "price_live");
+      await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", writes: true });
+      prompt.mockClear();
+
+      expect(await set({ name: "PRICE", value: "price_sandbox", environment: "production", replace: true })).toEqual({ ok: true, replaced: true, label: "Owner/Repo" });
+      expect(prompt).toHaveBeenCalledWith("let a thread overwrite the production value of PRICE (Owner/Repo) with a new one");
+    });
+
+    // The grant is the card's own, not the one the body names (electron/card-token.cjs).
+    it("uses the card the request proved, not the card it names", async () => {
+      const { vault, folder, prompt } = make();
+      await vault.grant(folder, { card: "proven", thread: "Build card", by: "you", writes: true });
+      const routes = vaultRoutes(() => vault, (_body, route) => (route === "/secrets/set" ? "proven" : ""));
+      prompt.mockClear();
+
+      expect(await routes["POST /secrets/set"]({ folder, name: "NEW", value: VALUE, card: "someone-else" }, "/secrets/set")).toEqual({ ok: true, added: true, label: "Owner/Repo" });
+      expect(prompt).not.toHaveBeenCalled();
+    });
+
+    it("asks when the card's grant names no writes", async () => {
+      const { folder, vault, set, prompt } = make();
+      await vault.grant(folder, { card: "c1", thread: "Build card", by: "you" });
+      prompt.mockClear();
+
+      expect(await set({ name: "NEW", value: VALUE })).toEqual({ ok: true, added: true, label: "Owner/Repo" });
+      expect(prompt).toHaveBeenCalledWith("let a thread add NEW (Owner/Repo, development)");
+    });
   });
 });

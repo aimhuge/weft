@@ -43,6 +43,10 @@ tool call.
 
 A bump Weft didn't see (a Codex thread, a commit made outside Weft) gets its section by hand: `pnpm changelog:release X.Y.Z`.
 
+Before the tag, the Copywriter writes the version's "What's new" splash (below) with `node scripts/release-splash.mjs X.Y.Z`.
+The whole run, as it works today (commit, bump, splash, tag, build on a mini, publish, check weft.zip), is the repo-only
+`/release` skill in `.claude/skills/release/SKILL.md`.
+
 `.github/workflows/release.yml` runs on the tag, on an Apple silicon runner:
 
 - refuses a tag that doesn't match `package.json`, runs the tests;
@@ -67,6 +71,9 @@ another Mac asks before the first open.
 then packs and signs here with the Flexbike Developer ID (`WEFT_SIGN_IDENTITY`, default `Flexbike, Inc. (H78XB55WG8)`),
 because the private key lives only in this Mac's keychain. It notarizes when the `APPLE_API_*` variables are set.
 `--check` only tests the builder and the identity; `--no-sign` packs unsigned.
+electron-builder's output goes through `scripts/build-log-filter.mjs`, which hides the known-harmless lines listed in
+`scripts/build-log-ignore.json` (pnpm's abbreviated duplicate references, other platforms' sharp and esbuild binaries)
+and says how many it hid. A "not found on disk" line naming any Mac package still shows.
 
 ### Secrets
 
@@ -86,7 +93,7 @@ from Alex Miller's individual membership, not Flexbike Inc's.
 ## Downloads
 
 weft.zip's download button and `weft.zip/download` (`app/download/route.ts`, a 302 to the newest dmg; the link to
-share) both read the release feed through `latestRelease()` in `lib/home-release.ts`, cached for hours, so a new release
+share) both read the release feed through `latestRelease()` in `lib/home-release.ts`, cached for minutes (Next's "minutes" profile: re-read at most once a minute), so a new release
 reaches the site without a deploy.
 
 ## How an installed Weft updates (`electron/updater.cjs`)
@@ -108,12 +115,75 @@ reaches the site without a deploy.
   Update window; its **Restart Now** button goes through the same `install()` as the menu, asking when threads run.
 - Squirrel only installs into a signed app. An unsigned build (or any Squirrel error) falls back to **Download Weft
   X…**, which opens the release page.
-- The Weft menu always has the item, and in the app it opens the **Software Update** window (`electron/update-window.cjs`,
+- **What an update brings, and what it installs.** Squirrel replaces the whole `.app` bundle, so the new
+  bundle arrives with its code: `app.asar` (Electron main's packages, in the derived allow-list) and
+  `Resources/server` (the Next standalone bundle) are already installed by the update itself. The one
+  tree on disk that is installed *separately* from the bundle is `Resources/toolchain/puku` — puku-cli's
+  tree, which `scripts/bundle-toolchain.mjs` installs at build time from a caret range with no lockfile
+  and then prunes packages out of. So the app runs **`pnpm install`** against that tree after an update
+  (`electron/toolchain-install.cjs`), in the background: the board never waits for it. It knows an update
+  landed by the version changing since the last launch (`electron/updated-since.cjs`), so an ordinary
+  relaunch installs nothing and only checks the tree.
+  It is not run against the app's own packages: those live inside the asar, already installed, and a
+  `pnpm install` beside an asar would write a `node_modules` folder nothing reads.
+- **The app checks its own bundle at boot** (`electron/runtime-deps.cjs`): the packages Electron main
+  requires are resolved from inside the asar, and one that is present but won't load is caught by
+  requiring it. A bundle missing a package shows the splash's error state naming it, instead of the
+  native "A JavaScript error occurred in the main process" dialog of 2026-10-28.
+- The Weft menu always has the item, and the File menu repeats it under New Thread (the only place off a Mac), and in the app it opens the **Software Update** window (`electron/update-window.cjs`,
   `update.html`, `update.js`, `update-preload.cjs`; the About window's pattern): this Mac's version, the newest, the last
   check, the release notes and one button for the next step (Check Now, Download…, Restart to Update). Opening it while
   idle checks right away. `electron/update-view.cjs` words each state (a feed 404 reads as "no release published yet");
   the updater keeps `notes`, `checkedAt`, `error` and `upToDate` in its state for it, and `updater.info()` hands it over.
   Without a window (`openWindow` unset) **Check for Updates…** falls back to message boxes.
+
+## What's new after an update (`lib/release-splash.ts`)
+
+The first time Weft opens on a version that has a splash, the board shows **What's new in Weft X** once: up to three
+short lines, sometimes a video, **Full release notes** (the GitHub release) and **Nice** (`components/ReleaseSplash.tsx`,
+mounted in `components/HeaderBadges.tsx`).
+
+- The lines live in `lib/release-splashes.json` (`{ "X.Y.Z": { "lines": [...], "video"?: "/whats-new/X.Y.Z.mp4" } }`), which
+  ships inside the app, so an update brings its own splash. A version with no entry shows nothing.
+- `scripts/release-splash.mjs X.Y.Z [--video …] [--dry-run]` writes the entry in the Copywriter's voice: its soul from
+  `lib/agents-built-in.json`, the version's CHANGELOG section as the brief, puku-cli (puku-ai-2.8) as the writer, or
+  `claude -p` with `WEFT_SPLASH_CLI=claude`.
+- `decideSplash()` reads the version last seen from localStorage (`weft-splash-version`). The same version: nothing. No
+  welcome answered yet (a fresh install): record the version, show nothing, so new users meet the welcome, not release
+  notes. Older or none stored with the welcome answered (someone who had Weft before the splash existed): show it.
+  Newer stored (a downgrade): record quietly. The version is recorded as the splash opens, and decided once a launch
+  (`lib/use-release-splash.ts`); an unreadable welcome leaves it for next launch.
+- The video plays muted and looping, with controls for the sound (the feature intros' rule: nothing talks unasked).
+- Settings → General → Reset tips clears the version seen (`resetOnboarding` in `lib/welcome-client.ts`), so the current
+  splash shows again on the next launch: that's how to preview one in dev mode, where the version is `package.json`'s.
+
+## Server patches
+
+Most changes (the board's UI, `lib/`, `app/api/`, Weft's skills) live only in the Next.js server's own code, a small part
+of the app next to Electron, the toolchain and the Claude Code binary. A **server patch** ships just that part, between
+versions: no version bump, notarization or dmg, and it goes live without relaunching the app.
+
+| Piece | What |
+| --- | --- |
+| `scripts/server-patch-deps.mjs` | The fingerprint of the standalone server's `node_modules` (every file's path and size, hashed). `prepare-standalone.mjs` writes it into every full build as `Resources/server/weft-deps.json` |
+| `scripts/server-patch-release.mjs` (`pnpm patch:release`) | Refuses a dirty tree, a version with no `v<version>` tag, and any change since that tag to `electron/`, `pnpm-lock.yaml` or `build/` (they only ship in a full release). Builds the standalone server, tars `server.js`, `package.json`, `public/`, `.next-dist/` and `plugin/` (no packages) into `dist/patch/weft-server-<version>+<sha>.tar.gz`, and writes `patch.json`. `--publish` uploads both to the rolling `patch-latest` prerelease (so GitHub's "latest" stays the app version) and deletes older tarballs |
+| `electron/server-patch-feed.cjs` | `patch.json` is `{ payload, signature }`: the details (`version`, `build`, `seq`, `deps`, `url`, `sha256`, `size`, `notes`, `commit`) as a JSON string, signed with ed25519. `whyNot()` says why a Mac shouldn't take one |
+| `electron/patch-key.cjs` + `scripts/server-patch-keygen.mjs` | The public key the app trusts. The keygen runs once, in your own terminal: it writes the public key here and prints the private key one time for 🔐 Add as `WEFT_PATCH_SIGNING_KEY` (weft vault, production). `null` = no key, the build takes no patches |
+| `electron/patcher.cjs` + `electron/patcher-app.cjs` | Checks `patch-latest/patch.json` 45 s after launch and hourly (`WEFT_PATCH_FEED` overrides). Takes a patch only when its signature checks out, it's for this app version and these packages, it's newer than the one staged or running, and it never failed here. Downloads, checks size and sha256, stages it, notifies (**Switch Now**). Waits while a full update is downloading or ready |
+| `electron/server-patch.cjs` | Stages into `<userData>/patches/<build>/` with `node_modules` a link to the app's own, and `current.json` naming it. `serverPaths()` is where `server.cjs` starts the server from on every launch, so a restart picks up the staged patch. Patches from another app version are cleared at start |
+
+Going live: once no thread runs and nobody has touched the Mac for 10 minutes, the patcher restarts the server (not the
+app) and reloads every page it serves. **Switch Now** asks first when threads run (**Switch When Idle** arms the
+restart-when-idle drain, which relaunches the app). A relaunch also picks the patch up.
+
+Rolling back: a patched server that dies within its first minute, or runs out of the crash budget, goes on
+`patches/bad.json` and `server.cjs` relaunches the app's own server straight away (`patchFailed()`). The Software
+Update and About windows show the running version as `0.6.7+abc1234`.
+
+Shipping one: `mcp__secrets__run("pnpm patch:release --publish", ["WEFT_PATCH_SIGNING_KEY"], environment: "production")`
+on a committed tree whose `electron/` matches the tag. A patch can't carry a change to Electron main, a new or
+moved package, or the toolchain; those still need `/release`. The first app version with the patcher, and a key, has to
+ship as a full release before any Mac can take a patch.
 
 ## Gaps
 
@@ -122,7 +192,7 @@ reaches the site without a deploy.
   blanks in the vault), and `gh release create` with the dmg, zip and update.json. The tag's workflow run was cancelled:
   the repo has no signing secrets. Squirrel's install of a signed update is still unproven until 0.4.1.
 - arm64 only. Intel Macs would need an `x64` (or `universal`) target and their own zip in the feed.
-- No delta updates: each update downloads the full zip.
+- No delta updates: each full update downloads the full zip (server patches cover the server between versions).
 - `countRunning` in `updater.cjs` repeats the one in `keep-working.cjs`.
 - The toolchain's versions are pinned in `scripts/bundle-toolchain.mjs` and move only when someone bumps them.
 - A puku trial for people without a Puku account (Weft's key behind the deployed Weft) is its own card; until it

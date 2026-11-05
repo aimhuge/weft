@@ -1,0 +1,128 @@
+/* The team's Devices page: the machine table, the fingerprint, and the pending-grant rows.
+   It leans on team.css for the page shell (wz-teamPage, wz-teamHeader, wz-roster, wz-inviteForm) and
+   adds only what the device list needs. The fingerprint is monospaced so the two sides of a TOFU
+   comparison line up character for character. */
+
+.wz-deviceTable td {
+  vertical-align: middle;
+}
+
+.wz-deviceWho {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wz-deviceName {
+  font-weight: 600;
+  color: var(--thread);
+}
+
+.wz-deviceOwner {
+  font-size: 12.5px;
+  color: var(--thread-3);
+}
+
+.wz-devicePlatform,
+.wz-deviceSeen {
+  color: var(--thread-2);
+  white-space: nowrap;
+}
+
+/* The fingerprint: one unbroken run of monospaced groups, so a group that doesn't match the other
+   side's is obvious at a glance. */
+.wz-deviceFingerprint {
+  display: inline-block;
+  padding: 4px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: rgb(255 255 255 / 0.025);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  letter-spacing: 0.04em;
+  color: var(--thread-2);
+  white-space: nowrap;
+}
+
+.wz-deviceFingerprintInput {
+  font-family: var(--mono);
+  font-size: 13.5px;
+  letter-spacing: 0.03em;
+}
+
+.wz-deviceRowRevoked .wz-deviceName,
+.wz-deviceRowRevoked .wz-deviceFingerprint {
+  text-decoration: line-through;
+  opacity: 0.55;
+}
+
+.wz-deviceFormTitle {
+  margin: 0;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+  color: var(--thread);
+}
+
+.wz-devicePendingRow {
+  align-items: flex-start;
+}
+
+.wz-devicePendingWho {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.wz-devicePendingHeadline {
+  font-size: 14.5px;
+  color: var(--thread);
+}
+
+.wz-devicePendingWhen {
+  font-size: 12.5px;
+  color: var(--thread-3);
+}
+
+@media (max-width: 720px) {
+  .wz-deviceFingerprint {
+    white-space: normal;
+    word-break: break-all;
+  }
+}
+
+/* The tab strip above the people and the machines. */
+.wz-teamTabs {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  align-self: flex-start;
+}
+
+.wz-teamTab {
+  padding: 7px 15px;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--thread-2);
+  text-decoration: none;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.wz-teamTab:hover {
+  color: var(--thread);
+  background: rgb(255 255 255 / 0.04);
+}
+
+.wz-teamTab[aria-current="page"] {
+  background: var(--clay);
+  color: #1a0e07;
+}

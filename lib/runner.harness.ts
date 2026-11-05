@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import type * as ChildProcess from "node:child_process";
 import { vi } from "vitest";
+import { stripEnvBlock } from "./env-block";
+import { PUKU_SIGN_IN_VARS } from "./puku-dotenv";
 import type { SubagentModel } from "./subagents";
 import type { Card, ThreadItem } from "./types";
 
@@ -30,6 +32,7 @@ export type Options = Record<string, unknown> & {
 export class FakeQuery {
   options: Options;
   received: string[] = [];
+  raw: string[] = [];
   // The uuid each user message was sent with (the prompt id ↑ rewinds by).
   uuids: (string | undefined)[] = [];
   inputClosed = false;
@@ -50,7 +53,10 @@ export class FakeQuery {
     void (async () => {
       for await (const m of prompt) {
         const c = m.message.content;
-        this.received.push(typeof c === "string" ? c : JSON.stringify(c));
+        const text = typeof c === "string" ? c : JSON.stringify(c);
+        // What tests compare is the message without its <weft-env> block (lib/turn-env.ts); `raw` keeps it.
+        this.raw.push(text);
+        this.received.push(stripEnvBlock(text));
         this.uuids.push(m.uuid);
       }
       this.inputClosed = true;
@@ -195,6 +201,8 @@ export const settingsMock = (h: Harness) => ({
   gooseModelId: () => "",
   gooseProviderId: () => "",
   gooseBaseUrl: () => "",
+  // The names the user gave their models, which a subagent's label shows.
+  gooseNamedModels: () => [] as { id: string; name: string }[],
 });
 
 export const loginMock = (h: Harness) => ({
@@ -284,6 +292,9 @@ export function resetHarness(h: Harness) {
   h.execFails = false;
   h.loginFails = false;
   for (const key of GLOBALS) Reflect.deleteProperty(globalThis, key);
+  // The runner reads these from process.env, so a run on a Weft Worker, or with a Puku key set, would see
+  // other options: pin them unset, and tests spell out the env a puku thread gets (backendEnv("puku", {})).
+  for (const name of ["WEFT_WORKER", "PUKU_CLI_ENV_FILE", ...PUKU_SIGN_IN_VARS]) vi.stubEnv(name, undefined);
   return fs.mkdtempSync(path.join(os.tmpdir(), "weft-runner-"));
 }
 

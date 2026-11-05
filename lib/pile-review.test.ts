@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchPileReview, startPileReview } from "./pile-review";
+
+// A worker's host: no project acts, its reads from the snapshot (here, whatever the test sets).
+const worker = vi.hoisted((): { pile: unknown; reads: boolean } => ({ pile: null, reads: true }));
+vi.mock("./project-host", async (actual) => {
+  const real = await actual<typeof import("./project-host")>();
+  const cloud = { can: (f: string) => f === "reads" && worker.reads, read: vi.fn(() => Promise.resolve(worker.pile)) };
+  return { ...real, hostFor: (cwd: string) => (cwd.startsWith("worker://") ? cloud : real.hostFor(cwd)) };
+});
+
+const { fetchPileReview, startPileReview } = await import("./pile-review");
 
 const reply = (body: unknown) => vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(() => Promise.resolve(new Response(JSON.stringify(body))));
 
@@ -11,6 +20,21 @@ describe("fetchPileReview", () => {
     vi.stubGlobal("fetch", fetch);
     await expect(fetchPileReview("/a b")).resolves.toEqual({ prompt: "Walk me through…", title: "Commit the uncommitted pile in weft" });
     expect(fetch.mock.calls[0]?.[0]).toBe("/api/pile?cwd=%2Fa%20b&prompt=1");
+  });
+
+  it("writes a worker project's prompt from its snapshot's pile, never asking this Mac", async () => {
+    const fetch = reply({ prompt: "p" });
+    vi.stubGlobal("fetch", fetch);
+    worker.pile = { root: "ling", files: 3, added: 10, removed: 2, cards: 1 };
+    const { prompt, title } = await fetchPileReview("worker://w1/ling");
+    expect(title).toBe("Commit the uncommitted pile in ling");
+    expect(prompt).toContain("in ling: 3 files, +10/-2 lines, from 1 cards in Review");
+    expect(fetch).not.toHaveBeenCalled();
+    worker.pile = null;
+    await expect(fetchPileReview("worker://w1/ling")).rejects.toThrow("Nothing uncommitted");
+    worker.reads = false;
+    await expect(fetchPileReview("worker://w1/ling")).rejects.toThrow("Nothing uncommitted");
+    worker.reads = true;
   });
 
   it("falls back to a plain title", async () => {

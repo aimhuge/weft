@@ -1,27 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { isMac, useShortcutList } from "@/lib/hotkeys";
-import { filterSections, shortcutSections, splitDescription } from "@/lib/shortcut-catalog";
-import { bindingSpec, currentBinding } from "@/lib/shortcuts";
+import { useState } from "react";
+import { filterSections, splitDescription } from "@/lib/shortcut-catalog";
 import Icon from "./Icon";
 import KeyCaps, { Cap } from "./KeyCaps";
 import Modal from "./Modal";
+import { PrintSheetButton } from "./PrintShortcutSheet";
+import { useShortcutSections } from "./use-shortcut-sections";
 
 // Every shortcut in the app, searchable by what it does or by its keys ("archive", "cmd k", "esc").
 export default function ShortcutsDialog({ onClose }: { onClose: () => void }) {
-  const registered = useShortcutList();
+  const { sections, mac } = useShortcutSections();
   const [query, setQuery] = useState("");
-  const mac = isMac();
-
-  const sections = useMemo(
-    () =>
-      shortcutSections(registered, {
-        desktop: typeof window !== "undefined" && Boolean(window.weft),
-        dictation: bindingSpec(currentBinding("dictation"), mac),
-      }),
-    [registered, mac],
-  );
   const shown = filterSections(sections, query, mac);
   const total = sections.reduce((n, s) => n + s.items.length, 0);
   const holdKey = mac ? "⌘" : "Ctrl";
@@ -86,10 +76,13 @@ export default function ShortcutsDialog({ onClose }: { onClose: () => void }) {
         )}
       </div>
 
-      <p className="shrink-0 border-t border-line px-6 py-3 text-[13px] text-muted">
-        Hold <Cap small>{holdKey}</Cap> or <Cap small>{mac ? "⇧" : "Shift"}</Cap> on the board to see what they do · plain
-        keys pause while you type · change the dictation key in Settings
-      </p>
+      <div className="flex shrink-0 items-center gap-4 border-t border-line px-6 py-3 text-[13px] text-muted">
+        <p className="min-w-0 flex-1">
+          Hold <Cap small>{holdKey}</Cap> or <Cap small>{mac ? "⇧" : "Shift"}</Cap> on the board to see what they do · plain
+          keys pause while you type · change the dictation key in Settings
+        </p>
+        <PrintSheetButton sections={sections} mac={mac} />
+      </div>
     </Modal>
   );
 }

@@ -1,24 +1,33 @@
-// What the pane's address bar (and a thread's open_url) loads: a URL as it is, localhost over http, a host
-// over https, and anything else (a word, a phrase) as a web search, the way Chrome's address bar does.
-const SEARCH_URL = "https://www.google.com/search?q=";
+// What the browser pane accepts as an address, and how it reports a tab. Pure, so it's tested without Electron.
+const { failedUrl } = require("./pane-error.cjs");
+
+const OPENS_AS_IS = /^(https?|file|about):/i;
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+const HOST_AND_PORT = /^[^\s/:]+:\d+([/?#]|$)/;
+const HOST = /^(localhost|\[::1\]|[^\s/?#]+\.[^\s/?#.]+)([:/?#]|$)/i;
 
 function normalizeUrl(raw) {
   const url = String(raw || "").trim();
-  if (/^(https?|file|about):/i.test(url)) return url;
+  if (OPENS_AS_IS.test(url)) return url;
   if (/^(localhost|127\.0\.0\.1|\[::1\])([:/]|$)/i.test(url)) return `http://${url}`;
-  // A host and port ("devbox:8080") reads like a scheme; the digits say it isn't one.
-  if (/^[\w.-]+:\d+([/?#]|$)/.test(url)) return `https://${url}`;
-  // Any other scheme (javascript:, chrome:, mailto:) stays out of the pane; words with a colon are a search.
-  if (/^[a-z][a-z0-9+.-]*:\S*$/i.test(url)) throw new Error(`Can't open ${url} in the browser pane`);
-  if (looksLikeHost(url)) return `https://${url}`;
-  return `${SEARCH_URL}${encodeURIComponent(url)}`;
+  if (HOST_AND_PORT.test(url)) return `https://${url}`;
+  if (HAS_SCHEME.test(url)) throw new Error(`Can't open ${url} in the browser pane`);
+  return `https://${url}`;
 }
 
-// "example.com" or "docs.foo.dev/guide" is an address; "nextjs", "react hooks" and "what is next.js" aren't.
-function looksLikeHost(text) {
-  if (!text || /\s/.test(text)) return false;
-  const host = text.split(/[/?#]/)[0];
-  return /^[\w-]+(\.[\w-]+)+\.?$/.test(host);
+// What the user typed in the address bar: an address, or else a Google search. Threads keep to
+// normalizeUrl, so a thread's bad address fails out loud rather than landing on a results page.
+function addressBarUrl(raw) {
+  const text = String(raw || "").trim();
+  if (OPENS_AS_IS.test(text)) return text;
+  if (!/\s/.test(text) && (HAS_SCHEME.test(text) || HOST.test(text))) return normalizeUrl(text);
+  return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 }
 
-module.exports = { normalizeUrl, SEARCH_URL };
+// One tab for the tab strip (components/PaneTabs.tsx). On the error page it keeps the address that failed.
+function tabState({ id, view }) {
+  const url = view.webContents.getURL();
+  return { id, url: failedUrl(url) ?? url, title: view.webContents.getTitle() };
+}
+
+module.exports = { addressBarUrl, normalizeUrl, tabState };

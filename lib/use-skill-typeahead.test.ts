@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { Editor } from "@tiptap/react";
+import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { localTransport, ThreadTransportContext, type ThreadTransport } from "./thread-transport";
 import type { SkillInfo } from "./types";
 
 const api = vi.hoisted(() => ({ skills: vi.fn() }));
@@ -85,5 +87,24 @@ describe("useSkillTypeahead", () => {
     });
     rerender({ text: "/de" });
     expect(result.current.suggestions).toEqual([]);
+  });
+
+  it("reads the list from the thread's transport: a worker card's comes from its worker, for that card", async () => {
+    const listSkills = vi.fn(() => Promise.resolve([skill("worker-deploy")]));
+    const worker: ThreadTransport = { ...localTransport, desktop: false, listSkills };
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(ThreadTransportContext.Provider, { value: worker }, children);
+    const { result } = renderHook(() => useSkillTypeahead(editorAt("/de"), "worker://w1/app", "card-9"), { wrapper });
+    await waitFor(() => expect(result.current.typeaheadOpen).toBe(true));
+    expect(listSkills).toHaveBeenCalledWith("card-9", "worker://w1/app");
+    expect(result.current.suggestions.map((s) => s.name)).toEqual(["worker-deploy"]);
+    expect(api.skills).not.toHaveBeenCalled();
+  });
+
+  it("offers nothing, and asks nobody, where the transport has no list", () => {
+    const bare: ThreadTransport = { ...localTransport, desktop: false, listSkills: undefined };
+    const wrapper = ({ children }: { children: ReactNode }) => createElement(ThreadTransportContext.Provider, { value: bare }, children);
+    const { result } = renderHook(() => useSkillTypeahead(editorAt("/de"), "/proj", "c1"), { wrapper });
+    expect(result.current.typeaheadOpen).toBe(false);
+    expect(api.skills).not.toHaveBeenCalled();
   });
 });

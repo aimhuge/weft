@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import type { IntakeResult } from "./project-intake";
+import type { IntakeResult } from "./intake-types";
 import type { RailPanel } from "./rail-view";
 
 // The intake screen that's open (components/IntakeDialog.tsx), as a tiny store outside Board, like

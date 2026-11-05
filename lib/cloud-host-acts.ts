@@ -1,0 +1,135 @@
+// weft.zip's way to a card's host verbs (docs/architecture/project-hosts.md, H3b): the same `host` command the
+// desktop sends a worker (lib/host-row.ts), inserted with the visitor's own session for whichever machine runs the
+// card, the Mac's inbox (lib/cloud-inbox-cards.ts) or a worker's daemon. The web board's transport
+// (components/web-board/useCloudTransport.ts) hands these on as its ↑ edit, Send fresh, Send later and "/" list, and
+// `act` is every other verb the board sends (lib/web-host.ts): card edits, the held-edit choices, a subagent's Stop.
+//
+// Each is followed to its result, as actOnWorker does on the desktop (lib/worker-acts.ts): a refusal rejects, so the
+// reply box puts the text back; one the machine hasn't taken within a few seconds answers `{ queued }`, a promise that
+// settles when it runs or is refused, so Send later keeps its row drawn until then. A queued ↑ edit or Send fresh
+// resolves at once (the box can't wait an hour); if it's refused later, its failed row shows above the box with its
+// text (lib/web-commands.ts cardReplies), so nothing typed is lost silently.
+//
+// A worker's card goes on the worker's session line when this board holds one that's up (lib/web-lines.ts), as
+// actOnLine does on the desktop (lib/line-host.ts): the worker runs it through the same `host` checks a row passes. A
+// widening never goes on the line (it's signed on sign.weft.zip and sent as a row), nor does text that pastes files
+// (the row carries their uploads); a call the line couldn't send (LineDown) takes the relay, and one it sent and lost is
+// refused rather than sent twice.
+import type { NewCommand } from "./cloud-commands";
+import { MEDIA_REF } from "./media";
+import { LineDown } from "./session-line-calls";
+import type { HostVerb } from "./host-api/types";
+import { hostRow, type CardTarget } from "./host-row";
+import type { WidenAsk } from "./sign-widen";
+import { widenChangeOf } from "./widen";
+import { skillCache } from "./skills-wire";
+import type { SkillInfo } from "./types";
+import type { Queued } from "./optimistic-cards";
+import { waitForCommand, type CommandResult, type WaitOptions } from "./worker-command-wait";
+import { ACT_WAIT, QUEUED_WAIT } from "./worker-acts";
+
+export type { CardTarget };
+
+export interface CloudHostInput {
+  // Where the card runs, or why a command can't be addressed to it.
+  target: (cardId: string) => CardTarget | string;
+  // Puts a row in; resolves to its id, or why it couldn't be sent.
+  insert: (row: NewCommand) => Promise<{ id: string } | string>;
+  // How a command went, its `result` included.
+  read: (commandId: string) => Promise<CommandResult>;
+  wait?: WaitOptions;
+  queuedWait?: WaitOptions;
+  // A change the network runs only with a signed approval (lib/widen.ts) goes here instead: the board opens
+  // sign.weft.zip, which signs it with the passkey and sends the command itself. Absent, it's sent unsigned, and the
+  // host refuses it with its own words.
+  widen?: (ask: WidenAsk) => boolean;
+  // The worker's session line, when this board holds one (lib/session-lines.ts lineFor).
+  line?: (workerId: string) => HostLine | null;
+}
+
+export interface HostLine {
+  up: () => boolean;
+  call: (verb: string, args: Record<string, unknown>) => Promise<unknown>;
+}
+
+// The worker a card's target names (`worker:<id>`), or null for a Mac's card.
+export const workerOfTarget = (to: CardTarget | string): string | null => (typeof to !== "string" && to.device.startsWith("worker:") ? to.device.slice("worker:".length) : null);
+
+const pastesFiles = (args: Record<string, unknown>) => Object.values(args).some((v) => typeof v === "string" && new RegExp(MEDIA_REF.source).test(v));
+
+export interface CloudHostActs {
+  // Any verb on the card args.id names, followed to its result: what the board's tiles, menus and header send
+  // (lib/web-host.ts puts it behind every card's ProjectHost.act on weft.zip).
+  act: (verb: HostVerb, cardId: string, args: Record<string, unknown>) => Promise<Queued | undefined>;
+  editLast: (cardId: string, text: string) => Promise<void>;
+  fresh: (cardId: string, message: string) => Promise<void>;
+  schedule: (cardId: string, text: string, at: number) => Promise<Queued | undefined>;
+  unschedule: (cardId: string, messageId: string) => Promise<Queued | undefined>;
+  listSkills: (cardId: string | undefined) => Promise<SkillInfo[]>;
+}
+
+function outcome(result: CommandResult, fallback: string): CommandResult {
+  if (result.status === "failed") throw new Error(result.error || fallback);
+  return result;
+}
+
+export function cloudHostActs({ target, insert, read, wait = ACT_WAIT, queuedWait = QUEUED_WAIT, widen, line }: CloudHostInput): CloudHostActs {
+  // True when the change went to be signed: the host makes it once the approval arrives, and the board sees it then.
+  function signing(verb: HostVerb, cardId: string, args: Record<string, unknown>): boolean {
+    if (!widen || !widenChangeOf({ verb, args: { ...args, id: cardId } })) return false;
+    const to = target(cardId);
+    return typeof to !== "string" && widen({ target: to, verb, args });
+  }
+
+  async function send(verb: HostVerb, cardId: string, args: Record<string, unknown>): Promise<string> {
+    const to = target(cardId);
+    if (typeof to === "string") throw new Error(to);
+    const sent = await insert(hostRow(to, verb, args));
+    if (typeof sent === "string") throw new Error(sent);
+    return sent.id;
+  }
+
+  // True when the worker ran it over its line; false when it goes by the relay instead.
+  async function onLine(verb: HostVerb, cardId: string, args: Record<string, unknown>): Promise<boolean> {
+    const workerId = workerOfTarget(target(cardId));
+    const held = workerId && line ? line(workerId) : null;
+    const full = { ...args, id: cardId };
+    if (!held?.up() || widenChangeOf({ verb, args: full }) || pastesFiles(full)) return false;
+    try {
+      await held.call(verb, full);
+      return true;
+    } catch (err) {
+      if (err instanceof LineDown) return false;
+      throw err;
+    }
+  }
+
+  // Sent and followed: undefined once it ran, a rejection if it was refused, `{ queued }` while it waits.
+  async function act(verb: HostVerb, cardId: string, args: Record<string, unknown>): Promise<Queued | undefined> {
+    if (signing(verb, cardId, args)) return undefined;
+    if (await onLine(verb, cardId, args)) return undefined;
+    const id = await send(verb, cardId, args);
+    const first = outcome(await waitForCommand(() => read(id), wait), "Your Mac couldn't do that.");
+    if (first.status === "done") return undefined;
+    const queued = waitForCommand(() => read(id), queuedWait).then((r) => void outcome(r, "Your Mac couldn't do that."));
+    // Whoever holds it handles a refusal; nobody holding it isn't an unhandled rejection.
+    queued.catch(() => {});
+    return { queued };
+  }
+
+  const skills = skillCache(async (cardId) => {
+    const id = await send("skills.list", cardId, {});
+    const result = outcome(await waitForCommand(() => read(id), wait), "Couldn't read the skills.");
+    if (result.status !== "done") throw new Error("The machine that runs this card didn't answer. It may be off.");
+    return result.result;
+  });
+
+  return {
+    act,
+    editLast: (cardId, text) => act("card.message.edit", cardId, { text }).then(() => {}),
+    fresh: (cardId, message) => act("card.fresh", cardId, { message }).then(() => {}),
+    schedule: (cardId, text, at) => act("card.schedule", cardId, { text, at }),
+    unschedule: (cardId, messageId) => act("card.unschedule", cardId, { messageId }),
+    listSkills: (cardId) => skills.get(cardId),
+  };
+}

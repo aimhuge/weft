@@ -35,6 +35,18 @@ export default function CommandPalette({
   const [allRecent, setAllRecent] = useState(false);
   const scope = scoped && currentProject ? currentProject.path : null;
   const list = useRef<HTMLUListElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  // autoFocus alone loses to whatever held focus when ⌘K was pressed (a card, the filter box, the
+  // browser pane); focus now and once more after the modal has painted.
+  useEffect(() => {
+    const focus = () => {
+      input.current?.focus();
+      input.current?.select();
+    };
+    focus();
+    const frame = requestAnimationFrame(focus);
+    return () => cancelAnimationFrame(frame);
+  }, []);
   // The board makes a new findPrompts on every render; a pending search shouldn't restart for that.
   const find = useRef(findPrompts);
   useEffect(() => {
@@ -100,6 +112,7 @@ export default function CommandPalette({
         <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3.5">
           <Icon name="search" size={19} className="text-muted" />
           <input
+            ref={input}
             autoFocus
             value={query}
             onChange={(e) => {

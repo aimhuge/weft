@@ -83,9 +83,19 @@ describe("the command line", () => {
     });
     const child = await new Promise<number>((resolve) => proc.stdout.once("data", (d: Buffer) => resolve(Number(d.toString().trim()))));
     const exited = new Promise<number | null>((resolve) => proc.on("exit", (code) => resolve(code)));
+    // The command's own output is the ready signal: the script installs its handlers before it spawns.
     proc.kill("SIGTERM");
     expect(await exited).toBe(130);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The forwarded SIGTERM ends the command, but not on our clock: wait for it to go rather than guess how long.
+    const gone = () => {
+      try {
+        process.kill(child, 0);
+        return false;
+      } catch {
+        return true;
+      }
+    };
+    for (const deadline = Date.now() + 5000; !gone() && Date.now() < deadline; ) await new Promise((resolve) => setTimeout(resolve, 20));
     expect(() => process.kill(child, 0)).toThrow();
     expect(fs.existsSync(lockPath(name))).toBe(false);
   });

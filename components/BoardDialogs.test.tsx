@@ -66,7 +66,8 @@ describe("BoardDialogs", () => {
 
   it("opens Settings and closes it through the panel's own close", async () => {
     const props = setup({ settings: true });
-    expect(await screen.findByRole("dialog", { name: "Settings" })).toBeInTheDocument();
+    // Settings is the heaviest panel: its first lazy import outruns findBy's one-second default on a busy machine.
+    expect(await screen.findByRole("dialog", { name: "Settings" }, { timeout: 15_000 })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(props.onCloseSettings).toHaveBeenCalled();
   });

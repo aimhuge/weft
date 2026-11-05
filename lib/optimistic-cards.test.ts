@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Card } from "./types";
 
-const api = vi.hoisted(() => ({ remove: vi.fn(), stop: vi.fn(), waitPermission: vi.fn(), putFirst: vi.fn() }));
+const api = vi.hoisted(() => ({ remove: vi.fn(), stop: vi.fn(), waitPermission: vi.fn(), putFirst: vi.fn(), putHolderFirst: vi.fn() }));
 vi.mock("./client", () => ({ api }));
 
-import { answerNow, applyIntents, firstNow, forget, onOptimistic, overlay, overlayAll, patchNow, removeNow, STOP_SETTLE_MS, stopNow, waitNow, type OptimisticUpdate } from "./optimistic-cards";
+import { answerNow, applyIntents, firstNow, forget, onOptimistic, otherFirstNow, overlay, overlayAll, patchNow, removeNow, STOP_SETTLE_MS, stopNow, waitNow, type OptimisticUpdate } from "./optimistic-cards";
 
 const card = (over: Partial<Card> = {}): Card => ({ id: "a", title: "A", column: "running", cwd: "/r", ...over }) as Card;
 
@@ -37,6 +37,25 @@ describe("removeNow", () => {
   it("reloads and rethrows when the server refuses", async () => {
     api.remove.mockRejectedValueOnce(new Error("copilot"));
     await expect(removeNow("a")).rejects.toThrow("copilot");
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    expect(overlay(card())).toEqual(card());
+  });
+
+  it("keeps another host's card hidden after it agrees, until a reload reads it gone", async () => {
+    vi.useFakeTimers();
+    const remote = vi.fn(() => Promise.resolve(undefined));
+    await removeNow("a", remote);
+    expect(api.remove).not.toHaveBeenCalled();
+    expect(remote).toHaveBeenCalledOnce();
+    // The worker's last read still has it: it stays hidden.
+    expect(overlay(card())).toBeNull();
+    vi.advanceTimersByTime(STOP_SETTLE_MS);
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    expect(overlay(card())).toEqual(card());
+  });
+
+  it("brings another host's card back when it refuses", async () => {
+    await expect(removeNow("a", () => Promise.reject(new Error("That thread isn't on this worker.")))).rejects.toThrow("isn't on this worker");
     expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
     expect(overlay(card())).toEqual(card());
   });
@@ -114,10 +133,26 @@ describe("answerNow / waitNow / firstNow", () => {
     expect(overlay(asking())?.pending?.id).toBe("p");
   });
 
-  it("Me first goes ahead now and calls putFirst", async () => {
+  it("This first goes ahead now and calls putFirst", async () => {
     await firstNow("a", "p");
     expect(api.putFirst).toHaveBeenCalledWith("a", "p");
     expect(applyIntents([asking()])[0]).toMatchObject({ pending: null, lastLine: "Allowed: Edit x.ts" });
+  });
+
+  it("Others first shows the card waiting now and calls putHolderFirst", async () => {
+    api.putHolderFirst.mockResolvedValue({ ok: true });
+    await otherFirstNow("a", "p");
+    expect(api.putHolderFirst).toHaveBeenCalledWith("a", "p");
+    expect(applyIntents([asking()])[0]).toMatchObject({ column: "running", pending: { id: "p", waiting: true } });
+  });
+
+  it("asks the card's own host when given its call (lib/project-host.ts)", async () => {
+    const call = vi.fn().mockResolvedValue({ ok: true });
+    await waitNow("a", "p", call);
+    await stopNow("b", call);
+    expect(call).toHaveBeenCalledTimes(2);
+    expect(api.waitPermission).not.toHaveBeenCalled();
+    expect(api.stop).not.toHaveBeenCalled();
   });
 
   it("Wait shows the card waiting now, until the server shows it waiting", async () => {
@@ -177,3 +212,48 @@ describe("patchNow", () => {
     expect(overlayAll([card({ id: "b" })])[0]?.archived).toBeUndefined();
   });
 });
+
+describe("a call its worker hasn't taken yet (queued)", () => {
+  const queuedOn = () => {
+    let run: () => void = () => {};
+    let refuse: (err: Error) => void = () => {};
+    const queued = new Promise<void>((resolve, reject) => {
+      run = resolve;
+      refuse = reject;
+    });
+    return { result: { queued }, run: () => run(), refuse: (err: Error) => refuse(err) };
+  };
+
+  it("keeps the change drawn past the usual timeout, then settles as usual once the worker runs it", async () => {
+    vi.useFakeTimers();
+    const q = queuedOn();
+    await patchNow("a", { starred: true }, () => Promise.resolve(q.result));
+    await vi.advanceTimersByTimeAsync(STOP_SETTLE_MS * 3);
+    expect(applyIntents([card()])[0]!.starred).toBe(true);
+    expect(updates).toEqual([{ kind: "apply" }]);
+    q.run();
+    await vi.advanceTimersByTimeAsync(STOP_SETTLE_MS);
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    expect(applyIntents([card()])[0]!.starred).toBeUndefined();
+  });
+
+  it("takes the change back at once when the worker refuses it later", async () => {
+    vi.useFakeTimers();
+    const q = queuedOn();
+    await stopNow("a", () => Promise.resolve(q.result));
+    expect(applyIntents([card()])[0]!.column).toBe("review");
+    q.refuse(new Error("gone"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(updates).toEqual([{ kind: "apply" }, { kind: "reload" }]);
+    expect(applyIntents([card()])[0]!.column).toBe("running");
+  });
+
+  it("lets go of it when a read already shows it", async () => {
+    const q = queuedOn();
+    await patchNow("a", { starred: true }, () => Promise.resolve(q.result));
+    const caughtUp = card({ starred: true });
+    expect(overlay(caughtUp)).toBe(caughtUp);
+    expect(applyIntents([card()])[0]!.starred).toBeUndefined();
+  });
+});
+

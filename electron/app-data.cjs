@@ -21,6 +21,8 @@ const {
   loadGrants,
   saveGrants,
   deriveNeeds,
+  manifestNeeds,
+  newGrant,
   manifestHash,
   effectiveGrant,
   GRANTS_FILE,
@@ -36,11 +38,12 @@ async function resolveSupabaseUrl(manifest, readLink) {
 
 // The state the page reads on access/requestAccess/revoke. App, project (vault label), env and
 // what the app asks of the vault; missing says what the env still lacks; granted covers the grant.
+// missing counts only what the reads need: a viewer's own fetch secret is blank until they fill it.
 async function describe({ folder, manifest, saved, grant, vault }) {
-  const needs = deriveNeeds(manifest.reads);
+  const needs = manifestNeeds(manifest);
   const env = manifest.env;
   const { label, secrets = [] } = await vault.names(manifest.folder);
-  const missing = needs.filter((n) => !secrets.some((s) => s.name === n && s.environment === env && !s.missing));
+  const missing = deriveNeeds(manifest.reads).filter((n) => !secrets.some((s) => s.name === n && s.environment === env && !s.missing));
   const granted = Boolean(grant);
   return {
     app: manifest.name,
@@ -73,7 +76,7 @@ function createAppData({ dataDir, vault, readLink, fetch: fetchImpl = globalThis
     if (!saved) throw err("not-saved", "Save this page as an app on the rail first.");
     const grants = loadGrants(dataDir);
     const grantRaw = grants[folder];
-    const grant = effectiveGrant(grantRaw, manifest, deriveNeeds(manifest.reads));
+    const grant = effectiveGrant(grantRaw, manifest, manifestNeeds(manifest));
     return { folder, manifest, saved, grant };
   }
 
@@ -86,20 +89,14 @@ function createAppData({ dataDir, vault, readLink, fetch: fetchImpl = globalThis
   // the grant and return the new shape. A granted app just returns the current state without asking.
   async function requestAccess(event) {
     const { folder, manifest, saved, grant } = await resolve(event);
-    const needs = deriveNeeds(manifest.reads);
+    const needs = manifestNeeds(manifest);
     if (grant) return describe({ folder, manifest, saved, grant, vault });
     const { label } = await vault.names(manifest.folder);
     const reason = `let ${manifest.name} read ${label}'s ${manifest.env} env (${needs.join(", ")})`;
     const ok = await vault.confirm(reason);
     const grants = loadGrants(dataDir);
     if (ok) {
-      grants[folder] = {
-        env: manifest.env,
-        folder: manifest.folder,
-        needs,
-        readsHash: manifestHash(manifest),
-        grantedAt: new Date(now()).toISOString(),
-      };
+      grants[folder] = newGrant(manifest, needs, now);
       saveGrants(dataDir, grants, now);
     }
     const after = ok ? grants[folder] : null;

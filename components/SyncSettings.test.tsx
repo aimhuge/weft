@@ -12,6 +12,7 @@ const openTeamPage = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/use-cloud-sync", () => ({ useCloudSync }));
 vi.mock("@/lib/use-account", () => ({ useAccount }));
 vi.mock("./board-palette", () => ({ openTeamPage }));
+vi.mock("./PhoneSettings", () => ({ default: () => <div>Phones card</div> }));
 
 const { default: SyncSettings } = await import("./SyncSettings");
 

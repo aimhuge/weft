@@ -10,9 +10,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Avatar } from "@/components/admin/DataTable";
 import { AdminPage, Badge } from "@/components/admin/kit";
 import { SheetTable } from "@aimhuge/sheet/client";
-import type { AdminUserRow } from "@/app/api/admin/users/route";
+import { countsText, versionCounts, versionsOf } from "@/lib/device-version";
 import { timeAgo } from "@/lib/format";
-import { USERS_FRESH, USERS_SHEET, msOf, type UserKey } from "@/lib/users-sheet";
+import { USERS_FRESH, USERS_SHEET, msOf, type AdminUserRow, type UserKey } from "@/lib/users-sheet";
 import { adminGet, day } from "../admin-api";
 import UserActivityDrawer from "./UserActivity";
 
@@ -74,6 +74,10 @@ const CELLS: Partial<Record<UserKey, (u: AdminUserRow) => React.ReactNode>> = {
     </span>
   ),
   provider: (u) => (u.provider ? <Badge>{u.provider}</Badge> : <span className="text-faint">—</span>),
+  version: (u) => {
+    const v = versionsOf(u.devices);
+    return v.length ? <span className="truncate text-muted" title={v.join("\n")}>{v.join(", ")}</span> : <span className="text-faint">—</span>;
+  },
   joined: (u) => <span className="text-muted">{day(u.createdAt)}</span>,
   seen: (u) => (
     <span className="text-muted" title={u.lastSeenAt ?? ""}>
@@ -87,7 +91,13 @@ const CELLS: Partial<Record<UserKey, (u: AdminUserRow) => React.ReactNode>> = {
   ),
 };
 
-const WIDTHS = ["minmax(0, 2.6fr)", "minmax(0, 0.9fr)", "minmax(0, 1fr)", "minmax(0, 1fr)", "88px"];
+const WIDTHS = ["minmax(0, 2.6fr)", "minmax(0, 0.9fr)", "minmax(0, 1.4fr)", "minmax(0, 1fr)", "minmax(0, 1fr)", "88px"];
+
+// The version distribution across every account's devices, in the subtitle so it costs no row: "0.7.0 release ×4 · ...".
+function distribution(rows: AdminUserRow[]): string {
+  const text = countsText(versionCounts(rows));
+  return text ? ` · ${text}` : "";
+}
 
 export default function UsersTable() {
   const [open, setOpen] = useState<AdminUserRow | null>(null);
@@ -97,7 +107,7 @@ export default function UsersTable() {
   return (
     <AdminPage
       title="Users"
-      subtitle={loading && !rows.length ? "Every weft.zip account" : `${rows.length} account${rows.length === 1 ? "" : "s"} on weft.zip${loading ? " (loading…)" : ""} · start typing to search`}
+      subtitle={loading && !rows.length ? "Every weft.zip account" : `${rows.length} account${rows.length === 1 ? "" : "s"} on weft.zip${loading ? " (loading…)" : ""} · start typing to search${distribution(rows)}`}
     >
       <SheetTable
         spec={USERS_SHEET}

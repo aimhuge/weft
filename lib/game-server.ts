@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { readActivity, record, trackActivity } from "./activity";
+import { readActivity, record, trackActivity, withoutHandedOff } from "./activity";
 import { readBadgeFacts } from "./badge-facts";
 import { craftHabits, scanCraft } from "./craft";
 import { startLimitPoll } from "./limit-poll";
@@ -24,6 +24,7 @@ import { countsAt, welcome } from "./welcome";
 import type { Card } from "./types";
 import { distinctHits, usageDays, type DayTokens, type LimitHit, type UsageDay } from "./usage";
 import { scanUsage, transcriptUsage } from "./usage-scan";
+import { mergeWorkerEvents } from "./worker-activity";
 
 // Puts the game together for /api/game: the activity log, the board's cards and the projects'
 // production-ready trees. Measuring a project reads its files, so reports are cached for a while and
@@ -150,15 +151,18 @@ function newerFacts(events: ActivityEvent[], cards: Card[], tokens: Map<string, 
   };
 }
 
-export function gameState({ cwd, full, now = Date.now() }: { cwd?: string | null; full?: boolean; now?: number }): GameState {
+// `worker`: what your Weft Workers' cards add (lib/worker-activity.ts), merged without counting a card twice.
+export function gameState({ cwd, full, now = Date.now(), worker = [] }: { cwd?: string | null; full?: boolean; now?: number; worker?: ActivityEvent[] }): GameState {
   trackActivity();
   // The limits chart needs samples between thread turns, so a 15-minute background poll runs
   // alongside the activity log (lib/limit-poll.ts).
   startLimitPoll();
   // With history opted out (lib/welcome.ts), what happened before the welcome doesn't count.
   const w = welcome();
-  const events = readActivity().filter((e) => countsAt(w, e.at));
-  const cards = listCards().filter((c) => c.role !== "copilot" && countsAt(w, c.createdAt));
+  // A card handed to a worker counts once, as the worker's card (lib/worker-handoff.ts).
+  const board = listCards();
+  const events = mergeWorkerEvents(withoutHandedOff(readActivity(), board), worker).filter((e) => countsAt(w, e.at));
+  const cards = board.filter((c) => c.role !== "copilot" && !c.handedOff && countsAt(w, c.createdAt));
   // Craft reads what the last scan found; the scan catches up in the background.
   void scanCraft(cards, sessionFiles()).catch(() => {});
   // So does usage: every transcript's tokens and limit hits, plus the hits Weft's threads logged live.

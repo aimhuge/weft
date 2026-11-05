@@ -32,6 +32,21 @@ function newVaultKey() {
   return toB64(need().crypto_aead_xchacha20poly1305_ietf_keygen());
 }
 
+// Random bytes, for the seeds the recovery key is made of (electron/vault-recovery-words.cjs).
+/** @returns {Uint8Array} */
+function randomBytes(count) {
+  return need().randombytes_buf(count);
+}
+
+// A keypair from a seed, so the same seed always gives the same keypair. The recovery key is this:
+// its words carry a seed, and the seed is turned back into the keypair on the machine that
+// recovers (electron/vault-recovery.cjs).
+/** @returns {{ publicKey: string, privateKey: string }} */
+function seedKeypair(seed) {
+  const { publicKey, privateKey } = need().crypto_box_seed_keypair(seed);
+  return { publicKey: toB64(publicKey), privateKey: toB64(privateKey) };
+}
+
 // Seals a vault key to a device: only that device's private key opens it.
 /** @returns {string} */
 function wrapKey(vaultKey, publicKey) {
@@ -64,4 +79,4 @@ function decrypt({ ciphertext, nonce }, vaultKey, data) {
   return s.to_string(plain);
 }
 
-module.exports = { ready, newKeypair, newVaultKey, wrapKey, unwrapKey, aad, encrypt, decrypt };
+module.exports = { ready, newKeypair, newVaultKey, randomBytes, seedKeypair, wrapKey, unwrapKey, aad, encrypt, decrypt };

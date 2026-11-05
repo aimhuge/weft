@@ -117,6 +117,13 @@ export const settingsMock = async (importOriginal: () => Promise<typeof import("
   threadPrompt: () => "THREAD PROMPT",
 });
 
+// Weft's guards for the turn (lib/guards/turn.ts), which need the server's port; their own tests are lib/guards/*.
+// The fake turn's env names its token, so a test can see the guards opened and reached the CLI.
+export const guardsTurnMock = async (importOriginal: () => Promise<typeof import("./guards/turn")>) => ({
+  ...(await importOriginal()),
+  openGuards: vi.fn(() => ({ token: "guard-token", url: "http://127.0.0.1:0/api/guards", env: { WEFT_GUARD_TOKEN: "guard-token" }, close: vi.fn() })),
+});
+
 export const EXE = "/opt/bin/codex";
 
 /** The per-test session under drive, and the fake child the newest spawn() returned. */

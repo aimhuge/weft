@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
-import { branchFor, cardSlug, cardWorktreePath, createWorktree, dirtyIn, headOf, isOurs, listWorktrees, moveWorktree, parseWorktreeList, removeWorktree, repoDir, repoKey, repoRootOf, worktreeAt, worktreesRoot } from "./worktrees";
+import { branchFor, cardSlug, cardWorktreePath, createWorktree, dirtyIn, headOf, isOurs, listBranches, listWorktrees, moveWorktree, parseBranches, parseWorktreeList, removeWorktree, repoDir, repoKey, repoRootOf, worktreeAt, worktreesRoot } from "./worktrees";
 import { awaitingWorktree, workDir } from "./work-dir";
 
 const tmp = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-wt-")));
@@ -72,6 +72,16 @@ describe("parseWorktreeList", () => {
   });
 });
 
+describe("parseBranches", () => {
+  it("reads name, worktree and date, skipping blank lines", () => {
+    expect(parseBranches("main\t/r\t20\nfeat/x\t\t10\n\n")).toEqual([
+      { name: "main", at: 20, worktree: "/r" },
+      { name: "feat/x", at: 10 },
+    ]);
+    expect(parseBranches("odd")).toEqual([{ name: "odd", at: 0 }]);
+  });
+});
+
 describe("worktrees in a real repo", () => {
   const a = path.join(repoDir(repo), "aaaa1111");
   const b = path.join(repoDir(repo), "bbbb2222");
@@ -116,6 +126,14 @@ describe("worktrees in a real repo", () => {
     await createWorktree(repo, a, "weft/keep-1");
     await removeWorktree(repo, a, "weft/keep-1", { force: true });
     expect(git(repo, "branch", "--list", "weft/keep-1")).toBe("");
+  });
+
+  it("lists the repo's branches and where each is checked out", async () => {
+    git(repo, "branch", "side");
+    const branches = await listBranches(repo);
+    expect(branches.find((b) => b.name === "main")?.worktree).toBe(repo);
+    expect(branches.find((b) => b.name === "side")).toMatchObject({ name: "side" });
+    expect(branches.find((b) => b.name === "side")?.worktree).toBeUndefined();
   });
 
   it("refuses paths that aren't its own", async () => {

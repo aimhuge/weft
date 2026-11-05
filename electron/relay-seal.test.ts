@@ -54,3 +54,17 @@ describe("POST /webhooks/relay-seal-many", () => {
     expect(sendValues).not.toHaveBeenCalled();
   });
 });
+
+describe("a Weft Worker's ask", () => {
+  it("names the worker in both prompts", async () => {
+    const sendValue = vi.fn((_f: string, _n: string, _e: string, reason: (label: string) => string) => Promise.resolve({ said: reason("Owner/Repo") }));
+    const sendValues = vi.fn((_f: string, _n: string[], _e: string, reason: (label: string) => string) => Promise.resolve({ said: reason("Owner/Repo") }));
+    const onWorker = vi.fn((worker: unknown, name: unknown) => (worker ? ` on ${String(name)}` : ""));
+    const routes = relaySealRoutes(() => ({ sendValue, sendValues }), onWorker) as unknown as Record<string, Route>;
+    const one = (await routes["POST /webhooks/relay-seal"]!({ folder: "/p", name: "S", provider: "stripe", worker: "w1", workerName: "build box" })) as { said: string };
+    expect(one.said).toBe("seal the stripe signing secret S (Owner/Repo, development) and store it on the relay on build box");
+    const many = (await routes["POST /webhooks/relay-seal-many"]!({ folder: "/p", hooks: [{ name: "S", provider: "stripe" }], worker: "w1", workerName: "build box" })) as { said: string };
+    expect(many.said).toBe("seal 1 webhook signing secrets (Owner/Repo, development) and store them on the relay on build box: stripe S");
+    expect(onWorker).toHaveBeenCalledWith("w1", "build box");
+  });
+});

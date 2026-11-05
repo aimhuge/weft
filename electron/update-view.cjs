@@ -65,10 +65,11 @@ function buttons(state) {
   return [{ ...check(), primary: true }];
 }
 
-function updateView({ state, currentVersion, packaged }, now = Date.now()) {
+// `running` is the version with its server patch, when one runs ("0.6.7+abc123", server-patch.cjs).
+function updateView({ state, currentVersion, packaged, running = null }, now = Date.now()) {
   return {
     ...headline(state, currentVersion, packaged),
-    current: `Weft ${currentVersion}${packaged ? "" : " (dev)"}`,
+    current: `Weft ${running || currentVersion}${packaged ? "" : " (dev)"}`,
     latest: state.version ? `Weft ${state.version}` : "",
     notes: state.notes || "",
     checked: state.checkedAt ? `Checked ${ago(state.checkedAt, now)}` : "Not checked yet",

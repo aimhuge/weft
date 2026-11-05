@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuditEntry } from "./keychain-audit-view";
+import type { AuditEntry } from "./keychain-audit-types";
 
 // The Keychain audit log's upload to your Weft account (lib/keychain-audit-sync.ts), against a fake client
 // and a fake shell: the outbox comes from Electron main, the rows go into keychain_events.

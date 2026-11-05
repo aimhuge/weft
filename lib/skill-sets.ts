@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import type { Settings } from "@anthropic-ai/claude-agent-sdk";
 import path from "node:path";
+import { agentSkillsOff } from "./agent-store";
 import { globalSingleton } from "./global-singleton";
 import { skillLibrary } from "./skill-library";
 import { skillsUsedIn } from "./skill-usage";
@@ -73,17 +74,22 @@ export function ensureSeeded(cwd: string): void {
   void seedProjectSet(cwd).catch(() => seeding().delete(cwd));
 }
 
-type CardSkills = Pick<Card, "cwd" | "skillsOn" | "skillsOff">;
+type CardSkills = Pick<Card, "cwd" | "skillsOn" | "skillsOff" | "agent">;
 
-// What's off for a thread in this folder: the project's off-list plus the card's own, less what the card turned on.
+// What a card starts from before its own changes: its project's off-list plus its agent's (lib/agent-store.ts).
+export function baseOff(card: Pick<Card, "cwd" | "agent">): string[] {
+  return unique([...(projectSet(card.cwd)?.off ?? []), ...agentSkillsOff(card.agent)]);
+}
+
+// What's off for a thread in this folder: the project's and its agent's off-lists plus the card's own, less what the card turned on.
 export function offFor(card: CardSkills): string[] {
   const on = new Set(card.skillsOn ?? []);
-  return unique([...(projectSet(card.cwd)?.off ?? []), ...(card.skillsOff ?? [])]).filter((name) => !on.has(name));
+  return unique([...baseOff(card), ...(card.skillsOff ?? [])]).filter((name) => !on.has(name));
 }
 
 // A card turning one skill or plugin on or off, as the smallest change from its project's set.
 export function toggleCardSkill(card: CardSkills, name: string, on: boolean): Pick<Card, "skillsOn" | "skillsOff"> {
-  const offInProject = projectSet(card.cwd)?.off.includes(name) ?? false;
+  const offInProject = baseOff(card).includes(name);
   const skillsOn = (card.skillsOn ?? []).filter((n) => n !== name);
   const skillsOff = (card.skillsOff ?? []).filter((n) => n !== name);
   if (on && offInProject) skillsOn.push(name);

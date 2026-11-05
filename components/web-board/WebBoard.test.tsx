@@ -5,9 +5,10 @@
 // panel and the live INSERT/UPDATE/DELETE path, without a real network. The pure logic
 // (webCards, applyCardChange, …) has its own coverage in lib/web-board.test.ts; this is the wiring.
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "@/lib/cloud-commands";
 import type { CloudThreadItemRow } from "@/lib/cloud-sync-types";
+import { pickModel } from "../model-picker-test-utils";
 import "../test-utils";
 import { cardRow, commandRow, db, mockState, resetHarness } from "./web-board-harness";
 
@@ -21,6 +22,12 @@ async function loadBoard() {
 const user = { id: "u1", email: "ada@b.co", name: "Ada", avatar: null };
 const orgs = [{ id: "o1", slug: "ada", name: "Ada's team" }, { id: "o2", slug: "lab", name: "Lab" }];
 const props = { orgId: "o1", orgSlug: "ada", userId: "u1", user, orgs, initialCommands: [] as CloudCommandRow[], openCardId: null, initialThread: [] as CloudThreadItemRow[], initialBlobUrls: {} };
+
+// The first import pulls in the whole board; on a busy CI shard that cold load alone can pass the
+// default 5s test timeout, so it is paid here, once, with room to spare.
+beforeAll(async () => {
+  await loadBoard();
+}, 60_000);
 
 afterEach(() => {
   resetHarness();
@@ -54,11 +61,11 @@ describe("WebBoard", () => {
     expect(within(screen.getByRole("banner")).getByText(/1 needs you/)).toBeInTheDocument();
   });
 
-  it("offers no way to act on a card: no stop, star, archive or drag", async () => {
+  it("offers a teammate's card no way to act on it: no stop, star, archive or drag", async () => {
     const { WebBoard } = await loadBoard();
-    render(<WebBoard {...props} initialCards={[cardRow({ card_id: "r", title: "Busy", column: "running" }), cardRow({ card_id: "d", title: "Finished", column: "done" })]} />);
+    render(<WebBoard {...props} initialCards={[cardRow({ card_id: "r", title: "Busy", column: "running", owner_user: "u2" }), cardRow({ card_id: "d", title: "Finished", column: "done", owner_user: "u2" })]} />);
     expect(screen.queryByLabelText("Stop this thread")).not.toBeInTheDocument();
-    // The rail's ★ filters the board (the desktop's own button), but a card carries no star of its own.
+    // The rail's ★ filters the board (the desktop's own button), but a teammate's card carries no star of its own.
     expect(within(screen.getByRole("navigation", { name: "Rail" })).getByRole("button", { name: /Starred cards/ })).toBeInTheDocument();
     expect(screen.queryByLabelText("Star this card")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/archive/i)).not.toBeInTheDocument();
@@ -173,7 +180,7 @@ describe("WebBoard starting a thread on your Mac", () => {
     const project = within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Project" });
     expect(project.selectedOptions[0]?.textContent).toBe("app");
     fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "  Add a dark mode  " } });
-    fireEvent.change(within(dialog).getByLabelText("Model"), { target: { value: "claude-opus-5-5" } });
+    pickModel("Model", "Opus 5.5", within(dialog));
     fireEvent.click(within(dialog).getByRole("button", { name: "Start on my Mac" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(mockState.inserts).toEqual([
@@ -184,6 +191,30 @@ describe("WebBoard starting a thread on your Mac", () => {
     ]);
     // Until the Mac has it, the board says so.
     expect(screen.getByRole("list", { name: "Threads sent to your Mac" })).toHaveTextContent(/Add a dark mode.*Waiting for your Mac/);
+  });
+
+  it("sends the mode you pick, the tags and Backlog, and says it adds to Backlog", async () => {
+    const dialog = await open();
+    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "Later" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: /^Permissions:/ }));
+    fireEvent.click(within(dialog).getByRole("menuitemradio", { name: /Auto/ }));
+    fireEvent.change(within(dialog).getByLabelText("Tags"), { target: { value: "ui, , bug" } });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Backlog" }));
+    expect(within(dialog).queryByRole("checkbox", { name: "Plan first" })).toBeNull();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Add to Backlog" }));
+    await waitFor(() => expect(mockState.inserts).toHaveLength(1));
+    expect(mockState.inserts[0]?.row).toMatchObject({ kind: "new_card", payload: { prompt: "Later", permissionMode: "auto", tags: ["ui", "bug"], start: false } });
+  });
+
+  it("on a worker's folder offers Plan first and no Backlog", async () => {
+    const dialog = await open([cardRow({ card_id: "w", folder: "app", owner_device: "worker:w1" })]);
+    expect(dialog).toHaveTextContent("Runs on your worker, in");
+    expect(within(dialog).getByRole("checkbox", { name: "Backlog" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "Think" } });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Plan first" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Start on my worker" }));
+    await waitFor(() => expect(mockState.inserts).toHaveLength(1));
+    expect(mockState.inserts[0]?.row).toMatchObject({ target_device: "worker:w1", payload: { prompt: "Think", permissionMode: "plan" } });
   });
 
   it("will not send an empty prompt", async () => {

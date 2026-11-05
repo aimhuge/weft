@@ -21,11 +21,21 @@ export interface BrowserState {
   canGoForward: boolean;
   // The page's zoom, in percent. A shell from before zoom reporting sends none.
   zoom?: number;
+  // The card's tabs and the one on screen. A shell from before tabs sends neither.
+  tabs?: PaneTab[];
+  tab?: number | null;
+}
+
+// One tab of a card's browser.
+export interface PaneTab {
+  id: number;
+  url: string;
+  title: string;
 }
 
 // What the app menu, dock, tray, global shortcuts and weft:// links ask a window to do.
 // open-card carries an id.
-export type MenuAction = "new-thread" | "settings" | "open-card" | "find" | "terminal" | "add-webhook";
+export type MenuAction = "new-thread" | "settings" | "open-card" | "find" | "find-next" | "find-previous" | "terminal" | "add-webhook";
 
 // The board's view of the signed-in user's billing (docs/architecture/billing.md). Mirrors the JSON the local
 // /api/account/billing route returns, kept client-side so React components don't pull in server-only modules.
@@ -56,29 +66,42 @@ export interface ShellBridge {
     // Closes the browsers of cards not in keys.
     prune(keys: string[]): void;
     getState(): Promise<BrowserState>;
-    setVisible(visible: boolean): void;
+    // Shows or hides the pane. key is the card the pane is for, when the board knows it: the
+    // shell uses it to make the right view, instead of the one that happened to be active.
+    setVisible(visible: boolean, key?: string | null): void;
     setBounds(rect: { x: number; y: number; width: number; height: number }): void;
     back(): void;
     forward(): void;
     reload(): void;
     // "in", "out", "reset", or a percentage.
     zoom(action: "in" | "out" | "reset" | number): void;
+    // The open card's tabs; a shell from before tabs has none of these.
+    newTab?(): void;
+    selectTab?(id: number): void;
+    closeTab?(id: number): void;
     onState(callback: (state: BrowserState) => void): () => void;
-    // Find in page (electron/pane-find.cjs): next steps to the next match (or the previous, with forward false).
-    find?(text: string, opts?: { forward?: boolean; next?: boolean }): void;
-    stopFind?(): void;
-    // ⌘F on the pane's page; the toolbar opens its find bar.
-    onFind?(callback: () => void): () => void;
+    // Find in the page on screen (electron/pane-find.cjs). A shell from before it has none. next: a step in the same search.
+    find?(text: string, options?: { forward?: boolean; next?: boolean }): void;
+    stopFind?(refocus: boolean): void;
     onFound?(callback: (found: { active: number; matches: number }) => void): () => void;
   };
   dialog: {
     // A native folder picker; resolves to null when cancelled.
     openFolder(): Promise<string | null>;
   };
+  // The printers macOS has (names), and printing a page of HTML through the system print dialog
+  // (electron/print.cjs). Missing in older shells.
+  print?: {
+    printers(): Promise<string[]>;
+    html(html: string): Promise<{ ok: boolean; reason?: string }>;
+  };
   // Opens an http(s) URL in the default browser.
   openExternal(url: string): void;
   // Opens a local folder in Finder.
   revealFolder(folder: string): void;
+  // Opens the folder in the first installed editor or terminal app (electron/open-in.cjs); resolves to its
+  // name, or null when none is installed. Missing in a shell from before it.
+  openIn?(folder: string, target: "editor" | "terminal"): Promise<string | null>;
   // A native context menu at the pointer (lib/card-menu.ts); resolves to the picked id, or null.
   popupMenu(items: MenuItem[]): Promise<string | null>;
   // The dock badge, e.g. how many cards need the user.
@@ -104,6 +127,20 @@ export interface ShellBridge {
   copilot: {
     toggle(): void;
     onState(callback: (state: { open: boolean }) => void): () => void;
+  };
+  // Dictate anywhere (electron/dictation-helper.cjs): the floating pill records, and its state comes back here so the
+  // composer's mic button shows it. Missing in older shells.
+  dictation?: {
+    toggle(): void;
+    cancel(): void;
+    setShortcut(accelerator: string): void;
+    onState(callback: (update: PillUpdate | null) => void): () => void;
+  };
+  // Sign in to Claude for a Weft Worker (electron/claude-sign-in.cjs): runs claude setup-token, opens its approval
+  // page beside the click, and resolves with the token or why there isn't one. Older shells don't have it.
+  claudeSignIn?: {
+    start(click: { x: number; y: number }): Promise<{ token?: string; error?: string }>;
+    cancel(): void;
   };
   // Shells for the terminal drawer, keyed by id. open reattaches to a running one and replays its output.
   terminal: {
@@ -151,8 +188,29 @@ export interface StartupResult {
   slowest: { name: string; label: string; ms: number };
 }
 
+// What the dictation pill reports, ~10 times a second while it records.
+export interface PillUpdate {
+  state: "idle" | "recording" | "transcribing";
+  seconds: number;
+  // Mic loudness, 0 to 1.
+  level: number;
+}
+
+// How a dictation arrived (electron/dictation-insert.cjs): typed into a Weft field, pasted into another app's text box,
+// left on the clipboard, or left there because Weft can't paste without Accessibility.
+export type PillDelivery = "inserted" | "pasted" | "copied" | "no-access";
+
+// Exposed by electron/dictation-preload.cjs, only in the floating dictation pill (app/dictate).
+export interface PillBridge {
+  onCommand(callback: (command: "toggle" | "cancel") => void): () => void;
+  state(update: PillUpdate): void;
+  text(text: string): Promise<PillDelivery>;
+  hide(): void;
+}
+
 declare global {
   interface Window {
     weft?: ShellBridge;
+    weftPill?: PillBridge;
   }
 }

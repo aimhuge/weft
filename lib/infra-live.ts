@@ -1,0 +1,318 @@
+import fs from "node:fs";
+import path from "node:path";
+import { bytesLabel } from "./billing/plans";
+import { DATA_DIR } from "./store";
+
+// The live infrastructure numbers behind the repo-analysis report's "Infrastructure & quotas" section
+// (docs/architecture/repo-analysis.md).
+//
+// Three sources, each with its own reach:
+//   - Postgres, through `public.infra_live()` (supabase/migrations/20261027094500_infra_live.sql): the
+//     database size, the file storage, the table and account counts. Read with the service key, like the
+//     Growth data app's reads.
+//   - The log stream, through Supabase's Analytics API: the EGRESS. Egress is bytes sent to a client, and
+//     the only record of those is the response's content length in the logs — there is no table for it and
+//     no Postgres function can see it. The cached and uncached halves are told apart by the CDN's cache
+//     status, which is how Supabase bills them separately.
+//   - This Mac: the limit windows (lib/limit-history.ts) and the token spend (lib/usage-history.ts).
+//
+// The report's page fetches this through GET /api/infra/live and patches its numbers in place, so the report
+// never goes stale while it is open.
+//
+// Egress is measured over a window, not all time: the Analytics API keeps a bounded window of logs, so the
+// number is "bytes out in the last N hours", and the report says so rather than implying it is a month.
+
+export const INFRA_LIVE_PATH = "/api/infra/live";
+
+/** What `public.infra_live()` returns. Every number is a count or a byte count. */
+export interface InfraLive {
+  database_bytes: number;
+  public_bytes: number;
+  table_count: number;
+  total_tables: number;
+  storage_bytes: number;
+  storage_objects: number;
+  storage_bucket: string;
+  storage_24h_bytes: number;
+  storage_24h_objects: number;
+  auth_users: number;
+  auth_24h: number;
+  cloud_cards: number;
+  cloud_cards_live: number;
+  thread_items: number;
+  thread_items_24h: number;
+  share_links: number;
+  share_visits: number;
+  oldest_card: string | null;
+}
+
+/** The egress read from the log stream: bytes out, and how they split. */
+export interface EgressLive {
+  /** Bytes sent to clients, uncached. */
+  uncached_bytes: number;
+  /** Bytes sent to clients, served by the CDN from cache. Cheaper, and a separate quota. */
+  cached_bytes: number;
+  /** Bytes sent INTO Supabase. Not egress, but it says the same thing about the traffic. */
+  ingress_bytes: number;
+  /** The requests behind those numbers. */
+  requests: number;
+  /** How far back the log window reaches. */
+  window_hours: number;
+  /** The first and last log line counted. */
+  from: string | null;
+  to: string | null;
+}
+
+/** What `public.blob_mirror_stats()` returns: the R2 read copy of weft-blobs (docs/architecture/r2.md). */
+export interface R2Live {
+  mirrored_objects: number;
+  mirrored_bytes: number;
+  /** In Supabase, not copied to R2 yet. */
+  pending_objects: number;
+  pending_bytes: number;
+  last_mirrored: string | null;
+}
+
+/** One provider and what the report says about it. */
+export interface ProviderState {
+  name: string;
+  holds: string;
+  /** "live", "linked", "not linked", "not used" — what the report shows in the STATE column. */
+  state: "live" | "linked" | "not linked" | "not used";
+  detail: string;
+}
+
+/** A quota ceiling and what is measured against it. */
+export interface QuotaRow {
+  resource: string;
+  free: string;
+  pro: string;
+  now: string;
+  /** null when the number can't be measured from the Mac. */
+  nowValue: number | null;
+  /** How full the tightest ceiling is, 0 to 1. null when there's nothing to compare against. */
+  fill: number | null;
+}
+
+// Supabase's plan ceilings, from the platform's own pricing (docs/guides/platform/manage-your-usage/egress).
+// The Free plan's 500 MB database and 1 GB file storage are the platform's limits; Pro's are 8 GB and 100 GB.
+export const SUPABASE_FREE = { databaseBytes: 500 * 1024 * 1024, storageBytes: 1024 * 1024 * 1024, egressBytes: 5 * 1024 * 1024 * 1024, authMaus: 50_000 };
+export const SUPABASE_PRO = { databaseBytes: 8 * 1024 * 1024 * 1024, storageBytes: 100 * 1024 * 1024 * 1024, egressBytes: 250 * 1024 * 1024 * 1024, authMaus: 100_000 };
+
+/**
+ * The quota table: each resource's ceiling on the Free and Pro plans, and the measured value now.
+ *
+ * The project's own plan tier is NOT known to the Mac: the Supabase Management API needs a personal access
+ * token that this build doesn't hold, and the SQL surface has no plan row. So both ceilings are shown and the
+ * reader picks — the report says which one applies rather than guessing.
+ */
+export function quotaRows(live: InfraLive | null, egress: EgressLive | null, r2: R2Live | null = null): QuotaRow[] {
+  const rows = [
+    byteQuota("Database size", live?.database_bytes ?? null, SUPABASE_FREE.databaseBytes, SUPABASE_PRO.databaseBytes),
+    byteQuota("File storage", live?.storage_bytes ?? null, SUPABASE_FREE.storageBytes, SUPABASE_PRO.storageBytes),
+    egressQuota(egress),
+    authQuota(live),
+  ];
+  // R2's free tier is 10 GB stored; past it, $0.015/GB-month (the "pro" column). Egress is free either way.
+  if (r2?.mirrored_objects) rows.push({ ...byteQuota("R2 storage", r2.mirrored_bytes, R2_FREE_BYTES, R2_FREE_BYTES), pro: "$0.015/GB-mo" });
+  return rows;
+}
+
+export const R2_FREE_BYTES = 10 * 1024 * 1024 * 1024;
+
+/** A ceiling measured in bytes, and how full the Free one is. */
+function byteQuota(resource: string, value: number | null, freeBytes: number, proBytes: number): QuotaRow {
+  return {
+    resource,
+    free: bytesLabel(freeBytes),
+    pro: bytesLabel(proBytes),
+    now: value === null ? "unread" : bytesLabel(value),
+    nowValue: value,
+    fill: value === null ? null : value / freeBytes,
+  };
+}
+
+/** The egress row: both halves of the bytes out, and the window they were measured over. */
+function egressQuota(egress: EgressLive | null): QuotaRow {
+  if (!egress) return byteQuota("Egress / month", null, SUPABASE_FREE.egressBytes, SUPABASE_PRO.egressBytes);
+  const out = egress.uncached_bytes + egress.cached_bytes;
+  return {
+    ...byteQuota("Egress / month", out, SUPABASE_FREE.egressBytes, SUPABASE_PRO.egressBytes),
+    now: `${bytesLabel(out)} in ${egress.window_hours}h`,
+  };
+}
+
+/** The Auth row: monthly active users, a count rather than a byte count. */
+function authQuota(live: InfraLive | null): QuotaRow {
+  const users = live?.auth_users ?? null;
+  return {
+    resource: "Auth MAUs",
+    free: SUPABASE_FREE.authMaus.toLocaleString("en-US"),
+    pro: SUPABASE_PRO.authMaus.toLocaleString("en-US"),
+    now: users === null ? "unread" : String(users),
+    nowValue: users,
+    fill: users === null ? null : users / SUPABASE_FREE.authMaus,
+  };
+}
+
+/**
+ * Which providers are in use, read from the artifacts on this Mac rather than from the docs.
+ *
+ * A provider's state comes from a file that only exists when it is linked: Vercel's project.json, Cloudflare's
+ * links.json, BlastCP's links.json. The Supabase project is the one this code is talking to, so it is live by
+ * definition. R2 is live once blob_mirror_stats() counts a copied object.
+ */
+export function providerStates(folder: string, r2: R2Live | null = null): ProviderState[] {
+  const read = (p: string): Record<string, unknown> | null => {
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(p, "utf8"));
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
+    } catch {
+      return null;
+    }
+  };
+  const vercel = read(path.join(folder, ".vercel", "project.json"));
+  const cloudflare = read(path.join(path.dirname(folder), ".weft", "cloudflare-links.json")) ?? read(path.join(DATA_DIR, "cloudflare-links.json"));
+  const blastcp = read(path.join(DATA_DIR, "blastcp-links.json"));
+  const vercelId = typeof vercel?.projectId === "string" ? vercel.projectId : null;
+  return [
+    { name: "Supabase", holds: "Postgres DB, Storage, Auth", state: "live", detail: "live" },
+    { name: "Vercel", holds: "weft.zip — web board, API, CDN", state: vercel ? "live" : "not linked", detail: vercelId ? `live · ${vercelId.slice(0, 10)}…` : "not linked" },
+    { name: "Cloudflare", holds: "Workers for Platforms — mini-app code", state: cloudflare ? "linked" : "not linked", detail: cloudflare ? "linked" : "not linked" },
+    r2State(r2),
+    { name: "BlastCP", holds: "social properties", state: blastcp ? "linked" : "not linked", detail: blastcp ? "linked" : "not linked" },
+    { name: "Stripe", holds: "billing", state: "live", detail: "live" },
+    { name: "Slack", holds: "#user-growth summaries", state: "linked", detail: "linked" },
+  ];
+}
+
+/** R2's row: live with what's copied and what's left, or not used until the first copy lands. */
+function r2State(r2: R2Live | null): ProviderState {
+  const holds = "weft-blobs read copy (0 egress)";
+  if (!r2 || r2.mirrored_objects === 0) return { name: "Cloudflare R2", holds, state: "not used", detail: r2 ? `not used · ${r2.pending_objects} to copy` : "not used" };
+  const pending = r2.pending_objects ? ` · ${r2.pending_objects} to copy` : "";
+  return { name: "Cloudflare R2", holds, state: "live", detail: `live · ${r2.mirrored_objects} objects, ${bytesLabel(r2.mirrored_bytes)}${pending}` };
+}
+
+/** The plan tier is not readable from the Mac; the report says so rather than guessing. */
+export function planTierReadable(): false {
+  return false;
+}
+
+/** The whole live picture, as the route returns it. */
+export interface InfraSnapshot {
+  at: string;
+  live: InfraLive | null;
+  egress: EgressLive | null;
+  /** The R2 read copy; null when blob_mirror_stats() couldn't be read. */
+  r2: R2Live | null;
+  providers: ProviderState[];
+  quotas: QuotaRow[];
+  /** Set when a source could not be read; the report shows it instead of a blank. */
+  notes: string[];
+}
+
+/**
+ * Calls `public.infra_live()` over PostgREST with the service key.
+ *
+ * The key is the secret one (`SUPABASE_SECRET_KEY`), not the publishable one: the function is granted to
+ * service_role alone, so a signed-in key gets a 401 and no numbers.
+ */
+export async function readInfraLive(url: string, key: string, fetchImpl: typeof fetch = fetch): Promise<InfraLive> {
+  if (!key) throw new Error("SUPABASE_SECRET_KEY isn't set, so the live numbers can't be read.");
+  const res = await fetchImpl(`${url.replace(/\/$/, "")}/rest/v1/rpc/infra_live`, {
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  });
+  if (!res.ok) throw new Error(`Supabase answered ${res.status} for infra_live.`);
+  const body = (await res.json()) as InfraLive;
+  if (typeof body.database_bytes !== "number") throw new Error("Supabase's infra_live answer wasn't the expected shape.");
+  return body;
+}
+
+/** Calls `public.blob_mirror_stats()` with the service key, like readInfraLive. */
+export async function readR2Live(url: string, key: string, fetchImpl: typeof fetch = fetch): Promise<R2Live> {
+  const res = await fetchImpl(`${url.replace(/\/$/, "")}/rest/v1/rpc/blob_mirror_stats`, {
+    method: "POST",
+    headers: { apikey: key, Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!res.ok) throw new Error(`Supabase answered ${res.status} for blob_mirror_stats.`);
+  const body = (await res.json()) as R2Live;
+  if (typeof body.mirrored_objects !== "number") throw new Error("Supabase's blob_mirror_stats answer wasn't the expected shape.");
+  return body;
+}
+
+/**
+ * The egress, summed by Supabase over its log store (ClickHouse SQL, one `logs` table for every source).
+ *
+ * Every log line for a service that answers a client carries the response's content length, and the CDN's
+ * cache status. `HIT` is served from the CDN and billed at the lower rate against its own quota; the rest
+ * (`MISS`, `DYNAMIC`, and lines with no status) is uncached.
+ *
+ * The two services name their headers differently — the edge gateway writes `response.headers.content_length`
+ * and the storage service `res.headers.content_length` — so both are read and the first that is there wins.
+ *
+ * It sums on Supabase's side because the endpoint answers at most 1,000 rows, and a day is tens of thousands
+ * of log lines: summing rows on the Mac counted a sliver of the traffic.
+ */
+export const EGRESS_SQL = [
+  "select source,",
+  "coalesce(log_attributes['response.headers.cf_cache_status'], log_attributes['res.headers.cf_cache_status'], '') as cache,",
+  "count() as requests,",
+  "sum(toUInt64OrZero(coalesce(log_attributes['response.headers.content_length'], log_attributes['res.headers.content_length'], ''))) as out_bytes,",
+  "sum(toUInt64OrZero(coalesce(log_attributes['request.headers.content_length'], log_attributes['req.headers.content_length'], ''))) as in_bytes",
+  "from logs group by source, cache",
+].join(" ");
+
+/** One row of EGRESS_SQL's answer: a source and cache status, with its requests and bytes each way. */
+export interface EgressRow {
+  source?: string;
+  cache?: string;
+  requests?: number | string;
+  out_bytes?: number | string;
+  in_bytes?: number | string;
+}
+
+/** Adds EGRESS_SQL's rows up into the cached and uncached egress, the ingress and the requests. */
+export function parseEgress(rows: EgressRow[]): Omit<EgressLive, "window_hours" | "from" | "to"> {
+  let uncached = 0;
+  let cached = 0;
+  let ingress = 0;
+  let requests = 0;
+  const num = (v: number | string | undefined) => {
+    const n = Number(v ?? 0);
+    return Number.isFinite(n) ? n : 0;
+  };
+  for (const row of rows) {
+    requests += num(row.requests);
+    ingress += num(row.in_bytes);
+    if (row.cache === "HIT") cached += num(row.out_bytes);
+    else uncached += num(row.out_bytes);
+  }
+  return { uncached_bytes: uncached, cached_bytes: cached, ingress_bytes: ingress, requests };
+}
+
+/**
+ * Reads the egress out of Supabase's log stream, over the Management API's logs endpoint.
+ *
+ * The personal access token is a Management API credential (`SUPABASE_ACCESS_TOKEN`), not the project's key —
+ * the logs are not readable with the service key. The endpoint answers 200 with `{ error }` for a bad query,
+ * so that is an error too.
+ *
+ * The window is what the log store keeps, so the answer is "bytes out in the last N hours" and never a
+ * month: the report says which window it read.
+ */
+export async function readEgress(projectRef: string, token: string, hours = 24, fetchImpl: typeof fetch = fetch): Promise<EgressLive> {
+  if (!token) throw new Error("SUPABASE_ACCESS_TOKEN isn't set, so the egress can't be read.");
+  const to = new Date();
+  const from = new Date(to.getTime() - hours * 60 * 60 * 1000);
+  const query = new URLSearchParams({ sql: EGRESS_SQL, iso_timestamp_start: from.toISOString(), iso_timestamp_end: to.toISOString() });
+  const url = `https://api.supabase.com/v1/projects/${projectRef}/analytics/endpoints/logs?${query}`;
+  const res = await fetchImpl(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) throw new Error(`Supabase's log stream answered ${res.status}.`);
+  const body = (await res.json()) as { result?: EgressRow[]; error?: unknown };
+  if (body.error) throw new Error(`Supabase's log stream refused the query: ${typeof body.error === "string" ? body.error : JSON.stringify(body.error)}`);
+  const parsed = parseEgress(Array.isArray(body.result) ? body.result : []);
+  return { ...parsed, window_hours: hours, from: from.toISOString(), to: to.toISOString() };
+}
+

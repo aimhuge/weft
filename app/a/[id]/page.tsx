@@ -15,12 +15,12 @@ import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { ShareGateForm } from "@aimhuge/share/client";
 import { appShareAccess } from "@/lib/app-share-access";
-import { appMetadataById } from "@/lib/app-share-meta";
+import { GENERIC_APP_METADATA, appMetadataById } from "@/lib/app-share-meta";
 import { versionedFrameSrc } from "@/lib/app-share-frame";
 import { appPublicUrl } from "@/lib/app-share-types";
 import { isWebEnabled } from "@/lib/home";
 import { SharedApp } from "@/components/share-view/SharedApp";
-import { ShareNotice } from "@/components/share-view/ShareNotice";
+import { ShareNotice, SignInNotice } from "@/components/share-view/ShareNotice";
 import { serviceClient } from "@/lib/web-session";
 import "@/components/home/home.css";
 import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
@@ -28,6 +28,13 @@ import { SharedAppSkeleton } from "@/components/web-states/Skeletons";
 // The link preview (lib/app-share-meta.ts), on params alone: reading the gate's cookie here would break the
 // prerendered shell, and a preview never depends on who is looking.
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+  // Without the web side the page is the static NotDeployed notice, so the metadata stays static too: awaiting
+  // params there leaves a prerendered page with runtime metadata, which `next build` refuses (the 0.7.1 dmg build).
+  if (!isWebEnabled()) return GENERIC_APP_METADATA;
+  return linkPreview(params);
+}
+
+async function linkPreview(params: Promise<{ id: string }>): Promise<Metadata> {
   "use cache";
   cacheLife("minutes");
   const { id } = await params;
@@ -57,7 +64,7 @@ async function PageBody({ params }: { params: Promise<{ id: string }> }) {
   await connection();
   const access = await appShareAccess(id);
   if (access.kind === "missing") notFound();
-  if (access.kind === "login") redirect(`/login?next=${encodeURIComponent(`/a/${id}`)}`);
+  if (access.kind === "login") return <SignInNotice next={`/a/${id}`} />;
   if (access.kind === "unconfigured") {
     return <ShareNotice title="Link unavailable">This link can&apos;t be opened right now. Try again in a little while.</ShareNotice>;
   }

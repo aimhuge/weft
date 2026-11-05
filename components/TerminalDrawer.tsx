@@ -3,6 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import "@xterm/xterm/css/xterm.css";
 import Icon from "./Icon";
+import PaneStatus from "./TerminalPaneStatus";
+import { terminalBridgeFor, type TerminalBridge } from "@/lib/line-terminal";
+import { isWorkerProject } from "@/lib/worker-project";
 
 // The board's terminal: real shells (electron/terminal.cjs) in a drawer along the bottom of the window,
 // for the commands a thread can't or shouldn't run. Each folder has its own shells, keyed by its path, so
@@ -22,9 +25,12 @@ export default function TerminalDrawer({
   height,
   onHeight,
   onClose,
+  host,
 }: {
   // The folder whose shells to show: the open card's, else the selected project's.
   cwd: string;
+  // The worker a worker project's shells run on, by name, for what the drawer says when one can't open.
+  host?: string | null;
   height: number;
   onHeight: (height: number) => void;
   onClose: () => void;
@@ -32,6 +38,8 @@ export default function TerminalDrawer({
   const [panes, setPanesState] = useState<string[]>(() => panesByFolder.get(cwd) ?? [cwd]);
   const [focused, setFocused] = useState(panes[0] ?? cwd);
   const bridge = typeof window === "undefined" ? undefined : window.weft;
+  // A worker project's shells run on the worker, over its session line (lib/line-terminal.ts).
+  const terminal = terminalBridgeFor(cwd, bridge?.terminal, host);
 
   function setPanes(next: string[]) {
     panesByFolder.set(cwd, next);
@@ -47,7 +55,7 @@ export default function TerminalDrawer({
   }
 
   function closePane(id: string) {
-    bridge?.terminal.kill(id);
+    terminal?.kill(id);
     const rest = panes.filter((p) => p !== id);
     // The last pane closing hides the drawer; reopening starts a fresh shell.
     if (rest.length === 0) {
@@ -78,8 +86,10 @@ export default function TerminalDrawer({
 
   const canSplit = panes.length < MAX_PANES;
 
+  // data-human-only: the shell has none of a thread's guards, so board_view can't click or type in it
+  // (docs/architecture/board-view.md); electron/board-view.cjs refuses any xterm on top of the mark.
   return (
-    <section style={{ height }} className="relative flex shrink-0 flex-col border-t border-line-strong bg-[#16161a]">
+    <section data-human-only style={{ height }} className="relative flex shrink-0 flex-col border-t border-line-strong bg-[#16161a]">
       <div onPointerDown={startDrag} className="absolute -top-1 left-0 right-0 z-10 h-2 cursor-row-resize" aria-hidden="true" />
       <div className="flex shrink-0 items-center gap-2 border-b border-white/10 px-3 py-1 text-[11.5px] text-zinc-400">
         <Icon name="terminal" size={13} />
@@ -98,13 +108,15 @@ export default function TerminalDrawer({
           <Icon name="x" size={13} />
         </button>
       </div>
-      {bridge?.terminal ? (
+      {terminal ? (
         <div className="flex min-h-0 flex-1">
           {panes.map((id, i) => (
             <TerminalPane
               key={id}
               id={id}
               cwd={cwd}
+              remote={isWorkerProject(cwd)}
+              terminal={terminal}
               divided={i > 0}
               closable={panes.length > 1}
               onFocus={() => setFocused(id)}
@@ -127,6 +139,8 @@ export default function TerminalDrawer({
 function TerminalPane({
   id,
   cwd,
+  remote,
+  terminal,
   divided,
   closable,
   onFocus,
@@ -135,6 +149,8 @@ function TerminalPane({
 }: {
   id: string;
   cwd: string;
+  remote: boolean;
+  terminal: TerminalBridge;
   divided: boolean;
   closable: boolean;
   onFocus: () => void;
@@ -152,8 +168,7 @@ function TerminalPane({
   });
 
   useEffect(() => {
-    const bridge = window.weft;
-    if (!bridge?.terminal || !host.current) return;
+    if (!host.current) return;
     const el = host.current;
     let disposed = false;
     // Read through a call: the async setup below checks it after each await, once cleanup may have run.
@@ -191,20 +206,20 @@ function TerminalPane({
       el.addEventListener("focusin", onFocusIn);
       cleanups.push(() => el.removeEventListener("focusin", onFocusIn));
 
-      cleanups.push(bridge.terminal.onData((sid, data) => sid === id && term.write(data)));
-      cleanups.push(bridge.terminal.onExit((sid, code) => sid === id && setExited(code)));
-      const input = term.onData((data) => bridge.terminal.write(id, data));
+      cleanups.push(terminal.onData((sid, data) => sid === id && term.write(data)));
+      cleanups.push(terminal.onExit((sid, code) => sid === id && setExited(code)));
+      const input = term.onData((data) => terminal.write(id, data));
       cleanups.push(() => input.dispose());
 
       const observer = new ResizeObserver(() => {
         if (!el.offsetWidth || !el.offsetHeight) return;
         fit.fit();
-        bridge.terminal.resize(id, term.cols, term.rows);
+        terminal.resize(id, term.cols, term.rows);
       });
       observer.observe(el);
       cleanups.push(() => observer.disconnect());
 
-      const opened = await bridge.terminal.open(id, cwd, term.cols, term.rows);
+      const opened = await terminal.open(id, cwd, term.cols, term.rows);
       if (isDisposed()) return;
       if (opened.error) setError(opened.error);
       else if (opened.replay) term.write(opened.replay);
@@ -215,10 +230,10 @@ function TerminalPane({
       disposed = true;
       cleanups.forEach((fn) => fn());
     };
-  }, [id, cwd, generation]);
+  }, [id, cwd, terminal, generation]);
 
   function restart() {
-    window.weft?.terminal.kill(id);
+    terminal.kill(id);
     setExited(null);
     setError(null);
     setGeneration((g) => g + 1);
@@ -226,7 +241,7 @@ function TerminalPane({
 
   return (
     <div className={`group relative flex min-w-0 flex-1 flex-col ${divided ? "border-l border-white/10" : ""}`}>
-      <div ref={host} className="min-h-0 flex-1 px-2 py-1" />
+      <div ref={host} data-human-only className="min-h-0 flex-1 px-2 py-1" />
       <div className="absolute right-1.5 top-1 z-10 flex gap-0.5 text-zinc-400 opacity-0 transition-opacity group-hover:opacity-100">
         <button onClick={restart} title="Restart this shell" aria-label="Restart this shell" className="rounded bg-[#16161a] p-1 hover:bg-white/10 hover:text-zinc-100">
           <Icon name="reload" size={12} />
@@ -237,12 +252,7 @@ function TerminalPane({
           </button>
         )}
       </div>
-      {exited !== null && (
-        <button onClick={restart} className="absolute bottom-2 left-3 text-[12px] text-amber-400 hover:underline">
-          Shell exited ({exited}). Restart
-        </button>
-      )}
-      {error && <p className="absolute bottom-2 left-3 text-[12px] text-red-400">Couldn&apos;t start a shell: {error}</p>}
+      <PaneStatus error={error} exited={exited} remote={remote} onRestart={restart} />
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { exprOf, formOf, inputOf, midnight, monthGrid, newForm, PRESETS, readback, runLabel, sameDay, timeValue, toggleDay, upcoming, withTime, type CronForm } from "./cron-form";
+import { exprOf, formOf, inputOf, midnight, monthGrid, newForm, PRESETS, readback, runLabel, sameDay, timeValue, toggleDay, untilNext, upcoming, withTime, type CronForm } from "./cron-form";
 import type { CronPick } from "./cron-schedule";
 
 const at = (y: number, mo: number, d: number, h = 0, mi = 0) => new Date(y, mo - 1, d, h, mi).getTime();
@@ -213,6 +213,34 @@ describe("runLabel", () => {
 
   it("gives the day and the time for any other day", () => {
     expect(runLabel(new Date(2026, 9, 30, 14, 30).getTime(), NOW)).toBe("Fri 30 Oct, 14:30");
+  });
+});
+
+describe("untilNext", () => {
+  const MINUTE = 60_000;
+  const HOUR = 60 * MINUTE;
+
+  it("counts the minutes until the next run", () => {
+    expect(untilNext(NOW + 5 * MINUTE, NOW)).toBe("in 5m");
+    expect(untilNext(NOW + 59 * MINUTE, NOW)).toBe("in 59m");
+  });
+
+  it("never says less than a minute", () => {
+    expect(untilNext(NOW, NOW)).toBe("in 1m");
+    expect(untilNext(NOW + MINUTE / 2, NOW)).toBe("in 1m");
+    expect(untilNext(NOW - 10 * MINUTE, NOW)).toBe("in 1m");
+  });
+
+  it("counts the hours once it is an hour or more away", () => {
+    expect(untilNext(NOW + HOUR, NOW)).toBe("in 1h");
+    expect(untilNext(NOW + 3 * HOUR, NOW)).toBe("in 3h");
+    // 47 hours is still hours; 48 hours and over becomes days.
+    expect(untilNext(NOW + 47 * HOUR, NOW)).toBe("in 47h");
+  });
+
+  it("counts the days from 48 hours on", () => {
+    expect(untilNext(NOW + 48 * HOUR, NOW)).toBe("in 2d");
+    expect(untilNext(NOW + 3 * DAY, NOW)).toBe("in 3d");
   });
 });
 

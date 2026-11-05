@@ -18,28 +18,49 @@ contextBridge.exposeInMainWorld("weft", {
     setActive: (key) => ipcRenderer.send("browser:active", key),
     prune: (keys) => ipcRenderer.send("browser:prune", keys),
     getState: () => ipcRenderer.invoke("browser:state"),
-    setVisible: (visible) => ipcRenderer.send("browser:visible", visible),
+    setVisible: (visible, key) => ipcRenderer.send("browser:visible", visible, key),
     setBounds: (rect) => ipcRenderer.send("browser:bounds", rect),
     back: () => ipcRenderer.send("browser:back"),
     forward: () => ipcRenderer.send("browser:forward"),
     reload: () => ipcRenderer.send("browser:reload"),
     zoom: (action) => ipcRenderer.send("browser:zoom", action),
-    find: (text, opts) => ipcRenderer.send("browser:find", text, opts),
-    stopFind: () => ipcRenderer.send("browser:stop-find"),
-    onFind: (callback) => listen("browser:find", callback),
-    onFound: (callback) => listen("browser:found", callback),
+    newTab: () => ipcRenderer.send("browser:newTab"),
+    selectTab: (id) => ipcRenderer.send("browser:selectTab", id),
+    closeTab: (id) => ipcRenderer.send("browser:closeTab", id),
     onState: (callback) => listen("browser:state", callback),
+    find: (text, options) => ipcRenderer.send("browser:find", text, options),
+    stopFind: (refocus) => ipcRenderer.send("browser:stopFind", refocus),
+    onFound: (callback) => listen("browser:found", callback),
   },
   dialog: {
     openFolder: () => ipcRenderer.invoke("dialog:openFolder"),
   },
   openExternal: (url) => ipcRenderer.send("shell:openExternal", url),
+  // The printers macOS has, and printing a page of HTML through the system print dialog (electron/print.cjs).
+  print: {
+    printers: () => ipcRenderer.invoke("print:printers"),
+    html: (html) => ipcRenderer.invoke("print:html", html),
+  },
   revealFolder: (folder) => ipcRenderer.send("shell:reveal", folder),
+  openIn: (folder, target) => ipcRenderer.invoke("shell:openIn", folder, target),
   popupMenu: (items) => ipcRenderer.invoke("menu:popup", items),
   setBadge: (count) => ipcRenderer.send("badge:set", count),
   copilot: {
     toggle: () => ipcRenderer.send("copilot:toggle"),
     onState: (callback) => listen("copilot:state", callback),
+  },
+  // Dictate anywhere (electron/dictation-helper.cjs): the mic button starts the floating pill, and the board tells
+  // main which key to listen for in every app.
+  dictation: {
+    toggle: () => ipcRenderer.send("dictation:toggle"),
+    cancel: () => ipcRenderer.send("dictation:cancel"),
+    setShortcut: (accelerator) => ipcRenderer.send("dictation:shortcut", accelerator),
+    onState: (callback) => listen("dictation:state", callback),
+  },
+  // Sign in to Claude for a Weft Worker (electron/claude-sign-in.cjs): resolves { token } or { error }.
+  claudeSignIn: {
+    start: (click) => ipcRenderer.invoke("claude-sign-in:start", click),
+    cancel: () => ipcRenderer.send("claude-sign-in:cancel"),
   },
   // The terminal drawer's shells (electron/terminal.cjs).
   terminal: {
@@ -81,6 +102,42 @@ contextBridge.exposeInMainWorld("weft", {
     activity: (limit) => ipcRenderer.invoke("vault:activity", limit),
     // A managed .env.local was edited by hand: load the vaults again.
     onChange: (callback) => listen("vault:changed", callback),
+    // This machine's registration in the shared vault (docs/architecture/teams-vault.md, "Device
+    // registration"). The board reads its own devices and its own fingerprint, so it can show the
+    // TOFU string. The private key and every secret value stay in main: the renderer only ever sees
+    // a public key, a fingerprint and a name.
+    devices: {
+      list: () => ipcRenderer.invoke("vault:devices"),
+      register: (options) => ipcRenderer.invoke("vault:devices-register", options ?? {}),
+      fingerprint: () => ipcRenderer.invoke("vault:devices-fingerprint"),
+    },
+    // The shared vault's cross-device flow (docs/architecture/teams-vault.md, "Granting a teammate's
+    // devices"). These are not the thread grants above: `grant` gives a card's thread access to a
+    // local vault for an hour, while `deviceGrant` seals the vault key to a teammate's machine so it
+    // can open the shared vault at all. Nothing here carries a value or a key.
+    deviceGrant: (pendingId) => ipcRenderer.invoke("vault:device-grant", pendingId),
+    deviceDecline: (pendingId) => ipcRenderer.invoke("vault:device-decline", pendingId),
+    requestJoin: (vaultId) => ipcRenderer.invoke("vault:join-request", vaultId),
+    join: (folder, details) => ipcRenderer.invoke("vault:join", folder, details),
+    share: (folder, orgId, repo, label) => ipcRenderer.invoke("vault:share", folder, orgId, repo, label),
+    // A shared vault's rotate (docs/architecture/teams-vault.md, "Removal and rotation"): the new key
+    // is made in main, because that is the only place a vault key exists. The board asks for it and
+    // gets back the names to change at their providers — names, never a value.
+    rotate: (org, userId) => ipcRenderer.invoke("vault:rotate", org, userId),
+    // The shared vault's event log (docs/architecture/teams-vault.md, "What the 🔐 drawer shows"): who
+    // did what, never a value. The tab reads the last hundred rows and watches for the ones that land.
+    events: (id, query) => ipcRenderer.invoke("vault:events", id, query ?? {}),
+    watchEvents: (id, scope) => ipcRenderer.invoke("vault:events-watch", id, scope),
+    unwatchEvents: (id) => ipcRenderer.invoke("vault:events-unwatch", id),
+    onEvents: (callback) => listen("vault:events-live", callback),
+    // A shared vault's recovery key (docs/architecture/teams-vault.md, "Recovery key"): the 24 words
+    // the user writes down. The vault key is unwrapped in main behind Touch ID, and the words are
+    // shown once — nothing here keeps them. `show` hands the words to the renderer; `status` says
+    // whether the vault has a recovery key yet.
+    recovery: {
+      show: (vaultId, passphrase) => ipcRenderer.invoke("vault:recovery-show", vaultId, passphrase ?? ""),
+      status: (vaultId) => ipcRenderer.invoke("vault:recovery-status", vaultId),
+    },
   },
   // Vercel (electron/vercel.cjs): the token stays in main; links are .vercel/project.json. Board window only.
   vercel: {
@@ -140,6 +197,58 @@ contextBridge.exposeInMainWorld("weft", {
     forgetToken: () => ipcRenderer.invoke("slack:forget-token"),
     channels: () => ipcRenderer.invoke("slack:channels"),
     createChannel: (name) => ipcRenderer.invoke("slack:create-channel", name),
+  },
+  // Pairing a phone or browser (electron/pairing-ipc.cjs, docs/architecture/mobile-security.md): the pairing link
+  // and the paired list come back; the code's secret check, the keys and Touch ID stay in main.
+  pairing: {
+    start: (orgId, opts) => ipcRenderer.invoke("pairing:start", orgId, opts),
+    check: (id) => ipcRenderer.invoke("pairing:check", id),
+    cancel: (id) => ipcRenderer.invoke("pairing:cancel", id),
+    list: () => ipcRenderer.invoke("pairing:list"),
+    revoke: (id) => ipcRenderer.invoke("pairing:revoke", id),
+    settings: () => ipcRenderer.invoke("pairing:settings"),
+    setSettings: (change) => ipcRenderer.invoke("pairing:set-settings", change),
+  },
+  // The desktop's signed approval (electron/desktop-signer.cjs): Touch ID, then main signs; the key stays in main.
+  approval: {
+    sign: (request) => ipcRenderer.invoke("approval:sign", request),
+    // Signed widening on a remote host (electron/widen-sign.cjs): Touch ID in main's words, then main signs.
+    widen: (request) => ipcRenderer.invoke("approval:widen", request),
+    endorse: (request) => ipcRenderer.invoke("approval:endorse", request),
+    endorseRefresh: () => ipcRenderer.invoke("approval:endorse-refresh"),
+    endorseConfirm: (request) => ipcRenderer.invoke("approval:endorse-confirm", request),
+  },
+  // Adding a worker by pairing it (electron/host-pairing-ipc.cjs, docs/architecture/device-registry.md): the install
+  // line comes back; the code's secret check and Touch ID stay in main.
+  hostPairing: {
+    start: (orgId) => ipcRenderer.invoke("host-pairing:start", orgId),
+    check: (id) => ipcRenderer.invoke("host-pairing:check", id),
+    cancel: (id) => ipcRenderer.invoke("host-pairing:cancel", id),
+    // Re-pin: main forgets the worker's pinned keys after Touch ID (electron/worker-pins.cjs).
+    forgetPin: (id, name) => ipcRenderer.invoke("worker-pins:forget", id, name),
+    // Approve re-pair: main asks Touch ID and signs the swap with this Mac's key (electron/worker-repair.cjs).
+    approveRepair: (id, code) => ipcRenderer.invoke("worker-repair:approve", id, code),
+    // Seal… : main grants the worker the workspace key after Touch ID; drop after a revoke; status for the list
+    // (electron/worker-key-grants.cjs).
+    grantKey: (id) => ipcRenderer.invoke("worker-keys:grant", id),
+    dropKeys: (id) => ipcRenderer.invoke("worker-keys:drop", id),
+    keyStatus: () => ipcRenderer.invoke("worker-keys:status"),
+  },
+  // "Keep on this worker" (electron/worker-keep.cjs): names only come back; keeping asks Touch ID in main.
+  workerKeep: {
+    list: (worker) => ipcRenderer.invoke("worker-keep:list", worker),
+    keep: (request) => ipcRenderer.invoke("worker-keep:keep", request),
+    stop: (request) => ipcRenderer.invoke("worker-keep:stop", request),
+    wipe: (worker) => ipcRenderer.invoke("worker-keep:wipe", worker),
+  },
+  // A worker's connectors (electron/connector-grants.cjs): on, settings, Allows and vouching for another Mac, each behind
+  // Touch ID in main and signed by this Mac's approval key; the Mac keys of yours and whether each is trusted yet.
+  connectors: {
+    set: (workerId, workerName, connector, settings) => ipcRenderer.invoke("connectors:set", workerId, workerName, connector, settings),
+    allow: (grantId, workerName, kind, subject, label) => ipcRenderer.invoke("connectors:allow", grantId, workerName, kind, subject, label),
+    signers: () => ipcRenderer.invoke("connectors:signers"),
+    trust: (key, name) => ipcRenderer.invoke("connectors:trust", key, name),
+    forgetSigner: (id) => ipcRenderer.invoke("connectors:forget-signer", id),
   },
   // Goose (electron/goose-ipc.cjs): a provider key per provider, sealed in the Keychain. The board sends a key
   // once and never reads one back — the runner's Goose subprocess gets it in its env (electron/goose-env.cjs).

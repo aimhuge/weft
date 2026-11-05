@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { restartArmed } from "./restart-when-idle";
-import { addScheduled } from "./schedule";
+import { holdMessage } from "./scheduled-hold";
 import { sessions } from "./runner-state";
 import { maxThreads } from "./settings";
 import { getCard, listCards, updateCard } from "./store";
@@ -41,8 +40,7 @@ export function slotNote(): string {
 export function holdForSlot(cardId: string, text: string, { echo = true } = {}): boolean {
   const card = getCard(cardId);
   if (!card || card.role === "copilot" || sessions.get(cardId)?.busy || !full(cardId)) return false;
-  const held = { id: randomUUID(), text, at: Date.now(), forSlot: true, ...(echo ? {} : { quiet: true }) };
-  updateCard(cardId, { scheduled: addScheduled(card.scheduled, held), lastLine: slotNote() });
+  holdMessage(card, text, { reason: "forSlot", quiet: !echo, note: slotNote() });
   return true;
 }
 

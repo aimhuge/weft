@@ -6,6 +6,8 @@
 // ?p= puts up to three of your own project names on the cards. It also reads the beat messages the pages post, and
 // writes the ones that jump between beats.
 
+import { SCENES, SCENE_SECONDS, sceneStart, type Scene, type SceneBeat } from "./welcome-scenes";
+
 export const LOOP_PATH = "/welcome/intro.html";
 
 export function loopSrc(names: string[]): string {
@@ -19,9 +21,22 @@ export function loopSrc(names: string[]): string {
 }
 
 // The tour's beats in order (build → ship → show), the page each one is on, and the title the welcome's tour bar
-// shows for it (components/WelcomeTourBar.tsx). beats.html's SCENES must keep the same order.
-export const BEATS = ["intro", "loop", "tools", "vault", "pane", "quality", "blastcp", "profile", "opensource", "keys"] as const;
+// shows for it (components/WelcomeTourBar.tsx). The beats page's scenes — its beats, the element each draws into and
+// how long it runs — are the one list in lib/welcome-scenes.ts, which the page, the narration and the render script
+// read too.
+export const BEAT_SCENES = SCENES;
+
+// The two beats that are their own page (intro.html, loop.html), then the beats page's scenes in order.
+export const BEATS = ["intro", "loop", ...SCENES.map((scene) => scene.beat)] as const;
 export type Beat = (typeof BEATS)[number];
+
+// Where each scene starts on the beats page, in seconds. The narration's lines and the render script's cut read
+// these, so a scene that grows moves everything after it with it.
+export const SCENE_STARTS: Record<SceneBeat, number> = Object.fromEntries(
+  SCENES.map((scene) => [scene.beat, sceneStart(scene.beat)]),
+) as Record<SceneBeat, number>;
+
+export { SCENE_SECONDS, type Scene, type SceneBeat };
 
 export const BEAT_TITLES: Record<Beat, string> = {
   intro: "Welcome to Weft",
@@ -75,6 +90,12 @@ export function voiceFor(beat: Beat): string | null {
 // The line the welcome says as a later step opens: "Allow Weft to see your projects.", "Now start a new thread."
 export function stepVoice(step: string): string | null {
   return step === "projects" || step === "first" ? `/welcome/narration-${step}.m4a` : null;
+}
+
+// Where the beats page's keyboard shortcuts start, in seconds: the scenes before them. The tour video cuts there
+// (scripts/render-welcome-loop.mjs), since the shortcuts only help once Weft is installed.
+export function keysStart(): number {
+  return sceneStart("keys");
 }
 
 // Narration on or muted, kept across the welcome's steps and the next time it shows.

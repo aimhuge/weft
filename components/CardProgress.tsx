@@ -1,16 +1,8 @@
 "use client";
 
 import { STAGES, stageStep } from "@/lib/format";
+import { COLUMN_TONE } from "@/lib/column-tone";
 import { type Card } from "@/lib/types";
-
-// The card's column colour, shared by the summary icon and the stage bar.
-const TONE: Record<Card["column"], { text: string; bar: string }> = {
-  running: { text: "text-accent", bar: "bg-accent" },
-  needs_you: { text: "text-warn", bar: "bg-warn" },
-  review: { text: "text-ok", bar: "bg-ok" },
-  backlog: { text: "text-muted", bar: "bg-muted" },
-  done: { text: "text-faint", bar: "bg-faint" },
-};
 
 // Whether the card has a progress line: a stage or what's left, and in Done only what's left.
 export function showsCardProgress(card: Card) {
@@ -23,7 +15,7 @@ export function showsCardProgress(card: Card) {
 // and tags) go at its end, so they don't crowd the footer.
 export default function CardProgress({ card, marks }: { card: Card; marks: React.ReactNode }) {
   const step = stageStep(card.stage);
-  const tone = TONE[card.column];
+  const tone = COLUMN_TONE[card.column];
   return (
     <div className="mt-2 flex min-w-0 items-center gap-1.5 overflow-hidden text-[11px]">
       {step > 0 && (

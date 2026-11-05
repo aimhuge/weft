@@ -8,7 +8,10 @@ import { api, type NewCardInput } from "./client";
 import { startPileReview } from "./pile-review";
 import { lastFolder } from "./board-helpers";
 import { onOpenCardRequest } from "./open-card";
-import { backendFor } from "./new-thread";
+import { backendFor, cardModel } from "./new-thread";
+import { hostOf } from "./project-host";
+import { isWorkerProject, localPath } from "./worker-project";
+import { dropPending, drawPending, matchByPrompt, pendingCard } from "./worker-pending-cards";
 import type { Card } from "./types";
 
 export interface BoardActions {
@@ -34,6 +37,28 @@ export interface BoardActionsDeps {
   // The cwd of the most recent card (used when no card is open and no project is set).
   latestCwd: string | null | undefined;
   notify: (err: unknown) => void;
+  // A new thread went to this worker instead of starting here, so there's no card to open yet.
+  onSentToWorker?: (worker: string) => void;
+}
+
+// POST /api/cards answers no card for a worker's project: the run went to the worker, and its card comes back later.
+const madeHere = (reply: { card: Card | null }) => reply.card?.id;
+
+// A worker project's new card, drawn on the board now under an id picked here; the worker's own card takes its place
+// (lib/worker-pending-cards.ts), and a refusal takes it off again.
+async function createCard(input: NewCardInput) {
+  if (!isWorkerProject(input.cwd)) return api.create(input);
+  const id = crypto.randomUUID();
+  // A started thread with an agent goes as a run, and the worker names its card.
+  drawPending(pendingCard(id, input, "your worker"), Boolean(input.agent && input.start));
+  try {
+    const reply = await api.create({ ...input, cardId: id } as NewCardInput);
+    if (reply.start?.cardId !== id) matchByPrompt(id);
+    return reply;
+  } catch (err) {
+    dropPending(id);
+    throw err;
+  }
 }
 
 export function useBoardActions({
@@ -44,12 +69,13 @@ export function useBoardActions({
   project,
   latestCwd,
   notify,
+  onSentToWorker,
 }: BoardActionsDeps): BoardActions {
   const openNew = useCallback(
     (folder?: string) => {
       setNewCwd(folder);
       setShowNew(true);
-      const cwd = folder ?? project ?? lastFolder();
+      const cwd = localPath(folder ?? project ?? lastFolder());
       if (cwd) api.warm({ cwd }).catch(() => {}); // best-effort prefetch; a cold start is fine
     },
     [project, setNewCwd, setShowNew],
@@ -58,8 +84,8 @@ export function useBoardActions({
   const openCard = useCallback(
     (card: Card) => {
       select(card.id);
-      // Start its CLI now so a reply doesn't wait.
-      if (!card.warm && card.column !== "done") api.warm({ cardId: card.id }).catch(() => {}); // best-effort prefetch
+      // Start its CLI now so a reply doesn't wait: best effort, on its own host (a worker's only over its line).
+      if (!card.warm && card.column !== "done") hostOf(card).warm(card.id);
     },
     [select],
   );
@@ -68,21 +94,26 @@ export function useBoardActions({
   useEffect(() => onOpenCardRequest((id) => select(id)), [select]);
 
   const create = useCallback(async (input: NewCardInput) => {
-    await api.create(input);
-  }, []);
+    const { start } = await createCard(input);
+    if (start?.worker) onSentToWorker?.(start.worker);
+  }, [onSentToWorker]);
 
   const improveQuality = useCallback(
     async (cwd: string, prompt: string, title: string, model?: string): Promise<string | undefined> => {
       // The model picks the CLI: every model is offered, and the card runs on the one that serves it.
       const backend = (model && backendFor(model)) || "claude";
-      const { card } = await api.create({ title, prompt, cwd, backend, model, start: true });
-      return card.id;
+      // The card's model is the id the CLI takes, so a Goose pick loses its "goose:" prefix; the
+      // card's backend says it runs on Goose.
+      // A worker project's card goes to the worker as a run, so there's no card here to open yet.
+      const reply = await createCard({ title, prompt, cwd, backend, model: cardModel(model), start: true });
+      if (reply.start?.worker) onSentToWorker?.(reply.start.worker);
+      return madeHere(reply);
     },
-    [],
+    [onSentToWorker],
   );
 
   const reviewAll = useCallback(async () => {
-    const cwd = selected?.cwd ?? project ?? latestCwd;
+    const cwd = selected?.cwd ?? localPath(project) ?? latestCwd;
     if (!cwd) return;
     try {
       const { reviewAllModel } = await api.settings();

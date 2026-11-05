@@ -1,0 +1,4 @@
+# The app is the root package; packages/* are workspace packages it links (packages/weft-client is @weft/client).
+# node-linker=hoisted (.npmrc) still keeps node_modules flat for Electron: a workspace package is a symlink in it.
+packages:
+  - packages/*

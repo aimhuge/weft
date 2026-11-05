@@ -1,6 +1,9 @@
 // Shared by lib/cloud-inbox*.test.ts: a stand-in for the account's Supabase client (the cloud_commands table
 // answers from `db`, the Realtime channel hands its handlers to the test, the session says who is signed in)
 // and the modules the inbox leans on. The test files mount these through vi.mock factories.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { vi } from "vitest";
 import type { CloudCommandRow } from "./cloud-commands";
 
@@ -72,7 +75,9 @@ export const client = {
     const entry = { name, filter: "", nudge: () => {}, status: (() => {}) as (status: string) => void };
     db.channels.push(entry);
     const channel = {
-      on: (_type: string, cfg: { filter: string }, cb: () => void) => {
+      on: (_type: string, cfg: { filter: string; table?: string }, cb: () => void) => {
+        // The Local Simulator calls' listener (lib/device-calls.ts) is on the same channel; these tests are about the commands'.
+        if (cfg.table === "device_calls") return channel;
         entry.filter = cfg.filter;
         entry.nudge = cb;
         return channel;
@@ -103,17 +108,27 @@ export const control = {
   startCard: vi.fn<(card: unknown) => void>(),
   syncNow: vi.fn<() => void>(),
   // The cards on this Mac, for a reply to find its thread.
-  cards: new Map<string, { id: string; cwd: string; role?: string }>(),
+  cards: new Map<string, { id: string; cwd: string; role?: string; readScope?: string[]; pending?: unknown }>(),
   sendUserMessage: vi.fn<(cardId: string, text: string) => void>(),
   // Calls a reply routes through sendUserMessage; answer/stop go through their own.
   answered: [] as { cardId: string; allow: boolean; answers?: Record<string, string>; pendingId?: string; reply?: unknown }[],
   answerPermission: vi.fn<(cardId: string, allow: boolean, answers?: Record<string, string>, pendingId?: string, reply?: unknown) => void>(),
+  // Folders an Always added to this Mac's settings.
+  allowed: [] as string[],
   stopped: [] as string[],
   stop: vi.fn<(cardId: string) => Promise<void>>(),
+  // Every host verb the inbox ran (hostApiMock).
+  verbs: [] as { verb: string; args: Record<string, unknown> }[],
+  // This Mac's default mode for a new thread (lib/settings.ts defaultPermissionMode).
+  defaultMode: "auto" as string,
 };
 
 export const accountMock = { accountClient: () => control.account() };
-export const settingsMock = { syncFolders: () => [...control.folders] };
+export const settingsMock = {
+  syncFolders: () => [...control.folders],
+  allowFolder: (folder: string) => control.allowed.push(folder),
+  defaultPermissionMode: () => control.defaultMode,
+};
 export const deviceMock = { deviceId: () => "mac-1" };
 export const cloudSyncMock = { syncNow: () => control.syncNow(), syncOrgId: () => Promise.resolve(control.org) };
 export const newCardMock = {
@@ -132,7 +147,32 @@ export const runnerMock = {
     return control.stop(cardId);
   },
 };
-export const storeMock = { getCard: (id: string) => control.cards.get(id) };
+// lib/host-api with its verbs handed to the runner mocks above, as the real handlers would (reply, answer, stop);
+// any other verb is only recorded in control.verbs.
+export async function hostApiMock(real: () => Promise<typeof import("./host-api")>) {
+  const { readQuestionReply } = await import("./question-reply");
+  return {
+    ...(await real()),
+    runVerb: async (verb: string, args: Record<string, unknown>) => {
+      control.verbs.push({ verb, args });
+      const a = args as { id: string; text: string; allow?: boolean; answers?: Record<string, string>; pendingId?: string };
+      if (verb === "card.message") runnerMock.sendUserMessage(a.id, a.text);
+      else if (verb === "card.permission.answer") runnerMock.answerPermission(a.id, a.allow === true, a.answers, a.pendingId, readQuestionReply(args));
+      else if (verb === "card.stop") await runnerMock.stop(a.id);
+      return { ok: true };
+    },
+  };
+}
+
+export const storeMock = {
+  // Where the Mac keeps its widening nonces (lib/cloud-inbox-cards.ts), a folder of this run's own.
+  DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "weft-inbox-")),
+  getCard: (id: string) => control.cards.get(id),
+  updateCard: (id: string, patch: { readScope?: string[] }) => {
+    const card = control.cards.get(id);
+    if (card) control.cards.set(id, { ...card, ...patch });
+  },
+};
 
 export const command = (over: Partial<CloudCommandRow> = {}): CloudCommandRow => ({
   id: "cmd-1",
@@ -163,12 +203,16 @@ export function resetInbox() {
   db.selects.length = 0;
   db.channels.length = 0;
   control.made.length = 0;
+  beats.length = 0;
   control.cards.clear();
   control.folders = ["/dev/app"];
   control.org = "org1";
   control.account = () => client;
   control.answered.length = 0;
+  control.allowed.length = 0;
   control.stopped.length = 0;
+  control.verbs.length = 0;
+  control.defaultMode = "auto";
   vi.clearAllMocks();
 }
 
@@ -178,3 +222,16 @@ export async function listening(refresh: () => Promise<void>) {
   db.channels[0]?.status("SUBSCRIBED");
   await settle();
 }
+
+// The desktop worker's heartbeat (lib/desktop-worker.ts): recorded, never sent.
+// The Mac's Local Simulator calls (lib/device-calls.ts) have their own tests; the inbox only asks it to look.
+export const deviceCallsMock = { drainDeviceCalls: () => Promise.resolve() };
+
+export const beats: string[] = [];
+export const desktopWorkerMock = {
+  desktopStatus: () => "online",
+  beatDesktopWorker: (_client: unknown, uid: string) => {
+    beats.push(uid);
+    return Promise.resolve();
+  },
+};

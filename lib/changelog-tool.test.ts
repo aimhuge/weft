@@ -25,7 +25,7 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 vi.mock("./store", () => ({ DATA_DIR: dir, getCard: (id: string) => cards[id] }));
 
 const { changelogFile, releaseProject, stampCard } = await import("./changelog");
-const { changelogTools, lineFor } = await import("./changelog-tool");
+const { changelogTools, lineFor, PAGE, pageOf } = await import("./changelog-tool");
 const { isTrustedTool } = await import("./board-tools-trust");
 
 const tools = (cardId?: string, cwd = "") => Object.fromEntries((changelogTools(() => cardId, () => cwd) as unknown as CapturedTool[]).map((t) => [t.name, t]));
@@ -56,6 +56,29 @@ describe("changelog tools", () => {
     expect(none.text).toMatch(/No project folder/);
     expect(none.isError).toBe(true);
     expect((await call("changelog_list", { folder: repo }, "none")).text).toMatch(/\| fixed \| draft \| — \| x$/);
+  });
+
+  it("pages a long list, clips long texts, and lists only this card's entries with mine", async () => {
+    for (let i = 0; i < 45; i++) await call("changelog_add", { kind: "added", text: `entry ${i}` });
+    await call("changelog_add", { kind: "fixed", text: "someone else's" }, "none", repo);
+    const first = (await call("changelog_list", {})).text.split("\n");
+    expect(first).toHaveLength(PAGE + 1);
+    expect(first.at(-1)).toBe(`(1–${PAGE} of 46; pass offset: ${PAGE} for the next page, or mine: true for this card's own)`);
+    const last = (await call("changelog_list", { offset: PAGE })).text.split("\n");
+    expect(last.at(-1)).toBe(`(${PAGE + 1}–46 of 46)`);
+    const mine = (await call("changelog_list", { mine: true, limit: 100 })).text;
+    expect(mine).not.toContain("someone else's");
+    expect(mine.split("\n")).toHaveLength(45);
+    expect((await call("changelog_list", { mine: true }, "none", repo)).text).toBe("No entries yet.");
+    await call("changelog_add", { kind: "added", text: "x".repeat(1000) });
+    const long = (await call("changelog_list", { offset: 46 })).text.split("\n")[0]!;
+    expect(long).toHaveLength(300);
+    expect(long.endsWith("…")).toBe(true);
+  });
+
+  it("keeps a page's offset and size in range", () => {
+    const entries = [{ id: "a", kind: "added", text: "x", project: repo, at: 0 }] as unknown as Parameters<typeof pageOf>[0];
+    expect(pageOf(entries, -3, 0)).toBe("a | added | draft | — | x");
   });
 
   it("hides released entries unless asked, and shows sha and version", async () => {

@@ -19,11 +19,13 @@ const BASE: SettingsView = {
   backupModel: "",
   projects: [],
   issueFolders: [],
+  issueLandings: {},
   syncFolders: [],
   allowedFolders: [],
   gooseProviderId: "",
   gooseModelId: "",
   gooseBaseUrl: "",
+  gooseNamedModels: [],
 };
 
 describe("initialSettingsForm", () => {

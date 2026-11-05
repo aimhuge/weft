@@ -2,6 +2,7 @@ import { defineConfig, globalIgnores } from "eslint/config";
 import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import tseslint from "typescript-eslint";
+import noClientServerLeak from "./eslint-rules/no-client-server-leak.mjs";
 
 const TS_FILES = ["**/*.{ts,tsx,mts,cts}"];
 const LINE_COUNT = { skipBlankLines: true, skipComments: true };
@@ -12,7 +13,7 @@ const LINE_COUNT = { skipBlankLines: true, skipComments: true };
 // (Extract Function or Module), then lower its number. Never get under it by joining lines, dropping
 // blank lines or deleting comments; that hides the smell and makes the file worse.
 const OVERSIZE = {
-  "components/Board.tsx": 402,
+  "components/Board.tsx": 384,
   "lib/runner.test.ts": 901,
   "app/api/routes.test.ts": 766,
   "lib/login.test.ts": 553,
@@ -22,15 +23,14 @@ const OVERSIZE = {
   "lib/board-view.test.ts": 520,
   "components/SettingsDialog.tsx": 471,
   "lib/use-dictation.test.ts": 425,
-  "electron/main.cjs": 355,
+  "electron/main.cjs": 347,
   "lib/import.ts": 391,
   "lib/library.ts": 391,
   "components/ReplyBox.tsx": 357,
   "components/NewCardDialog.tsx": 331,
   "lib/hotkeys.test.ts": 322,
   "lib/web-board.test.ts": 431,
-  "lib/board-tools.ts": 316,
-  "lib/login.ts": 316,
+  "lib/login.ts": 297,
   "lib/repos.test.ts": 307,
   "components/RepoPicker.tsx": 304,
   "lib/cloud-sync.test.ts": 561,
@@ -44,8 +44,6 @@ const COMPLEX = {
   "lib/import.ts": 36,
   "components/CardView.tsx": 32,
   "components/MediaNode.tsx": 25,
-  // Brackets escaped: a glob reads [id] as a character class.
-  "app/api/cards/\\[id\\]/route.ts": 24,
   "components/Composer.tsx": 24,
   "lib/copilot-digest.ts": 22,
   "components/ReplyBox.tsx": 21,
@@ -93,6 +91,31 @@ const eslintConfig = defineConfig([
       complexity: ["error", 15],
     },
   },
+  // The client/server boundary: a "use client" module must not reach a Node built-in or a server-only
+  // module. Turbopack panics on those and the board route 500s with nothing the UI can show, so a change
+  // that breaks the board fails lint here instead of the next restart. The analysis is lib/client-graph.ts's.
+  {
+    files: TS_FILES,
+    plugins: { weft: { rules: { "no-client-server-leak": noClientServerLeak } } },
+    rules: { "weft/no-client-server-leak": "error" },
+  },
+  // @weft/client runs on the phone too (packages/weft-client/README.md): no DOM, React, Next, Node built-ins or app code.
+  {
+    files: ["packages/weft-client/src/**/*.ts"],
+    ignores: ["**/*.test.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            { group: ["node:*", "fs", "path", "os", "child_process", "crypto"], message: "@weft/client runs on the phone: no Node built-ins." },
+            { group: ["react", "react-dom", "react-dom/*", "next", "next/*"], message: "@weft/client is plain TypeScript: no React or Next." },
+            { group: ["@/*", "../../../*", "**/lib/*"], message: "@weft/client can't import the app: move the piece into the package instead." },
+          ],
+        },
+      ],
+    },
+  },
   // The ratchet: files over those limits today, each held at its current size so it can only shrink.
   ...Object.entries(OVERSIZE).map(([file, max]) => ({ files: [file], rules: { "max-lines": ["error", { max, ...LINE_COUNT }] } })),
   ...Object.entries(COMPLEX).map(([file, max]) => ({ files: [file], rules: { complexity: ["error", max] } })),
@@ -113,6 +136,12 @@ const eslintConfig = defineConfig([
     // Leftover installs (node_modules.npm-old) and scratch: ESLint skips only a folder named exactly node_modules.
     "node_modules.*/**",
     ".scratch/**",
+    // Supabase Edge Function entrypoints run on Deno (Deno.serve, npm: imports), outside tsconfig; their pure
+    // modules (message.ts) stay linted and tested.
+    "supabase/functions/*/index.ts",
+    // Vendored, minified third-party bundles (public/welcome/gsap.min.js): not our code to lint.
+    "**/*.min.js",
+    "**/*.bundle.js",
   ]),
 ]);
 

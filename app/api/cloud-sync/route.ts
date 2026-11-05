@@ -3,6 +3,7 @@ import { resolveFolder } from "@/lib/folders";
 import { fail, guard } from "@/lib/guard";
 import { setSyncFolder, syncFolders } from "@/lib/settings";
 import { cloudSyncStatus, queueFolder, syncNow } from "@/lib/cloud-sync";
+import { rememberSyncRepo } from "@/lib/cloud-sync-repos";
 
 // The Settings → Sync page (lib/use-cloud-sync.ts, components/SyncSettings.tsx). GET returns which folders
 // have sync turned on and how the last flush went; POST turns a folder on or off (and queues its cards when
@@ -30,6 +31,8 @@ export async function POST(req: Request) {
     setSyncFolder(folder, on);
     // Turning a folder on also flushes its existing cards and items.
     if (on) queueFolder(folder);
+    // Your other Macs follow the switch for their clone of the same repo; it never holds up the answer.
+    rememberSyncRepo(folder, on).catch((err: unknown) => console.warn("[weft] project sync across Macs:", err));
     return Response.json({ folder, on, folders: syncFolders(), status: cloudSyncStatus() });
   } catch (err) {
     return fail(err);

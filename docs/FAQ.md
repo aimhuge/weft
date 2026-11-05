@@ -209,7 +209,7 @@ watchdog if Weft crashes.
 ### What are the main keyboard shortcuts?
 
 ⌘N new thread, ⌘J copilot, ⌃⌥Space copilot from any app, ⇧⌘B browser pane, ⌘K command palette, `/` (or ⌘F) filter
-cards, ⌘, settings, ⌃\` terminal, ⌘L tags, `j`/`k` move between cards, ⇧A archive, `Z` undo. Press `?` for the full,
+cards, ⌘, settings, ⌃\` terminal, ⌘L tags, `j`/`k` move between cards, ⇧A archive, ⇧Z undo, `Z` reopen the last card. Press `?` for the full,
 searchable sheet. Hold ⌘ or Shift on the board and a card shows what that modifier does.
 
 ---
@@ -273,7 +273,7 @@ your last message again in a fresh CLI.
 
 ### How do I archive cards?
 
-⇧A archives the focused card (or the open thread) and steps to the next. ⇧E archives every Done card on screen. `Z` or
+⇧A archives the focused card (or the open thread) and steps to the next. ⇧E archives every Done card on screen. ⇧Z or
 the toast's Undo brings the last one back. Right-click Done for show/hide archived.
 
 ### What's the difference between a star and a tag?
@@ -527,10 +527,13 @@ On every Claude Code and puku-cli thread (and its subagents):
   you'd see a build error.
 - **Symbol claims** between busy cards in one folder (above).
 
-### Do the guardrails apply to Codex?
+### Do the guardrails apply to Codex and Goose?
 
-Partly. Codex gets the filtered environment (no keys from your shell) and is asked not to read `.env` files, but the
-per-tool hooks (git, restart, check, folder and claim guards) aren't available to it.
+Yes, the same ones. Every tool call a Codex or Goose thread makes goes through Weft's guards before it runs, through
+each CLI's own hooks: the secret guard, the folder gate, the git, restart and check guards, broken-import warnings
+and symbol claims all see it, and refuse or ask in the same words as on Claude Code. If Weft can't install its guards
+for a turn, the turn doesn't start, and the card says why. One thing stays Claude Code and puku-cli only: an MCP
+server's own mid-call form.
 
 ### What if Weft really does need a restart?
 
@@ -645,6 +648,13 @@ seconds, or pause it.
 The 🪝 drawer lists each project's webhook routes. A thread that writes a route a provider posts to (Stripe, GitHub,
 Resend) records it there, and Weft can give it a public relay URL on weft.zip that forwards deliveries to your local
 route while Weft runs. No ngrok needed. The relay needs a Weft account.
+
+### Can I open my dev server from outside this Mac?
+
+Yes. **Open a tunnel** in 🪝 gives a dev server a private address on weft.zip that works from anywhere, with hot reload.
+You approve it with Touch ID, only your Weft account gets in, and it closes by itself after 4 hours unless you choose
+otherwise. It runs on a Cloudflare quick tunnel, so Cloudflare can see the traffic, and a streaming AI reply appears all
+at once instead of typing out.
 
 ### Is there a terminal?
 
@@ -840,8 +850,11 @@ pages and settings. The CLIs keep their own transcripts as usual. Set `WEFT_DATA
 
 ### Does Weft track me?
 
-Google Analytics runs on the weft.zip home page only, never on the board. The bundled puku-cli has its telemetry
-removed.
+On weft.zip (the home page, FAQ, profiles, share links and the web board), Google Analytics and PostHog, including
+PostHog's session replay, load only after you accept them in the banner; signed in, PostHog links your visits to your
+account. A Weft on your own Mac never loads either. The desktop app does send anonymous onboarding stats (which
+welcome steps you went through, never prompts, paths or card content), on by default: switch them off in Settings →
+Security. The bundled puku-cli has its telemetry removed. The details are in the [privacy policy](https://weft.zip/privacy).
 
 ### Can other websites or apps drive Weft?
 

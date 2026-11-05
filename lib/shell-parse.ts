@@ -2,6 +2,8 @@
 // Used by the secret guard (lib/secret-guard.ts): `cat > a.md <<EOF … .env … EOF` writes a page, while
 // `sh -c 'cat .en""v'` reads a .env file, and only a parser tells the two apart.
 
+import { ansiC, substituted } from "./shell-quoting";
+
 // One simple command: its words, the files it reads with `<` and writes with `>`, what it gets on stdin from
 // a heredoc or here-string, and whether its output is piped into the next command.
 export interface SimpleCommand {
@@ -93,9 +95,13 @@ class ShellParser {
         this.i += 2;
       } else if (this.src.startsWith("$(", this.i)) {
         this.i += 2;
-        this.nested.push(this.group());
+        const inner = this.group();
+        this.nested.push(inner);
+        this.addTokens(substituted(inner));
       } else if (this.at() === "`") {
-        this.nested.push(this.backticks());
+        const inner = this.backticks();
+        this.nested.push(inner);
+        this.addTokens(substituted(inner));
       } else {
         this.word += this.at();
         this.i++;
@@ -106,17 +112,47 @@ class ShellParser {
   }
 
   private dollar() {
+    // $'…' is ANSI-C quoting: \x2e is a dot, and the escapes are the shell's own.
+    if (this.at(1) === "'") {
+      this.i += 2;
+      const end = this.ansiCEnd();
+      this.addTokens(ansiC(this.src.slice(this.i, end)));
+      this.i = end + 1;
+      this.inWord = true;
+      return;
+    }
+    // ${…} and $NAME are the shell's own expansion; only $(…) runs a command.
     if (this.at(1) !== "(") {
       this.plain();
       return;
     }
     this.i += 2;
-    this.addNested(this.group());
+    const inner = this.group();
+    this.addNested(inner);
   }
 
   private addNested(text: string) {
     this.nested.push(text);
+    this.addTokens(substituted(text));
     this.inWord = true;
+  }
+
+  // Adds a substituted token to the word, kept apart from what surrounds it so the guard reads
+  // it as its own word: `pre$(echo .env)` reads as `pre .env`, not `pre.env`.
+  private addTokens(tokens: string) {
+    if (!tokens) return;
+    this.word += (this.word ? " " : "") + tokens;
+  }
+
+  // The closing quote of an ANSI-C string.
+  private ansiCEnd(): number {
+    let j = this.i;
+    while (j < this.src.length) {
+      if (this.src[j] === "\\") j += 2;
+      else if (this.src[j] === "'") return j;
+      else j++;
+    }
+    return this.src.length;
   }
 
   // The text up to the `)` closing the one just passed, skipping quoted parts and nested pairs.

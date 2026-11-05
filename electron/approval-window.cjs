@@ -5,6 +5,7 @@
 // and no bridge, and main reads the answer by awaiting a promise on the page.
 const crypto = require("node:crypto");
 const os = require("node:os");
+const { workerLayout } = require("./approval-worker.cjs");
 
 const WIDTH = 480;
 const MIN_HEIGHT = 240;
@@ -37,26 +38,44 @@ const ICONS = {
   finger: '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6.5 8.5a6.5 6.5 0 0 1 11.6 2.2M5 12.5c0-1 .1-1.9.4-2.7M18.9 14c0 2-.3 3.9-.9 5.6"/><path d="M8.6 18.6c.6-1.8.9-3.7.9-5.8a2.5 2.5 0 0 1 5 0c0 2.7-.4 5.2-1.2 7.4"/><path d="M12 12.8c0 3.3-.6 6.2-1.9 8.4M6.4 16.4c.4-1 .6-2.3.7-3.6"/></svg>',
 };
 
-/**
- * @param {{ kind?: string, command: string, cwd: string, script?: string, names: string[], environment: string, label: string, thread?: string, why?: string }} view
- * @param {{ touchId?: boolean, nonce?: string, home?: string }} [opts]
- */
-function approvalHtml(view, { touchId = false, nonce = "n", home } = {}) {
+// This Mac's own run or dev server: the thread's reason first, then the command, folder and secrets.
+/** @param {Parameters<typeof approvalHtml>[0]} view @param {string | undefined} home @param {(n: string) => string} chip */
+function localLayout(view, home, chip) {
   const dev = view.kind === "dev";
-  const title = dev ? "Start the dev server with secrets?" : "Run a command with secrets?";
   const who = view.thread ? `<b class="thread">${escape(view.thread)}</b>` : "";
-  const lead = dev
-    ? `${who ? `${who}'s` : "This card's"} dev server gets <b>${escape(view.label)}</b>'s ${escape(view.environment)} values in its env.`
-    : `${who || "A thread"} wants to run this with values from the <b>${escape(view.label)}</b> vault.`;
   const why = view.why ? `<div class="why"><div class="label">Why</div><p>${escape(view.why)}</p></div>` : "";
   const env = ["production", "preview", "development"].includes(view.environment) ? view.environment : "other";
   const runs = scriptLines(view.script)
     .map((s) => `<div class="row"><span class="tag">${s.name ? escape(s.name) : "runs"}</span><code>${escape(s.body)}</code></div>`)
     .join("");
-  const chips = view.names.map((n) => `<span class="chip">${ICONS.key}${escape(n)}</span>`).join("");
   const sample = view.names[0] ? `‹${escape(view.names[0])}›` : "‹NAME›";
-  const allow = `${touchId ? ICONS.finger : ""}Allow once`;
-  const hint = touchId ? `<span class="hint" id="hint">${ICONS.finger}Touch ID to allow once</span>` : "";
+  return {
+    title: dev ? "Start the dev server with secrets?" : "Run a command with secrets?",
+    lead: dev
+      ? `${who ? `${who}'s` : "This card's"} dev server gets <b>${escape(view.label)}</b>'s ${escape(view.environment)} values in its env.`
+      : `${who || "A thread"} wants to run this with values from the <b>${escape(view.label)}</b> vault.`,
+    main: `${why}<div class="cmd"><div class="main">${escape(view.command)}</div>${runs}<div class="row"><span class="tag">in</span><code>${escape(tilde(view.cwd, home))}</code></div></div>
+<div><div class="label">Secrets <span class="env ${env}">${escape(view.environment)}</span></div><div class="chips">${view.names.map(chip).join("")}</div></div>
+<p class="note">${ICONS.eye}<span>The thread never sees these values; its output shows ${sample} in their place.</span></p>`,
+    css: "",
+    gate: "window.__seen = Promise.resolve(true);",
+    span: "for 1 hour",
+    always: '<button class="ghost" data-answer="always" title="Run this exact command with these secrets from now on without asking">Always allow</button>',
+  };
+}
+
+/**
+ * @param {{ kind?: string, command: string, cwd: string, script?: string, names: string[], environment: string, label: string, thread?: string, why?: string, worker?: string, remote?: string, fingerprint?: string, firstUse?: boolean }} view
+ * @param {{ touchId?: boolean, nonce?: string, home?: string }} [opts]
+ */
+function approvalHtml(view, { touchId = false, nonce = "n", home } = {}) {
+  const chip = (n) => `<span class="chip">${ICONS.key}${escape(n)}</span>`;
+  // A Weft Worker's run has its own layout, once only, gated on being read to the end (electron/approval-worker.cjs).
+  const w = view.worker ? { ...workerLayout({ ...view, worker: view.worker }, chip), span: "once", always: "" } : localLayout(view, home, chip);
+  const title = w.title;
+  const lead = w.lead;
+  const allow = `${touchId ? ICONS.finger : ""}Allow ${w.span}`;
+  const hint = touchId ? `<span class="hint" id="hint">${ICONS.finger}Touch ID to allow ${w.span}</span>` : "";
   return `<!doctype html>
 <html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${escape(nonce)}'">
@@ -105,16 +124,15 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
 .primary { background:var(--accent); border-color:transparent; color:var(--accent-ink); }
 .primary:hover { background:color-mix(in srgb, var(--accent) 88%, black); }
 .spacer { flex:1; }
+${w.css}
 </style></head>
 <body><div class="card" role="alertdialog" aria-labelledby="t">
 <header><div class="badge">${ICONS.lock}</div><div><h1 id="t">${escape(title)}</h1><p class="lead">${lead}</p></div></header>
 <main>
-${why}<div class="cmd"><div class="main">${escape(view.command)}</div>${runs}<div class="row"><span class="tag">in</span><code>${escape(tilde(view.cwd, home))}</code></div></div>
-<div><div class="label">Secrets <span class="env ${env}">${escape(view.environment)}</span></div><div class="chips">${chips}</div></div>
-<p class="note">${ICONS.eye}<span>The thread never sees these values; its output shows ${sample} in their place.</span></p>
+${w.main}
 </main>
 <footer>
-<button class="ghost" data-answer="always" title="Run this exact command with these secrets from now on without asking">Always allow</button>
+${w.always}
 <span class="spacer"></span>${hint}
 <button data-answer="" id="cancel">Cancel</button>
 <button class="primary" data-answer="once">${allow}</button>
@@ -130,13 +148,14 @@ window.__answer = new Promise((resolve) => {
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") resolve(null); });
 });
 window.__touchEnded = () => document.getElementById("hint")?.remove();
+${w.gate}
 document.getElementById("cancel").focus();
 </script>
 </body></html>`;
 }
 
-// Touch ID is asked the moment the window shows, so a touch on the sensor alone is "Allow once". A click while
-// it's up waits for that same touch (Always allow, or Allow once). Cancelling the macOS prompt leaves the buttons,
+// Touch ID is asked the moment the window shows, so a touch on the sensor alone is "Allow for 1 hour". A click while
+// it's up waits for that same touch (Always allow, or Allow for 1 hour). Cancelling the macOS prompt leaves the buttons,
 // and a click after that asks Touch ID again. With touch, nothing is allowed without Touch ID passing.
 /**
  * @param {Promise<string | null>} answer the page's click, Escape or the window closing (null)
@@ -196,7 +215,9 @@ async function askInWindow({ BrowserWindow, parent, view, touchId = false, touch
     win.show();
     win.focus();
     const answer = Promise.race([win.webContents.executeJavaScript("window.__answer"), closed]).catch(() => null);
-    const touched = touch ? touch() : null;
+    // A worker's run asks Touch ID only once the whole command and script have been on screen (electron/approval-worker.cjs).
+    const seen = Promise.race([win.webContents.executeJavaScript("window.__seen"), closed]).catch(() => null);
+    const touched = touch ? seen.then((ok) => (ok ? touch() : false)) : null;
     const ended = () => {
       if (!win.isDestroyed()) win.webContents.executeJavaScript("window.__touchEnded()").catch(() => {});
     };

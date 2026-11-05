@@ -53,6 +53,13 @@ own origin.
   whose inputs changed) is rebuilt up front, falling back from `fs.watch`'s `recursive: true` (macOS,
   Windows) to the next start on Linux for deep subfolders. `electron/app-reload.cjs` reloads the pane
   after a build.
+- **A shared app follows its sources.** After each build of a folder, `lib/app-share-republish.ts` syncs every
+  app in it that has a share link, 5 s after the folder's last build, through `readAppShare` in `lib/app-share.ts`
+  (what Share… does when it opens): the page, files and manifest go up when they changed; the mode, owner and
+  address stay; a plan over its room keeps serving the old copy. On server start every already-built folder is
+  synced once too, so an edit made while Weft was closed goes up (an unchanged link costs one row read). Keys
+  aren't pushed from here, since that can ask for Touch ID; Share… still does. Before this, the 📈 Growth app's
+  seven new reads answered 404 "isn't in the manifest" on weft.zip until someone re-ran the share by hand.
 
 ### Where it lives: under its owner
 
@@ -141,7 +148,8 @@ weft.zip (injected inline script). `lib/app-bridge.ts` is the contract: `BRIDGE_
   allows, runs the call and returns `{ status, ok, headers, body, bodyEncoding: "utf8" | "base64" }`.
 - `weft.read(name, args?)` — a named read from the manifest (a Supabase function or a GA4 report), the
   same shape data apps called on the Mac before this shipped.
-- `weft.env()` — the manifest's `public` values, as is.
+- `weft.env()` — the manifest's `public` values, as is. On the Mac it, and any `weft.fetch` that fills a
+  placeholder, runs only under the env grant (main asks Touch ID itself when there's none; docs/architecture/secrets.md).
 - `weft.requestSecret(name) → { set: boolean }` — asks Weft (never the app) to collect this viewer's own
   value for a `from: "viewer"` secret.
 

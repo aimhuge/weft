@@ -6,6 +6,7 @@ import type { Backend, LoginTrial, LoginView } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "./button-styles";
 
 const NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
 
@@ -13,11 +14,6 @@ const NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli"
 const DONE_MS = 2000;
 
 type Action = "start" | "input" | "cancel" | "terminal";
-
-const secondary =
-  "rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink hover:bg-sunken disabled:opacity-50";
-const primary =
-  "inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50";
 
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err);
@@ -63,7 +59,7 @@ function TrialNote({ trial }: { trial: LoginTrial }) {
         Or log in to Puku below.
         {error && <span className="block text-danger">{error}</span>}
       </p>
-      <button onClick={() => void signIn("github")} disabled={busy !== null || waiting !== null} className={primary}>
+      <button onClick={() => void signIn("github")} disabled={busy !== null || waiting !== null} className={BUTTON_PRIMARY}>
         {waiting ? <Spinner size={13} /> : <Icon name="github" size={14} />} {waiting ? "Signing in…" : "Sign in to Weft"}
       </button>
     </div>
@@ -156,7 +152,7 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
                 <div>
                   <button onClick={() => {
                       if (login.url) openUrl(login.url);
-                    }} className={primary}>
+                    }} className={BUTTON_PRIMARY}>
                     <Icon name="globe" size={14} /> Open login page
                   </button>
                 </div>
@@ -179,7 +175,7 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
                     placeholder="Only if the CLI asks for one"
                     className="min-w-0 flex-1 rounded-md border border-line-strong bg-canvas px-3 py-2 font-mono text-[13px] text-ink outline-none placeholder:font-sans placeholder:text-faint focus:border-accent"
                   />
-                  <button type="submit" disabled={busy} className={`${secondary} inline-flex items-center gap-1.5`}>
+                  <button type="submit" disabled={busy} className={`${BUTTON_SECONDARY} inline-flex items-center gap-1.5`}>
                     <Icon name="send" size={13} /> Send
                   </button>
                 </div>
@@ -228,10 +224,10 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
 
         {login.state === "running" && (
           <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
-            <button onClick={() => void act("terminal")} disabled={busy} className={secondary}>
+            <button onClick={() => void act("terminal")} disabled={busy} className={BUTTON_SECONDARY}>
               Use Terminal instead
             </button>
-            <button onClick={cancel} className={secondary}>
+            <button onClick={cancel} className={BUTTON_SECONDARY}>
               Cancel
             </button>
           </div>
@@ -239,7 +235,7 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
 
         {login.state === "terminal" && (
           <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
-            <button onClick={cancel} className={secondary}>
+            <button onClick={cancel} className={BUTTON_SECONDARY}>
               Cancel
             </button>
           </div>
@@ -247,13 +243,13 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
 
         {login.state === "failed" && (
           <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
-            <button onClick={onClose} className={secondary}>
+            <button onClick={onClose} className={BUTTON_SECONDARY}>
               Close
             </button>
-            <button onClick={() => void act("terminal")} disabled={busy} className={secondary}>
+            <button onClick={() => void act("terminal")} disabled={busy} className={BUTTON_SECONDARY}>
               Use Terminal instead
             </button>
-            <button onClick={() => void act("start")} disabled={busy} className={primary}>
+            <button onClick={() => void act("start")} disabled={busy} className={BUTTON_PRIMARY}>
               <Icon name="reload" size={13} /> Try again
             </button>
           </div>

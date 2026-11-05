@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { fireEvent, render } from "@testing-library/react";
+import { fireEvent, render, renderHook } from "@testing-library/react";
 import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import "@/components/test-utils";
+import { useEscape } from "@/lib/use-escape";
 import AdminEscape, { isTyping } from "./AdminEscape";
 
 const push = vi.fn();
@@ -28,12 +29,20 @@ describe("AdminEscape", () => {
     input.remove();
   });
 
-  it("ignores other keys and an Esc something else handled", () => {
+  it("ignores other keys", () => {
     render(createElement(AdminEscape));
     fireEvent.keyDown(window, { key: "Enter" });
-    const handled = new KeyboardEvent("keydown", { key: "Escape", cancelable: true });
-    handled.preventDefault();
-    window.dispatchEvent(handled);
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("leaves the Esc to a drawer open on top of it", () => {
+    // The page's own Esc is a layer of the repo's Escape stack (lib/use-escape.ts): a drawer open over it
+    // (the Users page's activity drawer) is the newer layer, so it takes the key and the page stays put.
+    const drawer = vi.fn();
+    render(createElement(AdminEscape));
+    renderHook(() => useEscape(true, drawer));
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(drawer).toHaveBeenCalledOnce();
     expect(push).not.toHaveBeenCalled();
   });
 });

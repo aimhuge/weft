@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiFetch } from "@/lib/api-client";
+import { hostFor } from "@/lib/project-host";
+import { useSnapshotVersion } from "@/lib/project-snapshot-view";
 import { fixPrompt, tone, type QualityReport, type Section } from "@/lib/quality-view";
 import { findingPrompt, findingTitle, headroomScore, openFindings, scoreNote, scoreParts, type ScoutState } from "@/lib/scout-view";
 import { folderName, timeAgo } from "@/lib/format";
+import { workerScoutPrompt } from "@/lib/scout-worker";
 import { useNow } from "@/lib/use-now";
 import { useScout } from "@/lib/use-scout";
 import ScoutDialog from "./ScoutDialog";
@@ -111,16 +113,19 @@ export default function QualityBadge({
   const [started, setStarted] = useState<string[]>([]);
   const [menu, setMenu] = useState(false);
   const { scout, rescout, started: markStarted } = useScout(cwd);
+  // A worker's new snapshot reads again (lib/project-snapshot-view.ts); always 0 on this Mac's own projects.
+  const fresh = useSnapshotVersion(cwd);
 
   useEffect(() => {
     if (!cwd) return;
     let live = true;
     // Re-read on focus too, so a fresh `npm run coverage` or a split file shows up without a reload.
     const load = () => {
-      apiFetch(`/api/quality?cwd=${encodeURIComponent(cwd)}`)
-        .then((r) => r.json() as Promise<{ quality: QualityReport | null }>)
-        .then((d) => {
-          if (live) setLoaded({ cwd, q: d.quality });
+      // This Mac measures now; a worker's comes from its snapshot (lib/project-reads.ts).
+      hostFor(cwd)
+        .read("quality", cwd)
+        .then((q) => {
+          if (live) setLoaded({ cwd, q });
         })
         .catch(() => {});
     };
@@ -130,7 +135,7 @@ export default function QualityBadge({
       live = false;
       window.removeEventListener("focus", load);
     };
-  }, [cwd]);
+  }, [cwd, fresh]);
 
   if (!cwd || !loaded || loaded.cwd !== cwd || !loaded.q) return null;
   const q = loaded.q;
@@ -166,7 +171,16 @@ export default function QualityBadge({
             markStarted(f.id);
             onImprove(cwd, findingPrompt(f), findingTitle(f));
           }}
-          onRescout={rescout}
+          onRescout={() => {
+            // A worker scouts as a card there (lib/scout-worker.ts); this Mac runs its own scout.
+            if (hostFor(cwd).can("projectActs")) {
+              rescout();
+              return;
+            }
+            close();
+            const w = workerScoutPrompt();
+            onImprove(cwd, w.prompt, w.title);
+          }}
         />
       )}
     </>

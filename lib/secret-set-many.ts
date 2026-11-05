@@ -1,7 +1,9 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
+import { cardProof } from "./card-token";
 import { asText } from "./format";
+import { onWorker } from "./worker-secret-run";
 
 // mcp__secrets__set_values (docs/architecture/secrets.md): several values a thread generated, stored after ONE
 // Touch ID in Electron main (fillMany in electron/vault-routes.cjs) that names every secret and environment and says
@@ -28,7 +30,11 @@ function describe(r: Answer): string[] {
   ].filter(Boolean);
 }
 
-export function setValuesTool(folder: () => string) {
+// On a Weft Worker the vault is the owner's Mac's, asked one call at a time (lib/worker-vault.ts): set_value each.
+export const SET_VALUES_ON_WORKER = "set_values stores on this Mac's vault, and this card runs on a Weft Worker. Call mcp__secrets__set_value for each secret instead; each asks the user on their Mac.";
+
+/** cardId proves which card asks (lib/card-token.ts), so a grant that names writes stands in for the Touch ID. */
+export function setValuesTool(folder: () => string, cardId: () => string | undefined = () => undefined) {
   return tool(
     "set_values",
     `Store several values you generated in the 🔐 vault with ONE Touch ID: like set_value for each (adds a name, fills a blank, overwrites only with replace: true), but the user approves them all at once. Up to ${MAX_SET_VALUES}. The result never repeats a value. For keys the user gets from a provider, leave blanks for them.`,
@@ -50,9 +56,10 @@ export function setValuesTool(folder: () => string) {
     },
     ({ secrets, environment, project }) =>
       attempt(async () => {
+        if (onWorker()) return text(SET_VALUES_ON_WORKER, true);
         const env = environment ?? "development";
         const entries = secrets.map((s) => ({ name: s.name, value: s.value, environment: s.environment ?? env, ...(s.replace ? { replace: true } : {}) }));
-        const r = (await shell("/secrets/set-many", { folder: project ?? folder(), secrets: entries })) as Answer;
+        const r = (await shell("/secrets/set-many", { ...cardProof(cardId(), "/secrets/set-many"), folder: project ?? folder(), secrets: entries })) as Answer;
         if (r.denied) return text(`The user didn't approve storing ${names(entries)}. Nothing was written. Ask before trying again.`, true);
         const wrote = (r.added?.length ?? 0) + (r.set?.length ?? 0) + (r.replaced?.length ?? 0);
         return text(describe(r).join("\n"), wrote === 0);

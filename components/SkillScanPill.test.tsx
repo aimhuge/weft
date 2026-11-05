@@ -33,9 +33,9 @@ describe("ScanPills", () => {
     expect(screen.getByText("Danger")).toBeInTheDocument();
   });
 
-  it("says Check for a warning, and Clean for a clean scan", () => {
+  it("says Worth a look for a warning, and Clean for a clean scan", () => {
     const { unmount } = render(<ScanPills scan={scan({ verdict: "warn" })} review={{ status: "none" }} />);
-    expect(screen.getByText("Check")).toBeInTheDocument();
+    expect(screen.getByText("Worth a look")).toBeInTheDocument();
     unmount();
     render(<ScanPills scan={scan()} review={{ status: "none" }} />);
     expect(screen.getByText("Clean")).toBeInTheDocument();
@@ -48,7 +48,7 @@ describe("ScanPills", () => {
         review={{ status: "done", page: "/p.html", review: { verdict: "unsafe", summary: "", whatItDoes: "", concerns: [], falsePositives: [], dataFlow: "", license: "", recommendation: "", model: "", reviewedAt: "" } }}
       />,
     );
-    expect(screen.getByText("AI: unsafe")).toBeInTheDocument();
+    expect(screen.getByText("AI: Unsafe")).toBeInTheDocument();
   });
 
   it("says the review is reading while it runs", () => {

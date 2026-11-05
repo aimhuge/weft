@@ -1,6 +1,7 @@
 // What's on a device's screen, as a flat list of elements a thread can name, and the touches that act on them.
 // iOS reads the accessibility tree through AXe (`axe describe-ui`) and taps in points; Android dumps the view
 // tree with uiautomator and taps in pixels. Either way an element's frame is in the units its taps take.
+import { idbFor } from "./idb-session";
 import type { Device } from "./simulator-devices";
 import { run, runText, shellQuote } from "./simulator-exec";
 
@@ -100,15 +101,22 @@ export function findElement(els: Element[], query: string): Element {
 
 export const center = ({ frame: f }: Element) => ({ x: round(f.x + f.width / 2), y: round(f.y + f.height / 2) });
 
+// A watched iOS device on a worker has idb open (lib/idb-companion.ts), which takes a tap in milliseconds where AXe, a
+// fresh process each time, took over a second. Everything else goes the old way.
 export async function tapAt(d: Device, x: number, y: number) {
-  if (d.platform === "ios") await run("axe", ["tap", "-x", String(x), "-y", String(y), "--udid", d.id]);
+  const idb = idbFor(d.id);
+  if (idb) await idb.tap(x, y);
+  else if (d.platform === "ios") await run("axe", ["tap", "-x", String(x), "-y", String(y), "--udid", d.id]);
   else await run("adb", ["-s", d.id, "shell", "input", "tap", String(round(x)), String(round(y))]);
 }
 
 export type Point = { x: number; y: number };
 
 export async function swipe(d: Device, from: Point, to: Point, ms = 300) {
-  if (d.platform === "ios") {
+  const idb = idbFor(d.id);
+  if (idb) {
+    await idb.swipe(from, to, ms);
+  } else if (d.platform === "ios") {
     const coords = ["--start-x", from.x, "--start-y", from.y, "--end-x", to.x, "--end-y", to.y].map(String);
     await run("axe", ["swipe", ...coords, "--duration", String(ms / 1000), "--udid", d.id]);
   } else {
@@ -116,9 +124,13 @@ export async function swipe(d: Device, from: Point, to: Point, ms = 300) {
   }
 }
 
+// The tree's biggest frame: the window, so the screen's size in tap units. All zeros for an empty tree.
+export const largestFrame = (els: Element[]): Frame =>
+  els.reduce((a, b) => (b.frame.width * b.frame.height > a.width * a.height ? b.frame : a), { x: 0, y: 0, width: 0, height: 0 });
+
 // A swipe across the middle of the screen, sized from the tree's biggest frame (the window).
 export function directionSwipe(els: Element[], direction: "up" | "down" | "left" | "right"): { from: Point; to: Point } {
-  const screen = els.reduce((a, b) => (b.frame.width * b.frame.height > a.width * a.height ? b.frame : a), { x: 0, y: 0, width: 0, height: 0 });
+  const screen = largestFrame(els);
   if (!screen.width || !screen.height) throw new Error("Couldn't tell the screen's size from its UI tree; swipe by coordinates instead.");
   const cx = screen.x + screen.width / 2;
   const cy = screen.y + screen.height / 2;

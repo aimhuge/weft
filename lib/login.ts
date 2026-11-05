@@ -1,4 +1,5 @@
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { spawn, type ChildProcess } from "node:child_process";
+import { whichBin } from "./cli-exec";
 import { cliEnv } from "./env";
 import { publish } from "./bus";
 import type { Backend, LoginState, LoginTrial, LoginView } from "./types";
@@ -42,11 +43,7 @@ export function binary(backend: Backend) {
   let path = binaries.get(backend);
   if (!path) {
     const command = COMMANDS[backend];
-    try {
-      path = execFileSync("/usr/bin/which", [command], { encoding: "utf8" }).trim();
-    } catch {
-      path = "";
-    }
+    path = whichBin(command) ?? "";
     if (!path) throw new Error(`${command} isn't on this app's PATH, so it can't log in.`);
     binaries.set(backend, path);
   }
@@ -226,6 +223,10 @@ async function onExit(run: LoginRun, child: ChildProcess, code: number | null, s
 
 export function startLogin(backend: Backend, onDone?: () => void): LoginView {
   const existing = runs.get(backend);
+  // A login already under way is joined, never replaced. Starting a second one would retire the
+  // first (retire → killChild), killing the `auth login` process mid-flow: the credential never
+  // lands and the two logins fight each other (GitHub issue #13). Only a run that has actually
+  // finished — or failed — is worth starting over.
   if (existing && (existing.view.state === "running" || existing.view.state === "terminal")) {
     return addCallback(existing, onDone);
   }
@@ -236,7 +237,7 @@ export function startLogin(backend: Backend, onDone?: () => void): LoginView {
 
   const bin = binary(backend);
   const run = newRun(backend, "running", onDone);
-  const child = spawn(bin, ["auth", "login"], { env: cliEnv(), stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(/*turbopackIgnore: true*/ bin, ["auth", "login"], { env: cliEnv(), stdio: ["pipe", "pipe", "pipe"] });
   run.child = child;
 
   const onData = (chunk: Buffer) => {

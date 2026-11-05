@@ -23,6 +23,8 @@ describe("BackendPicker", () => {
     expect(screen.getByRole("button", { name: "Opus 5.5" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Opus 4.8" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("group", { name: "puku-cli" })).toBeInTheDocument();
+    // Every CLI runs behind Weft's guards (lib/guards), so no heading carries a warning.
+    expect(screen.getByRole("group", { name: "Codex" })).not.toHaveTextContent("guards");
     await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.7" }));
     expect(api.switchBackend).toHaveBeenCalledWith("c1", "puku", false, "puku-ai-2.7");
   });
@@ -35,6 +37,19 @@ describe("BackendPicker", () => {
     expect(screen.getByRole("button", { name: "Default model" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Opus 4.8" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Fable 5.1" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("marks the models at their cap on the card's own host: a worker card's, the worker's", async () => {
+    const fetch = vi.fn((url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ models: url === "/api/limits/plans?worker=w1" ? [{ model: "claude-opus-5-5", at: 1, resetsAt: 9e15 }] : [] }) } as Response));
+    vi.stubGlobal("fetch", fetch);
+    try {
+      render(<BackendPicker card={makeCard({ backend: "claude", cwd: "worker://w1/app" })} />);
+      await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
+      expect(await screen.findByText(/at its limit/)).toBeInTheDocument();
+      expect(screen.getByText(/at its limit/).closest("button")).toHaveTextContent("Opus 5.5");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("is a no-op when the chosen model is the card's own", async () => {
@@ -69,9 +84,11 @@ describe("BackendPicker", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("No such card.");
   });
 
-  it("the copilot doesn't get a switcher — just the static badge", () => {
-    render(<BackendPicker card={makeCard({ id: "copilot", backend: "claude", role: "copilot" })} />);
-    expect(screen.queryByRole("button", { name: /Switch model/ })).not.toBeInTheDocument();
-    expect(screen.getByText("Claude Code")).toBeInTheDocument();
+  it("the copilot switches model too, from a menu that opens upward under its reply box", async () => {
+    render(<BackendPicker card={makeCard({ id: "copilot", backend: "claude", role: "copilot" })} up />);
+    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
+    expect(screen.getByRole("group", { name: "Default" }).parentElement).toHaveClass("bottom-full");
+    await userEvent.click(screen.getByRole("button", { name: "Puku AI 2.8" }));
+    expect(api.switchBackend).toHaveBeenCalledWith("copilot", "puku", false, expect.any(String));
   });
 });

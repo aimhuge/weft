@@ -10,6 +10,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { DEPS_FILE, writeDepsFile } from "./server-patch-deps.mjs";
 
 const ROOT = path.resolve(import.meta.dirname, "..");
 const distDir = process.argv[2] || process.env.WEFT_DIST || ".next-dist";
@@ -34,7 +35,7 @@ if (!fs.existsSync(path.join(standalone, "server.js"))) {
 
 // 0. lib/login.ts makes tracing copy the whole project folder (sources, docs, electron/, build/).
 // The server needs none of it, so keep only what Next's standalone layout uses.
-const KEEP = new Set(["server.js", "package.json", "node_modules", "public", distDir]);
+const KEEP = new Set(["server.js", "package.json", "node_modules", "public", distDir, DEPS_FILE]);
 const pruned = [];
 for (const name of fs.readdirSync(standalone)) {
   if (KEEP.has(name)) continue;
@@ -94,6 +95,10 @@ function checkLinks(dir) {
   }
 }
 checkLinks(standalone);
+
+// 4. The packages' fingerprint, which a server patch must match to run on this build (scripts/server-patch-deps.mjs).
+const deps = writeDepsFile(standalone);
+console.log(`Wrote ${DEPS_FILE}: ${deps.files} files, ${deps.hash.slice(0, 12)}`);
 
 const size = execFileSync("du", ["-sh", standalone], { encoding: "utf8" }).split("\t")[0];
 console.log(`Standalone server ready: ${path.relative(ROOT, standalone)} (${size})`);

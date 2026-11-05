@@ -1,6 +1,7 @@
 "use client";
 
 import type { WelcomeProject } from "@/lib/welcome-preview";
+import { PrintSheetOffer } from "./PrintShortcutSheet";
 
 // The welcome's last screen (components/WelcomeDialog.tsx draws the frame and the Start button): your first thread,
 // in a project you brought in, with starters for someone who doesn't know what to ask yet. What happens next is a
@@ -81,6 +82,7 @@ export function FirstThreadStep({
           </li>
         </ul>
       </div>
+      <PrintSheetOffer />
     </div>
   );
 }

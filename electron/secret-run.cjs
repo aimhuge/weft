@@ -6,32 +6,43 @@
 // card used, so the runner can redact them from what it stores (redact).
 const crypto = require("node:crypto");
 const path = require("node:path");
+const { createExec, reply, baseEnv, KEEP_CHARS, REPLY_CHARS, KILL_GRACE_MS } = require("./secret-exec.cjs");
 const { redactor } = require("./secret-redact.cjs");
+const { decideAccess } = require("./vault-access.cjs");
 
-// Output kept while a command runs, and what goes back to the thread.
-const KEEP_CHARS = 1_000_000;
-const REPLY_CHARS = 20_000;
-// After SIGTERM on a timeout, how long before SIGKILL.
-const KILL_GRACE_MS = 3000;
 // How long a dev server's grant waits to be claimed.
 const GRANT_MS = 60_000;
-// Weft's own variables don't go to the commands it runs.
-const INTERNAL = /^(WEFT_SHELL_|ELECTRON_RUN_AS_NODE$)/;
 
-function baseEnv(env) {
-  return Object.fromEntries(Object.entries(env).filter(([k]) => !INTERNAL.test(k)));
-}
 
 // thread is the asking card's title and why the thread's own reason, both shown so the user knows who asks and for what.
-/** @param {{ kind: string, command: string, cwd: string, script?: string, names: string[], environment: string, label: string, thread?: string, why?: string }} request */
-function describe({ kind, command, cwd, script, names, environment, label, thread, why }) {
-  const message =
-    kind === "dev"
-      ? `Start ${thread ? `"${thread}"'s` : "this card's"} dev server with ${label}'s ${environment} secrets?`
-      : `${thread ? `"${thread}"` : "A thread"} wants to run a command with secrets from ${label}.`;
+// worker names the Weft Worker the command runs on, when it isn't this Mac (describeWorker).
+/** @param {{ kind: string, command: string, cwd: string, script?: string, names: string[], environment: string, label: string, thread?: string, why?: string, worker?: string, remote?: string, fingerprint?: string, firstUse?: boolean }} request */
+function describe(request) {
+  if (request.worker) return describeWorker(request);
+  const { kind, command, cwd, script, names, environment, label, thread, why } = request;
+  const message = kind === "dev" ? `Start ${thread ? `"${thread}"'s` : "this card's"} dev server with ${label}'s ${environment} secrets?` : `${thread ? `"${thread}"` : "A thread"} wants to run a command with secrets from ${label}.`;
   const detail = [why ? `Why: ${why}` : null, `Command: ${command}`, `In: ${cwd}`, script ? `Runs:\n${script}` : null, `Secrets (${environment}): ${names.join(", ")}`, "The thread won't see the values; they're shown as ‹NAME› in its output.", kind === "dev" ? null : "Always lasts until the code in this folder changes; then Weft asks again."].filter(Boolean).join("\n\n");
   const reason = `run "${command}" with ${names.join(", ")} (${label})${thread ? ` for "${thread}"` : ""}`;
   return { message, detail, reason, view: { kind, command, cwd, script, names, environment, label, thread, why } };
+}
+
+// A Weft Worker's run (electron/worker-secret.cjs): the exact command and script first, then where it runs, the
+// worker's pinned key and the plain truth that the worker's code gets the values; the thread's own words come last.
+/** @param {Parameters<typeof describe>[0] & { worker: string }} request */
+function describeWorker({ kind, command, cwd, script, names, environment, label, thread, why, worker, remote, fingerprint, firstUse }) {
+  const key = fingerprint ? `${worker}'s key: ${fingerprint}${firstUse ? " (first seen now: this Mac pins it)" : " (pinned)"}` : null;
+  const dev = kind === "dev";
+  // A dev server on a worker asks at every start and restart (electron/worker-dev-env.cjs), and the window says so.
+  const sealedFor = dev
+    ? `They're sealed to that worker for this one start: a restart asks again. Whatever the server runs, the project's code included, gets the values, and any process on ${worker} can read a running server's env. Its log shows ‹NAME› in their place.`
+    : "They're sealed to that worker for this one run, and the thread's output shows ‹NAME› in their place.";
+  const detail = [`Command: ${command}`, script ? `Runs:\n${script}` : null, `In: ${cwd} on the Weft Worker ${worker}, not this Mac`, remote ? `Repo: ${remote}` : null, `Secrets (${environment}) from ${label}: ${names.join(", ")}`, key, `The command and any code it runs on ${worker} get these values. ${sealedFor}`, thread ? `Card: ${thread}` : null, why ? `The thread says why: ${why}` : null].filter(Boolean).join("\n\n");
+  return {
+    message: dev ? `Start a dev server on the worker ${worker} with ${label}'s ${environment} secrets?` : `A card on the worker ${worker} wants to run a command with secrets from ${label}.`,
+    detail,
+    reason: `${dev ? "start" : "run"} "${command}" with ${names.join(", ")} (${label})${thread ? ` for "${thread}"` : ""} on the worker ${worker}`,
+    view: { kind, command, cwd, script, names, environment, label, thread, why, worker, remote, fingerprint, firstUse: Boolean(firstUse) },
+  };
 }
 
 /**
@@ -42,6 +53,7 @@ function describe({ kind, command, cwd, script, names, environment, label, threa
 
 // audit writes the run's line in the audit log (electron/keychain-audit.cjs); the vault's own read line is skipped.
 function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), env = process.env, now = Date.now, setTimer = setTimeout, clearTimer = clearTimeout, randomId = () => crypto.randomBytes(32).toString("hex"), killGraceMs = KILL_GRACE_MS, node = process.execPath, runner = path.join(__dirname, "secret-env.cjs") }) {
+  const { execute } = createExec({ spawn, env, now, setTimer, clearTimer, killGraceMs });
   const used = new Map(); // card key -> Map(name -> value)
   const grants = new Map(); // grant -> { values, until }
 
@@ -61,78 +73,27 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
   // (electron/vault-grants.cjs), a remembered rule, or the user's yes ("always" adds a rule).
   // asker ({ key, thread, why }) is only shown, never part of the rule.
   async function approve(request, names, label, asker = {}) {
-    if (vault.granted?.(asker.key, request.id)) return "grant";
-    if (rules.allows(request, names)) return "rule";
-    const choice = await ask(describe({ ...request, thread: asker.thread, why: asker.why, names, label }));
-    if (!choice) return null;
-    if (choice === "always") rules.remember(request, names);
-    return choice === "always" ? "always" : "once";
+    // Whether this card may run this command with these secrets, and how it was allowed
+    // (electron/vault-access.cjs).
+    const access = await decideAccess({
+      // A command run has no site, so any of the card's grants for the vault covers it; a grant's
+      // site only limits where a value may be typed (electron/vault-grants.cjs).
+      grants: { allows: (card, id) => Boolean(vault.granted?.(card, id)) },
+      card: asker.key,
+      vaultId: request.id,
+      rule: { allows: () => rules.allows(request, names) },
+      ask: () => ask(describe({ ...request, thread: asker.thread, why: asker.why, names, label })),
+      remember: () => rules.remember(request, names),
+    });
+    // A yes from the user covers this card for the hour (electron/vault-grants.cjs), so a thread that runs
+    // a few commands or restarts its dev server asks once, not every time.
+    if (access.via === "once" || access.via === "always") vault.grantAfterApproval?.({ card: asker.key, thread: asker.thread, id: request.id, label });
+    return access.allowed ? access.via : null;
   }
 
   // The audit line for a run or a dev server's secrets, allowed or not.
   function log({ action, key, thread, why, command, names, environment, label, via }) {
     audit({ kind: "vault", action, by: "thread", card: key, thread, detail: why, command, names, environment, vault: label, via: via ?? undefined, outcome: via ? "ok" : "denied" });
-  }
-
-  function execute({ argv, cwd, env: extra, values, timeoutMs }) {
-    return new Promise((resolve) => {
-      const started = now();
-      let out = "";
-      let cut = false;
-      let timedOut = false;
-      let child;
-      const add = (chunk) => {
-        out += chunk.toString();
-        if (out.length > KEEP_CHARS) {
-          out = out.slice(-KEEP_CHARS);
-          cut = true;
-        }
-      };
-      const signal = (sig) => {
-        try {
-          process.kill(-child.pid, sig);
-        } catch {
-          child.kill(sig);
-        }
-      };
-      let killTimer;
-      const timer = setTimer(() => {
-        timedOut = true;
-        signal("SIGTERM");
-        killTimer = setTimer(() => signal("SIGKILL"), killGraceMs);
-      }, timeoutMs);
-      const finish = (exitCode, sig) => {
-        clearTimer(timer);
-        clearTimer(killTimer);
-        resolve({ exitCode, signal: sig, timedOut, output: out, cut, ms: now() - started });
-      };
-      try {
-        child = spawn(argv[0], argv.slice(1), { cwd, env: { ...baseEnv(env), ...extra, ...values }, detached: true, stdio: ["ignore", "pipe", "pipe"] });
-      } catch (err) {
-        out = err.message;
-        finish(null, null);
-        return;
-      }
-      child.stdout.on("data", add);
-      child.stderr.on("data", add);
-      child.on("error", (err) => {
-        add(`${err.message}\n`);
-        finish(null, null);
-      });
-      child.on("close", (code, sig) => finish(code, sig));
-    });
-  }
-
-  // Redacted first, then cut to the reply's size; a cut start drops its first line, which could hold part of a value.
-  function reply(result, entries, label) {
-    let output = redactor(entries)(result.output);
-    let truncated = result.cut;
-    if (output.length > REPLY_CHARS) {
-      output = output.slice(-REPLY_CHARS);
-      truncated = true;
-    }
-    if (truncated) output = output.slice(output.indexOf("\n") + 1);
-    return { label, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, output, truncated, ms: result.ms };
   }
 
   return {
@@ -186,7 +147,7 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
 
 // The approval: Weft's own window with the command and names (electron/approval-window.cjs), or macOS's
 // alert if that can't open, then Touch ID where the Mac has it. The window starts Touch ID as it opens, so a
-// touch on the sensor is Allow once with no click; it answers only after Touch ID passed. askWindow is optional in tests.
+// touch on the sensor is Allow for 1 hour with no click; it answers only after Touch ID passed. askWindow is optional in tests.
 /**
  * @param {{
  *   dialog: { showMessageBox: (win: unknown, options: { type: string, buttons: string[], defaultId?: number, cancelId?: number, message: string, detail: string }) => Promise<{ response: number }> },
@@ -197,7 +158,7 @@ function createSecretRun({ vault, ask, rules, spawn, audit = /** @type {(entry: 
  */
 function runApproval({ dialog, systemPreferences, window, askWindow = undefined }) {
   const nativeAsk = async ({ message, detail }) => {
-    const { response } = await dialog.showMessageBox(window(), { type: "warning", buttons: ["Cancel", "Allow once", "Always allow"], defaultId: 0, cancelId: 0, message, detail });
+    const { response } = await dialog.showMessageBox(window(), { type: "warning", buttons: ["Cancel", "Allow for 1 hour", "Always allow"], defaultId: 0, cancelId: 0, message, detail });
     return [null, "once", "always"][response] ?? null;
   };
   return async (request) => {
@@ -216,33 +177,87 @@ function runApproval({ dialog, systemPreferences, window, askWindow = undefined 
   };
 }
 
-// The control server's routes for it (electron/browser-pane.cjs). key defaults to the pane's active card.
+// The control server's routes for it (electron/browser-pane.cjs). The card is the signed one: the
+// server proves which card a request is for and main believes only that (electron/card-token.cjs).
+// A request that proves nothing has no card, so it runs for nobody.
 /**
- * @param {() => ReturnType<typeof createSecretRun> | undefined} get
- * @param {() => string | undefined} [active]
+ * @param {() => (ReturnType<typeof createSecretRun> & { workerAsk?: (call: string) => Promise<unknown>, workerVault?: (call: string) => Promise<unknown>, workerGooseKey?: (call: string) => Promise<unknown> }) | undefined} get
+ * @param {(body: Record<string, unknown>, route: string) => string} [cardFor]
  */
-function secretRunRoutes(get, active = () => undefined) {
+function secretRunRoutes(get, cardFor = () => "") {
   const runner = () => {
     const r = get();
     if (!r) throw new Error("The secrets vault isn't ready yet.");
     return r;
   };
   return {
-    "POST /secrets/run": (body) => runner().run({ ...body, key: body.key ?? active() }),
-    "POST /secrets/dev-grant": (body) => runner().devGrant(body),
+    "POST /secrets/run": (body, route) => runner().run({ ...body, key: cardFor(body, route) }),
+    "POST /secrets/dev-grant": (body, route) => runner().devGrant({ ...body, key: cardFor(body, route) }),
     "POST /secrets/claim": (body) => runner().claim(body.grant),
+    // A worker card's ask, by its device_calls id only: main reads the rest itself (electron/worker-secret.cjs).
+    "POST /secrets/worker-ask": (body) => {
+      const r = runner();
+      if (!r.workerAsk) throw new Error("This Mac can't answer a worker's secrets yet.");
+      return r.workerAsk(String(body.call ?? ""));
+    },
+    // A worker card's vault call (list, blanks, set_value, push_to_vercel, a dev server's env), by id only too
+    // (electron/worker-vault.cjs): main reads the tool and everything else off the row itself.
+    "POST /secrets/worker-vault": (body) => {
+      const r = runner();
+      if (!r.workerVault) throw new Error("This Mac can't answer a worker's vault calls yet.");
+      return r.workerVault(String(body.call ?? ""));
+    },
+    // A worker's Goose turn asking for this Mac's provider key, by id only too (electron/worker-goose-key.cjs).
+    "POST /secrets/worker-goose-key": (body) => {
+      const r = runner();
+      if (!r.workerGooseKey) throw new Error("This Mac can't answer a worker's Goose key asks yet.");
+      return r.workerGooseKey(String(body.call ?? ""));
+    },
   };
 }
 
-// Wires it into Electron main with the vault, the approval dialog and the sealed rules file.
-function setupSecretRun({ vault, dataDir, window }) {
+// Wires it into Electron main with the vault, the approval dialog and the sealed rules file, and a Weft Worker's runs
+// (electron/worker-secret.cjs), which ask through the same window and read their requests with the account's session.
+// What main keeps about worker vault asks across restarts (electron/worker-vault-guards.cjs).
+function vaultGuards(dataDir) {
+  const guards = require("./worker-vault-guards.cjs");
+  return { nonces: guards.createAskNonces({ dir: dataDir, safeStorage: () => require("./keychain-audit.cjs").keychainFor("worker ask nonces") }), cardOrigin: guards.createCardOrigins({ dataDir }) };
+}
+
+// A Goose provider's key as main keeps it (electron/goose-token.cjs), read only when a worker's ask has checked out.
+function gooseKeyReader(dataDir, keychainFor) {
+  const { gooseTokenFile, readGooseProvider } = require("./goose-token.cjs");
+  return (providerId) => readGooseProvider(keychainFor("Goose provider keys"), gooseTokenFile(dataDir), providerId);
+}
+
+function setupSecretRun({ vault, dataDir, window, accountClient = () => null, vercelEnv = () => null }) {
   const { BrowserWindow, dialog, systemPreferences } = require("electron");
   const { audit, keychainFor } = require("./keychain-audit.cjs");
   const { askInWindow } = require("./approval-window.cjs");
   const { spawn } = require("node:child_process");
   const { createRunRules } = require("./run-rules.cjs");
+  const { createWorkerSecrets } = require("./worker-secret.cjs");
+  const { createWorkerPins } = require("./worker-pins.cjs");
   const rules = createRunRules({ file: path.join(dataDir, "vault", "run-rules.json"), safeStorage: keychainFor("run rules") });
-  return createSecretRun({ vault, rules, spawn, audit, ask: runApproval({ dialog, systemPreferences, window, askWindow: (opts) => askInWindow({ BrowserWindow, ...opts }) }) });
+  const ask = runApproval({ dialog, systemPreferences, window, askWindow: (opts) => askInWindow({ BrowserWindow, ...opts }) });
+  const pins = createWorkerPins({ dir: dataDir, safeStorage: () => keychainFor("worker pins") });
+  // This Mac's device key (electron/desktop-signer.cjs, the same file and keychain item pairing uses) signs each secret_use.
+  const signer = async () => {
+    await require("./vault-crypto.cjs").ready();
+    const sodium = require("libsodium-wrappers");
+    return require("./desktop-signer.cjs").createDesktopSigner({ dir: dataDir, safeStorage: () => keychainFor("vault key"), sodium: () => sodium });
+  };
+  const projects = require("./worker-projects.cjs");
+  // What this Mac keeps on its workers (electron/worker-kept.cjs): a use names a kept value's version, not the value.
+  const kept = require("./worker-kept.cjs").createKeptRecord({ dir: dataDir, safeStorage: () => keychainFor("vault key") });
+  const worker = createWorkerSecrets({ vault, ask, describe, accountClient, pins, signer, projectRepos: projects.createProjectRepos({ dataDir }), audit, kept });
+  // A worker card's list, blanks, set_value, push_to_vercel and dev server env (electron/worker-vault.cjs).
+  const devEnv = require("./worker-dev-env.cjs").createWorkerDevEnv({ vault, ask, describe, pins, signer, audit, kept });
+  const guards = vaultGuards(dataDir);
+  const workerVault = require("./worker-vault.cjs").createWorkerVault({ vault, vercelEnv, accountClient, pins, signer, projectFolders: projects.createProjectFolders({ dataDir }), devEnv, ...guards, audit });
+  // A worker's Goose turn: this Mac's provider key, only for the provider and endpoint it last set there (electron/worker-goose-key.cjs).
+  const gooseKey = require("./worker-goose-key.cjs").createWorkerGooseKey({ accountClient, pins, signer, confirm: (reason) => vault.confirm(reason), readKey: gooseKeyReader(dataDir, keychainFor), lastSet: require("./worker-goose-set.cjs").createGooseSetRecord({ dir: dataDir, safeStorage: () => keychainFor("vault key") }), ...guards, audit });
+  return { ...createSecretRun({ vault, rules, spawn, audit, ask }), workerAsk: worker.answer, workerVault: workerVault.answer, workerGooseKey: gooseKey.answer, devEnv };
 }
 
 module.exports = { setupSecretRun, createSecretRun, runApproval, secretRunRoutes, describe, baseEnv, REPLY_CHARS, KEEP_CHARS, GRANT_MS, KILL_GRACE_MS };

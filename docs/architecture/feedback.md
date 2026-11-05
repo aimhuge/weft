@@ -1,15 +1,18 @@
-# Feedback dot
+# Feedback
 
-A small dot at the right end of the board's footer (the board's bottom-right corner). It opens a chat where Haiku
-interviews you about what's in your way, writes a summary you check, and sends it to the Weft team's Slack.
+The feedback path behind the board's (now removed) footer dot: Haiku interviews you about what's in your way, writes
+a summary you check, and sends it to the Weft team's Slack.
+
+**The dot is gone from the UI.** `components/FeedbackDot.tsx` and `components/FeedbackChat.tsx` were removed from the
+board's footer (`components/BoardFooter.tsx`), along with the board-side hook `lib/use-feedback.ts`. The API path and
+weft.zip's collector below are unchanged and still work, so a future surface (a menu item, a Settings row) can reuse
+them as they are.
 
 ## Flow
 
-1. **The dot** (`components/FeedbackDot.tsx`, in `components/BoardFooter.tsx`). A click opens the popover
-   (`components/FeedbackChat.tsx`), which opens above the dot. Escape, ✕ or a click outside closes it. While it's open,
-   `useOverlay` hides the native browser pane, which would otherwise draw over it. The chat state lives in the dot,
-   so closing and reopening keeps the conversation. The dot is small on purpose, so it names itself: hovering or
-   focusing it shows a "Feedback" label beside the dot (to the left, since the chat opens above).
+1. **The dot** (removed). It used to sit at the right end of the board's footer; a click opened a popover
+   (`components/FeedbackChat.tsx`) above the dot, where Escape, ✕ or a click outside closed it, and `useOverlay` hid
+   the native browser pane so it wouldn't draw over the chat.
 2. **The interview** (`lib/use-feedback.ts` → `POST /api/feedback`). The chat starts with a fixed opener
    (`FEEDBACK_OPENER`), so it never waits on Haiku to say hello. Each answer sends the whole transcript.
    `turnPrompt` asks Haiku for one follow-up at a time (two to four is usually enough). It answers as JSON:

@@ -4,12 +4,12 @@
 // client is what reads across users (RLS on profiles allows only self-read).
 import { adminServiceClient, requireSuperAdminWeft } from "@/lib/admin";
 import { fail, guard } from "@/lib/guard";
+import type { DeviceBuild } from "@/lib/device-version";
 import type { AdminUserRow } from "@/lib/users-sheet";
 import { normalizeEmail } from "@aimhuge/teams";
 
-// The row type lives with the sheet that reads it (lib/users-sheet.ts); re-exported here for the
-// admin page's own importers.
-export type { AdminUserRow };
+// The row type lives with the sheet that reads it (lib/users-sheet.ts), so the admin page's client
+// components import it from there and never from this route.
 
 const PAGE_SIZE = 20;
 // The most one request may take: the Users sheet loads every account in pages this size and sorts and filters them
@@ -83,6 +83,7 @@ function mapUserToRow(
   u: AuthUser,
   profiles: Map<string, { name: string | null; avatar_url: string | null }>,
   lastSeen: Map<string, string>,
+  devices: Map<string, DeviceBuild[]> = new Map(),
 ): AdminUserRow {
   const meta = u.user_metadata ?? {};
   const profile = profiles.get(u.id);
@@ -96,6 +97,7 @@ function mapUserToRow(
     createdAt: u.created_at ?? null,
     lastSignInAt: u.last_sign_in_at ?? null,
     lastSeenAt: seenAt(u, lastSeen),
+    devices: devices.get(u.id) ?? [],
   };
 }
 
@@ -139,6 +141,21 @@ async function loadLastSeen(service: { rpc: (fn: string) => PromiseLike<{ data: 
   for (const r of data as Array<{ user_id?: unknown; last_seen_at?: unknown }>) {
     // PostgREST answers timestamptz as "2026-10-25T17:48:29+00:00"; ISO with Z keeps the string sort right.
     if (typeof r.user_id === "string" && typeof r.last_seen_at === "string") map.set(r.user_id, new Date(r.last_seen_at).toISOString());
+  }
+  return map;
+}
+
+// Every account's Macs and workers with the build each runs, from admin_device_versions. An error (the migration not
+// applied yet) answers an empty map, like the last-seen read above.
+async function loadDevices(service: { rpc: (fn: string) => PromiseLike<{ data: unknown; error: unknown }> }): Promise<Map<string, DeviceBuild[]>> {
+  const map = new Map<string, DeviceBuild[]>();
+  const { data, error } = await service.rpc("admin_device_versions");
+  if (error || !Array.isArray(data)) return map;
+  for (const r of data as Array<{ user_id?: unknown; kind?: unknown; name?: unknown; build?: unknown; channel?: unknown }>) {
+    if (typeof r.user_id !== "string" || typeof r.build !== "string") continue;
+    const list = map.get(r.user_id) ?? [];
+    list.push({ kind: typeof r.kind === "string" ? r.kind : "mac", name: typeof r.name === "string" ? r.name : "", build: r.build, channel: typeof r.channel === "string" ? r.channel : null });
+    map.set(r.user_id, list);
   }
   return map;
 }
@@ -187,7 +204,8 @@ export async function GET(req: Request) {
     const lastSeen = await loadLastSeen(service);
     const pageUsers = [...matching].sort(compareBy(sort.column, sort.dir, lastSeen)).slice(skip, skip + take);
     const profiles = await loadProfilesFor(service, pageUsers.map((u) => u.id));
-    const rows = pageUsers.map((u) => mapUserToRow(u, profiles, lastSeen));
+    const devices = await loadDevices(service);
+    const rows = pageUsers.map((u) => mapUserToRow(u, profiles, lastSeen, devices));
 
     return Response.json({ rows, total: matching.length });
   } catch (err) {

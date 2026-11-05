@@ -110,7 +110,7 @@ export async function bootedDevice(query?: string) {
   return d;
 }
 
-const adb = (d: Device, args: string[], opts?: { timeout?: number }) => run("adb", ["-s", d.id, ...args], opts);
+export const adb = (d: Device, args: string[], opts?: { timeout?: number }) => run("adb", ["-s", d.id, ...args], opts);
 
 async function bootIos(d: Device) {
   await run("xcrun", ["simctl", "boot", d.id]).catch((err: unknown) => {

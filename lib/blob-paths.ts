@@ -10,10 +10,9 @@ import os from "node:os";
 import path from "node:path";
 import { MEDIA_REF, extensionOf } from "./media";
 
-// Per-extension mime override for the upload's content-type, since the mime table in
-// lib/attachments.ts has video and audio types we don't accept on this store. The list here
-// matches what the outbox might actually upload: images, the HTML pages from lib/show.ts,
-// SVGs, and PDFs.
+// Per-extension mime for the upload's content-type. The list matches what the outbox might actually upload:
+// images, the HTML pages from lib/show.ts, SVGs and PDFs, and the files a page names (lib/blob-page-assets.ts):
+// stylesheets, scripts, fonts, videos and audio. A browser refuses a stylesheet or script sent as octet-stream.
 const BLOB_MIME: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
@@ -24,10 +23,36 @@ const BLOB_MIME: Record<string, string> = {
   htm: "text/html; charset=utf-8",
   svg: "image/svg+xml",
   pdf: "application/pdf",
+  avif: "image/avif",
+  ico: "image/x-icon",
+  css: "text/css; charset=utf-8",
+  js: "text/javascript; charset=utf-8",
+  mjs: "text/javascript; charset=utf-8",
+  json: "application/json",
+  woff: "font/woff",
+  woff2: "font/woff2",
+  ttf: "font/ttf",
+  otf: "font/otf",
+  mp4: "video/mp4",
+  m4v: "video/mp4",
+  webm: "video/webm",
+  mov: "video/quicktime",
+  mp3: "audio/mpeg",
+  m4a: "audio/mp4",
+  wav: "audio/wav",
+  ogg: "audio/ogg",
+  vtt: "text/vtt; charset=utf-8",
 };
 
 export function contentTypeFor(file: string) {
   return BLOB_MIME[extensionOf(file)] ?? "application/octet-stream";
+}
+
+// A file a browser can show: what a Weft Worker limits itself to (lib/worker-blobs.ts). JSON stays out: on disk it's
+// config far more often than a page's asset.
+export function hasWebType(file: string) {
+  const ext = extensionOf(file);
+  return ext !== "json" && ext in BLOB_MIME;
 }
 
 // A basename that we never want to upload: secrets, account state, the device key, any token

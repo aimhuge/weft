@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import type { Column } from "@/lib/types";
 import BacklogActions, { type BacklogLane } from "./BacklogActions";
+import { FoldButton } from "./FoldedColumn";
 import Icon from "./Icon";
 import ReviewFilterChips, { type ReviewChips } from "./ReviewFilterChips";
 import SprintsMenu from "./SprintsMenu";
@@ -25,6 +26,7 @@ export default function ColumnHeader({
   onReviewAll,
   backlog,
   reviewFilter,
+  onFold,
 }: {
   column: { id: Column; label: string };
   count: number | null;
@@ -40,11 +42,13 @@ export default function ColumnHeader({
   onReviewAll?: () => Promise<void>;
   backlog?: BacklogLane;
   reviewFilter?: ReviewChips;
+  // Folds the column to a strip (components/FoldedColumn.tsx).
+  onFold?: () => void;
 }) {
   const done = column.id === "done";
   return (
     <div className="relative flex items-center justify-between px-3 pb-1.5 pt-2.5">
-      <ColumnTitle label={column.label} needsYou={needsYou} backlog={backlog} />
+      <ColumnName label={column.label} needsYou={needsYou} backlog={backlog} onFold={onFold} />
       <span className="flex shrink-0 items-center gap-2 text-[11.5px] text-faint">
         {/* A narrow column (five columns on a small screen) keeps its actions as icons; one squeezed beside the
             open copilot lane keeps only its count and Archive all. */}
@@ -74,7 +78,7 @@ export default function ColumnHeader({
             </button>
           </Tip>
         )}
-        {backlog && <BacklogActions lane={backlog} />}
+        {backlog && <BacklogEnd lane={backlog} label={column.label} onFold={onFold} />}
         {count}
       </span>
     </div>
@@ -111,6 +115,26 @@ function ReviewAllButton({ onReviewAll }: { onReviewAll: () => Promise<void> }) 
 // A header button's words, dropped on a narrow column so its icon (and count) still fit.
 function Label({ children }: { children: ReactNode }) {
   return <span className="@max-[230px]:hidden">{children}</span>;
+}
+
+// The name with the fold chevron right after it, like Backlog's sprints caret; Backlog keeps its fold by the count.
+function ColumnName({ label, needsYou, backlog, onFold }: { label: string; needsYou: boolean; backlog?: BacklogLane; onFold?: () => void }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1">
+      <ColumnTitle label={label} needsYou={needsYou} backlog={backlog} />
+      {onFold && !backlog && <FoldButton label={label} onFold={onFold} />}
+    </span>
+  );
+}
+
+// Backlog's Save as sprint and archive-all, then its fold chevron (its name already carries the sprints caret).
+function BacklogEnd({ lane, label, onFold }: { lane: BacklogLane; label: string; onFold?: () => void }) {
+  return (
+    <>
+      <BacklogActions lane={lane} />
+      {onFold && <FoldButton label={label} onFold={onFold} />}
+    </>
+  );
 }
 
 // The column's name; Backlog's is a button that drops its saved sprints.

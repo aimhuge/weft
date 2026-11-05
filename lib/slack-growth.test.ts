@@ -1,10 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 
+import { appLinkTarget } from "./app-routes";
 import { growthEvents, type GrowthEvent, type GrowthOverview } from "./growth-read";
 import type { SlackSettings } from "./slack-types";
 import {
   createGrowthWatch,
   FIRST_WINDOW_MS,
+  GROWTH_DASHBOARD_URL,
   growthDashboardUrl,
   growthTestMessage,
   newEvents,
@@ -245,8 +249,16 @@ describe("createGrowthWatch", () => {
 });
 
 describe("the growth dashboard's address", () => {
-  it("is the deployed dashboard", () => {
-    expect(growthDashboardUrl({})).toBe("https://weft.zip/apps/growth");
+  it("is the Growth app's shared link", () => {
+    expect(growthDashboardUrl({})).toBe("https://weft.zip/@fotoflo/apps/growth");
+  });
+
+  // The old fallback, /apps/growth, was a 404: no route served it. The fallback must be a path proxy.ts
+  // rewrites onto the shared-app page that exists in the app router.
+  it("falls back to a path the app router serves", () => {
+    const path = new URL(GROWTH_DASHBOARD_URL).pathname;
+    expect(appLinkTarget(path)).toBe("/u/fotoflo/apps/growth");
+    expect(existsSync(join(process.cwd(), "app/u/[username]/apps/[slug]/page.tsx"))).toBe(true);
   });
 
   it("takes an explicit address", () => {
@@ -254,11 +266,11 @@ describe("the growth dashboard's address", () => {
   });
 
   it("ignores an address that is only spaces", () => {
-    expect(growthDashboardUrl({ WEFT_GROWTH_DASHBOARD_URL: "   " })).toBe("https://weft.zip/apps/growth");
+    expect(growthDashboardUrl({ WEFT_GROWTH_DASHBOARD_URL: "   " })).toBe("https://weft.zip/@fotoflo/apps/growth");
   });
 
   it("reads the environment when it is given none", () => {
-    expect(growthDashboardUrl()).toBe("https://weft.zip/apps/growth");
+    expect(growthDashboardUrl()).toBe("https://weft.zip/@fotoflo/apps/growth");
   });
 });
 

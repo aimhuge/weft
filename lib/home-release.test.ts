@@ -21,7 +21,7 @@ describe("latestRelease", () => {
     const signal = (options as { signal?: unknown }).signal;
     expect(signal).toBeInstanceOf(AbortSignal);
     expect((signal as AbortSignal).aborted).toBe(false);
-    expect(cacheLife).toHaveBeenCalledWith("hours");
+    expect(cacheLife).toHaveBeenCalledWith("minutes");
   });
 
   it("is null before the first release (GitHub answers 404)", async () => {

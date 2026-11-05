@@ -9,7 +9,8 @@
 // Mac skipped shows as a gap. The line under it says where the log is kept.
 
 import { Fragment, useMemo, useState } from "react";
-import { auditNote, auditSentence, auditVia, gapLine, grantLeft, mergeLog, seqGaps, syncLine, type AuditEntry, type VaultGrant } from "@/lib/keychain-audit-view";
+import { auditNote, auditSentence, auditVia, gapLine, grantLeft, mergeLog, seqGaps, syncLine } from "@/lib/keychain-audit-view";
+import type { AuditEntry, VaultGrant } from "@/lib/keychain-audit-types";
 import { useKeychainAccess } from "@/lib/use-keychain-access";
 import { useNow } from "@/lib/use-now";
 import { SettingsSectionHeader } from "./SettingsLayout";

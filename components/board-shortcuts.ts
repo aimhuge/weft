@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from "react";
-import type { ShortcutDef } from "@/lib/hotkeys";
+import { onBoardItself, type ShortcutDef } from "@/lib/hotkeys";
 import type { RailPanel } from "@/lib/rail-view";
 import { addSecret } from "@/lib/use-vault";
 import type { Card, LoginView } from "@/lib/types";
@@ -35,12 +35,27 @@ export interface BoardShortcutContext {
   moveFocus: (move: { dx?: number; dy?: number; edge?: "first" | "last" }) => void;
   openFocused: (e: KeyboardEvent) => false | undefined;
   jumpToNeedsYou: () => false | undefined;
+  // Opens the card you had open last (still outlined on the board); false when there's none to open.
+  reopenLast: () => false | undefined;
   stepProject: (by: number) => void;
   stepSort: () => void;
   archiveTarget: () => Card | undefined;
   toggleArchive: (card: Card) => void;
   archiveCards: (list: Card[]) => void;
   unarchive: (ids: string[]) => void;
+}
+
+// Plain "t" only from the board itself with no card open (lib/hotkeys.ts onBoardItself): a stray "t" from a panel, a
+// review box or a button must never open a shell. Anywhere else it's Ctrl+` (the app menu, MENU_ALIASES).
+function terminalShortcut(c: BoardShortcutContext): ShortcutDef {
+  return {
+    id: "terminal",
+    keys: ["t"],
+    description: "Toggle the terminal (from the board)",
+    group: "General",
+    enabled: c.boardKeys && !c.cardOpen,
+    handler: (e) => (onBoardItself(e.target) ? c.toggleTerminal() : false),
+  };
 }
 
 export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
@@ -73,7 +88,8 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
       handler: () => c.setLibraryOpen((open) => (open ? null : "tags")),
     },
     { id: "add-secret", keys: ["shift+s"], description: "Add a secret to the vault", group: "General", enabled: c.boardKeys, handler: () => addSecret(c.setLibraryOpen) },
-    { id: "filter", keys: ["/"], description: "Filter cards", group: "General", enabled: c.boardKeys, handler: c.focusFilter },
+    // Stands down with a card open, like the menu's ⌘F (lib/board-menu-bridge.ts): the filter sits behind the thread.
+    { id: "filter", keys: ["/"], description: "Filter cards", group: "General", enabled: c.boardKeys && !c.cardOpen, handler: c.focusFilter },
     {
       id: "settings",
       keys: [","],
@@ -84,7 +100,7 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
     },
     { id: "copilot", keys: ["c"], description: "Open or close the copilot", group: "General", enabled: c.boardKeys, handler: c.toggleCopilot },
     { id: "browser", keys: ["b"], description: "Toggle the browser", group: "General", enabled: c.boardKeys, handler: c.toggleBrowser },
-    { id: "terminal", keys: ["t"], description: "Toggle the terminal", group: "General", enabled: c.boardKeys, handler: c.toggleTerminal },
+    terminalShortcut(c),
     // The four-column workspace for an open card (lib/workspace-layout.ts). ⌥⌘1..4 sit on free
     // keys (the App group owns ⌘1/⌘2, ⌥⌘ are not used elsewhere in lib/shortcut-catalog.ts) and
     // stand down without a card.
@@ -156,6 +172,7 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
       enabled: c.boardKeys,
       handler: c.jumpToNeedsYou,
     },
+    { id: "reopen-last", keys: ["z"], description: "Reopen the last card you had open", group: "Board", enabled: c.boardKeys, handler: c.reopenLast },
     { id: "project-next", keys: ["]"], description: "Next project", group: "Board", enabled: c.boardKeys, handler: () => c.stepProject(1) },
     {
       id: "project-previous",
@@ -203,7 +220,7 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
     },
     {
       id: "archive-undo",
-      keys: ["z"],
+      keys: ["shift+z"],
       description: "Undo the last archive",
       group: "Board",
       enabled: c.boardKeys,

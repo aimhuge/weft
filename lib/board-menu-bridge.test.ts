@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({ addWebhookAsk: vi.fn() }));
 vi.mock("./use-webhooks", () => ({ addWebhookAsk: mocks.addWebhookAsk }));
 
 import { runMenuAction, useMenuBridge, type MenuBridge } from "./board-menu-bridge";
+import { onThreadFind, onThreadFindStep } from "./find-events";
 
 afterEach(() => {
   cleanup();
@@ -40,6 +41,53 @@ describe("runMenuAction", () => {
     expect(b.openSettings).toHaveBeenCalledTimes(1);
     expect(b.focusFilter).toHaveBeenCalledTimes(1);
     expect(b.toggleTerminal).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the board's filter alone while a card is open", () => {
+    const b = bridge({ cardOpen: true });
+    runMenuAction("find", undefined, b);
+    expect(b.focusFilter).not.toHaveBeenCalled();
+  });
+
+  it("leaves ⌘F to Settings' search while a dialog covers the thread", () => {
+    const open = vi.fn();
+    const off = onThreadFind(open);
+    runMenuAction("find", undefined, bridge({ cardOpen: true, threadOpen: false }));
+    off();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("finds in the open thread, and steps it with ⌘G", () => {
+    const open = vi.fn();
+    const step = vi.fn();
+    const offOpen = onThreadFind(open);
+    const offStep = onThreadFindStep(step);
+    const b = bridge({ cardOpen: true, threadOpen: true });
+    runMenuAction("find", undefined, b);
+    runMenuAction("find-next", undefined, b);
+    runMenuAction("find-previous", undefined, b);
+    offOpen();
+    offStep();
+    expect(open).toHaveBeenCalledTimes(1);
+    expect(step.mock.calls).toEqual([[1], [-1]]);
+    expect(b.focusFilter).not.toHaveBeenCalled();
+  });
+
+  it("leaves find to the browser pane when the page, or its find field, has the keys", () => {
+    const open = vi.fn();
+    const off = onThreadFind(open);
+    const b = bridge({ cardOpen: true, threadOpen: true });
+    runMenuAction("find", "pane", b);
+    const field = document.createElement("input");
+    const box = document.createElement("div");
+    box.setAttribute("data-pane-find", "");
+    box.append(field);
+    document.body.append(box);
+    field.focus();
+    runMenuAction("find", undefined, b);
+    box.remove();
+    off();
+    expect(open).not.toHaveBeenCalled();
   });
 
   it("opens a listed card, selects an unlisted id, and ignores a missing one", () => {

@@ -1,8 +1,11 @@
 import { folderName, timeAgo } from "./format";
+import { workflowOf, type IssueLanding, type IssueWorkflow } from "./issue-landing";
 
 // What the GitHub drawer shows (components/GithubDrawer.tsx), from GET /api/github (lib/github-status.ts): the
-// gh CLI's account and, per board project, its GitHub repo and whether its issues sync into Backlog cards
+// gh CLI's account and, per board project, its GitHub repo and whether its issues sync into cards
 // (lib/github-issues.ts). gh keeps its own token; Weft never sees it. Pure, so it's testable and safe in the browser.
+
+export type { IssueLanding, IssueWorkflow };
 
 export interface GithubAccount {
   login: string;
@@ -28,11 +31,13 @@ export interface GithubFolder {
   // owner/name, or null when the folder has no GitHub remote (error says why).
   repo: string | null;
   error: string | null;
-  // Its open issues become Backlog cards, every 5 minutes.
+  // Its open issues become cards, every 5 minutes.
   syncing: boolean;
   last: GithubSyncResult | null;
   // A webhook on the repo relays its issue events within seconds (lib/github-hooks.ts).
   instant: boolean;
+  // Where its cards land and how a "run" card works (lib/issue-landing.ts).
+  workflow: IssueWorkflow;
 }
 
 export interface GithubStatus {
@@ -62,6 +67,12 @@ export function syncLine(f: Pick<GithubFolder, "syncing" | "last" | "instant">, 
   if (!last) return { text: f.instant ? "Syncing as issues change" : "Syncing every 5 minutes", bad: false };
   if (last.error) return { text: last.error, bad: true };
   return { text: `Synced ${timeAgo(last.at, now)} · ${countsText(last.counts) ?? "no changes"}`, bad: false };
+}
+
+// The workflow a folder reads as, when the drawer draws one it wasn't told (an older server, a
+// folder that never chose): the default landing, no skill and no agent.
+export function workflowOfFolder(f: Pick<GithubFolder, "workflow">): IssueWorkflow {
+  return workflowOf(f.workflow);
 }
 
 // "2 added, 1 archived", or null when a sync changed nothing.

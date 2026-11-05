@@ -34,7 +34,8 @@ export type StaleProps = { cache: CacheState; onFresh: (message: string) => Prom
 
 // A thread's reply box: the same composer as a new thread (Markdown, pasted images and videos,
 // dictation), sized for a reply. Enter sends; Shift+Enter starts a new line. A message starting with "!"
-// is a shell command instead (onShell): it runs in the card's folder, even mid-turn, and the box turns amber.
+// is a shell command instead (onShell): it runs in the card's folder, even mid-turn, and the box turns amber. Where
+// there is no shell (noShell: a worker's card), the box still turns amber and says why, and nothing goes out.
 export default function ReplyBox({
   cardId,
   cwd,
@@ -47,6 +48,7 @@ export default function ReplyBox({
   stale,
   cutOff = false,
   noPriorContext: noPriorContextProp = false,
+  noDone = false,
   fiveHour,
   backend,
   model,
@@ -56,6 +58,7 @@ export default function ReplyBox({
   question,
   onSend,
   onShell,
+  noShell,
   onStop,
 }: {
   cardId: string;
@@ -73,6 +76,8 @@ export default function ReplyBox({
   // No prior assistant context: the model/CLI was just switched, or the card was never started.
   // When true, the reply box defaults to Send fresh and Continue is hidden.
   noPriorContext?: boolean;
+  // No Done button: the thread has no project to wrap up (the copilot).
+  noDone?: boolean;
   // The plan's 5-hour window on this thread; when it's used up, Enter schedules for its reset.
   fiveHour?: LimitWindow;
   // The thread's CLI and model, so the reply box can ask the shared limit stores (lib/limit-reset.ts)
@@ -85,6 +90,7 @@ export default function ReplyBox({
   question?: QuestionProps & { key: string };
   onSend: (text: string) => Promise<void>;
   onShell?: (command: string) => Promise<void>;
+  noShell?: string;
   onStop: () => Promise<void>;
 }) {
   const [sending, setSending] = useState(false);
@@ -103,7 +109,7 @@ export default function ReplyBox({
   const captureReply = () => {
     track("thread_reply_sent", { reply_type: "message" });
   };
-  const { initial, save: saveDraft, shell, empty } = useReplyDraft(cardId, onShell, clearError);
+  const { initial, save: saveDraft, shell, empty } = useReplyDraft(cardId, onShell ?? noShell, clearError);
 
   // Messages written while the thread was working; they go out together once the turn ends.
   const queued = useReplyQueue({ live, busy: sending, onSend, onStop, onSent: captureReply, onError: setErrorWrap });
@@ -160,6 +166,7 @@ export default function ReplyBox({
 
   // Runs the "!" command in the box; it doesn't wait for a running turn.
   async function runShell() {
+    if (noShell) return;
     const command = bangCommand(composer.current?.readText() ?? "") ?? "";
     if (!command || !onShell) {
       setError("Write a command after the !.");
@@ -251,7 +258,8 @@ export default function ReplyBox({
     }
   }
 
-  const { scheduleAt, unschedule, takeBackScheduled, scheduled } = useReplySchedule(cardId, composer, saveDraft, setErrorWrap, sendLater?.scheduled);
+  const held = useReplySchedule(cardId, composer, saveDraft, setErrorWrap, sendLater?.scheduled, { live, onStop, onSend, onSent: captureReply });
+  const { scheduleAt, unschedule, takeBackScheduled, scheduled } = held;
   const { onKeyDownCapture, onKeyDown } = useReplyKeys({
     composer,
     form,
@@ -298,6 +306,7 @@ export default function ReplyBox({
     // whose cache lapsed but whose session is still alive is NOT no-prior-context: Continue still
     // makes sense there, and the chip stays "Cache cold · 184k".
     noPriorContext: noPriorContextProp,
+    noDone,
     now,
   });
 
@@ -341,9 +350,10 @@ export default function ReplyBox({
         queue={queue}
         paused={paused}
         live={live}
-        sending={busy}
+        sending={busy || held.sending}
         now={now}
         onTakeBack={takeBackScheduled}
+        onSendScheduled={(m) => void held.sendNow(m)}
         onUnschedule={unschedule}
         onSendNow={(i) => void queued.sendNow(i)}
         onRemove={queued.remove}
@@ -352,6 +362,7 @@ export default function ReplyBox({
         ref={composer}
         variant="reply"
         cwd={cwd}
+        cardId={cardId}
         dropTarget={cardId}
         initial={initial}
         autoFocus={autoFocus}
@@ -379,7 +390,13 @@ export default function ReplyBox({
       />
       {status && <div className="mt-1.5 px-1">{status}</div>}
       {note && <p className="mt-1.5 text-[12px] text-muted">{note}</p>}
+      <NoShellNote shell={shell} note={noShell} />
       {error && <p className="mt-1.5 text-[12px] text-danger">{error}</p>}
     </div>
   );
+}
+
+// Why a "!" command won't run here (a worker's card: no shell reaches it), while the box starts with "!".
+function NoShellNote({ shell, note }: { shell: boolean; note?: string }) {
+  return shell && note ? <p className="mt-1.5 text-[12px] text-warn">{note}</p> : null;
 }

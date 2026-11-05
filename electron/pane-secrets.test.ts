@@ -7,18 +7,19 @@ function make({ url = "https://supabase.com/dashboard", got = { value: "s3cret-v
   const wc = { getURL: () => url, executeJavaScript: vi.fn(() => Promise.resolve()) };
   const vault = { useFor: vi.fn(() => Promise.resolve(got)), names: vi.fn(() => Promise.resolve({ label: "Owner/Repo", secrets: [] })) };
   const typeText = vi.fn(() => Promise.resolve({ found }));
-  const ps = createPaneSecrets({ secrets: () => vault, requirePage: () => wc, typeText });
-  return { ps, wc, vault, typeText };
+  const cdp = { send: vi.fn(() => Promise.resolve({})) };
+  const ps = createPaneSecrets({ secrets: () => vault, requirePage: () => wc, typeText, cdp });
+  return { ps, wc, vault, typeText, cdp };
 }
 
 const ask = { key: "c1", folder: "/proj", name: "GITHUB_CLIENT_SECRET", selector: "#secret" };
 
 describe("createPaneSecrets", () => {
   it("types the value in after the vault says yes, masks the field, and redacts it from read_page", async () => {
-    const { ps, wc, vault, typeText } = make();
+    const { ps, wc, vault, typeText, cdp } = make();
     expect(await ps.fill(ask)).toEqual({ found: true, label: "Owner/Repo" });
     expect(vault.useFor).toHaveBeenCalledWith("/proj", "GITHUB_CLIENT_SECRET", "development", { card: "c1", site: "supabase.com" });
-    expect(typeText).toHaveBeenCalledWith(wc, "#secret", "s3cret-value");
+    expect(typeText).toHaveBeenCalledWith(cdp, wc, "#secret", "s3cret-value");
     expect(wc.executeJavaScript).toHaveBeenCalledWith(expect.stringContaining("webkitTextSecurity"));
     expect(ps.redact("c1", "id: s3cret-value, again s3cret-value")).toBe("id: ‹GITHUB_CLIENT_SECRET›, again ‹GITHUB_CLIENT_SECRET›");
     expect(ps.redact("c2", "s3cret-value")).toBe("s3cret-value");

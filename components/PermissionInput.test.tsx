@@ -110,17 +110,45 @@ describe("PermissionActions", () => {
     return { onAnswer, onWait };
   }
 
-  it("goes ahead only through Me first, beside Wait and while waiting, where the transport has it", async () => {
+  it("goes ahead only through This first, beside Wait and while waiting, where the transport has it", async () => {
     const onFirst = vi.fn();
     const pending = { ...base, why: { category: "same-code" as const, detail: "d", holder } };
     const { rerender } = render(<PermissionActions pending={pending} answered={false} onAnswer={vi.fn()} onWait={vi.fn()} onFirst={onFirst} />);
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "Me first", "Deny"]);
-    await userEvent.click(screen.getByRole("button", { name: "Me first" }));
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "This first", "Deny"]);
+    await userEvent.click(screen.getByRole("button", { name: "This first" }));
     expect(onFirst).toHaveBeenCalledTimes(1);
     rerender(<PermissionActions pending={{ ...pending, waiting: true }} answered={false} onAnswer={vi.fn()} onFirst={onFirst} />);
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Me first", "Deny"]);
-    await userEvent.click(screen.getByRole("button", { name: "Me first" }));
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["This first", "Deny"]);
+    await userEvent.click(screen.getByRole("button", { name: "This first" }));
     expect(onFirst).toHaveBeenCalledTimes(2);
+  });
+
+  it("offers Others first on a clash: the holder goes ahead and this thread waits", async () => {
+    const onOtherFirst = vi.fn();
+    const onAnswer = vi.fn();
+    const pending = { ...base, why: { category: "same-code" as const, detail: "d", holder } };
+    render(<PermissionActions pending={pending} answered={false} onAnswer={onAnswer} onWait={vi.fn()} onFirst={vi.fn()} onOtherFirst={onOtherFirst} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "This first", "Others first"]);
+    // It replaces Deny on a clash: refusing the call isn't the question there.
+    expect(screen.queryByRole("button", { name: "Deny" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Others first" }));
+    expect(onOtherFirst).toHaveBeenCalledTimes(1);
+    expect(onAnswer).not.toHaveBeenCalled();
+  });
+
+  it("keeps Others first while the card already waits, so the order can be changed", async () => {
+    const onOtherFirst = vi.fn();
+    const pending = { ...base, why: { category: "same-code" as const, detail: "d", holder }, waiting: true };
+    render(<PermissionActions pending={pending} answered={false} onAnswer={vi.fn()} onFirst={vi.fn()} onOtherFirst={onOtherFirst} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["This first", "Others first"]);
+    await userEvent.click(screen.getByRole("button", { name: "Others first" }));
+    expect(onOtherFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to Deny on a clash where the transport can't say Others first", () => {
+    const pending = { ...base, why: { category: "same-code" as const, detail: "d", holder } };
+    render(<PermissionActions pending={pending} answered={false} onAnswer={vi.fn()} onWait={vi.fn()} onFirst={vi.fn()} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "This first", "Deny"]);
   });
 
   it("offers a retry for a call auto mode's classifier blocked, or keeping it denied", async () => {
@@ -133,7 +161,7 @@ describe("PermissionActions", () => {
     expect(REASONS.classifier.label).toBe("Auto mode blocked");
   });
 
-  it("offers Wait first when another card holds the code, and a plain Go ahead without Me first", async () => {
+  it("offers Wait first when another card holds the code, and a plain Go ahead without This first", async () => {
     const { onAnswer, onWait } = setup({ ...base, why: { category: "same-code", detail: "d", holder } });
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "Go ahead", "Deny"]);
     await userEvent.click(screen.getByRole("button", { name: "Wait" }));
@@ -143,7 +171,7 @@ describe("PermissionActions", () => {
   });
 
   it("while waiting, says who it waits for and still lets you go ahead or deny", async () => {
-    // Without Me first (weft.zip) the way ahead is a plain Go ahead.
+    // Without This first (weft.zip) the way ahead is a plain Go ahead.
     const { onAnswer } = setup({ ...base, why: { category: "same-code", detail: "d", holder }, waiting: true });
     expect(screen.getByText("Waiting for ‘Fix login’ to finish…")).toBeTruthy();
     await userEvent.click(screen.getByRole("button", { name: "Go ahead" }));

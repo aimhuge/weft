@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { render, screen, waitFor } from "@testing-library/react";
+import { boardMode } from "@/lib/board-prefs";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import "./test-utils";
@@ -169,15 +170,14 @@ describe("WelcomeDialog", () => {
     expect(api.answerWelcome).toHaveBeenCalled();
   });
 
-  it("with no agent logged in and signed out, puku-cli's row offers the free trial behind a GitHub sign-in", async () => {
+  it("with no agent logged in and signed out, the welcome doesn't chase a Puku sign-up", async () => {
     client.loginStatus.mockResolvedValue({ status: { claude: { loggedIn: false }, puku: { loggedIn: false }, codex: { loggedIn: false } }, runs: [] });
     api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
     render(<WelcomeDialog />);
-    await userEvent.click(await screen.findByRole("button", { name: /Try free/ }));
-    expect(screen.getByText(/try it free with your Weft account/)).toBeInTheDocument();
-    expect(screen.getByText("Log in to one, or try Puku free")).toBeInTheDocument();
-    expect(client.signIn).toHaveBeenCalledWith("github", expect.anything());
-    expect(telemetry.trackOnboarding).toHaveBeenCalledWith("onboarding_cli_login", { backend: "puku" });
+    expect(await screen.findByText("Log in to one to start")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Try free/ })).toBeNull();
+    expect(screen.queryByText(/try it free with your Weft account/)).toBeNull();
+    expect(client.signIn).not.toHaveBeenCalled();
   });
 
   it("signed in with no agent logged in, the first thread runs on puku-cli's trial", async () => {
@@ -211,6 +211,26 @@ describe("WelcomeDialog", () => {
     await next();
     expect(await screen.findByRole("button", { name: /^Bring in/ })).toBeInTheDocument();
     expect(screen.getByText("Step 3 of 4")).toBeInTheDocument();
+  });
+
+  it("the sign-in screen doesn't block: Not now moves on without an account", async () => {
+    client.account.mockResolvedValue({ configured: true, user: null });
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await next();
+    await userEvent.click(await screen.findByRole("button", { name: "Not now" }));
+    expect(await screen.findByRole("button", { name: /^Bring in/ })).toBeInTheDocument();
+    expect(client.signIn).not.toHaveBeenCalled();
+    expect(telemetry.trackOnboarding).toHaveBeenCalledWith("onboarding_account_deferred");
+  });
+
+  it("with no history, Not now goes straight to the first thread", async () => {
+    client.account.mockResolvedValue({ configured: true, user: null });
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([]) });
+    render(<WelcomeDialog />);
+    await next();
+    await userEvent.click(await screen.findByRole("button", { name: "Not now" }));
+    expect(await screen.findByText("Start your first thread")).toBeInTheDocument();
   });
 
   it("already signed in, or with sign-in not set up, there is no sign-in screen", async () => {
@@ -304,5 +324,21 @@ describe("WelcomeDialog", () => {
     await next();
     await bringIn();
     expect(telemetry.trackOnboarding).toHaveBeenCalledWith("onboarding_projects_answered", { brought: 1, count_history: true, start_empty: false });
+  });
+});
+
+describe("WelcomeDialog and the board mode", () => {
+  it("starts a new install on Regular", async () => {
+    api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
+    render(<WelcomeDialog />);
+    await waitFor(() => expect(boardMode()).toBe("regular"));
+    document.cookie = "weft-board-mode=; path=/; max-age=0";
+  });
+
+  it("leaves a board that already had its welcome alone", async () => {
+    api.loadWelcome.mockResolvedValue({ welcome: { at: 1, countHistory: true, fresh: false, skip: [] } });
+    render(<WelcomeDialog />);
+    await waitFor(() => expect(api.loadWelcome).toHaveBeenCalled());
+    expect(boardMode()).toBe("advanced");
   });
 });

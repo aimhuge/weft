@@ -3,6 +3,7 @@
 // Small helpers used by the board: removing one id from a Set, reading the last folder from
 // localStorage, firing a desktop notification when a card changes column, and opening a URL in
 // the board's browser (or a new tab in plain web mode).
+import type { BrowserState } from "./client";
 import type { Card } from "./types";
 
 // A new Set with one id removed. Used to keep the "unseen" highlight list up to date when a card
@@ -50,3 +51,14 @@ export function showPage(url: string): void {
   if (window.weft) void window.weft.browser.open(url, "board");
   else window.open(url, "_blank");
 }
+
+// The browser pane before the shell has said anything about it.
+export const CLOSED_BROWSER: BrowserState = {
+  visible: false,
+  url: "",
+  title: "",
+  loading: false,
+  canGoBack: false,
+  canGoForward: false,
+  zoom: 100,
+};

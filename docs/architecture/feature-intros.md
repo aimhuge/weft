@@ -1,7 +1,7 @@
 # Feature intros
 
-Every tool drawer on the left rail, the New thread dialog, the code quality dialog and the leagues play a short
-narrated video the first time you open them: what the drawer is for and what it can do. Fourteen of them, each its own
+Every tool drawer on the left rail, the New thread dialog, the code quality dialog and the leagues have a short
+narrated video that plays when you press ▶ beside the title (never on its own): what the drawer is for and what it can do. Fourteen of them, each its own
 page in `public/intros/`. This is the same HyperFrames idea as the welcome tour (see [welcome-tour.md](welcome-tour.md)),
 scaled down to one feature instead of the whole product.
 
@@ -156,8 +156,9 @@ sources before it starts. See
 `useFeatureIntro(id)` takes the drawer (or dialog) that's open, or `null`, and returns the state
 `components/FeatureIntro.tsx` draws:
 
-- It opens by itself the **first** time that drawer's id comes up, unless you've already seen it or you ask for
-  reduced motion (`prefers-reduced-motion: reduce`).
+- It **never opens by itself**: a drawer or dialog opens with its intro shut and ▶ beside its title. It used to open
+  the first time each drawer did, voice and all, and a voice starting unasked was unwelcome; the New thread splash's
+  tips (`lib/new-thread-tips.ts`) point at the intros instead.
 - It's seen once the page plays to the end (`done`) or you hide it, so hiding counts too.
 - The page plays its own voice, and stops it when you hide it or the drawer closes (both unmount the frame). The board
   used to start it on `start`, but the sandboxed frame animates in its own process while the board's window can be
@@ -173,18 +174,26 @@ sources before it starts. See
 - ▶ beside the title plays it again, big: an open intro is asked to start over, a closed one is loaded fresh (a new
   `run` remounts the iframe). ↻ Replay appears over the frame once it ends.
 
-## New thread plays in the browser pane (`lib/pane-intro.ts`)
+## New thread plays in the browser pane, on ▶ only (`lib/pane-intro.ts`)
 
 The New thread intro is a minute of tips, and one of them is about the browser pane, so on the desktop it plays
-there, beside the dialog, at full size rather than in a frame over the composer. The first time the dialog opens,
-`useNewThreadPane` (`lib/use-new-thread-pane.ts`) asks `takePaneIntro("newthread")` and opens
-`/intros/newthread.html?live=1` in place of the splash, in the dialog's own pane (`NEW_THREAD_PANE`); it is marked
-seen right away (the pane's page has no parent to post `done` to). ▶ by the title (`PlayIntroButton` in
-`components/FeatureIntro.tsx`) calls `playPaneIntro`, which opens it in that same pane again. It must never go to
-the board's pane (`openInPane`): that one sits hidden behind the dialog's, so the intro used to play unseen and only
-show up once the dialog closed. The pane refuses Weft's own server, so
-`electron/self-url.cjs` lets exactly `/intros/<id>.html` through. On the web there is no pane (`hasPane()` is
-false), so the dialog plays it in its own frame like any other intro.
+there, beside the dialog, at full size rather than in a frame over the composer. It **never starts on its own**: it
+used to play in place of the splash the first time the dialog opened, and later the next unseen drawer intro each
+time, but a voice starting unasked while you write a prompt is unwelcome. So `useNewThreadPane`
+(`lib/use-new-thread-pane.ts`) always opens the splash (`api.newThreadPage()` → `newThreadUrl` in `lib/show.ts`) in
+the dialog's own pane (`NEW_THREAD_PANE`), and an intro plays only when you ask:
+
+- ▶ by the title (`PlayIntroButton` in `components/FeatureIntro.tsx`) calls `playPaneIntro`, which opens it in that
+  same pane. It must never go to the board's pane (`openInPane`): that one sits hidden behind the dialog's, so the
+  intro used to play unseen and only show up once the dialog closed.
+- The splash carries a **tip card** under the title: `TIPS` in `lib/new-thread-tips.ts` (shortcuts, the New thread
+  intro, and a line per drawer that names its intro), started one further on each time (`nextTipIndex`, from a random
+  place) and faded to the next every 8 s by the page's own script. A tip with an intro has **▶ Watch**, a link to it
+  on Weft's own origin (the route passes `new URL(req.url).origin`). To add a tip, add a line to `TIPS`; keep it under
+  140 characters and only claim what Weft really does.
+
+The pane refuses Weft's own server, so `electron/self-url.cjs` lets exactly `/intros/<id>.html` through. On the web
+there is no pane (`hasPane()` is false), so the dialog plays it in its own frame like any other intro.
 
 The hook returns `{ id, open, ended, paused, expanded, run, src, attach, muted, toggleMuted, play, togglePlaying, setExpanded, hide }` (typed
 `FeatureIntroState`); `components/FeatureIntro.tsx` takes that as one `intro` prop and reads

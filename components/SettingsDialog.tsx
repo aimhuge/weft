@@ -1,28 +1,44 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
-import { showBacklog, showProgress } from "@/lib/board-prefs";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { boardMode, showBacklog, showProgress } from "@/lib/board-prefs";
 import { api } from "@/lib/client";
 import { pageInfo, rememberPage, rememberedPage, SETTINGS_PAGES, type SettingsPage } from "@/lib/settings-nav";
 import { computeDirty, initialSettingsForm, settingsDirtyPages, settingsPatch, type SettingsForm } from "@/lib/settings-form";
 import { useSettingsBackdrop } from "@/lib/use-scene";
+import { useSettingsSections } from "@/lib/use-settings-sections";
 import type { SettingsView } from "@/lib/types";
 import { SettingsCard, SettingsUnsavedDot } from "./SettingsLayout";
+import DevicesSettings from "./DevicesSettings";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import SettingsAccountsPage from "./SettingsAccountsPage";
+import SettingsAgentsPage from "./SettingsAgentsPage";
 import SettingsAutomationsPage from "./SettingsAutomationsPage";
 import SettingsConnectorsPage from "./SettingsConnectorsPage";
 import SettingsGeneralPage from "./SettingsGeneralPage";
 import LaptopModeCard from "./LaptopModeCard";
 import SettingsModelsPage from "./SettingsModelsPage";
+import SettingsSearch from "./SettingsSearch";
+import SettingsSectionNav from "./SettingsSectionNav";
 import SettingsSecurityPage from "./SettingsSecurityPage";
 import SettingsShortcutsPage from "./SettingsShortcutsPage";
 import SettingsThreadsPage from "./SettingsThreadsPage";
 import SyncSettings from "./SyncSettings";
 import TeamSettings from "./TeamSettings";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "./button-styles";
 
 const NEEDS_SETTINGS = new Set<SettingsPage>(["models", "threads", "security", "automations"]);
+
+// The pages that draw themselves, needing nothing from the settings form.
+const SELF_DRAWN: Partial<Record<SettingsPage, () => ReactNode>> = {
+  shortcuts: () => <SettingsShortcutsPage />,
+  accounts: () => <SettingsAccountsPage />,
+  connectors: () => <SettingsConnectorsPage />,
+  // TeamSettings draws its own cards, one per section.
+  team: () => <TeamSettings />,
+  devices: () => <DevicesSettings />,
+};
 
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err);
@@ -38,8 +54,12 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
   const [saving, setSaving] = useState(false);
   const [backlog, setBacklog] = useState(showBacklog);
   const [progress, setProgress] = useState(showProgress);
+  const [advanced, setAdvanced] = useState(() => boardMode() === "advanced");
   const [page, setPageState] = useState<SettingsPage>(rememberedPage);
   const backdrop = useSettingsBackdrop();
+  const scroller = useRef<HTMLDivElement>(null);
+  const sectionNav = useRef<HTMLElement>(null);
+  const { sections, active, jump } = useSettingsSections(scroller, sectionNav, page);
 
   function setPage(next: SettingsPage) {
     rememberPage(next);
@@ -90,8 +110,14 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
+  // The board's recent folders, for Agents and Sync. Those pages draw before the server's settings are in (they aren't
+  // in NEEDS_SETTINGS), so this is empty until then rather than read off the stand-in.
+  const recentFolders = settings?.projects.map((p) => p.path) ?? [];
+
   // What each page draws: a few cards. Pages in NEEDS_SETTINGS only draw once the server's settings are in.
   function pageBody(s: SettingsView): ReactNode {
+    const own = SELF_DRAWN[page];
+    if (own) return own();
     switch (page) {
       case "general":
         return (
@@ -100,6 +126,8 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             setBacklog={setBacklog}
             progress={progress}
             setProgress={setProgress}
+            advanced={advanced}
+            setAdvanced={setAdvanced}
           />
         );
       case "laptop":
@@ -153,18 +181,14 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             clearSaveError={clearSaveError}
           />
         );
-      case "shortcuts":
-        return <SettingsShortcutsPage />;
-      case "accounts":
-        return <SettingsAccountsPage />;
-      case "connectors":
-        return <SettingsConnectorsPage />;
-      case "team":
-        // TeamSettings draws its own cards, one per section.
-        return <TeamSettings />;
+      case "agents":
+        // Saves as you go, like Shortcuts; the project list is the board's recent folders.
+        return <SettingsAgentsPage projects={recentFolders} />;
       case "sync":
-        // SyncSettings draws its own cards, one per section. The recent folders live in s.projects.
-        return <SyncSettings recentProjects={s.projects.map((p) => p.path)} />;
+        // SyncSettings draws its own cards, one per section.
+        return <SyncSettings recentProjects={recentFolders} />;
+      default:
+        return null;
     }
   }
 
@@ -211,6 +235,14 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           className="flex shrink-0 items-center justify-between border-b border-line bg-panel/80 px-5 py-3 backdrop-blur-xl"
         >
           <h2 className="text-[15px] font-medium text-ink">Settings</h2>
+          <div className="ml-auto mr-3">
+            <SettingsSearch
+              onPick={(hit) => {
+                setPage(hit.page);
+                if (hit.title) jump(hit.title);
+              }}
+            />
+          </div>
           <button
             onClick={onClose}
             aria-label="Close"
@@ -245,11 +277,12 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             })}
           </nav>
 
-          <div className="flex h-full min-h-0 min-w-0 max-w-[760px] flex-1 flex-col gap-4 overflow-y-auto pb-4 pr-2">
+          <div ref={scroller} className="flex h-full min-h-0 min-w-0 max-w-[760px] flex-1 flex-col gap-4 overflow-y-auto pb-4 pr-2">
             <div className="px-1 pt-1 [text-shadow:0_1px_8px_rgb(0_0_0/0.35)]">
               <h2 className="text-[22px] font-semibold text-ink">{open.label}</h2>
               <p className="text-[13px] text-ink/80">{open.hint}</p>
             </div>
+            <SettingsSectionNav sections={sections} active={active} onJump={jump} navRef={sectionNav} />
             {content()}
           </div>
         </div>
@@ -261,14 +294,14 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           {saveError && <p className="mr-auto min-w-0 break-words text-[12.5px] text-danger">{saveError}</p>}
           <button
             onClick={onClose}
-            className="rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink hover:bg-sunken"
+            className={BUTTON_SECONDARY}
           >
             Cancel
           </button>
           <button
             onClick={() => void save()}
             disabled={settings === null || form === null || saving}
-            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50"
+            className={BUTTON_PRIMARY}
           >
             {saving && <Spinner size={12} />}
             Save

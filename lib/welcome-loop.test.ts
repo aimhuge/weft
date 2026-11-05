@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BEAT_TITLES, BEATS, beatMessage, goMessage, LOOP_PATH, loopSrc, pageOf, pageVoice, stepBeat, stepVoice, voiceFor } from "./welcome-loop";
+import { BEAT_SCENES, BEAT_TITLES, BEATS, beatMessage, goMessage, keysStart, LOOP_PATH, loopSrc, pageOf, pageVoice, SCENE_SECONDS, SCENE_STARTS, stepBeat, stepVoice, voiceFor } from "./welcome-loop";
 
 describe("loopSrc", () => {
   it("plays the tour live with no names when there are no projects", () => {
@@ -76,5 +78,37 @@ describe("stepVoice", () => {
     expect(stepVoice("projects")).toBe("/welcome/narration-projects.m4a");
     expect(stepVoice("first")).toBe("/welcome/narration-first.m4a");
     expect(stepVoice("ready")).toBeNull();
+  });
+});
+
+describe("the beats page's scenes", () => {
+  // The page (public/welcome/beats.html) draws its scenes from its own SCENES list; lib/welcome-scenes.ts is
+  // the one list the tour, the narration and the render script read. This pins the two together, so a scene added
+  // to one and forgotten in the other fails here rather than in the rendered video.
+  const html = readFileSync(join(__dirname, "..", "public", "welcome", "beats.html"), "utf8");
+  const pageScenes = [...html.slice(html.indexOf("var SCENES")).matchAll(/\["(\w+)", "(#\w+)", ([\d.]+)/g)].map((m) => ({
+    beat: m[1],
+    element: m[2],
+    seconds: Number(m[3]),
+  }));
+
+  it("are the page's own scenes, in the same order and with the same lengths", () => {
+    expect(pageScenes).toEqual(BEAT_SCENES.map((scene) => ({ beat: scene.beat, element: scene.element, seconds: scene.seconds })));
+  });
+
+  it("are the tour's beats after the two pages of their own", () => {
+    expect(BEATS).toEqual(["intro", "loop", ...BEAT_SCENES.map((scene) => scene.beat)]);
+  });
+
+  it("start where the scenes before them end", () => {
+    expect(SCENE_STARTS.tools).toBe(0);
+    expect(SCENE_STARTS.vault).toBe(5);
+    expect(SCENE_STARTS.pane).toBe(10.8);
+    expect(SCENE_STARTS.keys).toBe(51);
+    expect(SCENE_SECONDS).toBe(68.4);
+  });
+
+  it("put the keyboard shortcuts where the tour video cuts them", () => {
+    expect(keysStart()).toBe(51);
   });
 });

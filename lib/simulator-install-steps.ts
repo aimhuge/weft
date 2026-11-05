@@ -6,11 +6,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { download, runStep, type Installer, type OnLine } from "./simulator-install";
-import { androidSdk, TOOLS_DIR } from "./simulator-exec";
+import { androidSdk, STUDIO_APP, TOOLS_DIR, XCODE_APP } from "./simulator-exec";
 import type { InstallKey } from "./simulator-view";
 
-export const XCODE_APP = "/Applications/Xcode.app";
-export const STUDIO_APP = "/Applications/Android Studio.app";
+export { STUDIO_APP, XCODE_APP };
 
 // The same build Homebrew's cameroncooke/axe formula installs.
 const AXE_VERSION = "1.8.0";

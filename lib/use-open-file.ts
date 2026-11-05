@@ -8,7 +8,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { filesApi, FileConflictError, type OpenedFile } from "./client-files";
+import { FileConflictError, type OpenedFile } from "./client-files";
+import { useFilesSource } from "./files-source";
+import { useFileWatch } from "./use-file-watch";
 
 // Hash of the loaded text; "" means "the file was empty", null means "the file didn't exist".
 // useOpenFile takes it as a string for comparisons and to pass to filesApi.write.
@@ -107,6 +109,8 @@ function adoptWrite(
 }
 
 export function useOpenFile(cardId: string, path: string, enabled: boolean): UseOpenFileResult {
+  // This Mac's card routes, or a worker's file verbs (lib/files-source.ts).
+  const filesApi = useFilesSource();
   const [loaded, setLoaded] = useState<OpenedFile | null>(null);
   const [text, setTextState] = useState("");
   const [savedText, setSavedText] = useState("");
@@ -154,7 +158,7 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
         setBusy(false);
       },
     );
-  }, [cardId, path]);
+  }, [cardId, path, filesApi]);
 
   useEffect(() => {
     if (!enabled) return undefined;
@@ -164,10 +168,21 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
     };
   }, [enabled, load]);
 
+  // The file changed on disk: a clean tab takes it; unsaved edits stay, with the disk's text in the conflict banner.
+  const onDisk = useCallback((next: OpenedFile) => {
+    if (textRef.current === savedTextRef.current) {
+      adoptRead(next, { loaded: loadedRef.current, text: textRef.current, savedText: savedTextRef.current }, { setLoaded, setText: setTextState, setSavedText });
+      setConflict(null);
+    } else {
+      setConflict({ disk: next, baseHash: next.hash ?? "" });
+    }
+  }, []);
+
   // The poll runs while the tab is mounted, visible, and clean. The setStates happen inside the
   // .then chain, so the effect body itself doesn't synchronously set state.
   useEffect(() => {
-    if (!enabled) return undefined;
+    // A source that can't afford the poll (a worker's) reloads only when the file is opened again.
+    if (!enabled || filesApi.live === false) return undefined;
     pollCancelledRef.current = false;
     let timer: ReturnType<typeof setTimeout> | null = null;
     function schedule(): void {
@@ -191,14 +206,7 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
           const changed = (stat.mtime ?? -1) !== (cur.mtime ?? -1) || stat.size !== cur.size;
           if (!changed) return;
           return filesApi.read(cardId, path).then((next) => {
-            if (pollCancelledRef.current) return;
-            const stillClean = textRef.current === savedTextRef.current;
-            if (stillClean) {
-              adoptRead(next, { loaded: loadedRef.current, text: textRef.current, savedText: savedTextRef.current }, { setLoaded, setText: setTextState, setSavedText });
-              setConflict(null);
-            } else {
-              setConflict({ disk: next, baseHash: next.hash ?? "" });
-            }
+            if (!pollCancelledRef.current) onDisk(next);
           });
         })
         .catch(() => {
@@ -213,7 +221,10 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
       pollCancelledRef.current = true;
       if (timer) clearTimeout(timer);
     };
-  }, [cardId, path, enabled]);
+  }, [cardId, path, enabled, filesApi, onDisk]);
+
+  // A source that pushes changes instead (a worker's, over its session line) reloads by the same rule.
+  useFileWatch(filesApi, cardId, path, enabled, loadedRef, onDisk);
 
   // Save the user's text back to disk and adopt the response as the new baseline.
   const writeAndAdopt = useCallback(
@@ -240,7 +251,7 @@ export function useOpenFile(cardId: string, path: string, enabled: boolean): Use
         setBusy(false);
       }
     },
-    [cardId, path],
+    [cardId, path, filesApi],
   );
 
   const save = useCallback(async () => {

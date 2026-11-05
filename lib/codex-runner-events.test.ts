@@ -4,10 +4,13 @@
 // lib/codex-runner-turn.test.ts; lib/codex-runner.test.ts covers the pure helpers.
 import { describe, expect, it, vi } from "vitest";
 import { EXE, setupCodex } from "./codex-runner.harness";
+import { codexGuardArgs } from "./guards/codex";
+import { GuardsUnavailable, openGuards } from "./guards/turn";
 import type { Card } from "./types";
 
 const s = await vi.hoisted(async () => (await import("./codex-runner.harness")).codexState());
 
+vi.mock("./guards/turn", async (o) => (await import("./codex-runner.harness")).guardsTurnMock(o));
 vi.mock("./runner-turn", async () => (await import("./codex-runner.harness")).runnerTurnMock(s));
 vi.mock("./store", async () => (await import("./codex-runner.harness")).storeMock(s));
 vi.mock("./weft-mcp", async () => (await import("./codex-runner.harness")).weftMcpMock());
@@ -36,11 +39,30 @@ describe("driveCodex starts codex exec", () => {
     const prompt = ((rig().child().stdin.read() as Buffer | null) ?? Buffer.from("")).toString();
     expect(rig().opts()).toMatchObject({ command: EXE, cwd: rig().cwd });
     expect(rig().opts().args).toEqual([
-      "exec", "--json", "--cd", rig().cwd, "--skip-git-repo-check",
+      "exec", "--json", "--cd", rig().cwd, "--skip-git-repo-check", ...codexGuardArgs(),
       "--sandbox", "read-only", "--config", 'approval_policy="never"', "-",
     ]);
     expect(prompt).toContain("do it");
     expect(rig().session.sessionId).toBe("th-1");
+  });
+
+  it("runs every turn behind Weft's guards: its hooks in the argv, its token in the env, closed after", async () => {
+    await rig().run([event({ type: "turn.completed" })]);
+    expect(rig().opts().args).toContain("--dangerously-bypass-hook-trust");
+    expect(rig().opts().env.WEFT_GUARD_TOKEN).toBe("guard-token");
+    const opened = vi.mocked(openGuards).mock.results.at(-1)?.value as { close: () => void };
+    expect(opened.close).toHaveBeenCalled();
+  });
+
+  it("refuses to start a turn whose guards can't be installed, and says why", async () => {
+    vi.mocked(openGuards).mockImplementationOnce(() => {
+      throw new GuardsUnavailable("Weft's server port isn't known");
+    });
+    const r = rig();
+    const turn = r.codex.driveCodex(r.session, EXE);
+    r.session.inbox.push("do it");
+    await expect(turn).rejects.toThrow("guards couldn't be installed");
+    expect(s.spawned).toHaveLength(0);
   });
 
   it("strips CLAUDE_CODE_ENTRYPOINT from the env the CLI gets", async () => {

@@ -33,6 +33,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     orgId: access.share.share.org_id,
     cardId: access.share.share.card_id,
     card: card.card,
+    showChat: access.share.share.show_chat !== false,
     ...(typeof after === "number" ? { after } : {}),
     ...(typeof before === "number" ? { before } : {}),
   });

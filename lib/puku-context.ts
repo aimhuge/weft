@@ -48,6 +48,14 @@ export function codexProjectInstructions(cwd: string): string {
   return capped(readImports(path.join(cwd, "CLAUDE.md"), new Set([path.join(cwd, "AGENTS.md")]), 0));
 }
 
+// Whether Goose reads the folder's instructions on its own. Goose loads AGENTS.md from the folder it runs
+// in and resolves that file's `@./path` imports, so a project that puts its instructions behind AGENTS.md
+// needs nothing from us. Goose reads no CLAUDE.md and no SOUL.md by itself, so a project that keeps them
+// elsewhere is still Weft's to inject. Measured against goose 1.56 (docs/architecture/goose.md).
+export function gooseReadsProjectInstructions(cwd: string): boolean {
+  return fs.existsSync(path.join(cwd, "AGENTS.md"));
+}
+
 function capped(parts: string[]) {
   const text = parts.join("\n\n");
   return text.length > MAX_CHARS ? `${text.slice(0, MAX_CHARS)}\n\n[cut at ${MAX_CHARS} characters]` : text;

@@ -17,11 +17,13 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname),
       "server-only": serverOnlyStub,
+      // libsodium-wrappers 0.7.16's ESM build imports a ./libsodium.mjs it doesn't ship; its CommonJS build works.
+      "libsodium-wrappers": path.resolve(__dirname, "node_modules/libsodium-wrappers/dist/modules/libsodium-wrappers.js"),
     },
   },
   test: {
     // Component tests opt into jsdom per file (`// @vitest-environment jsdom`); everything else stays on node.
-    include: ["lib/**/*.test.ts", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts"],
+    include: ["lib/**/*.test.ts", "lib/**/*.test.tsx", "app/**/*.test.ts", "components/**/*.test.tsx", "app/**/*.test.tsx", "electron/**/*.test.ts", "scripts/**/*.test.ts", "scripts/**/*.test.mjs", "plugin/**/*.test.ts", "supabase/functions/**/*.test.ts", "packages/*/src/**/*.test.ts"],
     environment: "node",
     // Vitest 4's default threads pool times out spawning workers in CI under load (a few
     // files "fail to start forks worker" with no error in the worker). Forks is stable.
@@ -42,7 +44,8 @@ maxWorkers: Number(process.env.MAX_WORKERS) || 2,
     // WORKER_HEAP (MB) overrides it.
     execArgv: [`--max-old-space-size=${Number(process.env.WORKER_HEAP) || 768}`],
     // A worker whose run died (its parent killed mid-test) ends itself instead of running on under PID 1.
-    setupFiles: ["test/orphan-guard-setup.ts"],
+    // jsdom-storage-setup: jsdom files get jsdom's localStorage, not Node 25+'s own (test/jsdom-storage-setup.ts).
+    setupFiles: ["test/orphan-guard-setup.ts", "test/jsdom-storage-setup.ts"],
     env: {
       WEFT_DATA: path.join(sandbox, "data"),
       CLAUDE_CONFIG_DIR: path.join(sandbox, "claude"),
@@ -53,9 +56,9 @@ maxWorkers: Number(process.env.MAX_WORKERS) || 2,
     server: { deps: { inline: [/@aimhuge\//] } },
     coverage: {
       provider: "v8",
-      include: ["lib/**/*.ts", "app/api/**/*.ts"],
+      include: ["lib/**/*.ts", "app/api/**/*.ts", "packages/*/src/**/*.ts"],
       // Test files, and the shared fakes they import (lib/runner.harness.ts).
-      exclude: ["**/*.test.ts", "**/*.harness.ts"],
+      exclude: ["**/*.test.ts", "**/*.harness.ts", "**/*.d.ts"],
       reporter: ["text-summary", "text", "json-summary"],
     },
   },

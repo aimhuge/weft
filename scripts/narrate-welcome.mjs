@@ -8,8 +8,19 @@
 //   pnpm welcome:narrate                 af_heart
 //   pnpm welcome:narrate -- --voice=am_michael
 //   pnpm welcome:narrate -- --only=beats   one track, so the others aren't re-encoded
+import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { SCENES } from "../lib/welcome-scenes.ts";
 import { narrate } from "./narrate-lib.mjs";
+
+// The one list of the beats page's scenes (lib/welcome-scenes.ts): each scene's beat and how long it runs. The
+// beats track's lines are written against a scene, so their times follow the scenes when one grows.
+const scenes = SCENES;
+// A scene starts where the ones before it end. A hundredth of a second is the precision the scenes are written in,
+// so the sums are rounded to it and don't drift into 22.900000000002.
+const sceneStart = (beat) => Math.round(scenes.slice(0, scenes.findIndex((s) => s.beat === beat)).reduce((n, s) => n + s.seconds, 0) * 100) / 100;
+// A line's time, in the scene's hundredths.
+const at = (beat, offset) => Math.round((sceneStart(beat) + offset) * 100) / 100;
 
 // Each line starts where its caption does, or just after the line before it if that one is still talking, and should
 // end by its `end` (the script warns when it runs over, so a caption and its line don't drift apart).
@@ -33,21 +44,23 @@ const NARRATION = {
       [20.6, 25.6, "Moving a card to the Done column commits, refactors and deploys."],
     ],
   },
+  // The beats page's track: one line per caption, timed against the scene it belongs to (lib/welcome-scenes.ts),
+  // so a scene that grows carries its lines with it. The line's own times are relative to its scene's start.
   beats: {
-    duration: 68.4,
+    duration: scenes.reduce((n, s) => n + s.seconds, 0),
     lines: [
-      [0.5, 4.8, "Connect your tools to Weft, so your threads can use them."],
-      [5.5, 10.6, "Your vault stores your credentials and lets your AI securely use them."],
-      [11, 22.5, "Panes aren't just previews. They can use keys in your vault to connect to your database or APIs, so sharing a secure live dashboard, mini-app or game is just a few clicks away."],
-      [22.9, 28.1, "Weft also scores your code quality, and Weft's scout keeps your code clean."],
-      [28.5, 38.4, "Weft comes with BlastCP built in, so you can easily connect all your social accounts, make images, video and voice for your posts, and build in public."],
-      [38.8, 43, "Share your Wefter Profile, and show the world what you ship."],
-      [43.4, 50.8, "Weft is open source. If something is broken, or you want to add a feature, please feel free to make a pullrequest."],
-      [51.4, 54.2, "Weft is driven by keyboard shortcuts."],
-      [54.3, 58.6, "Double-click the board or hit Command N to start a new thread."],
-      [58.8, 60.8, "Press Escape to close it."],
-      [61, 64.8, "Hit Command K to open the search and action HUD."],
-      [65, 67.9, "And hit question mark for the shortcut list."],
+      ["tools", 0.5, 4.8, "Connect your tools to Weft, so your threads can use them."],
+      ["vault", 0.5, 5.6, "Your vault stores your credentials and lets your AI securely use them."],
+      ["pane", 0.2, 11.7, "Panes aren't just previews. They can use keys in your vault to connect to your database or APIs, so sharing a secure live dashboard, mini-app or game is just a few clicks away."],
+      ["quality", 0.2, 5.4, "Weft also scores your code quality, and Weft's scout keeps your code clean."],
+      ["blastcp", 0.2, 10.1, "Weft comes with BlastCP built in, so you can easily connect all your social accounts, make images, video and voice for your posts, and build in public."],
+      ["profile", 0.2, 4.4, "Share your Wefter Profile, and show the world what you ship."],
+      ["opensource", 0.2, 7.6, "Weft is open source. If something is broken, or you want to add a feature, please feel free to make a pullrequest."],
+      ["keys", 0.4, 3.2, "Weft is driven by keyboard shortcuts."],
+      ["keys", 3.3, 7.6, "Double-click the board or hit Command N to start a new thread."],
+      ["keys", 7.8, 9.8, "Press Escape to close it."],
+      ["keys", 10, 13.8, "Hit Command K to open the search and action HUD."],
+      ["keys", 14, 16.9, "And hit question mark for the shortcut list."],
     ],
   },
 
@@ -70,4 +83,9 @@ const root = resolve(import.meta.dirname, "..");
 const only = process.argv.find((a) => a.startsWith("--only="))?.slice("--only=".length);
 const tracks = only ? { [only]: NARRATION[only] } : NARRATION;
 if (only && !NARRATION[only]) throw new Error(`No track "${only}": ${Object.keys(NARRATION).join(", ")}`);
+// The beats track's lines are timed against their scene; every other track's are absolute already.
+for (const track of Object.values(tracks)) {
+  if (!track.lines.some((line) => typeof line[0] === "string")) continue;
+  track.lines = track.lines.map(([scene, cue, end, text]) => [at(scene, cue), at(scene, end), text]);
+}
 await narrate(tracks, (page) => join(root, "public", "welcome", `narration-${page}.m4a`));

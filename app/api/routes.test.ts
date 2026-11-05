@@ -46,13 +46,14 @@ vi.mock("@/lib/runner", () => ({
   retryAfterLogin: vi.fn(),
 }));
 
-vi.mock("@/lib/precedence", () => ({ putFirst: vi.fn() }));
+vi.mock("@/lib/precedence", () => ({ putFirst: vi.fn(), putHolderFirst: vi.fn() }));
 
 vi.mock("@/lib/settings", () => ({
   DEFAULT_THREAD_PROMPT: "You are a card on a board.",
   listProjects: vi.fn(() => []),
   touchProject: vi.fn(),
   removeProject: vi.fn(),
+  markProject: vi.fn(),
   dismissSession: vi.fn(),
   dismissedSessions: vi.fn(() => []),
   threadPrompt: vi.fn(() => "tp"),
@@ -77,6 +78,7 @@ vi.mock("@/lib/settings", () => ({
   issueFolders: vi.fn(() => []), setIssueSync: vi.fn(),
   allowedFolders: vi.fn(() => []), allowFolder: vi.fn(), unallowFolder: vi.fn(),
   syncFolders: vi.fn(() => []), setSyncFolder: vi.fn(),
+  workerFolders: vi.fn(() => []), setWorkerFolder: vi.fn(),
   settingsView: vi.fn(() => ({ threadPrompt: "tp", keepAliveMinutes: 5, automations: [] })),
 }));
 
@@ -602,15 +604,7 @@ describe("POST /cards/:id/permission", () => {
     expect(runner.answerPermission).toHaveBeenLastCalledWith("c1", false, undefined, undefined, undefined);
   });
 
-  it("puts a held edit first with first: true, and needs its pendingId", async () => {
-    const { putFirst } = await import("@/lib/precedence");
-    expect(await body(await answer("c1", { first: true, pendingId: "p1" }))).toEqual({ ok: true });
-    expect(putFirst).toHaveBeenCalledWith("c1", "p1");
-    expect(runner.answerPermission).not.toHaveBeenCalled();
-    const res = await answer("c1", { first: true });
-    expect(res.status).toBe(409);
-    expect((await body(res)).error).toMatch(/Me first needs/);
-  });
+  // The ordering choices ("This first", "Others first") are tested in app/api/permission-route.test.ts.
 
   it("409s when there's nothing to answer, or bad JSON", async () => {
     vi.mocked(runner.answerPermission).mockImplementationOnce(() => {
@@ -838,6 +832,17 @@ describe("/login", () => {
     }
     expect(login.startLogin).not.toHaveBeenCalled();
     expect(login.sendLoginInput).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /repos/clone", () => {
+  it("answers null for a repo that isn't cloning", async () => {
+    expect(await body(await cloneRoute.GET(req("/repos/clone?fullName=me/none")))).toBeNull();
+    expect(await body(await cloneRoute.GET(req("/repos/clone")))).toBeNull();
+  });
+
+  it("refuses a foreign host", async () => {
+    expect((await cloneRoute.GET(req("/repos/clone", { headers: { host: "evil.com" } }))).status).toBe(403);
   });
 });
 

@@ -47,7 +47,7 @@ export type TeamSnapshot = {
 export type TeamOp =
   | { org: string; action: "invite"; email: string; role: TeamRole }
   | { org: string; action: "role"; userId: string; role: TeamRole }
-  | { org: string; action: "remove"; userId: string }
+  | { org: string; action: "remove"; userId: string; rotate?: boolean }
   | { org: string; action: "revoke"; inviteId: string }
   | { org: string; action: "link-project"; repo: string }
   | { org: string; action: "unlink-project"; repo: string }
@@ -74,7 +74,10 @@ export type TeamActionResult = { ok: boolean; message?: string; upgrade?: Upgrad
 export type TeamClientActions = {
   invite: (email: string, role: TeamRole) => Promise<TeamActionResult>;
   changeRole: (userId: string, role: TeamRole) => Promise<TeamActionResult>;
-  remove: (userId: string) => Promise<TeamActionResult>;
+  // `rotate` asks for the shared vaults' keys to be turned around the removed member
+  // (docs/architecture/teams-vault.md, "Removal and rotation"). The desktop does the crypto in main
+  // and the server writes it; the browser on weft.zip has no main, so it only cuts the devices off.
+  remove: (userId: string, rotate?: boolean) => Promise<TeamActionResult>;
   revoke: (inviteId: string) => Promise<TeamActionResult>;
   addProject: (repo: string) => Promise<TeamActionResult>;
   removeProject: (repo: string) => Promise<TeamActionResult>;
@@ -83,6 +86,19 @@ export type TeamClientActions = {
   // By slug, not the loaded team: Settings → Teams renames any team you own from its list.
   renameTeam: (slug: string, name: string) => Promise<TeamActionResult>;
   deleteTeam: (slug: string, confirm: string) => Promise<TeamActionResult>;
+};
+
+// The desktop's rotate call, as the board sees it (window.weft.vault.rotate, from electron/preload.cjs).
+//
+// The new vault key is made in Electron main, because that is the only place a vault key exists;
+// the board only asks for the rotate and reads back the names of the values to change at their
+// providers. Names only — never a value, never a key.
+export type VaultRotateResult = {
+  ok: boolean;
+  error?: string;
+  // How many vaults were turned.
+  rotated?: number;
+  namesToRotate?: string[];
 };
 
 // "owner/name" as GitHub spells it.

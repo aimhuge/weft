@@ -46,6 +46,21 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
+describe("a column's fold chevron", () => {
+  it("folds the column, even while it's empty, and only shows when the column can fold", async () => {
+    const onFold = vi.fn();
+    const header = (fold?: () => void) => (
+      <ColumnHeader column={{ id: "done", label: "Done" }} count={0} needsYou={false} archivedCount={0} showArchived={false}
+        onToggleArchived={() => {}} toArchive={0} archiveTip="" onArchiveAll={() => {}} onFold={fold} />
+    );
+    const { rerender } = render(header(onFold));
+    await userEvent.click(screen.getByRole("button", { name: "Fold Done" }));
+    expect(onFold).toHaveBeenCalledOnce();
+    rerender(header());
+    expect(screen.queryByRole("button", { name: "Fold Done" })).toBeNull();
+  });
+});
+
 describe("Backlog header", () => {
   it("saves the lane's cards as a sprint and says so", async () => {
     const lane = setup();

@@ -1,6 +1,8 @@
 # Billing
 
-Status: built 2026-10-13; needs the migration applied, Stripe set up and a deploy before it works.
+Status: built 2026-10-13. On weft.zip: the migration, the Stripe products and prices (2026-10-24), the webhook route
+and the billing page; check the Stripe endpoint for step 3 below with `scripts/stripe-prices.mjs`. Team seats follow the
+roster and the pricing cards link to Checkout since 2026-10-26.
 
 Weft has three plans per workspace: **Free**, **Pro** and **Team**. Pro is $20 a month or $200 a year (two months
 free) and replaces the Puku trial's daily cap with a 300M Puku token allowance, refreshed every billing period.
@@ -46,13 +48,40 @@ Each plan includes a BlastCP tier (`plan.blastcp`, a `BlastcpTier`). The figures
 | | Brands | Channels | Posts / month | AI generation credit |
 | --- | ---: | ---: | ---: | ---: |
 | `BLASTCP_FREE` (Weft Free) | 1 | 3 | 30 | $0.50, once (`creditResets: false`) |
-| `BLASTCP_CREATOR` (Weft Pro, Team) | 1 | every (`null`) | unlimited (`null`) | $3 a month |
+| `BLASTCP_CREATOR` (Weft Pro, Team, Open Source, Education) | 1 | every (`null`) | unlimited (`null`) | $3 a month |
 
 Team also gets Creator, not BlastCP Pro: BlastCP Pro is $29 flat, and a one-seat Team only pays $9. BlastCP Pro and Agency
-(more brands and seats) are sold on BlastCP itself, so Weft has no fourth tier for them. **Not built yet: enforcement.**
-Today the bundle is just what the pricing section says. No Weft subscription reaches a BlastCP workspace: BlastCP would
-have to read the Weft plan when an account connects through the token exchange ([blastcp.md](blastcp.md)) and set its own
-`org_subscriptions` row to match.
+(more brands and seats) are sold on BlastCP itself, so Weft has no fourth tier for them.
+
+**Who gets it** (`lib/billing/blastcp-bundle.ts` `blastcpBundle`), one tier per person, on their own BlastCP workspace:
+
+- **Team**: every member gets Creator, since each is a paid seat.
+- **Pro, Open Source, Education**: the workspace's owners get Creator. Pro is priced per workspace, and the grants are
+  free, so the people a workspace invites don't each get a paid BlastCP plan.
+- Anything not `active`/`trialing` (a failing card, a cancel) and a lapsed grant give Free. Someone in several
+  workspaces gets the best one.
+
+The cards say so ("BlastCP Creator for the owner", "… for every seat").
+
+**How BlastCP applies it** (built 2026-10-27; BlastCP's side is aimhuge/blastcp
+`docs/architecture/weft-token-exchange.md` "The Weft plan"):
+
+```
+Weft (desktop)                                   BlastCP                                   weft.zip
+lib/blastcp-plan.ts syncBlastcpPlan ─ POST /api/weft/plan (Bearer Weft JWT) ─►
+  on sign-in, every 12 h (blastcp-auto.ts),       verify like the exchange, find the
+  and when the billing row sees a new plan         identity link ─ GET /api/billing/blastcp ─► { tier, until }
+  (app/api/account/billing, notePlan)             comp its own oldest owned workspace
+the token exchange itself also syncs ─────────►   (setPlanByAdmin), record weft_plan_bundles
+```
+
+- `/api/billing/blastcp` (`app/api/billing/blastcp/route.ts`, deployed Weft) answers only for the token's own user:
+  `{ tier: "free" | "creator", until }`, where `until` is the latest period or grant end that gives Creator.
+- BlastCP never touches a workspace that pays BlastCP through Stripe or is above Creator, takes back only what it
+  bundled, and lapses a bundle on its own `until` + 3 days if Weft goes quiet (a daily cron), so an uninstalled Weft
+  doesn't leave Creator on forever.
+- A BlastCP account connected only through the browser (no Weft identity link) gets nothing: the bundle needs Connect
+  with Weft.
 
 Team follows `@aimhuge/billing`'s DeckCP catalog: `perSeat: true` means the Stripe price is a **per-unit** recurring
 price and the seat count rides on the subscription's `quantity`, so a five-seat workspace is 5 × 900 cents.
@@ -249,16 +278,42 @@ at end of stream.
   and Education, **Manage billing** on Pro and Team, both opening `manageUrl` (system browser in the desktop, a new tab
   on the web). The hook keeps one answer for the board, loaded when you sign in (`useBillingPrefetch` in
   `AccountButton`) so the menu opens with it, and again on window focus. Hidden when signed out or unreadable.
-- **`/api/billing/webhook`** (planned, the same thread as the billing page): Stripe's POST target on
-  `https://weft.zip/api/billing/webhook`. Mounts the 9 events listed below, verifies the signature with
+- **`/api/billing/webhook`** (`app/api/billing/webhook/route.ts`, deployed): Stripe's POST target on
+  `https://weft.zip/api/billing/webhook` (`billing.handleStripeWebhook`, then the referral pass in
+  `lib/billing/referral-webhook.ts`). Takes the 9 events listed below, verifies the signature with
   `STRIPE_WEBHOOK_SECRET`, records the event in `billing_webhook_events` (PK on the Stripe event id, so a
   retried delivery is a unique violation rather than a duplicate write) and dispatches the right
   `billing.*` call (subscription upsert, invoice mirror, payment method attach/detach).
-- **Billing page** (`app/[orgSlug]/billing/page.tsx`, planned): the workspace-scoped manage page on weft.zip
+- **Billing page** (`app/[orgSlug]/billing/page.tsx`, deployed): the workspace-scoped manage page on weft.zip
   (`/team` is the roster; `/<slug>/billing` is the same shell with the plan and invoices). Server actions
   in `lib/billing-actions.ts` handle Checkout (creates a `customer` if needed, hands back a Stripe Checkout
   URL), the portal (Stripe's hosted billing portal for an existing customer), the default payment method
-  swap and the plan switch. Role rules: owner or admin can manage; member can only view.
+  swap and the plan switch. Role rules: owner or admin can manage; member can only view. Arriving with
+  `?plan=pro|team` (a pricing card's link) opens the upgrade dialog for an owner or admin who isn't on that plan yet.
+- **`/billing`** (`app/billing/page.tsx`): the pricing cards' way in. `lib/billing/plan-link.ts` `planLink(plan)` is
+  `/billing?plan=<plan>`; the page sends a signed-out visitor to `/login?next=/billing?plan=…` and anyone signed in to
+  `/<slug>/billing?plan=…` for their current workspace, where `components/team/OpenUpgrade.tsx` opens the dialog whose
+  button starts Checkout. `billing` is a reserved workspace slug, so the route can't shadow a workspace.
+
+## Team seats
+
+Built 2026-10-26. Team bills per seat on the subscription's `quantity`, so the quantity follows the roster:
+`lib/billing/seats.ts` `syncTeamSeats(service, org, actorEmail)` counts `org_memberships` (at least one) and, when that
+differs from the row's `seats`, calls the provider's `changePlan({ plan: "team", interval, seats })`, which updates the
+Stripe item's quantity with `create_prorations` and mirrors the answer onto the row. It runs after every change to who is
+in a workspace:
+
+- an existing account added from the invite box (`addExistingAccount` in `lib/team-ops.ts`);
+- an invite link accepted (`joinWorkspace` in `app/invite/[token]/actions.ts`);
+- a member removed, or leaving (`runRemove` in `lib/team-ops.ts`).
+
+A pending invite isn't a seat until it's accepted. Only a Team row that is still billing (`active`, `trialing`,
+`past_due`) moves, and only when the row's `provider` is the running provider's: a local Weft runs the mock
+(`BILLING_PROVIDER` unset) against the production database, and the mock must never rewrite a row Stripe owns. The team
+actions call `syncTeamSeatsQuietly`, which logs a failure as `Team seats: <slug>: …` instead of throwing, because the
+membership change has already happened and must stand; the next change, or **People** in the admin console (its own
+`syncSeats` in `lib/billing/admin/members.ts`, with the per-mode Stripe client), catches it up. Buying Team bills the
+member count at Checkout (`lib/billing/checkout.ts`).
 
 The mock provider that ships in `@aimhuge/billing` is the default and lets every test run without Stripe,
 but the mock has no hosted checkout page in Weft — for real customers you need `BILLING_PROVIDER=stripe`.
@@ -420,6 +475,10 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
 - `lib/billing/upgrade.ts`, `lib/billing/plan-cards.ts`, `lib/use-upgrade.ts`, `components/UpgradeDialog.tsx` (+ tests) — the upgrade dialog.
 - `lib/billing/stripe-env.ts` + `lib/billing/stripe-env.test.ts` — `requiredStripeEnv`, `missingStripeEnv`, `isBillingConfigError`: the
   STRIPE_* the provider demands, and the price script held to it.
+- `lib/billing/seats.ts` + `lib/billing/seats.test.ts` — `syncTeamSeats`, `syncTeamSeatsQuietly`: Team's quantity follows the roster.
+- `lib/billing/blastcp-bundle.ts` (+ test), `app/api/billing/blastcp/route.ts` (+ test) — the BlastCP tier a user's plan gives them, which BlastCP reads.
+- `lib/blastcp-plan.ts` (+ test) — the desktop's nudge to BlastCP (`syncBlastcpPlan`, `notePlan`), from `lib/blastcp-auto.ts` and `app/api/account/billing`.
+- `lib/billing/plan-link.ts` (+ test), `app/billing/page.tsx`, `components/team/OpenUpgrade.tsx` (+ test) — the pricing cards' way to Checkout.
 - `lib/billing/checkout.ts`, `app/api/billing/checkout/route.ts`, `app/api/account/billing/checkout/route.ts`, `app/checkout/done/page.tsx` (+ tests) — starting Checkout.
 - `lib/billing/plan-gate.ts` + `lib/billing/plan-gate.test.ts` — `TEAM_PLANS`, `GRANT_PLANS`, `grantLapsed`, `canHaveMembers`, `workspacePlan`,
   `workspaceCanHaveMembers`: which plans may have members (server-only).
@@ -475,17 +534,13 @@ endpoint and hands its signing secret to Vercel over the CLI's stdin, never prin
 - Token pricing is a placeholder: `PRO_PUKU_TOKENS = 300_000_000` in `lib/billing/plans.ts`. The user will
   tune it. Stripe doesn't enforce a per-period token count; the catalog does, and a lower number for a
   subscriber only affects their next period.
-- Team is in the catalog and gated on, but the billing page that would sell it (checkout, the plan switch, the seat
-  count on Stripe) is still on the other card. Until `STRIPE_PRICE_TEAM_MONTHLY` exists, a Team subscription can be
-  created by the package and nothing on weft.zip can buy one. Seat changes (add a person, raise the quantity) are
-  the same missing piece: the gate lets members in on Team, but the seat count has to be kept in step with the
-  roster by hand until the billing page does it.
+- A Team seat change that fails at Stripe (a declined proration invoice, an outage) is logged, not retried: the
+  workspace is under- or over-charged until the next membership change or an admin's **People** fixes it.
 - Concurrent requests can overdraw by what they spend together; each is refused up front when the allowance can't
   cover its own estimate (`reserve` in `lib/puku-proxy-usage.ts`), and every reply is charged however it ends, so a
   client that hangs up early still pays. The package accepts this race — the meter writes a row,
   not a counter, and the balance is derived. A burst of N requests at `remaining: 1` can all see the
   one-token allowance and all spend; the next check sees zero. The 15 s `CACHE_MS` keeps the window
   small.
-- The billing page (`/api/billing/webhook`, `app/[orgSlug]/billing/page.tsx`, `lib/billing-actions.ts`)
-  is on another card: this doc covers the wiring that's already in `lib/billing/`, the desktop status,
-  the proxy and the meter.
+- The billing page's own plan section sells Pro only; Team is bought through the upgrade dialog (which the page opens on
+  `?plan=team`) or from the admin console.

@@ -24,6 +24,12 @@ vi.mock("@/lib/github-relay", () => ({
 vi.mock("@/lib/github-status", () => ({
   githubStatus: vi.fn((folders: string[]) => Promise.resolve({ account: { login: "me", url: "https://github.com/me" }, error: null, folders })),
 }));
+// Where each folder's issue cards land, and how a "run" card works (lib/issue-landing.ts).
+const saved = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("@/lib/settings", () => ({
+  setIssueWorkflow: vi.fn((folder: string, workflow: unknown) => saved.set(folder, workflow)),
+  issueWorkflow: vi.fn((folder: string) => saved.get(folder) ?? { landing: "backlog" }),
+}));
 
 const lib = await import("@/lib/github-issues");
 const status = await import("@/lib/github-status");
@@ -32,6 +38,7 @@ const drawer = await import("./github/route");
 const hooks = await import("@/lib/github-hooks");
 const hookRoute = await import("./github/hooks/route");
 const relay = await import("@/lib/github-relay");
+const settings = await import("@/lib/settings");
 const webhook = await import("./github/webhook/route");
 
 const URL = "http://localhost:3457/api/github/issues";
@@ -42,7 +49,10 @@ const FOLDER = os.tmpdir();
 const send = (method: string, body: unknown, headers: Record<string, string> = WRITE) =>
   new Request(URL, { method, headers, body: JSON.stringify(body) });
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  saved.clear();
+});
 
 describe("GET /api/github/issues", () => {
   it("lists the folders that sync and their last sync", async () => {
@@ -69,6 +79,12 @@ describe("POST /api/github/issues", () => {
     expect(res.status).toBe(400);
     expect(((await res.json()) as { error: string }).error).toMatch("no GitHub remote");
     expect(lib.enableIssueSync).not.toHaveBeenCalled();
+  });
+
+  it("takes a worker project's path as it is: its issues become cards on the worker", async () => {
+    const res = await route.POST(send("POST", { folder: "worker://w1/app" }));
+    expect(await res.json()).toEqual({ folder: "worker://w1/app", added: 2, updated: 1, archived: 0 });
+    expect(lib.syncIssues).toHaveBeenCalledWith("worker://w1/app");
   });
 
   it("refuses a missing folder and a write without the header", async () => {
@@ -98,6 +114,28 @@ describe("DELETE /api/github/issues", () => {
     expect((await route.DELETE(send("DELETE", {}))).status).toBe(400);
     expect((await route.DELETE(send("DELETE", { folder: "/dev/app" }, READ))).status).toBe(403);
     expect(lib.disableIssueSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("PATCH /api/github/issues", () => {
+  it("saves where the folder's cards land, with the skill and the agent", async () => {
+    const res = await route.PATCH(send("PATCH", { folder: FOLDER, landing: "run", skill: "weft:plan", agent: "triage" }));
+    expect(await res.json()).toEqual({ folder: FOLDER, workflow: { landing: "run", skill: "weft:plan", agent: "triage" } });
+    expect(settings.setIssueWorkflow).toHaveBeenCalledWith(FOLDER, { landing: "run", skill: "weft:plan", agent: "triage" });
+  });
+
+  it("saves a landing with no skill and no agent", async () => {
+    const res = await route.PATCH(send("PATCH", { folder: FOLDER, landing: "needs_you" }));
+    expect(await res.json()).toEqual({ folder: FOLDER, workflow: { landing: "needs_you" } });
+  });
+
+  it("refuses a landing it doesn't know, a missing folder and a write without the header", async () => {
+    const bad = await route.PATCH(send("PATCH", { folder: FOLDER, landing: "sideways" }));
+    expect(bad.status).toBe(400);
+    expect(((await bad.json()) as { error: string }).error).toMatch("Pick where the cards land");
+    expect((await route.PATCH(send("PATCH", { folder: "/no/such/folder", landing: "run" }))).status).toBe(400);
+    expect((await route.PATCH(send("PATCH", { folder: FOLDER, landing: "run" }, READ))).status).toBe(403);
+    expect(settings.setIssueWorkflow).not.toHaveBeenCalled();
   });
 });
 

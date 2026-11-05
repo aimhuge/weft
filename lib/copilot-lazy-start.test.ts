@@ -24,6 +24,8 @@ vi.mock("./puku-trial", () => ({ startPukuTrial: vi.fn() }));
 vi.mock("./import", () => ({ startSessionSync: vi.fn() }));
 vi.mock("./search", () => ({ startSearchIndex: vi.fn() }));
 vi.mock("./scheduler", () => ({ startScheduler: vi.fn() }));
+vi.mock("./copilot-initiative-run", () => ({ startCheckIns: vi.fn() }));
+vi.mock("./runner-state", () => ({ isBusy: vi.fn(() => false) }));
 vi.mock("./copilot-suggest", () => ({ startSuggestRefresh: vi.fn(), chipCardId: vi.fn() }));
 vi.mock("./resume", () => ({ resumeInterrupted: vi.fn() }));
 vi.mock("./crash-blame", () => ({ consumeServerExit: vi.fn() }));

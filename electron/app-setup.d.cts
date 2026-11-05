@@ -33,6 +33,10 @@ export type GetSafeStorage = () => SafeStorage;
 // safeStorage being unavailable at wire time is fine.
 export type AccountGetter = () => Record<string, string>;
 
+// The local server's address and launch token (electron/main.cjs's `server`). The live-data
+// bridge reads it fresh on each call, because the server may not be up when setupApps runs.
+export type ServerAccessor = () => { url: string; token: string } | null;
+
 export interface AppsHandle {
   account: AccountGetter;
 }
@@ -49,4 +53,5 @@ export function setupApps(opts: {
   dataDir: string | undefined;
   supabaseReadLink: ReadLink | undefined;
   getSafeStorage: GetSafeStorage | undefined;
+  server: ServerAccessor | undefined;
 }): AppsHandle;

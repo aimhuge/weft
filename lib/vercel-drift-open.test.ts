@@ -8,7 +8,7 @@ describe("vercel-drift-open", () => {
   afterEach(() => offProjectOpen("vercel-drift"));
 
   it("asks main for the opened folder's drift on a later tick", async () => {
-    const ask = vi.fn((_route: string, _body?: Record<string, unknown>) => Promise.resolve({}));
+    const ask = vi.fn(() => Promise.resolve({}));
     startVercelDrift(ask);
     projectOpened("/dev/web");
     expect(ask).not.toHaveBeenCalled();
@@ -18,7 +18,7 @@ describe("vercel-drift-open", () => {
 
   it("swallows a main that isn't there", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    const ask = vi.fn((_route: string, _body?: Record<string, unknown>): Promise<Record<string, unknown>> => Promise.reject(new Error("no pane")));
+    const ask = vi.fn((): Promise<Record<string, unknown>> => Promise.reject(new Error("no pane")));
     startVercelDrift(ask);
     projectOpened("/dev/web");
     await new Promise((r) => setImmediate(r));

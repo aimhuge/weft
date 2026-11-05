@@ -18,8 +18,8 @@ vi.mock("./board-palette", () => ({ openTeamPage }));
 
 const { default: ShareCardDialog } = await import("./ShareCardDialog");
 
-const OK: CardShareState = { kind: "ok", id: null, url: null, mode: "private", hasPassword: false };
-const SHARED: CardShareState = { kind: "ok", id: "s1", url: "https://weft.zip/s/s1", mode: "email", hasPassword: false };
+const OK: CardShareState = { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true };
+const SHARED: CardShareState = { kind: "ok", id: "s1", url: "https://weft.zip/s/s1", mode: "email", hasPassword: false, slug: null, showChat: true };
 
 function setup(...answers: CardShareState[]) {
   for (const a of answers) api.getShare.mockResolvedValueOnce(a);

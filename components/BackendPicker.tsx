@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/client";
 import { backendPick } from "@/lib/backend-pick";
 import { patchNow } from "@/lib/optimistic-cards";
 import { isLive } from "@/lib/format";
+import { hostOf } from "@/lib/project-host";
 import { BACKENDS, CODEX_DEFAULT_MODEL, MODELS, NO_MODEL, runningOn } from "@/lib/new-thread";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
 import { useEscape } from "@/lib/use-escape";
@@ -15,8 +15,9 @@ import Icon from "./Icon";
 // A clickable version of the CLI chip for the thread header. Click it and pick a model: one of this
 // CLI's swaps the open CLI's model, one of the other CLI's switches CLI and the next turn runs there
 // (stop the thread first). No replay by default — that's the rate-limit banner's job (and it
-// always replays). The copilot is locked to claude, so it gets the static badge instead.
-export default function BackendPicker({ card }: { card: Card }) {
+// always replays). The copilot picks too (lib/copilot.ts runs it on any CLI); under its reply box the
+// menu opens upward (up), since the box sits at the bottom of its window.
+export default function BackendPicker({ card, up = false }: { card: Card; up?: boolean }) {
   // Without a "[1m]" context suffix, so it matches a MODELS id.
   const model = runningOn(card).model?.replace(/\[[^\]]*\]$/, "");
   // "" is the CLI's own choice — the card's own model, when it has one. Codex's "Codex default"
@@ -27,8 +28,7 @@ export default function BackendPicker({ card }: { card: Card }) {
   const [error, setError] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const live = isLive(card);
-  const locked = card.role === "copilot";
-  const atLimit = new Set(useLimitedModels().map((l) => l.model));
+  const atLimit = new Set(useLimitedModels(card.cwd).map((l) => l.model));
   useEscape(open, () => setOpen(false));
 
   useEffect(() => {
@@ -51,13 +51,12 @@ export default function BackendPicker({ card }: { card: Card }) {
       setError(pickNow.refused);
       return;
     }
-    void patchNow(card.id, pickNow.patch, () => api.switchBackend(card.id, next, false, id)).catch((err: unknown) => {
+    // The card's host switches it (lib/project-host.ts): this Mac's route, or a worker's card.switchBackend.
+    void patchNow(card.id, pickNow.patch, () => hostOf(card).act("card.switchBackend", { id: card.id, backend: next, replay: false, model: id })).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
       setError(message.replace(/^Error:\s*/, "") || "Couldn't switch.");
     });
   }
-
-  if (locked) return <BackendBadge backend={card.backend} card={card} />;
 
   const row = "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] hover:bg-accent-soft disabled:opacity-40 disabled:hover:bg-transparent";
   return (
@@ -73,7 +72,7 @@ export default function BackendPicker({ card }: { card: Card }) {
         <BackendBadge backend={card.backend} card={card} />
       </button>
       {open && (
-        <div className="absolute left-0 top-full z-30 mt-1 w-48 rounded-lg border border-line bg-panel p-1 shadow-lg">
+        <div className={`absolute left-0 z-30 w-48 rounded-lg ${up ? "bottom-full mb-1 max-h-[60vh] overflow-y-auto" : "top-full mt-1"} border border-line bg-panel p-1 shadow-lg`}>
           <div role="group" aria-label="Default">
             <button
               type="button"

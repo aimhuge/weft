@@ -84,6 +84,9 @@ export function toggleColumn(layout: Layout, id: ColumnId): Layout {
 }
 
 export function setOpen(layout: Layout, id: ColumnId, open: boolean): Layout {
+  // Already in that state: hand back the same layout, so nothing re-renders or re-writes storage.
+  // Opening a card asks for the pane every time, and the pane is usually already open.
+  if (layout.open[id] === open) return layout;
   const next = cloneLayout(layout);
   const openCount = COLUMNS.reduce((n, c) => (next.open[c] ? n + 1 : n), 0);
   if (!open && openCount <= 1) return next;

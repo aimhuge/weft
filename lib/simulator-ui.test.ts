@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { dropIdb, setIdb } from "./idb-session";
 
 // What's on a device's screen and the touches that act on it. The tools behind it (axe, adb) are
 // faked: each call is recorded so the test can pin the exact command line.
@@ -293,5 +294,18 @@ describe("uiTree", () => {
     const tree = await ui.uiTree(android);
     expect(exec.runText).toHaveBeenCalledWith("adb", ["-s", "emulator-5554", "exec-out", "uiautomator", "dump", "/dev/tty"]);
     expect(at(tree, 0)).toMatchObject({ label: "Hi", type: "TextView" });
+  });
+});
+
+describe("touches on a device with idb open", () => {
+  const idb = { size: { width: 1, height: 1 }, tap: vi.fn(() => Promise.resolve()), swipe: vi.fn(() => Promise.resolve()), touch: vi.fn(), key: vi.fn(), text: vi.fn(), video: vi.fn(), close: vi.fn() };
+
+  it("goes through idb, not a fresh process", async () => {
+    setIdb(ios.id, idb);
+    await ui.tapAt(ios, 12, 34);
+    await ui.swipe(ios, { x: 1, y: 2 }, { x: 3, y: 4 }, 200);
+    dropIdb(ios.id, idb);
+    expect(idb.tap).toHaveBeenCalledWith(12, 34);
+    expect(idb.swipe).toHaveBeenCalledWith({ x: 1, y: 2 }, { x: 3, y: 4 }, 200);
   });
 });

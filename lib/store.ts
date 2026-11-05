@@ -11,6 +11,7 @@ import { globalSingleton } from "./global-singleton";
 import { normalizeTags } from "./tags";
 import { compareCardOrder, ordersForSlot } from "./card-order";
 import { orphanTasks } from "./tasks";
+import { writeFileAtomic } from "./atomic-write";
 
 // The app was called Threadboard and kept its data in ~/.threadboard. Move that folder to
 // ~/.weft the first time, unless ~/.weft already exists. If the move fails, keep using the old one.
@@ -54,6 +55,7 @@ function loadState(): State {
       card.tasks = orphanTasks(card.tasks, Date.now()) ?? card.tasks;
       if (card.column === "running" || card.pending) {
         card.column = "review";
+        delete card.archived; // as updateCard does: a card back in Review isn't filed away
         card.pending = null;
         card.lastLine = CLOSED_LINE;
         // lib/resume.ts carries the turn on, unless it's been cut off MAX_RESUMES carry-ons in a row.
@@ -61,7 +63,7 @@ function loadState(): State {
       }
       cards.set(card.id, card);
     }
-    if (migrateLibrary([...cards.values()])) fs.writeFileSync(BOARD_FILE, JSON.stringify({ cards: [...cards.values()] }, null, 2));
+    if (migrateLibrary([...cards.values()])) writeFileAtomic(BOARD_FILE, JSON.stringify({ cards: [...cards.values()] }, null, 2));
   }
   return { cards, threads: new Map() };
 }
@@ -107,7 +109,8 @@ function libraryKinds(): Map<string, string> {
 
 function saveBoard() {
   const cards = [...state().cards.values()];
-  fs.writeFileSync(BOARD_FILE, JSON.stringify({ cards }, null, 2));
+  // Temp file, fsync, rename (lib/atomic-write.ts): a crash mid-write can't leave a half-written board.
+  writeFileAtomic(BOARD_FILE, JSON.stringify({ cards }, null, 2));
 }
 
 function threadFile(id: string) {
@@ -188,6 +191,9 @@ export function updateCard(id: string, patch: Partial<Card>): Card {
   const now = Date.now();
   const moved = patch.column !== undefined && patch.column !== card.column;
   Object.assign(card, patch, { updatedAt: now }, moved ? { columnAt: now } : {});
+  // Archived means filed away from Done. Any other move (a turn ending in Review, a closed session, a drag)
+  // brings it back, or a card that still needs you would vanish; a patch that sets archived itself decides.
+  if (moved && card.column !== "done" && patch.archived === undefined) delete card.archived;
   // A card's symbol claims (lib/claims.ts) end with its work: at Done, or when it's archived.
   if (card.column === "done" || card.archived) delete card.claims;
   saveBoard();
@@ -276,7 +282,7 @@ function setPictures(cardId: string, patch?: Pick<Card, "pictures" | "thumb">) {
 }
 
 // Sets a card's fields that aren't activity (its pane capture, its emoji), leaving updatedAt alone.
-export function decorateCard(id: string, patch: Partial<Pick<Card, "thumb" | "emoji" | "title" | "titleBy" | "tags" | "tagsBy" | "share">>) {
+export function decorateCard(id: string, patch: Partial<Pick<Card, "thumb" | "emoji" | "title" | "titleBy" | "tags" | "tagsBy" | "share" | "page" | "pages">>) {
   const card = state().cards.get(id);
   if (!card) return;
   Object.assign(card, patch);
@@ -308,6 +314,15 @@ export function foldThread(cardId: string, from: number) {
   saveThread(cardId);
   setPictures(cardId, threadPictures(items));
   if (folded) publish({ type: "thread", cardId, item: folded, index: items.length - 1, truncate: true });
+}
+
+// Drops the thread from `from` on (a copilot check-in it answered QUIET, lib/copilot-initiative-run.ts).
+export function dropThreadFrom(cardId: string, from: number) {
+  const items = getThread(cardId).slice(0, from);
+  state().threads.set(cardId, items);
+  saveThread(cardId);
+  const last = items[items.length - 1];
+  publish(last ? { type: "thread", cardId, item: last, index: items.length - 1, truncate: true } : { type: "thread_cleared", cardId });
 }
 
 export function replaceThreadItem(cardId: string, index: number, item: ThreadItem) {

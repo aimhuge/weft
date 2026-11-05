@@ -14,7 +14,8 @@ is never written to, so every run starts from the same point.
 - **⏰ in the New thread window** (`components/NewThreadHeaderActions.tsx`): puts the prompt being written on a cron
   instead of starting it once, with the window's folder, CLI, model and mode; "Also run now" fires the first run.
 - **⏰ Crons on the left rail** (under 🏷, `components/CronsDrawer.tsx`): every cron, soonest first, with a count badge
-  of the ones that will run again. Each row: schedule, next run, an on/off switch, the last runs as dots coloured by
+  of the ones that will run again. Each row: schedule, next run, an on/off switch (`components/CronSwitch.tsx`, the
+  same switch the thread header's popover puts beside its crons), the last runs as dots coloured by
   their card's column (`lib/crons-view.ts`; click one to open that run), Run now, Edit (the same form) and Delete.
   A cron a thread made over MCP says so. The first time it opens, the drawer plays its intro video
   (`public/intros/crons.html`, docs/architecture/feature-intros.md).
@@ -60,6 +61,46 @@ The board MCP has `create_cron`, `list_crons`, `update_cron`, `delete_cron` and 
 in every thread and the copilot, trusted like `create_card` (`CRON_TOOL_NAMES` in `lib/cron-types.ts`). A thread's
 `create_cron` forks itself by default. `cron-tools` loads `cron-run` only when a run fires: `cron-run` reaches the
 runner, which builds these tools.
+
+## On a Weft Worker
+
+A cron lives where its runs fire: its cards work in a checkout and a fork resumes a session on that host's disk. So a
+cron a thread makes on a worker is the worker's (its own `crons.json`, fired by the worker's own `startCronClock`,
+started after recovery), and `create_cron` there refuses a folder or source card that isn't the worker's. The worker
+publishes its whole list after every `crons` event (`lib/worker-lists.ts` → `worker_set_lists` → `cloud_worker_lists`,
+owner-only), and the Mac's `GET /api/crons` adds them (`lib/worker-lists-read.ts`) with their `worker://` folder, an id
+`worker:<worker>:<cron>` and `worker` set to its name, so the ⏰ drawer and count include them, and a worker project's ⏰
+shows only that worker's. The drawer's switch, Edit, Run now and Delete reach the worker as host verbs (`cron.update`,
+`cron.run`, `cron.delete`; `lib/worker-list-acts.ts`), held to what the drawer changes (never the folder, CLI, mode or
+agent, never a "!" prompt), and a run from the Mac starts in the mode a card from the network may. A worker card's
+thread header ⏰ makes one there too: `components/ThreadCronButton.tsx` sends `cron.create` through `hostOf(card).act`
+(`lib/host-api/cron-create.ts`, args.id the card, so each run takes the card's folder, CLI, model, effort and agent on
+the worker); remoteRefusal keeps the row to what the popover sends (`cronCreateRefusal`, @weft/client list-policy.ts:
+prompt, schedule, name, fork or fresh, the message to fork at, a window, on or off, run now; never a "!" prompt), the
+worker narrows the cron's mode to what a card from the network may start in (`lib/worker-kinds.ts` `listVerb`), and a
+Mac refuses it from the network like its other list verbs. The popover reads the list again once the worker has
+republished it (`useCrons().later`). The other way,
+`list_crons` on a worker lists the Mac's crons too, read-only as `mac:<id>` (`lib/mac-crons.ts` publishes a summary to
+`cloud_mac_crons`), and refuses to change one. Details:
+[project-hosts.md](project-hosts.md#crons-and-webhooks-both-ways-as-built).
+
+## Crons Weft runs for itself
+
+Two crons are not a user's scheduled job but Weft's own upkeep, both in `~/.weft/crons.json` and both made
+over MCP from a thread:
+
+- **Weekly repo analysis** (Mondays 10:00, fresh thread, `~/dev/weft`): runs the repo-analysis skill's
+  four scripts over the repo (docs/architecture/skills.md; the skill ships five, but `docs-drift.sh` is the
+  superseded shell version of `docs-drift.mjs` and nothing calls it) and writes a report to
+  `~/.weft/show/repo-analysis/report-YYYY-MM-DD.html`, so the weekly runs accumulate rather than overwrite
+  each other. It **diffs against the previous run** — the point is what moved since last week, not what
+  is — and leads with what got worse, what got better, and a short read on whether the repo is getting
+  healthier. The first report is `~/.weft/show/repo-analysis/index.html`, and its style is the house style
+  the later ones copy. Its infrastructure and quota numbers are **live, not baked**: the page reads
+  `/api/infra/live` through Weft's own bridge on open, so the database, storage and egress figures are
+  true at the moment you read the report (docs/architecture/infra-live.md).
+- **Daily growth summary** (daily 9:00): posts the day's growth numbers to the #user-growth Slack channel
+  through the board's own API.
 
 ## API
 

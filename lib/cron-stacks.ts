@@ -1,3 +1,4 @@
+import { foldParentOf } from "./cron-fold";
 import type { Card, Column } from "./types";
 
 // A cron's runs fold into a stack on the board (components/CronStack.tsx): under the thread they were forked from,
@@ -15,13 +16,19 @@ export function stackRuns(byColumn: Map<Column, Card[]>): Stacks {
   for (const list of byColumn.values()) for (const card of list) shown.add(card.id);
   const stacks = new Map<string, Card[]>();
   // A run whose holder is on screen goes in its stack; one whose holder isn't stays where it is.
-  const stacked = (card: Card) => Boolean(card.cronOf && card.cronOf !== card.id && shown.has(card.cronOf));
+  // Only a cron's run stacks: a card started by another thread stays in its column (lib/list-tree.ts draws that tree).
+  const stacked = (card: Card) => {
+    const holder = card.cronOf;
+    return Boolean(holder && holder !== card.id && shown.has(holder));
+  };
   for (const list of byColumn.values()) {
     for (const card of list) {
       if (!stacked(card)) continue;
-      const runs = stacks.get(card.cronOf as string) ?? [];
+      // A stacked run's holder is its cronOf, and stacked() has just checked it is a card on screen.
+      const holder = foldParentOf(card) as string;
+      const runs = stacks.get(holder) ?? [];
       runs.push(card);
-      stacks.set(card.cronOf as string, runs);
+      stacks.set(holder, runs);
     }
   }
   for (const runs of stacks.values()) runs.sort((a, b) => (b.cronRun ?? 0) - (a.cronRun ?? 0) || b.createdAt - a.createdAt);

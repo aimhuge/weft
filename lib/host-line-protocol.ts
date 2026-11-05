@@ -1,0 +1,179 @@
+// The session line's wire (docs/architecture/project-hosts.md#routes-the-webrtc-line): one WebRTC peer connection per
+// worker host, shared by every card a board shows, with named channels. Both ends read the same parsers, so a message
+// one side can't read is dropped, never half-applied.
+//
+//   host      board → worker  { id, verb, args }        one host-api verb, run as a `host` command is (remoteRefusal)
+//             worker → board  { id, ok, result|error }  in order, reliable
+//   events    worker → board  { t: "card" | "card_deleted" | "thread" | "thread_cleared", … }   what the relay mirrors,
+//                             { t: "delta", … }   a reply's text as it streams (lib/line-deltas.ts), and
+//                             { t: "file", … }    a watched file changed (lib/host-line-files.ts)
+//   line      both ways       ping/pong (the heartbeat and the chip's ms), offer/answer (renegotiation over the line)
+//   terminal  board → worker  { t: "open", folder, cols, rows, widen } then input/resize; worker → board opened/data/exit/refused.
+//             Only with a signed approval for that folder (lib/host-line-terminal.ts); without one, TERMINAL_REFUSAL.
+import type { IceServer, LineOffer } from "@weft/client";
+import type { HostResult } from "./host-command";
+import type { ScreenQuality } from "./rtc-signal";
+import type { Card, ThreadItem } from "./types";
+
+// The channel labels, the sealed offer's purpose and shape, and its topic are @weft/client's, so the phone and weft.zip
+// open the same line (packages/weft-client/src/line-offer.ts).
+export { LINE_CHANNELS, LINE_PURPOSE, lineTopic, type IceServer, type LineOffer } from "@weft/client";
+export const TERMINAL_REFUSAL =
+  "A terminal on a worker opens only with your approval: Touch ID in Weft on your Mac, the Mac this worker was paired with (weft-worker enrol <code> --re-pair on the box).";
+
+// The terminal channel's messages (lib/host-line-terminal.ts on the worker, lib/line-terminal.ts on the board).
+export type TerminalIn =
+  | { t: "open"; folder: string; cols: number; rows: number; widen: unknown }
+  | { t: "input"; data: string }
+  | { t: "resize"; cols: number; rows: number };
+export type TerminalOut = { t: "opened" } | { t: "data"; data: string } | { t: "exit"; code: number } | { t: "refused"; message: string };
+
+// A terminal's size: whole cells, within what a screen could show.
+const cells = (v: unknown, max: number): v is number => typeof v === "number" && Number.isInteger(v) && v > 0 && v <= max;
+
+export interface HostCall {
+  id: number;
+  verb: string;
+  args: Record<string, unknown>;
+}
+export type HostReply = { id: number; ok: true; result: HostResult } | { id: number; ok: false; error: string };
+
+export type LineEvent =
+  | { t: "card"; card: Card }
+  | { t: "card_deleted"; id: string }
+  | { t: "thread"; cardId: string; index: number; item: ThreadItem; truncate?: boolean }
+  | { t: "thread_cleared"; cardId: string }
+  // The reply streaming in on a card, redacted, ~50 ms at a time: `text` follows what came before for the same `index` (the
+  // thread's length when the reply began), or replaces it with `reset`.
+  | { t: "delta"; cardId: string; index: number; text: string; reset?: true }
+  // A file a board watches (files.watch) changed on the worker: its hash now, null once it's gone or can't be read.
+  | { t: "file"; cardId: string; path: string; hash: string | null };
+
+// A watched device to carry as a track on the line, and the label of the input channel that goes with it
+// (`input:<device>:<nonce>`): that channel closing is what stops this track, not one before or after it.
+export interface LineScreen {
+  device: string;
+  quality?: ScreenQuality;
+  channel?: string;
+}
+
+export const screenChannel = (device: string, nonce: string) => `input:${device}:${nonce}`;
+// `input:<device>:<nonce>`: a device id (a simulator's UDID) and 8 to 32 hex digits, nothing else.
+const SCREEN_CHANNEL = /^input:([A-Za-z0-9-]{1,64}):[0-9a-f]{8,32}$/;
+// A worker card's own headless browser, live as a "device" (lib/worker-browser-screen.ts): its frames are JPEGs on the
+// input channel rather than a video track.
+export const isBrowserScreen = (device: string | undefined) => !!device && /^browser-[0-9a-f]{16}$/.test(device);
+// The device a well-formed input channel's label names, or null for any other label.
+export function deviceOfChannel(label: string): string | null {
+  return SCREEN_CHANNEL.exec(label)?.[1] ?? null;
+}
+export type Control =
+  | { t: "ping"; at: number }
+  | { t: "pong"; at: number }
+  | { t: "offer"; sdp: string; screen?: LineScreen }
+  | { t: "answer"; sdp: string }
+  | { t: "error"; message: string };
+
+const isObject = (v: unknown): v is Record<string, unknown> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
+const str = (v: unknown): v is string => typeof v === "string" && v.length > 0;
+const num = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+function parse(raw: string): Record<string, unknown> | null {
+  try {
+    const v: unknown = JSON.parse(raw);
+    return isObject(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function iceServer(v: unknown): IceServer | null {
+  if (!isObject(v)) return null;
+  const urls = Array.isArray(v.urls) ? v.urls.filter(str) : str(v.urls) ? v.urls : null;
+  if (!urls || (Array.isArray(urls) && !urls.length)) return null;
+  const out: IceServer = { urls };
+  if (str(v.username)) out.username = v.username;
+  if (str(v.credential)) out.credential = v.credential;
+  return out;
+}
+
+export const iceServers = (v: unknown): IceServer[] => (Array.isArray(v) ? v.map(iceServer).filter((s): s is IceServer => s !== null) : []);
+
+// The worker's reading of the opened offer. Null for anything short of a whole one.
+export function readLineOffer(raw: string): LineOffer | null {
+  const p = parse(raw);
+  if (!p || !str(p.sdp) || !str(p.key) || !str(p.topic)) return null;
+  return { sdp: p.sdp, key: p.key, topic: p.topic, ice: iceServers(p.ice) };
+}
+
+export function readHostCall(raw: string): HostCall | null {
+  const p = parse(raw);
+  if (!p || !num(p.id) || !str(p.verb)) return null;
+  return { id: p.id, verb: p.verb, args: isObject(p.args) ? p.args : {} };
+}
+
+export function readHostReply(raw: string): HostReply | null {
+  const p = parse(raw);
+  if (!p || !num(p.id)) return null;
+  if (p.ok === true && isObject(p.result)) return { id: p.id, ok: true, result: p.result as HostResult };
+  if (p.ok === false && str(p.error)) return { id: p.id, ok: false, error: p.error };
+  return null;
+}
+
+type Message = Record<string, unknown>;
+
+// Each event's reader, by its `t`: the event, or null when it isn't whole.
+const EVENT_READERS: Record<LineEvent["t"], (p: Message) => LineEvent | null> = {
+  card: (p) => (isObject(p.card) && str(p.card.id) ? { t: "card", card: p.card as unknown as Card } : null),
+  card_deleted: (p) => (str(p.id) ? { t: "card_deleted", id: p.id } : null),
+  thread_cleared: (p) => (str(p.cardId) ? { t: "thread_cleared", cardId: p.cardId } : null),
+  thread: (p) =>
+    str(p.cardId) && num(p.index) && isObject(p.item)
+      ? { t: "thread", cardId: p.cardId, index: p.index, item: p.item as unknown as ThreadItem, ...(p.truncate === true ? { truncate: true } : {}) }
+      : null,
+  delta: (p) =>
+    str(p.cardId) && num(p.index) && typeof p.text === "string"
+      ? { t: "delta", cardId: p.cardId, index: p.index, text: p.text, ...(p.reset === true ? { reset: true } : {}) }
+      : null,
+  file: (p) => (str(p.cardId) && str(p.path) && (p.hash === null || str(p.hash)) ? { t: "file", cardId: p.cardId, path: p.path, hash: p.hash } : null),
+};
+
+export function readLineEvent(raw: string): LineEvent | null {
+  const p = parse(raw);
+  const read = p && typeof p.t === "string" && Object.hasOwn(EVENT_READERS, p.t) ? EVENT_READERS[p.t as LineEvent["t"]] : null;
+  return p && read ? read(p) : null;
+}
+
+function lineScreen(v: unknown): LineScreen | undefined {
+  if (!isObject(v) || !str(v.device)) return undefined;
+  return { device: v.device, ...(str(v.quality) ? { quality: v.quality as ScreenQuality } : {}), ...(str(v.channel) ? { channel: v.channel } : {}) };
+}
+
+export function readControl(raw: string): Control | null {
+  const p = parse(raw);
+  if (!p) return null;
+  if ((p.t === "ping" || p.t === "pong") && num(p.at)) return { t: p.t, at: p.at };
+  if (p.t === "answer" && str(p.sdp)) return { t: "answer", sdp: p.sdp };
+  if (p.t === "error" && str(p.message)) return { t: "error", message: p.message };
+  if (p.t !== "offer" || !str(p.sdp)) return null;
+  const screen = lineScreen(p.screen);
+  return screen ? { t: "offer", sdp: p.sdp, screen } : { t: "offer", sdp: p.sdp };
+}
+
+export function readTerminalIn(raw: string): TerminalIn | null {
+  const p = parse(raw);
+  if (!p) return null;
+  if (p.t === "input" && typeof p.data === "string") return { t: "input", data: p.data };
+  if (p.t === "resize" && cells(p.cols, 1000) && cells(p.rows, 500)) return { t: "resize", cols: p.cols, rows: p.rows };
+  if (p.t !== "open" || !str(p.folder) || !cells(p.cols, 1000) || !cells(p.rows, 500)) return null;
+  return { t: "open", folder: p.folder, cols: p.cols, rows: p.rows, widen: p.widen };
+}
+
+export function readTerminalOut(raw: string): TerminalOut | null {
+  const p = parse(raw);
+  if (!p) return null;
+  if (p.t === "opened") return { t: "opened" };
+  if (p.t === "data" && typeof p.data === "string") return { t: "data", data: p.data };
+  if (p.t === "exit" && num(p.code)) return { t: "exit", code: p.code };
+  return p.t === "refused" && str(p.message) ? { t: "refused", message: p.message } : null;
+}

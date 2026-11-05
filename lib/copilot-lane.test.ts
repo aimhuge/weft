@@ -1,21 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { columnMinWidth, LANE_CYCLE, laneDigest, laneStateFromPrefs, lastAsked, lastReply } from "./copilot-lane";
-import type { Card, ThreadItem } from "./types";
-
-function card(over: Partial<Card>): Card {
-  return {
-    id: "c1",
-    title: "A thread",
-    prompt: "",
-    cwd: "/dev/app",
-    backend: "claude",
-    permissionMode: "auto",
-    column: "running",
-    createdAt: 0,
-    updatedAt: 0,
-    ...over,
-  };
-}
+import { columnMinWidth, hasUnread, LANE_CYCLE, laneStateFromPrefs, lastReply, lastReplyAt } from "./copilot-lane";
+import type { ThreadItem } from "./types";
 
 describe("columnMinWidth", () => {
   it("keeps columns roomy when the lane is hidden, narrows them once peek or open", () => {
@@ -39,19 +24,6 @@ describe("LANE_CYCLE", () => {
     expect(LANE_CYCLE.hidden).toBe("peek");
     expect(LANE_CYCLE.peek).toBe("open");
     expect(LANE_CYCLE.open).toBe("hidden");
-  });
-});
-
-describe("lastAsked", () => {
-  it("is the time of your last message, or 0 before you sent one", () => {
-    expect(lastAsked([])).toBe(0);
-    const items: ThreadItem[] = [
-      { kind: "user", text: "hi", at: 10 },
-      { kind: "assistant", text: "hello", at: 11 },
-      { kind: "user", text: "and?", at: 20 },
-      { kind: "assistant", text: "more", at: 21 },
-    ];
-    expect(lastAsked(items)).toBe(20);
   });
 });
 
@@ -93,26 +65,22 @@ describe("lastReply", () => {
   });
 });
 
-describe("laneDigest", () => {
-  it("lists what needs you, newest first, leaving out archived cards and the copilot", () => {
-    const cards = [
-      card({ id: "a", column: "needs_you", updatedAt: 1 }),
-      card({ id: "b", column: "needs_you", updatedAt: 5 }),
-      card({ id: "c", column: "needs_you", archived: true }),
-      card({ id: "copilot", column: "needs_you", role: "copilot" }),
-      card({ id: "d", column: "running" }),
-    ];
-    expect(laneDigest(cards, []).needsYou.map((c) => c.id)).toEqual(["b", "a"]);
+describe("hasUnread", () => {
+  const items: ThreadItem[] = [
+    { kind: "user", text: "what next?", at: 10 },
+    { kind: "assistant", text: "Build the diff view.", at: 20 },
+    { kind: "assistant", text: "  ", at: 30 },
+  ];
+
+  it("dates the latest reply with text, or 0 before any", () => {
+    expect(lastReplyAt(items)).toBe(20);
+    expect(lastReplyAt([])).toBe(0);
   });
 
-  it("counts cards that reached Review or Done since you last asked", () => {
-    const cards = [
-      card({ id: "a", column: "review", updatedAt: 30 }),
-      card({ id: "b", column: "done", updatedAt: 40 }),
-      card({ id: "c", column: "done", updatedAt: 5 }),
-      card({ id: "d", column: "running", updatedAt: 50 }),
-    ];
-    const items: ThreadItem[] = [{ kind: "user", text: "status?", at: 10 }];
-    expect(laneDigest(cards, items)).toEqual({ needsYou: [], finished: 2, lastReply: null });
+  it("lights only for a reply after you last looked", () => {
+    expect(hasUnread(items, 0)).toBe(true);
+    expect(hasUnread(items, 19)).toBe(true);
+    expect(hasUnread(items, 20)).toBe(false);
+    expect(hasUnread([], 0)).toBe(false);
   });
 });

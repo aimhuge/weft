@@ -4,18 +4,21 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { isLive } from "@/lib/format";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
-import { firstNow, patchNow, waitNow } from "@/lib/optimistic-cards";
+import { useRegularMode } from "@/lib/use-regular-mode";
+import { patchNow } from "@/lib/optimistic-cards";
+import { holdNow, type Hold } from "@/lib/card-handlers-host";
+import { hostOf } from "@/lib/project-host";
 import ArchiveButton from "./ArchiveButton";
 import CardFooterMeta from "./CardFooterMeta";
 import CronMark, { cronCardClass } from "./CronMark";
 import CardFace from "./CardFace";
-import CardPicture from "./CardPicture";
 import CardProgress, { showsCardProgress } from "./CardProgress";
 import Icon, { Spinner } from "./Icon";
 import { ContinueButton, RestartButton, type ResumeHow } from "./CardResume";
 import CardMarks from "./CardMarks";
 import RestartMark, { restartCardClass } from "./RestartMark";
 import StarButton from "./StarButton";
+import TeamOwnerMark, { TeamCardPicture } from "./TeamOwnerMark";
 
 // Re-exports so existing import sites keep working.
 export { default as BackendBadge } from "./BackendBadge";
@@ -61,7 +64,7 @@ function RateLimitSwitch({ card }: { card: Card }) {
     <button
       onClick={(e) => {
         e.stopPropagation();
-        void api.switchBackend(card.id, other, true).catch(() => {});
+        void hostOf(card).act("card.switchBackend", { id: card.id, backend: other, replay: true }).catch(() => {});
       }}
       className="mt-2 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-on-accent hover:opacity-90"
     >
@@ -143,7 +146,8 @@ export default function CardView({
   const fixed = card.column === "running" || card.role === "copilot" || readOnly;
   // The issue and tags sit on the progress line, or in the footer when the card has none.
   const marks = <CardMarks card={card} onTag={onTag} onDismissBreak={readOnly ? undefined : () => void patchNow(card.id, { broke: undefined }, () => api.clearBreak(card.id)).catch(() => {})} />;
-  const progress = showsCardProgress(card);
+  const regular = useRegularMode();
+  const progress = !regular && showsCardProgress(card);
   const answered = answeredId !== null && answeredId === card.pending?.id;
   // A card that broke Weft (lib/crash-blame.ts) is ringed red until you dismiss its chip; selection still shows.
   const border = card.broke && !selected ? BROKE_BORDER : cardBorder(card, selected, unseen, lastOpen);
@@ -182,7 +186,8 @@ export default function CardView({
           {!readOnly && <RateLimitSwitch card={card} />}
         </div>
         <div className="flex shrink-0 items-start gap-1.5">
-          <CardPicture card={card} />
+          {/* A teammate's card wears their avatar on its picture's corner (components/TeamOwnerMark.tsx). */}
+          <TeamCardPicture card={card} />
         </div>
       </div>
       {progress && <CardProgress card={card} marks={marks} />}
@@ -203,7 +208,7 @@ export default function CardView({
 function CardPrompts({ card, answered, onAnswer, onOpen, onResume }: { card: Card; answered: boolean; onAnswer: (allow: boolean) => void; onOpen: () => void; onResume?: (how: ResumeHow) => void }) {
   return (
     <>
-      {waitsForLogin(card) && (
+      {waitsForLogin(card) && hostOf(card).can("login") && (
         <button
           onClick={(e) => {
             e.stopPropagation();
@@ -236,7 +241,9 @@ function CardPrompts({ card, answered, onAnswer, onOpen, onResume }: { card: Car
 }
 
 // The footer's buttons: continue, star, archive and stop. A read-only card (weft.zip) has none.
+// A teammate's card (lib/team-host.ts) shows whose it is there instead.
 function CardActions({ card, readOnly, onResume, onStar, onArchive, onStop }: { card: Card; readOnly: boolean; onResume?: (how: ResumeHow) => void; onStar?: () => void; onArchive?: () => void; onStop: () => void }) {
+  if (card.team) return <TeamOwnerMark mark={card.team} />;
   if (readOnly) return null;
   // The copilot opens like any card but can't be moved, starred or filed under a project.
   const copilot = card.role === "copilot";
@@ -252,18 +259,20 @@ function CardActions({ card, readOnly, onResume, onStar, onArchive, onStop }: { 
 
 // The Allow / Deny pair for a permission prompt. The card opens the thread on click; each button
 // stops the event so the click answers the prompt instead. An edit another card is holding offers
-// the holder's face, Wait (the default, as in the thread's prompt) and Me first (lib/precedence.ts), which goes
-// ahead and has the holder leave the file to this card. A card already waiting (lib/permission-wait.ts) drops
-// Wait; its last line already says who it waits for. Buttons never wrap, so a narrow card stays one row.
+// the order, not a refusal: the holder's face, Wait (the default, as in the thread's prompt), This first
+// (lib/precedence.ts), which goes ahead and has the holder leave the file to this card, and Others
+// first, which puts the holder ahead — this card leaves the file to it and waits. A card already
+// waiting (lib/permission-wait.ts) drops Wait; its last line already says who it waits for. Buttons
+// never wrap, so a narrow card stays one row.
 function PermissionRow({ card, answered, onAnswer }: { card: Card; answered: boolean; onAnswer: (allow: boolean) => void }) {
   const stop = (allow: boolean) => (e: React.MouseEvent) => {
     e.stopPropagation();
     onAnswer(allow);
   };
   const holder = card.pending?.why?.holder;
-  const send = (call: typeof waitNow) => (e: React.MouseEvent) => {
+  const send = (hold: Hold) => (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (card.pending) void call(card.id, card.pending.id).catch(() => {});
+    if (card.pending) void holdNow(card, hold, card.pending.id).catch(() => {});
   };
   const btn = "whitespace-nowrap rounded-md px-2.5 py-1 text-[12px] disabled:opacity-50";
   const primary = `${btn} bg-accent font-medium text-on-accent hover:opacity-90`;
@@ -275,14 +284,16 @@ function PermissionRow({ card, answered, onAnswer }: { card: Card; answered: boo
       <div className="mt-2 flex items-center gap-1.5">
         <CardFace face={holder} tip={`‘${holder.title}’ is editing this file`} />
         {!card.pending?.waiting && (
-          <button onClick={send(waitNow)} disabled={answered} className={primary} title={`Hold this edit until ‘${holder.title}’ finishes or commits, then redo it on top`}>
+          <button onClick={send("wait")} disabled={answered} className={primary} title={`Hold this edit until ‘${holder.title}’ finishes or commits, then redo it on top`}>
             Wait
           </button>
         )}
-        <button onClick={send(firstNow)} disabled={answered} className={card.pending?.waiting ? primary : secondary} title={`Go ahead, and ‘${holder.title}’ leaves this file to this card until it commits or finishes`}>
-          Me first
+        <button onClick={send("first")} disabled={answered} className={card.pending?.waiting ? primary : secondary} title={`Go ahead, and ‘${holder.title}’ leaves this file to this card until it commits or finishes`}>
+          This first
         </button>
-        {deny}
+        <button onClick={send("otherFirst")} disabled={answered} className={secondary} title={`Let ‘${holder.title}’ go first: it keeps this file, and this card waits until it commits or finishes`}>
+          Others first
+        </button>
       </div>
     );
   return (

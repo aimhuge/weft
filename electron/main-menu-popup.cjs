@@ -13,6 +13,8 @@ function createMenuPopup({ ipcMain, Menu, BrowserWindow }) {
               label: String(item.label),
               enabled: item.enabled !== false,
               ...(typeof item.checked === "boolean" ? { type: "checkbox", checked: item.checked } : {}),
+              // A dimmer second line on the item (Electron's sublabel), for the status it carries.
+              ...(item.detail ? { sublabel: String(item.detail) } : {}),
               // Drawn beside the item, and live while the menu is open (a popup's keys go away with it).
               ...(item.accelerator ? { accelerator: String(item.accelerator) } : {}),
               click: () => (picked = String(item.id)),

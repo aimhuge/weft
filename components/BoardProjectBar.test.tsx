@@ -47,6 +47,7 @@ function setup(over: Partial<BoardProjectBarProps> = {}) {
     onView: vi.fn(),
     home: "/h",
     onMenuOpenChange: vi.fn(),
+    onDismissViewHint: vi.fn(),
     ...over,
   };
   render(<BoardProjectBar {...props} />);
@@ -64,6 +65,12 @@ describe("BoardProjectBar", () => {
   it("hands ProjectBar the board's layout and a way to change it", () => {
     const p = setup({ view: "list" });
     expect(seen.get("bar")).toMatchObject({ view: "list", onView: p.onView });
+  });
+
+  it("hands ProjectBar the hint that says where Escape took you", () => {
+    const onDismissViewHint = vi.fn();
+    setup({ viewHint: { mode: "list", id: 1 }, onDismissViewHint });
+    expect(seen.get("bar")).toMatchObject({ viewHint: { mode: "list", id: 1 }, onDismissViewHint });
   });
 
   it("lists no matches for a blank query", () => {

@@ -24,6 +24,13 @@ describe("CardActions", () => {
     expect(onShare).toHaveBeenCalledOnce();
   });
 
+  it("leaves the trash out without onDelete, and the Skills menu out without skills (a host that has neither)", () => {
+    renderActions({ onDelete: undefined, skills: false });
+    expect(screen.queryByRole("button", { name: "Delete card" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Skills/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Archive card" })).toBeInTheDocument();
+  });
+
   it("leaves the share button out without a handler", () => {
     renderActions();
     expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
@@ -46,6 +53,14 @@ describe("CardActions", () => {
   it("can't archive a live card", () => {
     renderActions({ live: true });
     expect(screen.getByRole("button", { name: "Archive card" })).toHaveProperty("disabled", true);
+  });
+
+  it("toggles: an archived card shows it pressed and unarchives, even mid-turn", async () => {
+    const props = renderActions({ card: makeCard({ archived: true }), live: true });
+    const button = screen.getByRole("button", { name: "Unarchive card" });
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(button);
+    expect(props.onArchive).toHaveBeenCalledOnce();
   });
 });
 

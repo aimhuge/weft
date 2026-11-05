@@ -1,9 +1,20 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import CopilotPersonaMenu from "./CopilotPersonaMenu";
 import "./test-utils";
+
+const api = vi.hoisted(() => ({
+  copilotCheckIns: vi.fn(() => Promise.resolve({ on: true })),
+  setCopilotCheckIns: vi.fn((on: boolean) => Promise.resolve({ on })),
+}));
+vi.mock("@/lib/client", () => ({ api }));
+
+beforeEach(() => {
+  api.copilotCheckIns.mockReset().mockResolvedValue({ on: true });
+  api.setCopilotCheckIns.mockReset().mockImplementation((on: boolean) => Promise.resolve({ on }));
+});
 
 describe("CopilotPersonaMenu", () => {
   it("names the current persona, Wingman when the card has none", () => {
@@ -48,5 +59,26 @@ describe("CopilotPersonaMenu", () => {
   it("is off while the copilot starts or resets", () => {
     render(<CopilotPersonaMenu persona={undefined} busy onPick={() => {}} />);
     expect(screen.getByRole("button", { name: /Wingman/ })).toBeDisabled();
+  });
+
+  it("turns its own check-ins off and on, and puts the switch back when that fails", async () => {
+    render(<CopilotPersonaMenu persona={undefined} busy={false} onPick={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: /Wingman/ }));
+    const toggle = await screen.findByRole("menuitemcheckbox", { name: /Checks in on its own/ });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+    await userEvent.click(toggle);
+    expect(api.setCopilotCheckIns).toHaveBeenCalledWith(false);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    api.setCopilotCheckIns.mockRejectedValueOnce(new Error("down"));
+    await userEvent.click(toggle);
+    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "false"));
+  });
+
+  it("leaves the switch out when Weft can't say whether check-ins are on", async () => {
+    api.copilotCheckIns.mockRejectedValueOnce(new Error("down"));
+    render(<CopilotPersonaMenu persona={undefined} busy={false} onPick={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: /Wingman/ }));
+    await waitFor(() => expect(api.copilotCheckIns).toHaveBeenCalled());
+    expect(screen.queryByRole("menuitemcheckbox")).not.toBeInTheDocument();
   });
 });

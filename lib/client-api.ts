@@ -1,25 +1,30 @@
 // The fetch client: a single `api` object with one method per server route, plus
 // the XHR upload and audio transcribe helpers.
 
-import type { ThreadAgent } from "./agents";
+import { withCreateWiden } from "./widen-signer";
+import type { AgentInfo, ThreadAgent } from "./agents";
 import type { TagInfo, TagRow } from "./tags";
-import type { Webhook, WebhookInput, WebhookPatch } from "./webhooks";
-import type { IntakeResult } from "./project-intake";
-import type { SubagentModel } from "./subagents";
+// The webhook, intake and clone shapes come from their own type-only modules, not from the server modules
+// that hold them: naming a server module's type still makes Turbopack resolve that module (node:fs,
+// node:child_process), and a browser chunk can't hold those — the board failed to compile.
+import type { Webhook, WebhookInput, WebhookPatch } from "./webhook-types";
+import type { WorkerDevGroup } from "./worker-dev-list";
+import type { IntakeResult } from "./intake-types";
+import type { CloneJob } from "./clone-progress-types";
 import type { CloudSyncStatus } from "./cloud-sync-view";
 import type { CardShareState, CardShareUpdate } from "./share-types";
 import type { GithubStatus } from "./github-view";
-import type { MediaKind } from "./media";
+import type { UploadedAttachment } from "@weft/client";
 import type { BillingClientView } from "./client-bridge";
 import type { CheckoutAnswer, UpgradeInterval, UpgradePlan } from "./billing/upgrade";
 import type { CopilotPersona } from "./copilot-personas";
 import type { WeftConnect } from "./blastcp-view";
 import type { GogStatus } from "./gog-view";
 import type { CustomTheme } from "./custom-theme";
+import type { DictationSettingsView } from "./dictation-types";
 import type {
   AccountProvider,
   AccountView,
-  Automation,
   Backend,
   Card,
   CliStatus,
@@ -28,6 +33,7 @@ import type {
   DevServerStatus,
   Effort,
   GithubRepo,
+  IssueWorkflow,
   LocalRepo,
   LoginView,
   MachineInfo,
@@ -36,6 +42,7 @@ import type {
   QuestionReply,
   RestartStatus,
   ServiceEntry,
+  SettingsPatch,
   SettingsView,
   SkillInfo,
   SkillSetView,
@@ -56,18 +63,21 @@ export interface NewCardInput {
   tags?: string[];
   // A git worktree of its own (docs/architecture/worktrees.md); left out, the shared folder.
   isolated?: boolean;
+  // The branch that worktree works on (lib/branch-name.ts); left out, its own weft/* branch.
+  branch?: string;
   // Who the thread is (lib/agents.ts); left out, Builder.
   agent?: ThreadAgent;
   start: boolean;
 }
 
-export interface UploadedAttachment {
-  name: string;
-  path: string;
-  url: string;
-  kind: MediaKind;
-  bytes: number;
-}
+// Whose skill set: a project's, a card's or an agent's.
+export type SkillSetWhere = { cwd: string } | { card: string } | { agent: string };
+
+// What Settings → Agents sends to make or edit one.
+export type AgentDraft = Pick<AgentInfo, "name" | "emoji" | "tagline" | "soul">;
+
+// A saved upload's answer is @weft/client's, so a transport can name it.
+export type { UploadedAttachment };
 
 // How long an upload waits for the server's reply once its bytes are sent.
 export const UPLOAD_REPLY_MS = 60_000;
@@ -146,8 +156,8 @@ async function themeFromPicture(prompt: string, picture: File) {
   return reply<{ id: string; card: Card }>(res);
 }
 
-async function transcribe(audio: Blob) {
-  const res = await send("/api/transcribe", {
+async function transcribe(audio: Blob, lang?: string) {
+  const res = await send(`/api/transcribe${lang ? `?lang=${encodeURIComponent(lang)}` : ""}`, {
     method: "POST",
     headers: { "x-weft-token": "1", "content-type": audio.type || "audio/webm" },
     body: audio,
@@ -167,7 +177,9 @@ export async function call<T>(method: string, url: string, body?: unknown, signa
 
 export const api = {
   list: () => call<{ cards: Card[]; home: string; roots: Record<string, string> }>("GET", "/api/cards"),
-  create: (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number } }>("POST", "/api/cards", input),
+  // A thread in a worker project has no card here: the answer names the worker it went to (start.worker).
+  // A new thread with an agent on a worker carries a Touch ID approval for it (lib/widen-signer.ts withCreateWiden).
+  create: async (input: NewCardInput) => call<{ card: Card; start?: { started: boolean; at?: number; worker?: string; cardId?: string } }>("POST", "/api/cards", await withCreateWiden(input)),
   move: (id: string, column: Column) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { column }),
   // Re-points a card at another folder (the list view's folder picker); the server refuses a busy card.
   setCwd: (id: string, cwd: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { cwd }),
@@ -176,6 +188,21 @@ export const api = {
   setMode: (id: string, permissionMode: PermissionMode) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { permissionMode }),
   // A new soul: the card's CLI ends and its next turn resumes the conversation under it (lib/agents.ts).
   setAgent: (id: string, agent: ThreadAgent) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { agent }),
+  // Settings → Agents (lib/agent-store.ts): every agent, and yours to make, edit, delete or (built-ins) reset.
+  agents: () => call<{ agents: AgentInfo[]; projects: Record<string, string> }>("GET", "/api/agents"),
+  // A project's default agent; null puts it back on Builder.
+  setProjectAgent: (cwd: string, agent: string | null) => call<{ projects: Record<string, string> }>("PUT", "/api/agents", { cwd, agent }),
+  createAgent: (agent: AgentDraft) => call<{ agent: AgentInfo }>("POST", "/api/agents", agent),
+  updateAgent: (id: string, agent: AgentDraft) => call<{ agent: AgentInfo }>("PATCH", `/api/agents/${encodeURIComponent(id)}`, agent),
+  deleteAgent: (id: string) => call<{ ok: true }>("DELETE", `/api/agents/${encodeURIComponent(id)}`),
+  resetAgent: (id: string) => call<{ agent: AgentInfo; from: "github" | "shipped" }>("POST", `/api/agents/${encodeURIComponent(id)}/reset`),
+  // A thread that writes an agent's soul (lib/agent-author.ts): the card comes back, already running.
+  authorAgent: (input: { what: string; cwd?: string; backend?: Backend }) =>
+    call<{ card: Card; start: { started: boolean; at?: number } }>("POST", "/api/agents/author", input),
+  // The new thread that designs an agent (lib/agent-thread.ts): the card comes back, already running,
+  // with the brief page as its pane.
+  designAgent: (input: { project: string; job: string; backend?: Backend }) =>
+    call<{ card: Card; start: { started: boolean; at?: number } }>("POST", "/api/agents/design", input),
   archive: (id: string, archived: boolean) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { archived }),
   // ★ and tags. Tags are normalized on the server, become yours (tagsBy "user"), and new ones join the catalog.
   mark: (id: string, patch: { starred?: boolean; tags?: string[] }) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, patch),
@@ -211,12 +238,15 @@ export const api = {
   schedule: (id: string, text: string, at: number) => call<{ card: Card }>("POST", `/api/cards/${id}/scheduled`, { text, at }),
   unschedule: (id: string, messageId: string) => call("DELETE", `/api/cards/${id}/scheduled`, { messageId }),
   // pendingId is the request the user saw; the server refuses the answer if another is in front.
-  // reply: a question's notes, or "Chat about this" instead of answers.
-  answer: (id: string, allow: boolean, answers?: Record<string, string>, pendingId?: string, reply?: QuestionReply) =>
-    call("POST", `/api/cards/${id}/permission`, { allow, answers, pendingId, ...reply }),
+  // reply: a question's notes, or "Chat about this" instead of answers. auth: main's signature after Touch ID, which an
+  // Allow on a vault, skip-permissions or agent-config ask needs (lib/local-approve.ts).
+  answer: (id: string, allow: boolean, answers?: Record<string, string>, pendingId?: string, reply?: QuestionReply, auth?: object) =>
+    call("POST", `/api/cards/${id}/permission`, { allow, answers, pendingId, ...reply, ...(auth ? { auth } : {}) }),
   // Wait on a symbol-claim prompt: Weft answers it once the card holding that code lets go.
   waitPermission: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { wait: true, pendingId }),
   putFirst: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { first: true, pendingId }),
+  // Others first: the card holding the code goes ahead, and this card waits for it (lib/precedence.ts).
+  putHolderFirst: (id: string, pendingId: string) => call("POST", `/api/cards/${id}/permission`, { otherFirst: true, pendingId }),
   stop: (id: string) => call("POST", `/api/cards/${id}/stop`),
   // The task strip's Stop: ends one subagent or background command (lib/task-stop.ts).
   stopTask: (id: string, taskId: string) => call<{ ok: true }>("POST", `/api/cards/${id}/tasks/${encodeURIComponent(taskId)}/stop`),
@@ -247,7 +277,7 @@ export const api = {
   devAction: (id: string, action: "start" | "restart" | "stop") =>
     call<{ status: DevServerStatus }>("POST", `/api/cards/${id}/dev`, { action }),
   // The rail's Services drawer: every process Weft spawned (thread CLIs, dev servers, terminals), with CPU and memory.
-  services: () => call<{ services: ServiceEntry[]; launchers?: DevLauncher[]; machine?: MachineInfo }>("GET", "/api/services"),
+  services: () => call<{ services: ServiceEntry[]; launchers?: DevLauncher[]; workers?: WorkerDevGroup[]; machine?: MachineInfo }>("GET", "/api/services"),
   launchDev: (cwd: string, command: string) => call<{ ok: true; result: "started" | "restarted"; id: string }>("POST", "/api/services", { action: "launch", cwd, command }),
   serviceAction: (body: { action: "kill"; id?: string; pid?: number } | { action: "restart"; id: string }) =>
     call<{ ok: true }>("POST", "/api/services", body),
@@ -255,6 +285,8 @@ export const api = {
   resetCopilot: () => call<{ card: Card }>("POST", "/api/copilot/reset"),
   // Switching persona starts a new chat (lib/copilot.ts setCopilotPersona).
   copilotPersona: (persona: CopilotPersona) => call<{ card: Card }>("POST", "/api/copilot/persona", { persona }),
+  copilotCheckIns: () => call<{ on: boolean }>("GET", "/api/copilot/check-ins"),
+  setCopilotCheckIns: (on: boolean) => call<{ on: boolean }>("POST", "/api/copilot/check-ins", { on }),
   copilotSuggestions: () => call<{ chips: { text: string; cardId?: string; project?: string; covers?: string[] }[]; covers: string[] }>("GET", "/api/copilot/suggestions"),
   copilotChipClicked: (text: string) => call<{ ok: true }>("POST", "/api/copilot/suggestions", { text }),
   // Restart when idle (lib/restart-when-idle.ts): nothing new starts, and Weft restarts once the running turns end.
@@ -266,31 +298,19 @@ export const api = {
   themes: () => call<{ themes: CustomTheme[] }>("GET", "/api/themes"),
   createTheme: (prompt: string) => call<{ id: string; card: Card }>("POST", "/api/themes", { prompt }),
   themeFromPicture,
-  saveSettings: (patch: {
-    threadPrompt?: string;
-    keepAliveMinutes?: number;
-    maxThreads?: number;
-    defaultPermissionMode?: PermissionMode;
-    defaultBackend?: Backend;
-    automations?: Automation[];
-    pushOnDone?: boolean;
-    subagentModel?: SubagentModel;
-    doneModel?: string;
-    doneEffort?: Effort | "";
-    copilotModel?: string;
-    reviewAllModel?: string;
-    backupModel?: string;
-    gooseProviderId?: string;
-    gooseModelId?: string;
-    gooseBaseUrl?: string;
-  }) =>
-    call<SettingsView>("PATCH", "/api/settings", patch),
+  saveSettings: (patch: SettingsPatch) => call<SettingsView>("PATCH", "/api/settings", patch),
   addProject: (path: string) => call<{ path: string; projects: Project[] }>("POST", "/api/projects", { path }),
   newProject: (parent: string, name: string) =>
     call<{ path: string; projects: Project[] }>("POST", "/api/projects/new", { parent, name }),
   // The project menu's Re-seed Backlog (lib/project-seed-run.ts): parks starter cards again, says how many.
   seedProject: (path: string) => call<{ added: number }>("POST", "/api/projects/seed", { path }),
   removeProject: (path: string) => call<{ projects: Project[] }>("DELETE", "/api/projects", { path }),
+  // Pin or hide a project in the bar (its right-click menu, components/project-menu-handler.ts).
+  markProject: (path: string, marks: { pinned?: boolean; hidden?: boolean }) =>
+    call<{ projects: Project[] }>("PATCH", "/api/projects", { path, ...marks }),
+  // Add a folder to a project, or take one off: its threads work there as in the project (lib/project-folders.ts).
+  setProjectFolder: (path: string, folder: string, on: boolean) =>
+    call<{ projects: Project[] }>("PATCH", "/api/projects", { path, folder, on }),
   loginStatus: () => call<{ status: Record<Backend, CliStatus>; runs: LoginView[] }>("GET", "/api/login"),
   login: (backend: Backend, action: "start" | "input" | "cancel" | "terminal", text?: string, signal?: AbortSignal) =>
     call<{ login: LoginView | null }>("POST", "/api/login", { backend, action, text }, signal),
@@ -312,12 +332,17 @@ export const api = {
   skills: (cwd?: string) =>
     call<{ skills: SkillInfo[] }>("GET", `/api/skills${cwd ? `?cwd=${encodeURIComponent(cwd)}` : ""}`),
   // A project's skill set, or a card's, and turning one skill or plugin on or off there (lib/skill-sets.ts).
-  skillSet: (where: { cwd: string } | { card: string }) =>
-    call<SkillSetView>("GET", `/api/skills/set?${"card" in where ? `card=${encodeURIComponent(where.card)}` : `cwd=${encodeURIComponent(where.cwd)}`}`),
-  setSkill: (where: { cwd: string } | { card: string }, name: string, on: boolean) => call<SkillSetView>("PUT", "/api/skills/set", { ...where, name, on }),
+  skillSet: (where: SkillSetWhere) => {
+    const [[key, value]] = Object.entries(where) as [[string, string]];
+    return call<SkillSetView>("GET", `/api/skills/set?${key}=${encodeURIComponent(value)}`);
+  },
+  setSkill: (where: SkillSetWhere, name: string, on: boolean) => call<SkillSetView>("PUT", "/api/skills/set", { ...where, name, on }),
   uploadAttachment: upload,
   dictation: () => call<{ available: boolean; reason?: string; model?: string }>("GET", "/api/transcribe"),
   transcribe,
+  dictationSettings: () => call<DictationSettingsView>("GET", "/api/transcribe/settings"),
+  setDictationSettings: (patch: { language?: string; advanced?: boolean; vocabulary?: string; sounds?: boolean }) =>
+    call<DictationSettingsView>("PATCH", "/api/transcribe/settings", patch),
   repos: (fresh = false) => call<{ repos: LocalRepo[] }>("GET", `/api/repos${fresh ? "?fresh=1" : ""}`),
   githubRepos: (fresh = false) => call<{ repos: GithubRepo[] }>("GET", `/api/repos/github${fresh ? "?fresh=1" : ""}`),
   // Your Weft account (lib/account.ts). signIn returns the provider's page to open in the system browser.
@@ -332,10 +357,16 @@ export const api = {
   billingCheckout: (plan: UpgradePlan, interval: UpgradeInterval) =>
     call<CheckoutAnswer>("POST", "/api/account/billing/checkout", { plan, interval }),
   cloneRepo: (fullName: string) => call<{ path: string; projects: Project[] }>("POST", "/api/repos/clone", { fullName }),
-  // A folder's open GitHub issues as Backlog cards, now and every 5 minutes after (lib/github-issues.ts).
+  // How far that clone has got, polled while it runs (lib/clone-progress.ts).
+  cloneProgress: (fullName: string) => call<CloneJob | null>("GET", `/api/repos/clone?fullName=${encodeURIComponent(fullName)}`),
+  // A folder's open GitHub issues as cards, now and every 5 minutes after (lib/github-issues.ts).
   importIssues: (folder: string) =>
     call<{ folder: string; added: number; updated: number; archived: number }>("POST", "/api/github/issues", { folder }),
   stopIssues: (folder: string) => call<{ folders: string[] }>("DELETE", "/api/github/issues", { folder }),
+  // Where that folder's cards land and how a "run" card works: the landing, the validation skill and
+  // the agent (lib/issue-landing.ts).
+  setIssueWorkflow: (folder: string, workflow: IssueWorkflow) =>
+    call<{ folder: string; workflow: IssueWorkflow }>("PATCH", "/api/github/issues", { folder, ...workflow }),
   // A webhook on the folder's repo, relayed by Weft's Supabase, so its issues sync within seconds (lib/github-hooks.ts).
   addHook: (folder: string) => call<{ repo: string }>("POST", "/api/github/hooks", { folder }),
   removeHook: (folder: string) => call<{ ok: true }>("DELETE", "/api/github/hooks", { folder }),
@@ -350,11 +381,15 @@ export const api = {
   // The Settings → Sync page (lib/use-cloud-sync.ts): opt-in folders and the live flush status.
   cloudSync: () => call<{ folders: string[]; status: CloudSyncStatus }>("GET", "/api/cloud-sync"),
   cloudSyncSetFolder: (folder: string, on: boolean) => call<{ folder: string; on: boolean; folders: string[]; status: CloudSyncStatus }>("POST", "/api/cloud-sync", { folder, on }),
+  // A project's "Run on This Mac / Run on Worker" in its right-click menu (lib/worker-handoff.ts).
+  workerFolders: () => call<{ folders: string[] }>("GET", "/api/workers?folders=1"),
+  setWorkerFolder: (folder: string, on: boolean) => call<{ folders: string[]; worker?: string }>("POST", "/api/workers", { action: "folder", folder, on }),
   cloudSyncNow: () => call<{ status: CloudSyncStatus }>("POST", "/api/cloud-sync", { sync: true }),
   // The 🪝 drawer: each folder's webhooks, and a public relay URL for one (lib/webhooks.ts; signedIn: the relay needs a Weft account).
   webhooks: (folders: string[]) => call<{ hooks: Webhook[]; signedIn: boolean }>("GET", `/api/webhooks?${new URLSearchParams(folders.map((f) => ["folder", f]))}`),
   addWebhook: (input: WebhookInput) => call<{ hook: Webhook; existed: boolean }>("POST", "/api/webhooks", input),
-  updateWebhook: (id: string, patch: WebhookPatch) => call<{ hook: Webhook }>("PATCH", `/api/webhooks/${id}`, patch),
+  // A Weft Worker's webhook answers with no hook (the worker republishes its list) and maybe `queued`.
+  updateWebhook: (id: string, patch: WebhookPatch) => call<{ hook?: Webhook; queued?: true }>("PATCH", `/api/webhooks/${id}`, patch),
   removeWebhook: (id: string) => call<{ ok: true }>("DELETE", `/api/webhooks/${id}`),
   relayWebhook: (id: string) => call<{ hook: Webhook }>("POST", `/api/webhooks/${id}/relay`),
   unrelayWebhook: (id: string) => call<{ hook: Webhook }>("DELETE", `/api/webhooks/${id}/relay`),

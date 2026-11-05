@@ -4,6 +4,8 @@
 // browser / terminal / settings / new-thread buttons, and the account button. Each button gets
 // the keyboard hint that lives in the hotkeys registry.
 import type { ReactNode } from "react";
+import { usePasskeySync } from "@/lib/use-passkey-sync";
+import { useRegularMode } from "@/lib/use-regular-mode";
 import Icon from "./Icon";
 
 export interface BoardHeaderProps {
@@ -40,6 +42,8 @@ export default function BoardHeader({
   // On weft.zip the browser and terminal panes and the Mac's Settings are on the Mac, so the web
   // header leaves those three out and shares the board with the host's own share control.
   const web = variant === "web";
+  // Regular mode leaves out the terminal and share buttons.
+  const regular = useRegularMode();
   return (
     <header
       className={`flex shrink-0 items-center gap-3 border-b border-line bg-panel ${mac ? "app-drag mac-title-bar pr-4" : "px-4 py-2.5"}`}
@@ -67,19 +71,20 @@ export default function BoardHeader({
           >
             <Icon name="globe" size={15} />
           </button>
-          <button
-            onClick={onToggleTerminal}
-            title={hint("terminal", "Terminal")}
-            aria-label="Terminal"
-            className={`rounded-md border p-1.5 ${terminalOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-sunken hover:text-ink"}`}
-          >
-            <Icon name="terminal" size={15} />
-          </button>
+          {!regular && (
+            <button
+              onClick={onToggleTerminal}
+              title={hint("terminal", "Terminal")}
+              aria-label="Terminal"
+              className={`rounded-md border p-1.5 ${terminalOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-sunken hover:text-ink"}`}
+            >
+              <Icon name="terminal" size={15} />
+            </button>
+          )}
         </>
       )}
-      {web ? (
-        slots.share
-      ) : (
+      {web && slots.share}
+      {!web && !regular && (
         <button
           onClick={onShareBoard}
           title={hint("share-board", "Share the board")}
@@ -89,16 +94,7 @@ export default function BoardHeader({
           <Icon name="share" size={15} />
         </button>
       )}
-      {!web && (
-        <button
-          onClick={onOpenSettings}
-          title={hint("settings", "Settings")}
-          aria-label="Settings"
-          className="rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
-        >
-          <Icon name="sliders" size={15} />
-        </button>
-      )}
+      {!web && <SettingsButton title={hint("settings", "Settings")} onOpen={onOpenSettings} />}
       <button
         onClick={onOpenNew}
         title={hint("new-thread", "New thread")}
@@ -109,5 +105,23 @@ export default function BoardHeader({
       </button>
       {slots.account}
     </header>
+  );
+}
+
+// Settings, marked while a worker hasn't taken this Mac's latest passkey set (a revoke that hasn't landed). The desktop
+// board keeps them in step from here (lib/use-passkey-sync.ts); Settings → Devices names them.
+function SettingsButton({ title, onOpen }: { title: string; onOpen: () => void }) {
+  const untaken = usePasskeySync();
+  const waiting = untaken.length === 1 ? "a worker hasn't" : `${untaken.length} workers haven't`;
+  return (
+    <button
+      onClick={onOpen}
+      title={untaken.length ? `${title}: ${waiting} taken your passkey change yet (Devices)` : title}
+      aria-label="Settings"
+      className="relative rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
+    >
+      <Icon name="sliders" size={15} />
+      {untaken.length > 0 && <span data-testid="passkeys-untaken" className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-warn" />}
+    </button>
   );
 }

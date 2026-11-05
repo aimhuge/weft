@@ -26,6 +26,7 @@ CLI closes (a Weft restart), and sits in the thread's task strip as "1 task runn
   (the whole list) and `stop`. `DEVSERVERS_PROMPT` in every thread's system prompt (`lib/weft-prompts.ts`) and
   `/weft:preview` step 3 point threads at it. Trusted, so no permission prompt (`lib/board-tools-trust.ts`).
 - The review tour's `dev` command goes through the same runs (`app/api/cards/[id]/dev`), with the tour's url.
+  Its panel (`components/ReviewPanelDevServer.tsx`) polls every 3s and never navigates on a flap: it opens the current step once, only if the server was down when the tour opened, and only over a blank pane or that step's own failed page. One missed check doesn't count as down unless the run crashed; `reachable` waits 5s, since a compiling `next dev` answers late.
 - `lib/devserver-list.ts` `listDev()`: every Weft run (probed in parallel), plus running background shell tasks a
   thread still started the old way (`lib/tasks.ts` `isDevServerTask`, a pattern on the task's description; its url
   parsed from "port 4001" or "localhost:4001"). Those are stop-only: stopping goes through `lib/task-stop.ts`.
@@ -90,6 +91,42 @@ The top of the Services drawer, above the usage summary (`components/DevLauncher
   Restart on a live run and ends it through the drawer's kill (`kill({ id: run.id })`, `lib/services-kill.ts` → `stopDev`).
 - In the services list below, a row whose `cardId` is still on the board names its card as a button (`ServiceName`),
   which opens it through the rail's `onOpenCard`.
+
+## On a worker
+
+Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `mcp__devservers__start`, `status` and
+`stop` already ran on a worker, spawning in the daemon's process; what was missing was a way for the board to see them.
+
+- **Published** (`lib/worker-dev-servers.ts`): every 10 s the daemon reads `listDev()` and, when it changed, puts up to
+  20 rows on its `cloud_workers.dev_servers` (`worker_set_dev_servers`, key-checked, capped at 16 KB): card id, folder name,
+  command (inline env values redacted; no card title, since a card travels sealed and the whole workspace reads the
+  row), localhost url, state, and the `/t/<id>` address when a tunnel to that server is open.
+- **Read** (`lib/worker-dev-list.ts`): `GET /api/services` adds `workers`, your own headless workers' rows read with your
+  session (the migration grants `select (dev_servers)`, since the table's grants are per column); a database without
+  the column, or signed out, gives none. The worker wrote the row, so an `address` that isn't weft.zip's own
+  `/t/<uuid>` is dropped (`lib/tunnel-link.ts`), and `dev.open`'s answer is held to the same check.
+- **Shown** (`components/WorkerDevServers.tsx`, under the Dev servers section): "On m1mini", one row per server, filtered
+  to the picked project by folder name. **Open** opens the address in the pane when one is open; otherwise it sends the
+  `dev.open` host verb (`lib/host-api/dev-servers.ts`, `lib/worker-dev-acts.ts`), which opens a tunnel on the worker
+  after your Touch ID on this Mac (tunnels.md#on-a-worker) and answers the address in the command's `result`. It waits
+  up to 6 minutes for that, since a person is involved. **Stop** sends `dev.stop`. The pane is the native one, so `/t`
+  needs a weft.zip sign-in there once.
+- **Log, Restart** (T5, project-hosts.md#drawers-and-mini-apps-on-a-worker-project-t5-as-built): a run Weft started
+  also has Log, which sends `dev.log` and draws the run's last 40 lines in the row (key-shaped text hidden, held under
+  2,500 bytes for the command's `result`; a second click hides it), and Restart (`dev.restart`, the run's own command
+  again; Start once it ended). A server a thread started in its own shell is stop-only, as on the Mac. With a worker
+  project picked, only that worker's checkout shows (`lib/worker-dev-view.ts`); with a project on this Mac, a worker's
+  checkout of the same name.
+- **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open`, `stop`, `rerun` and `log`.
+- **Owner only**: `dev.open` is an owner verb (`OWNER_VERBS`, `lib/host/dispatch.ts`): the worker (and a Mac) run it
+  only for a command its owner made, so no other workspace member can raise a Touch ID prompt on the owner's Mac
+  (tunnels.md#on-a-worker). There is no `dev.restart` verb; the Mac's `restart` action on `POST /api/cards/:id/dev`
+  is behind the local token guard.
+- **Locally** the same verbs mount on `POST /api/cards/:id/dev` as `open` and `stop`.
+- **The vault's env** (T2): `devSecrets` (`lib/secret-run.ts`) asks the owner's Mac through `lib/worker-dev-env.ts`;
+  after a Touch ID on the Mac at every start and restart the development values arrive sealed and go to
+  `electron/secret-env.cjs` on its stdin, which redacts them from the log
+  ([project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built)).
 
 ## Stopping one task
 

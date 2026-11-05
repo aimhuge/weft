@@ -1,13 +1,12 @@
 // The ⏰ badge and the Crons band in the list view (lib/list-crons.ts).
 import { describe, expect, it } from "vitest";
-import { cronBadge, cronsHeldBy, cronRows, untilNext } from "./list-crons";
+import { cronBadge, cronsHeldBy, cronRows } from "./list-crons";
 import type { Cron } from "./cron-types";
 import type { Card } from "./types";
 
 const NOW = 1_800_000_000_000;
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
-const DAY = 24 * HOUR;
 
 // A cron with every field filled in, so a test only says what it means to change.
 const cron = (over: Partial<Cron> = {}): Cron => ({
@@ -44,31 +43,6 @@ const card = (over: Partial<Card> = {}): Card => {
     ...over,
   };
 };
-
-describe("untilNext", () => {
-  it("counts the minutes until the next run", () => {
-    expect(untilNext(NOW + 5 * MINUTE, NOW)).toBe("in 5m");
-    expect(untilNext(NOW + 59 * MINUTE, NOW)).toBe("in 59m");
-  });
-
-  it("never says less than a minute", () => {
-    expect(untilNext(NOW, NOW)).toBe("in 1m");
-    expect(untilNext(NOW + MINUTE / 2, NOW)).toBe("in 1m");
-    expect(untilNext(NOW - 10 * MINUTE, NOW)).toBe("in 1m");
-  });
-
-  it("counts the hours once it is an hour or more away", () => {
-    expect(untilNext(NOW + HOUR, NOW)).toBe("in 1h");
-    expect(untilNext(NOW + 3 * HOUR, NOW)).toBe("in 3h");
-    // 47 hours is still hours; 48 hours and over becomes days.
-    expect(untilNext(NOW + 47 * HOUR, NOW)).toBe("in 47h");
-  });
-
-  it("counts the days from 48 hours on", () => {
-    expect(untilNext(NOW + 48 * HOUR, NOW)).toBe("in 2d");
-    expect(untilNext(NOW + 3 * DAY, NOW)).toBe("in 3d");
-  });
-});
 
 describe("cronsHeldBy", () => {
   it("holds a fork cron by its source card", () => {

@@ -37,6 +37,13 @@ describe("CardView read-only", () => {
     expect(screen.queryByLabelText(/archive/i)).not.toBeInTheDocument();
   });
 
+  it("a teammate's card says whose it is where the buttons would be", () => {
+    renderCard({ team: { org: "o", owner: "z", name: "Zulker Nayeen", avatar: "https://a/z.png", device: "d" } }, { onStar: vi.fn() });
+    expect(screen.getByText("Zulker's Mac")).toBeInTheDocument();
+    expect(document.querySelector('img[src="https://a/z.png"]')).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /star/i })).not.toBeInTheDocument();
+  });
+
   it("still opens the thread on click", async () => {
     const { onOpen } = renderCard();
     await userEvent.click(screen.getByText("Fix the login page"));

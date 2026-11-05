@@ -6,7 +6,7 @@
 // - the card's rows are the ones cloud sync already uploads (lib/cloud-sync.ts), so a card is shared only from a synced folder.
 // Modes come from @aimhuge/share; a card never takes "public_edit" (editing a thread would run turns on the owner's Mac).
 import { isShareMode, type ShareMode } from "@aimhuge/share";
-import { BLOB_REF_PREFIX, type BlobRef } from "./cloud-sync-types";
+import type { SharePane } from "@weft/client";
 import { SITE } from "./site";
 import type { Card, ThreadItem } from "./types";
 
@@ -28,6 +28,10 @@ export interface CloudShareRow {
   // has_password, a generated column, instead.
   password_hash?: string | null;
   has_password?: boolean;
+  // The link's address under its sharer, weft.zip/@<username>/threads/<slug>; null on links made before slugs.
+  slug?: string | null;
+  // false: the viewer shows the card's header and pane only, and the live poll never sends the thread's items.
+  show_chat?: boolean;
   // The database fills it in (auth.uid()); the desktop never sends it.
   created_by?: string;
   created_at: string;
@@ -56,6 +60,16 @@ export function shareUrl(id: string, origin = SITE): string {
   return `${origin}/s/${id}`;
 }
 
+// A thread link's address under its sharer, like a mini app's (lib/app-share-types.ts appPublicUrl).
+export function threadPublicUrl(username: string, slug: string, origin = SITE): string {
+  return `${origin}/@${username}/threads/${slug}`;
+}
+
+// The address to copy: the slug one when the link has both a slug and a sharer with a username, else /s/<id>.
+export function cardShareLink(id: string, slug: string | null | undefined, username: string | null | undefined): string {
+  return slug && username ? threadPublicUrl(username, slug) : shareUrl(id);
+}
+
 // What GET/PUT /api/cards/[id]/share answer on the desktop, for the Share dialog.
 export type CardShareState =
   | { kind: "signed-out" }
@@ -64,31 +78,26 @@ export type CardShareState =
   | { kind: "not-synced"; folder: string }
   // Synced, but the card's row hasn't reached cloud_cards yet (the outbox flushes within ~10 s).
   | { kind: "pending" }
-  | { kind: "ok"; id: string | null; url: string | null; mode: CardShareMode; hasPassword: boolean };
+  | { kind: "ok"; id: string | null; url: string | null; mode: CardShareMode; hasPassword: boolean; slug: string | null; showChat: boolean };
 
 // What the Share dialog draws before the server answers: the share the card remembers (card.share, kept by
 // lib/card-share.ts), or a private one; signed out, the sign-in. The server's answer replaces it a moment later.
 export function seedShareState(card: Pick<Card, "share">, signedOut: boolean): CardShareState {
   if (signedOut) return { kind: "signed-out" };
   const memo = card.share;
-  if (!memo) return { kind: "ok", id: null, url: null, mode: "private", hasPassword: false };
-  return { kind: "ok", id: memo.id, url: memo.id ? shareUrl(memo.id) : null, mode: memo.mode, hasPassword: memo.hasPassword };
+  if (!memo) return { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true };
+  const url = memo.url ?? (memo.id ? shareUrl(memo.id) : null);
+  return { kind: "ok", id: memo.id, url, mode: memo.mode, hasPassword: memo.hasPassword, slug: memo.slug ?? null, showChat: memo.showChat ?? true };
 }
 
 // PUT /api/cards/[id]/share. A password is hashed on the Mac and only its hash goes up; omitted keeps the old one.
+// showChat and slug are left as they are when omitted; a slug that's taken is refused (409).
 export interface CardShareUpdate {
   mode: CardShareMode;
   password?: string;
+  showChat?: boolean;
+  slug?: string;
 }
-
-// What the viewer's right half shows: the latest page the card's pane showed, as far as the thread tells.
-export type SharePane =
-  // A ~/.weft/show page (or any local file) the outbox uploaded: served sandboxed by app/api/s/[id]/page/[sha].
-  | { kind: "blob"; ref: BlobRef; hash: string; label: string }
-  // A public site: framed directly (it may refuse to be framed; the viewer offers a link).
-  | { kind: "site"; url: string; label: string }
-  // Only reachable on the owner's Mac (localhost, a file that didn't upload): the viewer shows the card's pane capture.
-  | { kind: "local"; url: string; label: string };
 
 // GET /api/s/[id]/live?after=<seq> (new items) or ?before=<seq> (older page), as the viewer polls it.
 // Items are newest first like the thread route, already redacted (lib/share-redact.ts) and with blob refs left in;
@@ -103,44 +112,12 @@ export interface ShareLive {
   hasOlder: boolean;
   pane: SharePane | null;
   blobUrls: Record<string, string>;
+  // The sharer's choice: false means items is always empty and the viewer shows the pane alone.
+  showChat: boolean;
 }
 
 // How often the viewer polls while its tab is visible.
 export const SHARE_POLL_MS = 4000;
 
-const BLOB_PAGE = /^(blob:sha256:[0-9a-f]{64})(#.*)?$/;
-const LOCAL = /^(file:|\/)|^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(:\d+)?(\/|$)/i;
-
-function pageLabel(url: string): string {
-  try {
-    const u = new URL(url);
-    if (u.protocol === "file:") return decodeURIComponent(u.pathname).split("/").filter(Boolean).slice(-2).join("/") + u.hash;
-    return `${u.host}${u.pathname.replace(/\/$/, "")}${u.hash}`;
-  } catch {
-    return url.split("/").filter(Boolean).slice(-2).join("/");
-  }
-}
-
-// One page string from the thread (an open_url call's summary, a user message's `page`) as a pane.
-export function paneFromUrl(raw: string): SharePane | null {
-  const url = raw.trim();
-  if (!url) return null;
-  const blob = BLOB_PAGE.exec(url);
-  if (blob) return { kind: "blob", ref: blob[1] as BlobRef, hash: blob[2] ?? "", label: "Page" };
-  if (url.startsWith(BLOB_REF_PREFIX)) return null;
-  if (LOCAL.test(url)) return { kind: "local", url, label: pageLabel(url) };
-  if (/^https?:\/\//i.test(url)) return { kind: "site", url, label: pageLabel(url) };
-  return null;
-}
-
-// The pane as of the newest item: the last mcp__browser__open_url call, or the page a message was sent with.
-// Items may come in any order; the newest `at` wins (ties: later in the list).
-export function paneFor(items: readonly ThreadItem[]): SharePane | null {
-  let best: { at: number; pane: SharePane } | null = null;
-  for (const item of items) {
-    const raw = item.kind === "tool" && item.name === "mcp__browser__open_url" ? item.summary : item.kind === "user" ? item.page : undefined;
-    const pane = raw ? paneFromUrl(raw) : null;
-    if (pane && (!best || item.at >= best.at)) best = { at: item.at, pane };
-  }
-  return best?.pane ?? null;
-}
+// The pane a share shows, and a worker screen's page string: @weft/client, shared with the web board and the phone.
+export { paneFor, paneFromUrl, screenPage, screenTopic, SCREEN_EVENT, type ScreenDevice, type SharePane } from "@weft/client";

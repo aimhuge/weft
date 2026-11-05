@@ -40,8 +40,8 @@ export function webTeamActions(orgSlug: string): TeamClientActions {
     async changeRole(userId: string, role: TeamRole): Promise<TeamActionResult> {
       return serverChangeMemberRole(orgSlug, userId, role);
     },
-    async remove(userId: string): Promise<TeamActionResult> {
-      return serverRemoveMember(orgSlug, userId);
+    async remove(userId: string, rotate = false): Promise<TeamActionResult> {
+      return serverRemoveMember(orgSlug, userId, rotate);
     },
     async revoke(inviteId: string): Promise<TeamActionResult> {
       return serverRevokeInvite(orgSlug, inviteId);

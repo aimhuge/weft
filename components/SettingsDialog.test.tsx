@@ -4,12 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { SettingsView } from "@/lib/types";
 import SettingsDialog from "./SettingsDialog";
+import { pickModel } from "./model-picker-test-utils";
 import "./test-utils";
 
 const api = vi.hoisted(() => ({ settings: vi.fn(), saveSettings: vi.fn() }));
 vi.mock("@/lib/client", () => ({ api }));
 // The pages' own pickers have their own tests; here they only need to show up on the right page.
 vi.mock("./AppearancePicker", () => ({ default: () => <p>appearance picker</p> }));
+vi.mock("./DictationSettings", () => ({ default: () => <p>dictation settings</p> }));
 vi.mock("./AccountSettings", () => ({ default: () => <p>account settings</p> }));
 vi.mock("./CliLogins", () => ({ default: () => <p>cli logins</p> }));
 vi.mock("./SubagentPicker", () => ({ default: () => <p>subagent picker</p> }));
@@ -23,9 +25,13 @@ vi.mock("./LaptopModeCard", () => ({ default: () => <p>laptop mode card</p> }));
 // TeamSettings is a real component but reads from lib/use-team, which would need a board-side
 // data fetch. Here it just needs to be reachable without throwing.
 vi.mock("./TeamSettings", () => ({ default: () => <p>team settings</p> }));
+// DevicesSettings has its own test; here the Devices page only has to reach it.
+vi.mock("./DevicesSettings", () => ({ default: () => <p>devices settings</p> }));
 // SyncSettings is the real component on the new "sync" page; it has its own test. Here it just
 // needs to render so we can reach the page without firing useCloudSync / useAccount.
-vi.mock("./SyncSettings", () => ({ default: () => <p>sync settings</p> }));
+vi.mock("./SyncSettings", () => ({ default: ({ recentProjects }: { recentProjects: string[] }) => <p>sync settings: {recentProjects.join(",")}</p> }));
+// The Agents page has its own test; here it shows the folders it was handed.
+vi.mock("./SettingsAgentsPage", () => ({ default: ({ projects }: { projects: string[] }) => <p>agents page: {projects.join(",")}</p> }));
 
 const SETTINGS: SettingsView = {
   threadPrompt: "be nice",
@@ -45,8 +51,10 @@ const SETTINGS: SettingsView = {
   gooseProviderId: "",
   gooseModelId: "",
   gooseBaseUrl: "",
+  gooseNamedModels: [],
   projects: [],
   issueFolders: [],
+  issueLandings: {},
   syncFolders: [],
   allowedFolders: [],
 };
@@ -61,6 +69,34 @@ const pages = () => screen.getByRole("navigation", { name: "Settings pages" });
 const go = (name: string) => userEvent.click(within(pages()).getByRole("button", { name }));
 
 describe("SettingsDialog", () => {
+  it("draws Agents and Sync before the settings load, then hands them the recent folders", async () => {
+    let load: (s: SettingsView) => void = () => {};
+    api.settings.mockReturnValue(new Promise<SettingsView>((resolve) => (load = resolve)));
+    render(<SettingsDialog onClose={() => {}} />);
+    await go("Agents");
+    expect(screen.getByText("agents page:")).toBeInTheDocument();
+    await go("Sync");
+    expect(screen.getByText("sync settings:")).toBeInTheDocument();
+    load({ ...SETTINGS, projects: [{ path: "/dev/app" }] } as SettingsView);
+    expect(await screen.findByText("sync settings: /dev/app")).toBeInTheDocument();
+    await go("Agents");
+    expect(screen.getByText("agents page: /dev/app")).toBeInTheDocument();
+    // The dialog reopens on the last page; leave it where the other tests expect it.
+    await go("General");
+  });
+
+  it("searches every page from the title bar and opens the pick at its section", async () => {
+    render(<SettingsDialog onClose={() => {}} />);
+    await userEvent.type(screen.getByRole("combobox", { name: "Search settings" }), "permission");
+    fireEvent.mouseDown(screen.getByRole("option", { name: /Default permission mode/ }));
+    expect(screen.getByRole("heading", { name: "Security", level: 2 })).toBeInTheDocument();
+    const sections = await screen.findByRole("navigation", { name: "Sections on this page" });
+    expect(await within(sections).findByRole("button", { name: "Default permission mode" })).toHaveAttribute("aria-current", "location");
+    await userEvent.click(within(sections).getByRole("button", { name: "Site notes" }));
+    expect(within(sections).getByRole("button", { name: "Site notes" })).toHaveAttribute("aria-current", "location");
+    await go("General");
+  });
+
   it("puts a scene behind it and shows one page at a time", async () => {
     render(<SettingsDialog onClose={() => {}} />);
     expect(screen.getByRole("dialog").style.background).toContain("/api/scenes/salt-flats");
@@ -77,7 +113,7 @@ describe("SettingsDialog", () => {
     await go("Security");
     expect(await screen.findByText("trusted folders")).toBeInTheDocument();
     expect(screen.getByText("token expiry")).toBeInTheDocument();
-    expect(screen.getByText("Default permission mode")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Default permission mode" })).toBeInTheDocument();
 
     await go("Shortcuts");
     expect(screen.getByRole("heading", { name: "Shortcuts", level: 2 })).toBeInTheDocument();
@@ -93,15 +129,15 @@ describe("SettingsDialog", () => {
     expect(screen.queryByLabelText("Unsaved changes")).not.toBeInTheDocument();
 
     // The model and effort are the New thread dialog's remembered picks, so they change right away.
-    await userEvent.selectOptions(menu, "claude-haiku-5-5");
+    pickModel("Default model", "Haiku 5.5");
     expect(localStorage.getItem("weft.model.claude")).toBe("claude-haiku-5-5");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Default effort" }), "low");
     expect(localStorage.getItem("weft.effort")).toBe("low");
 
-    // The one menu is the CLI picker too: puku-cli's own default row moves the CLI.
-    await userEvent.selectOptions(menu, "cli:puku");
+    // The one menu is the CLI picker too: a puku model moves the CLI to puku-cli.
+    pickModel("Default model", "Opus 4.8");
     expect(within(pages()).getByLabelText("Unsaved changes")).toBeInTheDocument();
-    expect(menu).toHaveValue("cli:puku");
+    expect(menu).toHaveValue("Opus 4.8");
 
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     expect(api.saveSettings).toHaveBeenCalledWith({ defaultBackend: "puku" });
@@ -172,6 +208,12 @@ describe("SettingsDialog", () => {
     render(<SettingsDialog onClose={() => {}} />);
     await go("Teams");
     expect(screen.getByText("team settings")).toBeInTheDocument();
+  });
+
+  it("renders the Devices page from the nav", async () => {
+    render(<SettingsDialog onClose={() => {}} />);
+    await go("Devices");
+    expect(screen.getByText("devices settings")).toBeInTheDocument();
   });
 
   it("gives the Laptop mode card its own page", async () => {

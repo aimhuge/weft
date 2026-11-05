@@ -1,57 +1,78 @@
-// electron/pane-find.cjs: find in page against a fake webContents.
 import { describe, expect, it, vi } from "vitest";
-import { findInPage, stopFind, watchFind } from "./pane-find.cjs";
+import { createPaneFind } from "./pane-find.cjs";
 
-function fakeContents(destroyed = false) {
-  const handlers = new Map<string, (...args: unknown[]) => void>();
+function page() {
+  const handlers: Record<string, (e: unknown, r: unknown) => void> = {};
   return {
-    handlers,
-    isDestroyed: () => destroyed,
+    isDestroyed: () => false,
     findInPage: vi.fn(),
     stopFindInPage: vi.fn(),
-    on: (event: string, fn: (...args: unknown[]) => void) => handlers.set(event, fn),
+    focus: vi.fn(),
+    on: (name: string, fn: (e: unknown, r: unknown) => void) => (handlers[name] = fn),
+    found: (result: unknown) => handlers["found-in-page"]?.({}, result),
   };
 }
 
-describe("findInPage", () => {
-  it("starts a new search while typing and steps through it after", () => {
-    const wc = fakeContents();
-    findInPage(wc, "hooks");
-    findInPage(wc, "hooks", { next: true });
-    findInPage(wc, "hooks", { next: true, forward: false });
-    expect(wc.findInPage.mock.calls).toEqual([
-      ["hooks", { forward: true, findNext: true }],
-      ["hooks", { forward: true, findNext: false }],
-      ["hooks", { forward: false, findNext: false }],
-    ]);
+describe("createPaneFind", () => {
+  it("starts a new search, then steps within it", () => {
+    const wc = page();
+    const find = createPaneFind({ current: () => wc, send: vi.fn() });
+    find.find("cat");
+    expect(wc.findInPage).toHaveBeenLastCalledWith("cat", { forward: true, findNext: true });
+    find.find("cat", { forward: false, next: true });
+    expect(wc.findInPage).toHaveBeenLastCalledWith("cat", { forward: false, findNext: false });
   });
 
-  it("clears the highlights when the field is emptied", () => {
-    const wc = fakeContents();
-    findInPage(wc, "");
-    findInPage(wc, undefined);
+  it("does nothing with no page or no text", () => {
+    const wc = page();
+    createPaneFind({ current: () => undefined, send: vi.fn() }).find("cat");
+    createPaneFind({ current: () => wc, send: vi.fn() }).find("");
     expect(wc.findInPage).not.toHaveBeenCalled();
-    expect(wc.stopFindInPage).toHaveBeenCalledWith("keepSelection");
   });
 
-  it("does nothing without a live page", () => {
-    const wc = fakeContents(true);
-    findInPage(undefined, "x");
-    findInPage(wc, "x");
-    stopFind(undefined);
-    stopFind(wc);
+  it("clears the last page when find moves to another tab", () => {
+    const [a, b] = [page(), page()];
+    let now = a;
+    const find = createPaneFind({ current: () => now, send: vi.fn() });
+    find.find("cat");
+    now = b;
+    find.find("cat");
+    expect(a.stopFindInPage).toHaveBeenCalledWith("clearSelection");
+    expect(b.findInPage).toHaveBeenCalled();
+  });
+
+  it("stops, handing the keyboard back only when asked", () => {
+    const wc = page();
+    const find = createPaneFind({ current: () => wc, send: vi.fn() });
+    find.find("cat");
+    find.stop();
+    expect(wc.stopFindInPage).toHaveBeenCalledTimes(1);
+    expect(wc.focus).not.toHaveBeenCalled();
+    find.stop();
+    expect(wc.stopFindInPage).toHaveBeenCalledTimes(1);
+    find.stop(true);
+    expect(wc.focus).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves a destroyed page alone", () => {
+    const wc = { ...page(), isDestroyed: () => true };
+    const find = createPaneFind({ current: () => wc, send: vi.fn() });
+    find.find("cat");
+    find.stop(true);
     expect(wc.findInPage).not.toHaveBeenCalled();
-    expect(wc.stopFindInPage).not.toHaveBeenCalled();
   });
-});
 
-describe("watchFind", () => {
-  it("sends the active match and the count, zero for what Chromium left out", () => {
-    const wc = fakeContents();
-    const onFound = vi.fn();
-    watchFind(wc, onFound);
-    wc.handlers.get("found-in-page")!({}, { activeMatchOrdinal: 2, matches: 7 });
-    wc.handlers.get("found-in-page")!({}, {});
-    expect(onFound.mock.calls).toEqual([[{ active: 2, matches: 7 }], [{ active: 0, matches: 0 }]]);
+  it("reports the count from the page being searched only", () => {
+    const [a, b] = [page(), page()];
+    const send = vi.fn();
+    const find = createPaneFind({ current: () => a, send });
+    find.watch(a);
+    find.watch(b);
+    find.find("cat");
+    b.found({ activeMatchOrdinal: 9, matches: 9 });
+    expect(send).not.toHaveBeenCalled();
+    a.found({ activeMatchOrdinal: 2, matches: 5 });
+    a.found({});
+    expect(send.mock.calls).toEqual([[{ active: 2, matches: 5 }], [{ active: 0, matches: 0 }]]);
   });
 });

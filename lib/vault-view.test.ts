@@ -4,6 +4,7 @@ import {
   secretAskOf,
   blankTitle,
   canManage,
+  conflictLine,
   manageOffer,
   takeOver,
   writeBackText,
@@ -252,5 +253,10 @@ describe("vault view", () => {
     const bridge = { overview: vi.fn() };
     vi.stubGlobal("window", { weft: { vault: bridge } });
     expect(vaultBridge()).toBe(bridge);
+  });
+
+  it("says who changed which secret in which environment", () => {
+    // The banner's line, with the actor's name, the name and the environment — and nothing else.
+    expect(conflictLine({ actor: "Sam", name: "API_KEY", environment: "development" })).toBe("Sam changed API_KEY in development — keep your edit?");
   });
 });

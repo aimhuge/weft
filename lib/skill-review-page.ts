@@ -1,3 +1,4 @@
+import { REVIEW_VERDICT_LABEL, SCAN_VERDICT_LABEL } from "./skill-verdict";
 import type { ScanFinding, SkillReview, SkillScan } from "./types";
 
 // The page a skill review opens in the browser pane (lib/skill-review.ts): the static scan at once, and the
@@ -22,8 +23,6 @@ export const esc = (s: string | number | undefined) =>
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
 
-const STATIC_LABEL = { danger: "Danger", warn: "Worth a look", clean: "Clean" } as const;
-const AI_LABEL = { unsafe: "Unsafe", caution: "Use with care", safe: "Looks safe" } as const;
 const TONE = { danger: "bad", unsafe: "bad", high: "bad", warn: "warn", caution: "warn", medium: "warn", clean: "ok", safe: "ok", low: "dim", info: "dim" } as const;
 
 const pill = (tone: string, text: string) => `<span class="pill ${tone}">${esc(text)}</span>`;
@@ -42,7 +41,7 @@ function aiSection(input: ReviewPageInput): string {
   const concerns = review.concerns.length
     ? `<ul>${review.concerns.map((c) => `<li>${pill(TONE[c.severity], c.severity)} ${esc(c.explanation)} ${where(c.file, c.line)}</li>`).join("")}</ul>`
     : `<p class="muted">No concerns.</p>`;
-  return `<section class="card"><h2>AI review ${pill(TONE[review.verdict], AI_LABEL[review.verdict])}</h2>
+  return `<section class="card"><h2>AI review ${pill(TONE[review.verdict], REVIEW_VERDICT_LABEL[review.verdict])}</h2>
 <p class="lead">${esc(review.summary)}</p>
 <h3>What it does</h3><p>${esc(review.whatItDoes)}</p>
 <h3>Concerns</h3>${concerns}
@@ -74,7 +73,7 @@ code{font-size:12px;color:var(--muted)}.why{margin:4px 0 0;color:var(--ok);font-
 .spin{display:inline-block;width:10px;height:10px;border:2px solid var(--line);border-top-color:var(--ink);border-radius:50%;animation:s 1s linear infinite;vertical-align:-1px}@keyframes s{to{transform:rotate(360deg)}}
 </style></head><body>
 <h1>✦ ${esc(name)}</h1><p class="src">${esc(source)}</p>
-<section class="card"><h2>Static scan ${pill(TONE[scan.verdict], STATIC_LABEL[scan.verdict])}${review ? ` AI ${pill(TONE[review.verdict], AI_LABEL[review.verdict])}` : ""}</h2>
+<section class="card"><h2>Static scan ${pill(TONE[scan.verdict], SCAN_VERDICT_LABEL[scan.verdict])}${review ? ` AI ${pill(TONE[review.verdict], REVIEW_VERDICT_LABEL[review.verdict])}` : ""}</h2>
 <div class="stats"><span>${scan.files} files</span><span>${Math.round(scan.bytes / 1024)} KB</span><span>License: ${esc(scan.license.spdx ?? scan.license.kind)}</span><span>${scan.hosts.length} hosts called</span></div>
 ${real.length ? `<h3>Findings</h3><ul>${real.map((f) => findingRow(f, review)).join("")}</ul>` : `<p class="muted">The rules found nothing.</p>`}
 </section>

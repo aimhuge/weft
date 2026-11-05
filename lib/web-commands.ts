@@ -69,12 +69,32 @@ export function commandLine(command: CloudCommandRow): { title: string; note: st
 // A reply, an answer to a waiting request or a Stop: a command for one card's thread rather than a new card.
 export const isCardCommand = (c: Pick<CloudCommandRow, "kind">) => c.kind === "reply" || c.kind === "answer" || c.kind === "stop";
 
+// A worker's sign-ins and clones come from Settings and the project menu on the desktop, and report back there. Its
+// mode changes and screen taps come from an open thread, which shows the result.
+const isWorkerAdmin = (c: Pick<CloudCommandRow, "kind">) => c.kind === "login" || c.kind === "github_login" || c.kind === "clone" || c.kind === "mode" || c.kind === "input" || c.kind === "qa";
+
+// A host verb (an ↑ edit, Send later, a star from the desktop) answers in the thread or the card it changes.
+const isHostVerb = (c: Pick<CloudCommandRow, "kind">) => c.kind === "host";
+
+// A session line's sealed offer (lib/web-lines.ts, or the desktop's): plumbing, with nothing to show.
+const isLine = (c: Pick<CloudCommandRow, "kind">) => c.kind === "line";
+
 // The strip under the header follows new threads; a card's own commands show under its reply box instead.
-export const boardCommands = (commands: CloudCommandRow[]) => commands.filter((c) => !isCardCommand(c));
+export const boardCommands = (commands: CloudCommandRow[]) => commands.filter((c) => !isCardCommand(c) && !isWorkerAdmin(c) && !isHostVerb(c) && !isLine(c));
+
+// A host verb that carried typed text (↑ edit, Send fresh, Send later) and failed after its box let it go: it shows
+// above the box with its text, so a refusal that came late (the Mac was asleep) doesn't lose what was typed.
+function failedHostText(c: CloudCommandRow, cardId: string): boolean {
+  if (!isHostVerb(c) || c.status !== "failed") return false;
+  const args = (c.payload as { args?: { id?: unknown; text?: unknown; message?: unknown } }).args;
+  return args?.id === cardId && Boolean(args.text || args.message);
+}
 
 // The commands sent to one card that haven't reached its thread yet, or that failed.
 export function cardReplies(commands: CloudCommandRow[], cardId: string): CloudCommandRow[] {
-  return commands.filter((c) => isCardCommand(c) && (c.payload as { cardId?: string }).cardId === cardId && (isOpenCommand(c) || c.status === "failed"));
+  return commands.filter(
+    (c) => (isCardCommand(c) && (c.payload as { cardId?: string }).cardId === cardId && (isOpenCommand(c) || c.status === "failed")) || failedHostText(c, cardId),
+  );
 }
 
 // Whether the web can reply to a card: only the Mac of the account that runs it obeys (lib/cloud-inbox.ts).

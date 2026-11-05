@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { api, type NewCardInput } from "@/lib/client";
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import {
+  bareModel,
   DRAFT,
   LAST_BACKEND,
   LAST_CWD,
@@ -25,7 +26,9 @@ import {
   subscribeDefaults,
 } from "@/lib/new-thread";
 import { useIsolate } from "./use-isolate";
+import { isWorkerProject } from "./worker-project";
 import type { ThreadAgent } from "./agents";
+import { useAgentList } from "./use-agents";
 
 // The dialog's state and the actions that drive it.
 export interface NewCardDialogLogic {
@@ -50,8 +53,12 @@ export interface NewCardDialogLogic {
   chooseFolder: (folder: string) => void;
   promptToStart: (read: () => string, focus: () => void) => string | null;
   isolated: boolean;
+  setIsolated: (on: boolean) => void;
   toggleIsolated: () => void;
-  // Who the thread is (lib/agents.ts). Not remembered: every new thread starts as Builder.
+  // The branch its worktree works on ("" for its own weft/* one); picking one turns isolation on.
+  branch: string;
+  pickBranch: (name: string) => void;
+  // Who the thread is (lib/agents.ts): the folder's default (Settings → Agents) until you pick one, Builder when it has none.
   agent: ThreadAgent;
   setAgent: (a: ThreadAgent) => void;
   promptLength: number;
@@ -111,8 +118,11 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   const [busy, setBusy] = useState<false | "start" | "backlog">(false);
   const [started, setStarted] = useState<string | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const { isolated, toggleIsolated, promptLength, notePrompt } = useIsolate(cwd);
-  const [agent, setAgent] = useState<ThreadAgent>("builder");
+  const { isolated, setIsolated, toggleIsolated, branch, pickBranch, promptLength, notePrompt } = useIsolate(cwd);
+  // The agent you picked here; a new folder goes back to its own default.
+  const [pickedAgent, setAgent] = useState<ThreadAgent | null>(null);
+  const { projects: projectAgents } = useAgentList();
+  const agent = pickedAgent ?? projectAgents[cwd] ?? "builder";
 
   useSettingsDefaults(pickedMode, pickedBackend, setPermissionMode, setBackend, setModelState);
   useEffect(() => () => clearTimeout(draftTimer.current), []);
@@ -129,7 +139,8 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     setModelState(m);
     const resolved = resolveModel(m);
     if (!resolved) return;
-    setModelFor(resolved.backend, resolved.model);
+    // Remembered as picked, so a Goose row ("goose:<id>") comes back as the same row next time.
+    setModelFor(resolved.backend, m);
     setBackend(resolved.backend);
   }, []);
 
@@ -173,6 +184,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
 
   const chooseFolder = useCallback((folder: string) => {
     setCwd(folder);
+    setAgent(null);
     setError(null);
     api.warm({ cwd: folder, backend }).catch(() => {}); // best-effort prefetch
   }, [backend]);
@@ -207,17 +219,21 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
           cwd,
           backend,
           permissionMode,
-          model,
+          // A Goose row's value carries a "goose:" prefix to tell it from another CLI's same id; the
+          // thread gets the bare id.
+          model: bareModel(model),
           effort: effortFor(backend, effort),
-          ...(isolated ? { isolated: true } : {}),
-          ...(agent !== "builder" ? { agent } : {}),
+          ...(isolated ? { isolated: true, ...(branch ? { branch } : {}) } : {}),
+          // Always named, so Builder picked here wins over the folder's default.
+          agent,
           start,
         };
         if (opts.stay) await opts.onCreate(input, { stay: true });
         else await opts.onCreate(input);
         clearTimeout(draftTimer.current);
         remember(DRAFT, null);
-        rememberPicks({ cwd, backend, model, effort });
+        // A worker project isn't remembered as the last folder, so the next thread can't land on it by default.
+        rememberPicks({ cwd: isWorkerProject(cwd) ? home : cwd, backend, model, effort });
         if (!opts.stay) {
           opts.onClose();
           return;
@@ -231,7 +247,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
         setBusy(false);
       }
     },
-    [busy, cwd, backend, permissionMode, model, effort, isolated, agent, promptToStart],
+    [busy, cwd, home, backend, permissionMode, model, effort, isolated, branch, agent, promptToStart],
   );
 
   return {
@@ -255,7 +271,10 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     chooseFolder,
     promptToStart,
     isolated,
+    setIsolated,
     toggleIsolated,
+    branch,
+    pickBranch,
     agent,
     setAgent,
     promptLength,

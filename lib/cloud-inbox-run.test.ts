@@ -5,9 +5,12 @@ import type { CloudCommandRow } from "./cloud-commands";
 vi.mock("./account", async () => (await import("./cloud-inbox.harness")).accountMock);
 vi.mock("./settings", async () => (await import("./cloud-inbox.harness")).settingsMock);
 vi.mock("./device-id", async () => (await import("./cloud-inbox.harness")).deviceMock);
+vi.mock("./desktop-worker", async () => (await import("./cloud-inbox.harness")).desktopWorkerMock);
+vi.mock("./device-calls", async () => (await import("./cloud-inbox.harness")).deviceCallsMock);
 vi.mock("./cloud-sync", async () => (await import("./cloud-inbox.harness")).cloudSyncMock);
 vi.mock("./new-card", async () => (await import("./cloud-inbox.harness")).newCardMock);
 vi.mock("./runner", async () => (await import("./cloud-inbox.harness")).runnerMock);
+vi.mock("./host-api", async (real) => (await import("./cloud-inbox.harness")).hostApiMock(real));
 vi.mock("./store", async () => (await import("./cloud-inbox.harness")).storeMock);
 
 const { refreshCloudInbox } = await import("./cloud-inbox");

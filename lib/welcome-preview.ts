@@ -1,37 +1,20 @@
 import os from "node:os";
 import path from "node:path";
 import { backfillEvents } from "./activity";
-import { activeDays, dayKey, levelFor, streakOf, tallyDays, type Level } from "./game";
-import { attributes, classFor, type Attribute } from "./game-attributes";
+import { activeDays, dayKey, levelFor, streakOf, tallyDays } from "./game";
+import { attributes, classFor } from "./game-attributes";
 import type { Card } from "./types";
 import { isScratch } from "./welcome";
+import type { WelcomeProfile, WelcomeProject } from "./welcome-types";
 
 // What the welcome shows before anything is imported: a Wefter Profile worked out from the sessions
 // the sync would pick up (screen 1), and their projects to tick (screen 2). Pure, so it's tested
 // without Claude Code; app/api/welcome feeds it lib/import-sync.ts sessionsToImport().
 
-export interface WelcomeProject {
-  cwd: string;
-  // The folder's name, and where it is with ~ for your home folder.
-  name: string;
-  where: string;
-  sessions: number;
-  last: number;
-  // A worktree, scratch or temp folder: shown folded and unticked.
-  scratch: boolean;
-}
-
-export interface WelcomeProfile {
-  className: string;
-  level: Level;
-  xp: number;
-  sessions: number;
-  shipped: number;
-  bestStreak: number;
-  projects: number;
-  // Your three strongest attributes.
-  top: Attribute[];
-}
+// The preview's shapes live in lib/welcome-types.ts (types only, no node:os), so the board's welcome
+// dialog can name them without dragging this module into the browser chunk. Re-exported here: the
+// server's own imports of "./welcome-preview" keep working.
+export type { WelcomeProfile, WelcomeProject };
 
 export function welcomeProjects(cards: Card[]): WelcomeProject[] {
   const home = os.homedir();

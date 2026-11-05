@@ -3,21 +3,21 @@ import { chipsFor } from "./copilot-starters";
 
 const reply = {
   chips: [
-    { text: "Answer the auth card", project: "/dev/weft", covers: ["Let's commit all the new stuff"] },
+    { text: "Answer the auth card", project: "/dev/weft", covers: ["What should I build next?"] },
     { text: "Sign in to Weft" },
-    { text: "Fix the groovenfill deploy", project: "/dev/groovenfill", covers: ["How can I improve my codebase?"] },
+    { text: "Fix the groovenfill deploy", project: "/dev/groovenfill", covers: ["What's worth refactoring?"] },
     { text: "Commit weft", project: "/dev/weft" },
     { text: "Review weft", project: "/dev/weft" },
     { text: "Review groovenfill", project: "/dev/groovenfill" },
   ],
-  covers: ["Let's commit all the new stuff", "How can I improve my codebase?"],
+  covers: ["What should I build next?", "What's worth refactoring?"],
 };
 
 describe("chipsFor", () => {
   it("keeps one project's chips plus account-wide ones, and only their covers", () => {
     const { chips, covers } = chipsFor(reply, "/dev/groovenfill");
     expect(chips.map((c) => c.text)).toEqual(["Sign in to Weft", "Fix the groovenfill deploy", "Review groovenfill"]);
-    expect([...covers]).toEqual(["How can I improve my codebase?"]);
+    expect([...covers]).toEqual(["What's worth refactoring?"]);
   });
 
   it("shows the most urgent four across every project for All", () => {

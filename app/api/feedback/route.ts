@@ -2,7 +2,7 @@ import { fail, guard } from "@/lib/guard";
 import { cleanMessages, parseSummary, parseTurn, summaryPrompt, turnPrompt } from "@/lib/feedback";
 import { complete } from "@/lib/haiku";
 
-// The feedback dot's interview (components/FeedbackDot.tsx): the transcript in, Haiku's next question out, or the
+// The feedback interview: the transcript in, Haiku's next question out, or the
 // summary once it has heard enough (or `wrap` asks for it now).
 export async function POST(req: Request) {
   const denied = guard(req);

@@ -1,11 +1,14 @@
 import { tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { attempt, shell, text } from "./browser-tools";
+import { cardProof } from "./card-token";
 import { asText } from "./format";
 import { globalSingleton } from "./global-singleton";
 import { addMissingBlank, missingText } from "./secret-ask";
 import { checkCommand, checkNames, packageScript, resolveCwd } from "./secret-command";
 import { shellToken } from "./shell-token";
+import { devEnvOnWorker } from "./worker-dev-env";
+import { onWorker, redactOnWorker, workerSecretRun } from "./worker-secret-run";
 
 // Vault values in a command's env, for a thread that never sees them (docs/architecture/secrets.md). This side
 // checks the command and splits it; Electron main asks the user (the exact command, its package.json script,
@@ -36,8 +39,10 @@ export function usesSecrets(cardId: string): boolean {
  */
 export async function redactStored(cardId: string, value: string): Promise<string> {
   if (!value || !inUse.has(cardId)) return value;
+  // A worker card's values never passed through a main here: this process kept them (lib/worker-secret-run.ts).
+  if (onWorker()) return redactOnWorker(cardId, value);
   try {
-    return asText((await shell("/secrets/redact", { key: cardId, text: value })).text);
+    return asText((await shell("/secrets/redact", { ...cardProof(cardId, "/secrets/redact"), text: value })).text);
   } catch {
     return "‹output hidden: Weft couldn't check it for vault secrets›";
   }
@@ -95,24 +100,13 @@ export function runTool(cardId: () => string | undefined, folder: () => string, 
         const dir = resolveCwd(root, cwd);
         const timeoutMs = Math.min(Math.max(timeout_seconds ?? DEFAULT_TIMEOUT_S, 1), MAX_TIMEOUT_S) * 1000;
         const key = cardId();
-        const r = (await shell("/secrets/run", {
-          key,
-          thread: title(),
-          why: asText(why).trim() || undefined,
-          folder: root,
-          cwd: dir,
-          command: command.trim(),
-          argv,
-          env,
-          names: wanted,
-          environment: environment ?? "development",
-          script: packageScript(argv, dir),
-          timeoutMs,
-        })) as RunReply;
+        const request = { thread: title(), why: asText(why).trim() || undefined, cwd: dir, command: command.trim(), argv, env, names: wanted, environment: environment ?? "development", script: packageScript(argv, dir), timeoutMs };
+        // On a Weft Worker the vault is on the owner's Mac: it approves and seals the values to this box for this run.
+        const r: RunReply = onWorker() ? await workerSecretRun({ ...request, cardId: key, root }) : await shell("/secrets/run", { ...cardProof(key, "/secrets/run"), ...request, folder: root });
         const missing = r.missing ?? [];
         if (missing.length) {
           const env = environment ?? "development";
-          const added = await Promise.all(missing.map((name) => addMissingBlank(root, name, env)));
+          const added = await Promise.all(missing.map((name) => addMissingBlank(root, name, env, key)));
           return text(missingText(missing, env, asText(r.label, "this"), added.every(Boolean)), true);
         }
         if (!r.denied) markInUse(key);
@@ -137,15 +131,22 @@ export interface DevLaunch {
  * undefined starts it the plain way, with a note for its log when there's something to say.
  */
 export async function devSecrets(cardId: string, command: string, cwd: string, thread?: string): Promise<{ launch?: DevLaunch; note?: string }> {
-  if (!process.env.WEFT_SHELL_URL) return {};
+  const worker = onWorker();
+  if (!process.env.WEFT_SHELL_URL && !worker) return {};
   let checked;
   try {
     checked = checkCommand(command);
   } catch (err) {
     return { note: `Started without vault secrets: ${(err as Error).message}` };
   }
+  // On a Weft Worker the owner's Mac approves once and seals the development values to this box (lib/worker-dev-env.ts).
+  if (worker) {
+    const r = await devEnvOnWorker({ cardId, thread, root: cwd, cwd, command: command.trim(), argv: checked.argv, env: checked.env, script: packageScript(checked.argv, cwd) });
+    if (r.launch) markInUse(cardId);
+    return r;
+  }
   try {
-    const r = await shell("/secrets/dev-grant", { key: cardId, thread, folder: cwd, cwd, command: command.trim(), argv: checked.argv, env: checked.env, script: packageScript(checked.argv, cwd) });
+    const r = await shell("/secrets/dev-grant", { ...cardProof(cardId, "/secrets/dev-grant"), thread, folder: cwd, cwd, command: command.trim(), argv: checked.argv, env: checked.env, script: packageScript(checked.argv, cwd) });
     const names = Array.isArray(r.names) ? (r.names as string[]) : [];
     if (r.denied) return { note: "Started without vault secrets: not approved." };
     if (!names.length || typeof r.grant !== "string") return {};

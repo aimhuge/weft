@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { MODE_OPTIONS, permissionOptions, type Backend, type PermissionMode } from "@/lib/types";
-import { useOverlay } from "@/lib/overlay";
+import { useLocalMenu, useMenuCoverPublisher } from "@/lib/overlay";
 import { useEscape } from "@/lib/use-escape";
 import Icon from "./Icon";
 
@@ -29,11 +29,15 @@ function buttonClass(small: boolean, loose: boolean) {
 }
 
 // Open/closed, shut by Escape or a click outside `root`. The pane is a native view drawn above the
-// board, so it hides while the menu is open.
+// board, so the page steps aside around the menu rather than the menu hiding the page.
 function useMenu() {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
-  useOverlay(open);
+  const menu = useRef<HTMLDivElement>(null);
+  useLocalMenu(open);
+  // The menu measures itself and publishes the rectangle it covers, so the pane's page steps aside
+  // around it instead of vanishing under it.
+  useMenuCoverPublisher(menu, open);
   useEscape(open, () => setOpen(false));
   useEffect(() => {
     if (!open) return;
@@ -43,7 +47,7 @@ function useMenu() {
     window.addEventListener("pointerdown", away);
     return () => window.removeEventListener("pointerdown", away);
   }, [open]);
-  return { open, setOpen, root };
+  return { open, setOpen, root, menu };
 }
 
 // The modes, each with what it does under its name.
@@ -53,15 +57,19 @@ function ModeMenu({
   up,
   end,
   onPick,
+  menuRef,
 }: {
   options: { id: PermissionMode; label: string; hint: string }[];
   value: PermissionMode;
   up: boolean;
   end: boolean;
   onPick: (mode: PermissionMode) => void;
+  // The menu's own element, so the page can measure it and step aside around it.
+  menuRef: RefObject<HTMLDivElement | null>;
 }) {
   return (
     <div
+      ref={menuRef}
       role="menu"
       aria-label="Permissions"
       className={`absolute ${end ? "right-0" : "left-0"} z-40 w-72 rounded-lg border border-line bg-panel p-1 shadow-lg ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
@@ -114,7 +122,7 @@ export default function ModePicker({
   // Line the menu up with the button's right edge, for a picker at the right of its row.
   end?: boolean;
 }) {
-  const { open, setOpen, root } = useMenu();
+  const { open, setOpen, root, menu } = useMenu();
   const mode = currentMode(backend, value);
   const options = visibleModes(backend, yolo, value);
   const loose = value === "bypassPermissions";
@@ -138,7 +146,7 @@ export default function ModePicker({
         <span className={small ? "pr-0.5" : "pr-1"}>{mode.label}</span>
         <Icon name="chevronDown" size={small ? 10 : 12} />
       </button>
-      {open && <ModeMenu options={options} value={value} up={up} end={end} onPick={pick} />}
+      {open && <ModeMenu options={options} value={value} up={up} end={end} onPick={pick} menuRef={menu} />}
     </div>
   );
 }

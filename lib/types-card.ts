@@ -1,30 +1,19 @@
 // Card, column, project and board-event types used across the app.
 
+// The columns, the CLIs, the permission modes and a skill are @weft/client's, so the phone names them the same.
+import { COLUMNS, MODES, type Backend, type Column, type PendingPermission, type PermissionMode, type PromptReason, type SkillInfo, type ThreadItem } from "@weft/client";
 import type { Effort, LoginView } from "./types-settings";
-import type { PendingElicitation, Question, ThreadItem } from "./types-thread";
 import type { Card } from "./types-card-detail";
-import type { EditPreview } from "./edit-preview";
 
-export const COLUMNS = [
-  { id: "backlog", label: "Backlog" },
-  { id: "running", label: "Running" },
-  { id: "needs_you", label: "Needs you" },
-  { id: "review", label: "Review" },
-  { id: "done", label: "Done" },
-] as const;
+export { COLUMNS, MODES, type Backend, type Column, type PermissionMode };
 
 // The copilot is one long-lived thread with this fixed id, kept off the board.
 export const COPILOT_ID = "copilot";
 
-export type Column = (typeof COLUMNS)[number]["id"];
-
-export type Backend = "claude" | "puku" | "codex" | "goose";
 export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
 // The short name, for a label that sits beside something else ("Sonnet 5.5 (Claude)").
 export const BACKEND_SHORT: Record<Backend, string> = { claude: "Claude", puku: "Puku", codex: "Codex", goose: "Goose" };
 // bypassPermissions is "YOLO": every tool runs without asking.
-export type PermissionMode = "default" | "acceptEdits" | "auto" | "bypassPermissions";
-export const MODES: PermissionMode[] = ["default", "acceptEdits", "auto", "bypassPermissions"];
 
 // How the pickers (new thread, thread header, card menu) name each mode, loosest first.
 export const MODE_OPTIONS: { id: PermissionMode; label: string; hint: string }[] = [
@@ -78,6 +67,9 @@ export interface CardStats {
   branch?: string;
   // Share of the model's context window the last turn filled, 0-100.
   contextUsed?: number;
+  // The stack itself: the tokens the last request carried, and the window they were measured against.
+  contextTokens?: number;
+  contextWindow?: number;
   tokens?: number;
   // Lines added and removed in the folder's working tree (git diff against HEAD).
   added?: number;
@@ -100,6 +92,14 @@ export interface ScheduledMessage {
   forSlot?: boolean;
   // A re-run of the last message (a retry or a limit resume): it is already in the thread, so it goes out without an echo.
   quiet?: boolean;
+}
+
+// A file this card leaves to another card for now: the user put that card first ("This first",
+// lib/precedence.ts). The file is a plain path, not a claim key (lib/claims.ts).
+export interface CardYield {
+  // The card that goes first on the file.
+  to: string;
+  file: string;
 }
 
 // A thread's tour of what it built, for the user to step through in Review (see lib/review.ts).
@@ -146,6 +146,12 @@ export interface DevServerEntry {
 export interface Project {
   path: string;
   lastUsedAt: number;
+  // Pinned from the project's right-click menu: always a chip in the project bar, never dropped from the list.
+  pinned?: boolean;
+  // Hidden from the bar ("Hide from Bar"): its chip goes until the folder is used again; "More" still lists it.
+  hidden?: boolean;
+  // Folders added to the project ("Add Folder…"): its threads read and edit there with no "Outside project" prompt.
+  folders?: string[];
 }
 
 // When an automation runs its skill: as a thread starts, when you move a card to Review or Done, or
@@ -169,13 +175,8 @@ export interface Automation {
   pattern?: string;
 }
 
-export interface SkillInfo {
-  // What follows the slash when running it.
-  name: string;
-  description: string;
-  // weft: ships with Weft (plugin/skills); user: ~/.claude/skills; project: <folder>/.claude/skills.
-  source: "weft" | "user" | "project";
-}
+// A skill a thread can run with "/": @weft/client's, since the "/" list travels to other boards.
+export type { SkillInfo };
 
 // A Claude Code plugin (/plugin install) a thread can be given or not, as a whole (lib/skill-library.ts).
 export interface PluginInfo {
@@ -212,44 +213,13 @@ export interface SkillSetView {
   seeded: boolean;
 }
 
-export interface PendingPermission {
-  id: string;
-  toolName: string;
-  title: string;
-  input: Record<string, unknown>;
-  // Set when the agent asked questions instead of asking to use a tool.
-  questions?: Question[];
-  // A folder outside the card's project that a question names, found on the server (lib/read-scope.ts
-  // stats the disk, so the client can't run it); the form offers "Read from <token>" for it.
-  readScope?: { directory: string; token: string };
-  // The page with the options' previews (lib/question-preview.ts); open it at #<question>-<option>.
-  previewUrl?: string;
-  // What a held Edit/Write would change, readable (lib/edit-preview.ts).
-  edit?: EditPreview;
-  // Why the prompt came up: a symbol-claim clash (lib/claims.ts clashWhy) or the card's permission mode.
-  why?: PromptReason;
-  // The user chose Wait: Weft answers it once the holder lets go of the code.
-  waiting?: boolean;
-  // Set when an MCP server asked instead of a tool (lib/elicitation.ts): Accept / Decline and its form.
-  elicitation?: PendingElicitation;
-}
-
-// A permission prompt's reason, as a category chip and a short detail (components/PermissionInput.tsx).
-// same-code / overlap / whole-file: another busy card's claim (lib/claims.ts); mode: the card's permission mode;
-// outside: a folder beyond the card's project (lib/folder-guard.ts); classifier: auto mode's classifier denied
-// the call itself, and the prompt offers a one-time retry (lib/classifier-denial.ts).
-export interface PromptReason {
-  category: "same-code" | "overlap" | "whole-file" | "mode" | "outside" | "classifier";
-  detail: string;
-  // For a clash: the card holding the claim and its claim key, so Wait can watch for its release (lib/permission-wait.ts).
-  // Its emoji and thumbnail show beside the prompt; first: the user put it first, so this card yields (lib/precedence.ts).
-  holder?: { id: string; title: string; claim: string; emoji?: string; thumb?: string; first?: true };
-}
+// The pending ask (a permission prompt, a question or an MCP form) and why it came up are @weft/client's.
+export type { PendingPermission, PromptReason };
 
 // Card and CardIssue live in lib/types-card-detail.ts to keep this file under the line limit.
 // Re-exported here so `./types` and direct importers keep working.
 export type { Card } from "./types-card-detail";
-export type { CardBreak, CardIssue, CardWorktree } from "./types-card-detail";
+export type { CardBreak, CardIssue, CardWorktree, TeamMark } from "./types-card-detail";
 
 export type BoardEvent =
   | { type: "card"; card: Card }
@@ -266,6 +236,8 @@ export type BoardEvent =
   | { type: "account" }
   // A cron was made, changed, run or deleted (lib/cron-store.ts): the rail's Crons drawer reloads.
   | { type: "crons" }
+  // A Weft Worker wrote a project's snapshot (lib/worker-project-live.ts): the header badges read that worker:// path again.
+  | { type: "worker_project"; project: string }
   // A restart was armed, cancelled, or the turns it waits on changed (lib/restart-when-idle.ts).
   | { type: "restart"; restart: RestartStatus };
 

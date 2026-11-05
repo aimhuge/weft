@@ -8,12 +8,17 @@
 // the iframe's own sizing class, so the frame keeps exactly the room it had.
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type Ref } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type Ref } from "react";
 import "./share-view.css";
 
 // Long enough for a big page over a slow link, short enough that a dead blob doesn't read as
 // "still loading" forever.
 const LOAD_TIMEOUT_MS = 12_000;
+
+// "Are we past hydration?" for useSyncExternalStore: false on the server and while hydrating, true after.
+const noSubscribe = () => () => {};
+const onClient = () => true;
+const onServer = () => false;
 
 // Hand the frame to the caller's ref too, whichever kind it is.
 function assignRef<T>(ref: Ref<T> | undefined, el: T | null) {
@@ -49,6 +54,11 @@ export function PaneFrame({
   // does not bubble, so React's root-level delegation never sees it. The listener is native,
   // attached straight to the element.
   const inner = useRef<HTMLIFrameElement | null>(null);
+  // The src goes on only after mount. Server-rendered with its src, a cached frame could finish
+  // loading before hydration attached onLoad; the load went unseen, and the timer showed "didn't
+  // load" over a page that was there. A sandboxed frame's origin is opaque, so there's no reading
+  // its readyState after the fact either.
+  const mounted = useSyncExternalStore(noSubscribe, onClient, onServer);
 
   // One timer per mount/attempt: cleared on load, on unmount and before a retry.
   useEffect(() => {
@@ -78,7 +88,9 @@ export function PaneFrame({
     [frameRef],
   );
 
-  const onLoad = () => {
+  const onLoad = (e: { currentTarget: HTMLIFrameElement }) => {
+    // The empty frame's about:blank load before the src goes on isn't the page.
+    if (!e.currentTarget.getAttribute("src")) return;
     if (timer.current) clearTimeout(timer.current);
     setLoaded(true);
     setFailed(false);
@@ -96,7 +108,7 @@ export function PaneFrame({
         key={attempt}
         ref={setFrame}
         title={title}
-        src={src}
+        src={mounted ? src : undefined}
         {...(sandbox ? { sandbox } : {})}
         className={className}
         onLoad={onLoad}

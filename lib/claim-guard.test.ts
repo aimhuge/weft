@@ -7,6 +7,7 @@ import type { Card } from "./types";
 const cards = new Map<string, Card>();
 
 vi.mock("./store", () => ({
+  DATA_DIR: os.tmpdir(),
   getCard: (id: string) => cards.get(id),
   listCards: () => [...cards.values()],
   updateCard: vi.fn((id: string, patch: Partial<Card>) => {
@@ -167,6 +168,19 @@ describe("the PostToolUse hook", () => {
   });
 });
 
+describe("claimsFor on Markdown", () => {
+  it("claims blocks, not the file", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "md-claims-"));
+    const doc = path.join(dir, "MAP.md");
+    fs.writeFileSync(doc, "## Map\n\n- one\n- two\n");
+    const keys = await claimsFor("Edit", { file_path: doc, old_string: "- two", new_string: "- two!" }, dir);
+    expect(keys.map((k) => k.slice(k.indexOf("#") + 1))).toEqual(["Map/two", "Map/two!"]);
+    const missing = await claimsFor("Edit", { file_path: doc, old_string: "- nope", new_string: "x" }, dir);
+    expect(missing.map((k) => k.slice(k.indexOf("#") + 1))).toEqual(["*"]);
+    expect((await claimsFor("Write", { file_path: doc, content: "x" }, dir)).map((k) => k.slice(k.indexOf("#") + 1))).toEqual(["*"]);
+  });
+});
+
 describe("releaseClaims", () => {
   it("drops every card's claims on the committed files", () => {
     cards.set("a", card("a", { claims: [`${file}#one`, "/b.ts#*"] }));
@@ -174,5 +188,13 @@ describe("releaseClaims", () => {
     releaseClaims([file]);
     expect(cards.get("a")?.claims).toEqual(["/b.ts#*"]);
     expect(store.updateCard).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops only the committer's claims on a file the commit held lines back from", () => {
+    cards.set("a", card("a", { claims: [`${file}#one`] }));
+    cards.set("b", card("b", { claims: [`${file}#two`] }));
+    releaseClaims([file], [file], "a");
+    expect(cards.get("a")?.claims).toEqual([]);
+    expect(cards.get("b")?.claims).toEqual([`${file}#two`]);
   });
 });

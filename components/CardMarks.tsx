@@ -4,6 +4,7 @@ import { cardTags } from "@/lib/rail-view";
 import { runningBadge } from "@/lib/tasks-view";
 import { formatAt } from "@/lib/schedule";
 import type { Card, CardBreak } from "@/lib/types";
+import BlockingMark from "./BlockingMark";
 import TagPill from "./TagPill";
 import Tip from "./Tip";
 
@@ -14,10 +15,13 @@ import Tip from "./Tip";
 export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card; onTag?: (tag: string) => void; onDismissBreak?: () => void }) {
   const { shown, more } = cardTags(card.tags);
   const tasks = runningBadge(card.tasks);
-  if (!hasMarks(card, shown.length > 0 || Boolean(tasks))) return null;
+  // The blocking count is live (lib/waits-on.ts), so the row can't be skipped before it is known:
+  // an empty span costs nothing, and the mark decides for itself.
+  if (!hasMarks(card, shown.length > 0 || Boolean(tasks))) return <BlockingMark cardId={card.id} />;
   return (
-    <span className="flex shrink-0 items-center gap-1">
+    <span className="flex min-w-0 items-center gap-1">
       {card.broke && <BrokeChip broke={card.broke} onDismiss={onDismissBreak} />}
+      <BlockingMark cardId={card.id} />
       <IsolatedMark card={card} />
       {tasks && (
         <Tip text={tasks.title}>
@@ -37,9 +41,9 @@ export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card;
         </a>
       )}
       {card.autoResumedAt && (
-        <Tip text={`This thread restarted on its own after the ${card.backend} limit reset.`}>
+        <Tip text={resumedTip(card)}>
           <span className="shrink-0 rounded-md border border-accent/40 px-1.5 py-px text-[11px] font-medium text-accent">
-            Auto-resumed · {formatAt(card.autoResumedAt)}
+            {card.autoResumedReason === "upgrade" ? "Resumed · plan upgraded" : `Auto-resumed · ${formatAt(card.autoResumedAt)}`}
           </span>
         </Tip>
       )}
@@ -52,10 +56,10 @@ export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card;
             e.stopPropagation();
             onTag(tag);
           }}
-          className="flex shrink-0"
+          className="flex min-w-0"
           tabIndex={onTag ? 0 : -1}
         >
-          <TagPill tag={tag} className="max-w-[60px]" title={onTag ? `#${tag} · show only this tag` : undefined} />
+          <TagPill tag={tag} className="min-w-0 max-w-[60px] shrink" title={onTag ? `#${tag} · show only this tag` : undefined} />
         </button>
       ))}
       {more > 0 && (
@@ -68,6 +72,15 @@ export default function CardMarks({ card, onTag, onDismissBreak }: { card: Card;
 }
 
 const HAPPENED: Record<CardBreak["kind"], string> = { server: "stopped Weft's server", build: "broke Weft's build", reload: "made the board reload" };
+
+// Why the thread restarted on its own: the plan's window reset, or the plan itself changed (the
+// user upgraded, so the models that were capped have room again — lib/limit-upgrade.ts).
+function resumedTip(card: Card): string {
+  if (card.autoResumedReason === "upgrade") {
+    return "This thread restarted on its own: your plan was upgraded, so the limits that parked it are gone.";
+  }
+  return `This thread restarted on its own after the ${card.backend} limit reset.`;
+}
 
 // The red chip on a card that broke Weft: what it did on hover, × to dismiss.
 function BrokeChip({ broke, onDismiss }: { broke: CardBreak; onDismiss?: () => void }) {

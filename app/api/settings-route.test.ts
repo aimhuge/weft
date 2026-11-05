@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // to the CLI that serves it, so the API takes them all.
 
 vi.mock("next/server", () => ({ connection: async () => {} }));
+vi.mock("@/lib/account-settings", () => ({ pushAccountSettings: vi.fn(() => Promise.resolve(true)) }));
 
 vi.mock("@/lib/store", () => ({
   DATA_DIR: "/tmp/weft-api-test-data",
@@ -64,8 +65,11 @@ vi.mock("@/lib/settings", () => ({
   settingsView: vi.fn(() => ({ threadPrompt: "tp", keepAliveMinutes: 5, automations: [] })),
 }));
 
+vi.mock("@/lib/goose-models", () => ({ setNamedModels: vi.fn() }));
+
 const settings = await import("@/lib/settings");
 const settingsRoute = await import("./settings/route");
+const gooseModels = await import("@/lib/goose-models");
 
 const WRITE = { host: "localhost:3457", "x-weft-token": "1", "content-type": "application/json" };
 
@@ -112,6 +116,9 @@ describe("/settings", () => {
     expect(rules[0]).toEqual({ id: "a1", on: "done", skill: "weft:done" });
     expect(rules[1]).toMatchObject({ on: "prompt-matches", skill: "deploy", pattern: "ship it" });
     expect(rules[1]!.id).toBeTruthy();
+    // The account's settings then go to your workers (lib/account-settings.ts).
+    const { pushAccountSettings } = await import("@/lib/account-settings");
+    expect(pushAccountSettings).toHaveBeenCalled();
   });
 
   it("PATCH saves the cap on running threads, then lets the waiting threads go", async () => {
@@ -171,5 +178,38 @@ describe("/settings", () => {
     expect(settings.setCopilotModel).toHaveBeenCalledWith("puku-ai-2.8");
     expect(settings.setReviewAllModel).toHaveBeenCalledWith("puku-ai-2.7");
     expect(settings.setSubagentModel).toHaveBeenCalledWith("puku-ai-2.8");
+  });
+
+  it("PATCH saves the names the user gave their Goose models", async () => {
+    const res = await patch({
+      gooseNamedModels: [
+        { id: "puku-ai-2.8", name: "My Puku" },
+        { id: "anthropic/claude-opus-4.1", name: "Big Opus" },
+      ],
+    });
+    expect(res.status).toBe(200);
+    expect(gooseModels.setNamedModels).toHaveBeenCalledWith([
+      { id: "puku-ai-2.8", name: "My Puku" },
+      { id: "anthropic/claude-opus-4.1", name: "Big Opus" },
+    ]);
+  });
+
+  it("PATCH leaves the names alone when the field isn't in the body", async () => {
+    expect((await patch({ threadPrompt: "be brief" })).status).toBe(200);
+    expect(gooseModels.setNamedModels).not.toHaveBeenCalled();
+  });
+
+  it("PATCH refuses a list of names that isn't a list of pairs, and saves none of them", async () => {
+    for (const body of [
+      { gooseNamedModels: "nope" },
+      { gooseNamedModels: ["just-a-string"] },
+      { gooseNamedModels: [{ id: "gpt-5" }] },
+      { gooseNamedModels: [{ name: "No id" }] },
+      { gooseNamedModels: [{ id: 5, name: "A number" }] },
+      { gooseNamedModels: [null] },
+    ]) {
+      expect((await patch(body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect(gooseModels.setNamedModels).not.toHaveBeenCalled();
   });
 });

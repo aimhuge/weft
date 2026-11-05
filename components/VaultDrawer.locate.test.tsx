@@ -6,6 +6,9 @@ import type { ImportScan, VaultBridge, VaultOverview } from "@/lib/vault-view";
 import "./test-utils";
 import VaultDrawer from "./VaultDrawer";
 
+// The drawer's recovery menu item uses next/navigation's useRouter(); the app router isn't mounted in a test.
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
+
 // The 🔐 drawer's Import all on the nudge, and Locate… in a vault's header and the import preview.
 const AWAY = "../web-build/.env.local";
 

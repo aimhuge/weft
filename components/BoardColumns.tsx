@@ -3,13 +3,17 @@
 // The board's row of columns: the <main> sheet and one BoardColumn per visible column, with the
 // column-specific extras (Backlog's sprints and reorder, Review's Resume all / Review all / filter
 // chips, Running and Needs you's Switch all) wired by column id here so Board only passes state in.
-import { useMemo, type DragEvent, type MouseEvent, type ReactNode } from "react";
+import { useMemo, useRef, useSyncExternalStore, type DragEvent, type MouseEvent, type ReactNode } from "react";
 import type { Card, Column } from "@/lib/types";
 import type { LaneState } from "@/lib/copilot-lane";
+import { foldedColumns, isFolded, setColumnFolded, subscribeBoardPrefs } from "@/lib/board-prefs";
+import { wideColumns } from "@/lib/board-overflow";
+import { useElementSize } from "@/lib/use-element-size";
 import { reviewFilterCounts, type ReviewFilter, type ReviewFilterKey } from "@/lib/board-view";
 import { stackRuns } from "@/lib/cron-stacks";
 import BoardColumn, { COLUMN_LIMIT } from "./BoardColumn";
 import CronStack from "./CronStack";
+import FoldedColumn from "./FoldedColumn";
 
 export interface BoardColumnsProps {
   columns: readonly { id: Column; label: string }[];
@@ -70,24 +74,58 @@ export default function BoardColumns(given: BoardColumnsProps) {
     },
   };
   const { columns, byColumn, expanded, onNew } = props;
+  // Columns folded to a strip (their header's chevron), remembered in a cookie like the other board prefs.
+  const shut = useSyncExternalStore(subscribeBoardPrefs, foldedColumns, () => "");
+  const lanes = columns.map((column) => {
+    const list = byColumn.get(column.id) ?? [];
+    const shown = expanded.includes(column.id) ? list : list.slice(0, COLUMN_LIMIT);
+    return { column, list, shown, folded: isFolded(shut, column.id) };
+  });
+  // The fullest columns spill into a second column of cards while the board has room (lib/board-overflow.ts).
+  const board = useRef<HTMLElement>(null);
+  const { width, height } = useElementSize(board);
+  const wide = wideColumns(width, height, lanes.map((l) => ({ id: l.column.id, count: l.shown.length, folded: l.folded })));
   return (
     <main
+      ref={board}
+      data-board-surface
       className="board-sheet flex min-w-0 flex-1 gap-3 overflow-x-auto p-3"
       onDoubleClick={(e) => {
         // Empty board space (between or inside columns, not on a card or control) opens New thread.
         if (!(e.target as HTMLElement).closest("[data-card-id], button, a, input, textarea, [contenteditable]")) onNew();
       }}
     >
-      {columns.map((column) => {
-        const list = byColumn.get(column.id) ?? [];
-        const shown = expanded.includes(column.id) ? list : list.slice(0, COLUMN_LIMIT);
-        return <OneColumn key={column.id} {...props} column={column} list={list} shown={shown} />;
-      })}
+      {lanes.map(({ column, list, shown, folded }) =>
+        folded ? (
+          <ShutColumn key={column.id} {...props} column={column} count={list.length} />
+        ) : (
+          <OneColumn key={column.id} {...props} column={column} list={list} shown={shown} wide={wide.includes(column.id)} />
+        ),
+      )}
     </main>
   );
 }
 
-function OneColumn({ column, list, shown, ...p }: BoardColumnsProps & { column: { id: Column; label: string }; list: Card[]; shown: Card[] }) {
+function ShutColumn({ column, count, ...p }: BoardColumnsProps & { column: { id: Column; label: string }; count: number }) {
+  return (
+    <FoldedColumn
+      column={column}
+      count={p.loaded ? count : null}
+      dragOver={p.drag.over === column.id}
+      onUnfold={() => setColumnFolded(column.id, false)}
+      onDragOver={(e) => {
+        e.preventDefault();
+        p.drag.onOver(column.id);
+      }}
+      onDragLeave={() => p.drag.onLeave(column.id)}
+      onDrop={(e) => p.drag.onDrop(column.id, e)}
+    />
+  );
+}
+
+type Lane = { column: { id: Column; label: string }; list: Card[]; shown: Card[]; wide: boolean };
+
+function OneColumn({ column, list, shown, wide, ...p }: BoardColumnsProps & Lane) {
   const id = column.id;
   const count = list.length;
   const review = id === "review";
@@ -98,6 +136,8 @@ function OneColumn({ column, list, shown, ...p }: BoardColumnsProps & { column: 
       column={column}
       shown={shown}
       count={count}
+      wide={wide}
+      onFold={() => setColumnFolded(id, true)}
       loaded={p.loaded}
       filtering={p.filtering}
       dragOver={p.drag.over === id}

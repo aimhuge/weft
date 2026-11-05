@@ -4,6 +4,8 @@ import { shellToken } from "./shell-token";
 // What every Weft MCP tool uses to reach Electron main: the pane's token-guarded control server. The desktop
 // shell (electron/main.cjs) passes its URL when it starts the Next server.
 const SHELL_URL = process.env.WEFT_SHELL_URL;
+// The routes a worker serves itself; fill is among them only to refuse it by name.
+const WORKER_ROUTES = /^\/(browser\/|secrets\/fill$)/;
 
 export type ToolResult = {
   content: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }>;
@@ -15,7 +17,9 @@ export function text(value: string, isError = false): ToolResult {
 }
 
 export async function shell(route: string, body?: Record<string, unknown>) {
-  if (!SHELL_URL) throw new Error("The browser pane only exists in the desktop app (npm run desktop).");
+  // A card on a Weft Worker drives the worker's own headless Chromium instead (lib/worker-browser-routes.ts).
+  if (!SHELL_URL && process.env.WEFT_WORKER === "1" && WORKER_ROUTES.test(route)) return (await import("./worker-browser-routes")).workerShell(route, body);
+  if (!SHELL_URL) throw new Error(process.env.WEFT_WORKER === "1" ? "This needs the desktop app, and this card runs on a Weft Worker." : "The browser pane only exists in the desktop app (npm run desktop).");
   const res = await fetch(`${SHELL_URL}${route}`, {
     method: "POST",
     headers: { authorization: `Bearer ${shellToken()}`, "content-type": "application/json" },

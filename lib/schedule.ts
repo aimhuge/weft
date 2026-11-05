@@ -69,11 +69,6 @@ export function sendLaterOptions(backend: Card["backend"], resets: PlanResets, n
   return options;
 }
 
-// The card's scheduled messages with this one added, soonest first.
-export function addScheduled(list: ScheduledMessage[] | undefined, message: ScheduledMessage): ScheduledMessage[] {
-  return [...(list ?? []), message].sort((a, b) => a.at - b.at);
-}
-
 // The message whose time has come, if any (the soonest). A message held for a free slot isn't timed: it goes when
 // one frees (lib/thread-slots.ts), not when the scheduler finds it due.
 export function dueMessage(card: Card, now = Date.now()): ScheduledMessage | undefined {
@@ -87,6 +82,10 @@ export function sendsWhen(m: ScheduledMessage, now = Date.now()) {
   if (m.forSlot) return "when a slot frees";
   return m.afterTurn ? "after this turn" : formatAt(m.at, now);
 }
+
+// A held row Send now can take: one only waiting for this turn. A row held for a restart still armed would be held
+// again (after the turn it stopped), one held for a slot would wait for a slot again, and a timed one waits for its time.
+export const canSendNow = (m: ScheduledMessage) => Boolean(m.afterTurn) && !m.id.startsWith("pending-");
 
 // "11:41pm", or "sat 9:00am" when it isn't today.
 export function formatAt(at: number, now = Date.now()) {

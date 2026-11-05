@@ -94,3 +94,32 @@ describe("POST /secrets/set-many", () => {
     expect(prompt).not.toHaveBeenCalled();
   });
 });
+
+// A card whose grant names writes (electron/vault-grants.cjs) stores its batch without asking again, as set does,
+// unless the batch overwrites a value.
+describe("POST /secrets/set-many under a grant that names writes", () => {
+  function granted() {
+    const m = make();
+    const routes = vaultRoutes(() => m.vault, () => "c1") as unknown as Record<string, (body: Record<string, unknown>, route?: string) => Promise<unknown>>;
+    const many = (secrets: unknown) => routes["POST /secrets/set-many"]!({ folder: m.folder, secrets }, "/secrets/set-many");
+    return { ...m, many };
+  }
+
+  it("adds and fills without a Touch ID", async () => {
+    const { vault, folder, prompt, many, values } = granted();
+    await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", writes: true });
+    prompt.mockClear();
+    expect(await many([{ name: "A", value: "a" }, { name: "B", value: "b" }])).toMatchObject({ ok: true, added: [{ name: "A" }, { name: "B" }] });
+    expect(prompt).not.toHaveBeenCalled();
+    expect(await values(["A", "B"])).toEqual({ A: "a", B: "b" });
+  });
+
+  it("still asks when the batch overwrites", async () => {
+    const { vault, folder, prompt, many } = granted();
+    await vault.setValue(folder, "OLD", "development", "old");
+    await vault.grant(folder, { card: "c1", thread: "Build card", by: "you", writes: true });
+    prompt.mockClear();
+    await many([{ name: "NEW", value: "n" }, { name: "OLD", value: "o", replace: true }]);
+    expect(prompt).toHaveBeenCalledTimes(1);
+  });
+});

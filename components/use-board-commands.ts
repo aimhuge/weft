@@ -3,6 +3,8 @@
 import type { Dispatch, SetStateAction } from "react";
 import { api } from "@/lib/client";
 import { stopNow } from "@/lib/optimistic-cards";
+import { hostOf } from "@/lib/project-host";
+import { workerPromptHits } from "@/lib/worker-prompt-search";
 import { useShortcutListener, useShortcuts } from "@/lib/hotkeys";
 import { stepThrough, SORTERS, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import { useMenuBridge } from "@/lib/board-menu-bridge";
@@ -26,6 +28,8 @@ export interface BoardCommandsInput {
   selected: Card | null;
   // The open card's id, set even before its card has loaded.
   selectedId: string | null;
+  // The card opened last, still outlined after you close it (lib/use-open-card.ts); Z reopens it.
+  lastOpenId: string | null;
   projectSummaries: ProjectSummary[];
   project: string | null;
   sort: SortKey;
@@ -68,6 +72,12 @@ export interface BoardCommandsInput {
   toast: (message: string) => void;
 }
 
+// A card's Stop on its own host (a worker's as card.stop); undefined keeps stopNow's own call for this Mac's.
+function stopCall(cards: Card[], id: string) {
+  const card = cards.find((x) => x.id === id);
+  return card && hostOf(card).kind === "cloud" ? () => hostOf(card).act("card.stop", { id }) : undefined;
+}
+
 export function useBoardCommands(c: BoardCommandsInput) {
   const { cards, openCard } = c;
 
@@ -80,7 +90,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
   const stepProject = (by: number) => c.chooseProject(stepThrough([null, ...c.projectSummaries.map((p) => p.path)], c.project, by));
   const stepSort = () => c.chooseSort(stepThrough(Object.keys(SORTERS) as SortKey[], c.sort, 1));
 
-  useMenuBridge({ cards, openNew: c.openNew, openCard, select: c.select, openSettings: () => c.setShowSettings(true), focusFilter, toggleTerminal: c.toggleTerminal, openDrawer: c.setLibraryOpen });
+  useMenuBridge({ cards, openNew: c.openNew, openCard, select: c.select, openSettings: () => c.setShowSettings(true), focusFilter, cardOpen: Boolean(c.selectedId) || !c.boardKeys, threadOpen: Boolean(c.selectedId) && c.boardKeys, toggleTerminal: c.toggleTerminal, openDrawer: c.setLibraryOpen });
   useOnboardingEvents(c.openNew, c.select);
   useIntakeActions(c.setLibraryOpen, c.select);
 
@@ -108,6 +118,11 @@ export function useBoardCommands(c: BoardCommandsInput) {
       moveFocus: (move) => moveFocus(move, c.columns, c.selectedId, c.selected?.column ?? null),
       openFocused: (e) => openFocused(e, cards, openCard),
       jumpToNeedsYou,
+      reopenLast: () => {
+        const card = c.selectedId ? undefined : cards.find((x) => x.id === c.lastOpenId);
+        if (!card) return false;
+        openCard(card);
+      },
       stepProject,
       stepSort,
       archiveTarget: c.archiveTarget,
@@ -142,7 +157,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
         focusReply: () => document.querySelector<HTMLElement>('aside [contenteditable="true"], aside textarea')?.focus(),
         closeThread: () => c.select(null),
         toggleArchive: c.toggleArchive,
-        stop: (id) => void stopNow(id).catch(c.notify),
+        stop: (id) => void stopNow(id, stopCall(cards, id)).catch(c.notify),
         move: c.move,
         chooseProject: c.chooseProject,
         openCard,
@@ -154,7 +169,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
   // The prompts the user wrote that match a query, as palette items that open their card.
   async function findPrompts(query: string): Promise<PaletteItem[]> {
     const { hits } = await api.searchPrompts(query);
-    return promptItems(hits, cards, c.rootOf, openCard);
+    return promptItems([...hits, ...workerPromptHits(cards, query)], cards, c.rootOf, openCard);
   }
 
   return { openPalette, paletteItems, findPrompts };

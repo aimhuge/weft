@@ -88,7 +88,7 @@ const MARKERS = ["package.json", "pyproject.toml", "Cargo.toml", "go.mod", ".git
 function hasProjectMarker(dir: string): boolean {
   for (const m of MARKERS) {
     try {
-      if (fs.statSync(path.join(dir, m)).isFile() || fs.statSync(path.join(dir, m)).isDirectory()) return true;
+      if (fs.statSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, m)).isFile() || fs.statSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, m)).isDirectory()) return true;
     } catch {
       // missing
     }

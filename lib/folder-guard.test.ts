@@ -5,11 +5,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // The folder gate (lib/folder-guard.ts) on real temp folders, with the board's card and the settings mocked.
 
-const h = vi.hoisted(() => ({ card: undefined as { id: string; role?: string; readScope?: string[] } | undefined, allowed: [] as string[] }));
+const h = vi.hoisted(() => ({ card: undefined as { id: string; role?: string; readScope?: string[]; cwd?: string } | undefined, allowed: [] as string[], folders: new Map<string, string[]>() }));
 vi.mock("./store", () => ({ DATA_DIR: "/nonexistent/.weft", getCard: (id: string) => (id === h.card?.id ? h.card : undefined) }));
 vi.mock("./settings", () => ({ allowedFolders: () => h.allowed }));
+vi.mock("./project-folders", () => ({ projectFolders: (project: string) => h.folders.get(project) ?? [] }));
+// The session's own project folder in the CLI's home, found by its session id (lib/secret-guard-own-project.ts).
+const OWN_SESSION = "0b9e1a52-1f0e-4c4a-9d55-3a1d2b3c4d5e";
+vi.mock("./secret-guard-own-project", () => ({ ownProjectDirs: (id?: string) => (id === OWN_SESSION ? ["/Users/zzz-guard-test/.claude/projects/-app"] : []) }));
 
-const { folderAsk, folderGuard, folderGuardMatcher, grantedRead, outsideFolder, pathsOf, tilde } = await import("./folder-guard");
+const { folderAsk, folderGuard, folderGuardMatcher, grantedRead, outsideFolder, pathsOf, showPageCall, tilde } = await import("./folder-guard");
 
 const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "weft-folder-guard-")));
 const project = path.join(root, "project");
@@ -59,7 +63,7 @@ describe("pathsOf", () => {
     expect(pathsOf("Bash", { command: 'cd "/Users/p/My Drive/app" && cat x' })).toEqual(["/Users/p/My Drive/app"]);
     expect(pathsOf("Bash", { command: "ls '~/My Drive/a b'" })).toEqual(["~/My Drive/a b"]);
     expect(pathsOf("Bash", { command: String.raw`ls ~/My\ Drive/app /tmp` })).toEqual(["~/My Drive/app", "/tmp"]);
-    expect(pathsOf("Bash", { command: 'echo "/a" "/b c"' })).toEqual(["/a", "/b c"]);
+    expect(pathsOf("Bash", { command: 'ls "/a" "/b c"' })).toEqual(["/a", "/b c"]);
   });
 });
 
@@ -219,6 +223,16 @@ describe("folderGuard hook", () => {
     expect(folderAsk("t4")).toBeUndefined();
   });
 
+  it("stays quiet on this session's own project folder in the CLI's home, and asks for any other session", async () => {
+    const hook = (session: string) =>
+      folderGuard(() => "c1")({ hook_event_name: "PreToolUse", tool_name: "Read", tool_input: { file_path: file }, cwd: project, session_id: session } as never, "tr1", {
+        signal: new AbortController().signal,
+      });
+    const file = `/Users/zzz-guard-test/.claude/projects/-app/${OWN_SESSION}/tool-results/mcp-board-changelog_list.txt`;
+    expect(await hook(OWN_SESSION)).toEqual({});
+    expect(await hook("11111111-2222-4333-8444-555555555555")).toMatchObject({ hookSpecificOutput: { permissionDecision: "ask" } });
+  });
+
   it("does nothing for the copilot, an unknown card, other hook events or a call with no id", async () => {
     const outside = { file_path: path.join(away, "a.ts") };
     h.card = { id: "c1", role: "copilot" };
@@ -252,6 +266,13 @@ describe("grantedRead", () => {
     expect(grantedRead("Glob", { pattern: "*.ts", path: dir }, project, "c1")).toBe(true);
   });
 
+  it("counts the folders added to the card's project as granted", () => {
+    h.card = { id: "c1", cwd: project };
+    h.folders.set(project, [dir]);
+    expect(grantedRead("Read", { file_path: path.join(dir, "a.ts") }, project, "c1")).toBe(true);
+    h.folders.clear();
+  });
+
   it("is false for writes, Bash, an ungranted folder, or a call with no path", () => {
     h.card = { id: "c1", readScope: [dir] };
     expect(grantedRead("Edit", { file_path: path.join(dir, "a.ts") }, project, "c1")).toBe(false);
@@ -259,5 +280,32 @@ describe("grantedRead", () => {
     expect(grantedRead("Read", { file_path: "/Users/zzz-guard-elsewhere/a.ts" }, project, "c1")).toBe(false);
     expect(grantedRead("Grep", { pattern: "x" }, project, "c1")).toBe(false);
     expect(grantedRead("Read", { file_path: path.join(dir, "a.ts") }, project, undefined)).toBe(false);
+  });
+});
+
+// The system prompt tells every thread to write its pane pages in SHOW_DIR, so no permission mode asks about it (2026-10-31).
+describe("showPageCall", () => {
+  const show = path.join(root, "data", "show");
+  fs.mkdirSync(show, { recursive: true });
+
+  it("is true for a file tool writing, editing or reading a page in the show folder", () => {
+    expect(showPageCall("Write", { file_path: path.join(show, "ling-quality.html") }, project, [show])).toBe(true);
+    expect(showPageCall("Edit", { file_path: path.join(show, "plan", "index.html") }, project, [show])).toBe(true);
+    expect(showPageCall("Read", { file_path: show }, project, [show])).toBe(true);
+  });
+
+  it("is false for Bash, a path outside it, one climbing out of it, or no path", () => {
+    expect(showPageCall("Bash", { command: `cp a.png ${show}/a.png` }, project, [show])).toBe(false);
+    expect(showPageCall("Write", { file_path: path.join(project, "a.html") }, project, [show])).toBe(false);
+    expect(showPageCall("Write", { file_path: path.join(show, "..", "vault.json") }, project, [show])).toBe(false);
+    expect(showPageCall("Write", { file_path: path.join(root, "data", "shows", "a.html") }, project, [show])).toBe(false);
+    expect(showPageCall("Write", {}, project, [show])).toBe(false);
+  });
+
+  it("defaults to Weft's own show folder and the temp dirs", () => {
+    expect(showPageCall("Write", { file_path: "/nonexistent/.weft/show/a.html" }, project)).toBe(true);
+    expect(showPageCall("Edit", { file_path: "/tmp/weft-clone/scripts/a.ts" }, project)).toBe(true);
+    expect(showPageCall("Write", { file_path: path.join(os.tmpdir(), "a.txt") }, project)).toBe(true);
+    expect(showPageCall("Write", { file_path: "/var/a.txt" }, project)).toBe(false);
   });
 });

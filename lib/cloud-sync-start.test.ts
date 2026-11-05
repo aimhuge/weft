@@ -6,6 +6,7 @@ const accountClient = vi.fn(() => ({ fake: "client" }));
 const bundle = {
   refFor: vi.fn(() => Promise.resolve(null)),
   upload: vi.fn(() => Promise.resolve(null)),
+  uploadPage: vi.fn(() => Promise.resolve(null)),
   rewriteItem: vi.fn((item: ThreadItem) => Promise.resolve(item)),
   fetchBlob: vi.fn(),
 };
@@ -25,6 +26,12 @@ vi.mock("./cloud-sync", () => ({
 }));
 
 vi.mock("./cloud-inbox", () => ({ startCloudInbox: () => startCloudInbox() }));
+const stopRepos = vi.fn();
+const startSyncRepos = vi.fn(() => stopRepos);
+vi.mock("./cloud-sync-repos", () => ({ startSyncRepos: () => startSyncRepos() }));
+const stopSettings = vi.fn();
+const startAccountSettingsPush = vi.fn(() => stopSettings);
+vi.mock("./account-settings", () => ({ startAccountSettingsPush: () => startAccountSettingsPush() }));
 
 const { startAccountCloudSync } = await import("./cloud-sync-start");
 
@@ -38,9 +45,13 @@ describe("startAccountCloudSync", () => {
     const end = startAccountCloudSync();
     expect(passed).toBeDefined();
     expect(startCloudInbox).toHaveBeenCalledTimes(1);
+    expect(startSyncRepos).toHaveBeenCalledTimes(1);
+    expect(startAccountSettingsPush).toHaveBeenCalledTimes(1);
     end();
+    expect(stopSettings).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
     expect(stopInbox).toHaveBeenCalledTimes(1);
+    expect(stopRepos).toHaveBeenCalledTimes(1);
   });
 
   it("makes no client or blob store until a flush needs one", () => {
@@ -54,11 +65,13 @@ describe("startAccountCloudSync", () => {
     const item: ThreadItem = { kind: "user", text: "hi", at: 1 };
     await passed!.refFor("/a.png");
     await passed!.upload("/a.png", "org");
+    await passed!.uploadPage?.("/p.html", "org");
     expect(await passed!.rewriteItem(item, "org")).toBe(item);
     expect(createBlobStore).toHaveBeenCalledTimes(1);
     expect(createBlobStore).toHaveBeenCalledWith({ client: { fake: "client" } });
     expect(bundle.refFor).toHaveBeenCalledWith("/a.png");
     expect(bundle.upload).toHaveBeenCalledWith("/a.png", "org");
+    expect(bundle.uploadPage).toHaveBeenCalledWith("/p.html", "org");
     expect(bundle.rewriteItem).toHaveBeenCalledWith(item, "org");
   });
 });

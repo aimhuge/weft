@@ -3,36 +3,34 @@
 // web inserts a cloud_commands row addressed to this device; this hears it over Realtime (and a 30 s check,
 // since a socket can drop while the Mac sleeps), claims it, and either makes the card in the folder it names
 // and starts the thread, sends the reply as if it were typed here, answers the pending request, or stops the
-// turn. Either way the result syncs back through the outbox like any other change, so the web board sees it
-// appear.
+// turn, or runs any other verb of lib/host-api (a `host` command, whose result goes back on the row). The card
+// kinds are host verbs underneath (lib/cloud-inbox-cards.ts). Either way the result syncs back through the outbox
+// like any other change, so the web board sees it appear.
+//
+// The loop itself is the host core's (lib/host/inbox.ts), shared with the Weft Worker daemon: this file is the Mac's
+// identity (the account's session: a conditional-update claim and the update-own grant, lib/host/identity.ts), its
+// wake-up (postgres_changes, since it has a session), its beat (lib/host/beat.ts, ticked on each check) and its kinds.
 //
 // It only obeys a command that is (1) for this device, (2) created by the account signed in here, (3) for a
 // folder switched on in Settings → Sync and (4) for the workspace this Mac syncs to. A Realtime event is just
 // a nudge: what runs is always read back from the table, never taken from the event.
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
-import { answerBody, newCardBody, replyBody, stopBody, type CloudCommandRow } from "./cloud-commands";
-import { syncNow, syncOrgId } from "./cloud-sync";
+import { macDispatch } from "./cloud-inbox-cards";
+import { beatDesktopWorker, desktopStatus } from "./desktop-worker";
+import { drainDeviceCalls } from "./device-calls";
 import { deviceId } from "./device-id";
 import { globalSingleton } from "./global-singleton";
-import { createCardFromBody, startCard } from "./new-card";
-import { answerPermission, sendUserMessage, stop } from "./runner";
+import { createBeat } from "./host/beat";
+import { sessionLine } from "./host/identity";
+import { createInbox, newInboxState, startPolling, type Connection } from "./host/inbox";
 import { syncFolders } from "./settings";
-import { getCard } from "./store";
+import { hasQaGrant } from "./qa-grants";
+
+export { syncFolderFor } from "./cloud-inbox-cards";
 
 const CHECK_MS = 30_000;
-const BATCH = 20;
-const ERROR_MAX = 300;
-
-const live = () =>
-  globalSingleton("__weftCloudInbox", () => ({
-    started: false,
-    channel: null as RealtimeChannel | null,
-    uid: null as string | null,
-    timer: null as ReturnType<typeof setInterval> | null,
-    draining: false,
-    again: false,
-  }));
+const warn = (msg: string) => console.warn(`Cloud inbox: ${msg}`);
 
 function safeClient(): SupabaseClient | null {
   try {
@@ -46,6 +44,42 @@ async function signedInUser(client: SupabaseClient): Promise<string | null> {
   const { data } = await client.auth.getSession();
   return data.session?.user.id ?? null;
 }
+
+// Who this Mac acts as for one pass, read afresh each time: the account signed in now, or nobody.
+async function connect(): Promise<Connection | null> {
+  const client = safeClient();
+  const uid = client ? await signedInUser(client) : null;
+  if (!client || !uid) return null;
+  return { line: sessionLine(client, uid, deviceId(), warn), dispatch: macDispatch(client, uid) };
+}
+
+// Listening means this Mac takes the web board's commands, and says so in the workspace's Workers list. One beat per
+// check, as the account the check found: no presence, so every tick writes the row, and never an offline on the way out.
+const beat = (client: SupabaseClient, uid: string) =>
+  createBeat({
+    heartbeat: (status) => beatDesktopWorker(client, uid, status),
+    status: desktopStatus,
+    // Keeps the leases of the commands this Mac is running (lib/host/lease.ts).
+    renew: () => inbox().renew(sessionLine(client, uid, deviceId(), warn)),
+    after: () => {},
+    log: console.warn,
+    label: "Desktop worker",
+  }).tick();
+
+// Only state lives across a module reload; the inbox and its closures are built from this module each time, so a
+// reloaded server never runs a stale handler. The single-flight flags carry over, so two drains still can't overlap.
+const live = () =>
+  globalSingleton("__weftCloudInbox", () => ({
+    started: false,
+    channel: null as RealtimeChannel | null,
+    uid: null as string | null,
+    stopChecks: null as (() => void) | null,
+    flight: newInboxState(),
+  }));
+
+// Reads this device's pending commands from the account's own table and runs them oldest first.
+const inbox = () => createInbox({ connect, log: warn, state: live().flight });
+const drain = () => inbox().poll();
 
 async function stopListening(client: SupabaseClient | null) {
   const g = live();
@@ -62,13 +96,15 @@ export async function refreshCloudInbox() {
   const client = safeClient();
   if (!client) return;
   try {
-    const uid = syncFolders().length ? await signedInUser(client) : null;
+    // Local Simulator needs the Mac listening, and showing as present, even with no folder synced.
+    const uid = syncFolders().length || hasQaGrant() ? await signedInUser(client) : null;
     if (!uid) {
       await stopListening(client);
       return;
     }
+    void beat(client, uid);
     if (g.channel && g.uid === uid) {
-      await drain();
+      await Promise.all([drain(), drainDeviceCalls(client, uid)]);
       return;
     }
     await stopListening(client);
@@ -77,11 +113,14 @@ export async function refreshCloudInbox() {
     g.channel = client
       .channel(`cloud-commands-${device}`)
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "cloud_commands", filter: `target_device=eq.${device}` }, () => void drain())
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "device_calls", filter: `target_device=eq.${device}` }, () => void drainDeviceCalls(client, uid))
       .subscribe((status: string) => {
-        if (status === "SUBSCRIBED") void drain();
+        if (status !== "SUBSCRIBED") return;
+        void drain();
+        void drainDeviceCalls(client, uid);
       });
   } catch (err) {
-    console.warn(`Cloud inbox: ${(err as Error).message}`);
+    warn((err as Error).message);
   }
 }
 
@@ -98,127 +137,14 @@ export function startCloudInbox(): () => void {
   } catch {
     // Accounts aren't set up in this build: nothing to hear.
   }
-  g.timer = setInterval(() => void refreshCloudInbox(), CHECK_MS);
+  // The poll backstop: a socket can drop while the Mac sleeps. Each check also follows sign-in and Settings → Sync.
+  g.stopChecks = startPolling(() => void refreshCloudInbox(), { fastMs: CHECK_MS });
   void refreshCloudInbox();
   return () => {
     unsubscribe();
-    if (g.timer) clearInterval(g.timer);
-    g.timer = null;
+    g.stopChecks?.();
+    g.stopChecks = null;
     g.started = false;
     void stopListening(safeClient());
   };
-}
-
-// Reads this device's pending commands from the account's own table and runs them oldest first. One drain at a
-// time; a nudge that arrives mid-drain makes it look again when it ends.
-async function drain() {
-  const g = live();
-  if (g.draining) {
-    g.again = true;
-    return;
-  }
-  g.draining = true;
-  // Read through a function: TypeScript would take `g.again` as the false it was just set to.
-  const nudged = () => g.again;
-  try {
-    do {
-      g.again = false;
-      const client = safeClient();
-      const uid = client ? await signedInUser(client) : null;
-      if (!client || !uid) return;
-      const { data, error } = await client
-        .from("cloud_commands")
-        .select("*")
-        .eq("target_device", deviceId())
-        .eq("created_by", uid)
-        .eq("status", "pending")
-        .order("created_at", { ascending: true })
-        .limit(BATCH)
-        .overrideTypes<CloudCommandRow[]>();
-      if (error) throw new Error(error.message);
-      for (const command of data) await run(client, uid, command);
-    } while (nudged());
-  } catch (err) {
-    console.warn(`Cloud inbox: ${(err as Error).message}`);
-  } finally {
-    g.draining = false;
-  }
-}
-
-// Claims a command (the update only matches while it is still pending, so a command can't run twice), runs it
-// and says how it went. A claimed command is never retried: a card that was made must not be made again.
-async function run(client: SupabaseClient, uid: string, command: CloudCommandRow) {
-  const claim = await client.from("cloud_commands").update({ status: "claimed" }).eq("id", command.id).eq("status", "pending").select("id");
-  if (claim.error || !claim.data.length) return;
-  try {
-    const cardId = await startFromCommand(client, uid, command);
-    await report(client, command.id, { status: "done", card_id: cardId });
-  } catch (err) {
-    await report(client, command.id, { status: "failed", error: (err as Error).message.slice(0, ERROR_MAX) });
-  }
-}
-
-async function startFromCommand(client: SupabaseClient, uid: string, command: CloudCommandRow): Promise<string> {
-  // A newer web board may send a kind this version doesn't know.
-  const kind: string = command.kind;
-  if (kind !== "new_card" && kind !== "reply" && kind !== "answer" && kind !== "stop") throw new Error("This version of Weft doesn't know that kind of request. Update the desktop app.");
-  if (command.created_by !== uid) throw new Error("That request wasn't made by the account signed in on this Mac.");
-  if (!syncFolders().includes(command.folder)) throw new Error(`${command.folder} isn't switched on in Settings → Sync on this Mac.`);
-  const org = await syncOrgId(client, uid);
-  if (org !== command.org_id) throw new Error("That workspace isn't the one this Mac syncs its cards to.");
-  if (kind === "reply") return replyFromCommand(command);
-  if (kind === "answer") return answerFromCommand(command);
-  if (kind === "stop") return stopFromCommand(command);
-  const card = createCardFromBody(newCardBody(command));
-  startCard(card);
-  // The card and its first items are already in the outbox; send them now so the board sees it start.
-  syncNow();
-  return card.id;
-}
-
-// A reply goes to the card the way the reply box sends one: now, or after the turn that's running (the card shows it
-// queued). Only to a card in the command's folder, so a reply can't reach a thread outside a synced folder.
-function replyFromCommand(command: CloudCommandRow): string {
-  const reply = replyBody(command);
-  if (!reply) throw new Error("That reply is empty.");
-  const card = getCard(reply.cardId);
-  if (!card || card.cwd !== command.folder) throw new Error("That thread isn't on this Mac anymore.");
-  if (card.role === "copilot") throw new Error("The copilot can't be answered from the web.");
-  sendUserMessage(card.id, reply.text);
-  // The message is in the outbox already; this sends it now rather than on the next tick.
-  syncNow();
-  return card.id;
-}
-
-// An answer goes to the card's pending permission request or question: it has to be in the command's folder
-// (so a reply can't reach a thread outside a synced folder), and not the copilot. answerPermission throws when
-// the request isn't waiting any more, which the run() above turns into a failed report.
-function answerFromCommand(command: CloudCommandRow): string {
-  const answer = answerBody(command);
-  if (!answer) throw new Error("That answer is empty.");
-  const card = getCard(answer.cardId);
-  if (!card || card.cwd !== command.folder) throw new Error("That thread isn't on this Mac anymore.");
-  if (card.role === "copilot") throw new Error("The copilot can't be answered from the web.");
-  answerPermission(card.id, answer.allow, answer.answers, answer.pendingId, answer.reply);
-  // Settling an answer already updates the card; sync so the web board sees the new state.
-  syncNow();
-  return card.id;
-}
-
-// A stop ends the card's running turn. Same card checks as the other card-bound kinds.
-async function stopFromCommand(command: CloudCommandRow): Promise<string> {
-  const body = stopBody(command);
-  if (!body) throw new Error("That stop is missing the card.");
-  const card = getCard(body.cardId);
-  if (!card || card.cwd !== command.folder) throw new Error("That thread isn't on this Mac anymore.");
-  if (card.role === "copilot") throw new Error("The copilot can't be stopped from the web.");
-  await stop(card.id);
-  // stop() ends the turn; sync so the web board sees the card back in needs_you / idle.
-  syncNow();
-  return card.id;
-}
-
-async function report(client: SupabaseClient, id: string, patch: { status: "done" | "failed"; card_id?: string; error?: string }) {
-  const { error } = await client.from("cloud_commands").update(patch).eq("id", id);
-  if (error) console.warn(`Cloud inbox: couldn't report on ${id}: ${error.message}`);
 }

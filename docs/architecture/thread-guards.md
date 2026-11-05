@@ -1,13 +1,67 @@
 # Thread guards
 
-Every board thread's CLI starts from `guardedCli()` in `lib/env.ts`: a stripped environment and a set of hooks that
-turn away tool calls no permission mode should allow. They run as `PreToolUse` hooks, so they deny a call before it
+Every board thread runs behind one guard set, whatever its CLI: a stripped environment and a set of hooks that turn
+away tool calls no permission mode should allow. They run before a call (`PreToolUse`), so they deny it before it
 runs, in every permission mode (bypass included), and the denial's reason goes back to the model as the tool result.
+
+## One guard layer, every CLI
+
+The guards live in `lib/guards/`, apart from any one CLI:
+
+- `hooks.ts` `guardHooks(otherTurns, cardId)` is the guard set: one list of hooks per event (the table below).
+- `decide.ts` `decide(hooks, call)` runs it on one call in Claude Code's terms (`tool`, `input`, `cwd`, `id`) and folds
+  what the hooks said the way the Agent SDK does: any deny wins, then any ask, then allow (with any context or
+  feedback for after the call). Matchers read as Claude Code reads them (`matches()`).
+- `ask.ts` `askAboutCall()` is what an ask becomes: the card asks you in the guard's words (outside folder, another
+  card's symbol), with the one-shot retry grant and granted-folder reads first. The SDK's `canUseTool`
+  (`lib/runner-session.ts`) and the guard route both call it, so an ask looks the same on every CLI.
+
+Each CLI reaches the set through its own enforcement point:
+
+| CLI | How the guards see a call | Adapter |
+| --- | --- | --- |
+| Claude Code, puku-cli | Agent SDK in-process hooks (`Options.hooks`) | `lib/env.ts` `guardedCli()` |
+| Codex 0.162 | its own `PreToolUse`/`PostToolUse` hooks, given per turn on the command line | `lib/guards/codex.ts` |
+| Goose 1.56 | an open-plugin's `hooks/hooks.json` in the card's Goose state root | `lib/guards/goose.ts` |
+
+Codex and Goose hooks are commands, so their calls come to Weft over HTTP: the hook runs an inline `curl` to
+`/api/guards/<cli>/<event>` (`app/api/guards/[cli]/[event]/route.ts`) with the turn's bearer token
+(`lib/guards/turn.ts` `openGuards`), and `lib/guards/hook.ts` `answerHook` maps the payload to Claude Code's tools
+(`lib/guards/calls.ts`: Codex's `Bash`, `apply_patch` split per file by `lib/guards/patch.ts`; Goose's `shell`,
+`write`, `edit`, `tree`, `read_image`, `analyze`), runs `decide()`, waits on the card for an ask, and prints the
+answer in the CLI's words (`lib/guards/answer.ts`). Codex reads Claude Code's own hook output; Goose reads
+`{"decision":"allow"|"block","reason"}`.
+
+- **Codex**: `--enable hooks` (on even if your `config.toml` turned it off), `--dangerously-bypass-hook-trust` (Codex
+  asks you to trust a new hook in its TUI; `codex exec` has none, and Weft wrote the hook), `hooks.PreToolUse` and
+  `hooks.PostToolUse` with `matcher="*"` and `timeout=3600`, and `shell_environment_policy.exclude` so the guard and
+  MCP tokens stay out of the model's shell (hooks still get them). Nothing is written to `~/.codex`.
+- **Goose**: `<GOOSE_PATH_ROOT>/.agents/plugins/weft-guards/` (`.plugin/plugin.json`, `hooks/hooks.json` mode 0600,
+  matcher `.*` on `PreToolUse`, `PostToolUse` and `PostToolUseFailure`, `timeout` 3600), written before the turn and
+  its hooks removed after. The token is written into the file, not Goose's env, which its shell would show.
+
+**Fail closed.** A turn whose guards can't be installed doesn't start: `openGuards` throws `GuardsUnavailable` without
+the server's port or a card, and `openGooseGuards` when its plugin can't be written; the card says why. Both CLIs let a
+call through when their hook can't run or times out (verified on 0.162.1 and 1.56.0: a hook without its exec bit, and
+Goose's 30-second default), so the hook is inline (no script file to lose), prints a refusal when Weft doesn't answer
+(server down, turn closed, timeout: `UNANSWERED`), both hooks get an hour, and the route refuses an ask nobody answers
+a minute before that (`ASK_LIMIT_MS`). A guard that throws refuses the call too.
+
+**Cost.** Opening the guards adds nothing slow to a turn's start: a random token, and for Goose two small files. Each
+tool call on Codex or Goose adds one local `curl` round trip, ~5 ms warm on the dev server (4-11 ms over 20 calls,
+measured 2026-10-27; the route's first call after a restart compiles it, ~0.3 s), plus the guards' own work, which
+Claude Code pays in-process too.
+
+**Proof.** `lib/guards/parity.test.ts` sends the same four calls as Claude Code, Codex and Goose make them (read `.env`,
+`git reset --hard`, kill Weft's server while another card runs, write outside the card's folder) through the real
+guard set: each is refused, or asked about, in the same words on all three.
 
 | Hook | File | Turns away |
 | --- | --- | --- |
-| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, environment dumps (Bash, Read, Grep…) |
+| Secret guard | `lib/secret-guard.ts` | reading `.env` files, Weft's data secrets, a Weft Worker's home ([what's sealed](weft-worker.md#whats-sealed-on-a-worker)), environment dumps, CLIs that print a sign-in token and the files they keep it in ([below](#credential-clis)) (Bash, Read, Grep…); a board thread's copy knows its card, so it may Read an attachment its user pasted in (`lib/secret-guard-pasted.ts`) |
 | Restart guard | `lib/restart-guard.ts` | killing or restarting Weft's own server, app or port while other cards' turns run; points the thread at `mcp__board__restart_weft_when_idle` |
+| Clipboard guard | `lib/clipboard-guard.ts` | reading the clipboard (`pbpaste`, `osascript` `the clipboard`, NSPasteboard, `wl-paste`, `xclip`, `xsel`) while a pairing code is open, since its link carries the pairing secret; main marks the code open in `vault/pairing-open.json` ([mobile-security.md](mobile-security.md#pairing-a-passkey)) |
+| Worker CLI guard | `lib/worker-cli-guard.ts` | *running* the Weft Worker's command line: `weft-worker …`, `sh`/`bash`/`./install/worker.sh`, `curl … worker.sh \| sh`, `node`/`tsx`/`jiti`/`pnpm exec`/`npx` on `scripts/weft-worker.ts`, the same behind `env`, `exec`, `xargs`, `sudo`, `nohup`, or any runner handed a `wph.` pairing code. Reads, edits, `git diff/log/show`, `sed -n`, and `pnpm lint`/`test`/`typecheck` on those files stay open; a shape it can't read is refused |
 | Git guard | `lib/git-guard.ts` | git commands that throw away or hide uncommitted work in the shared tree |
 | Route import guard | `lib/route-import-guard.ts` | an edit that makes a route file import a module that isn't there yet |
 | Prerender check | `lib/prerender-check.ts` (run by the route import guard) | a route segment config export `next build` refuses under cacheComponents; warns (doesn't deny) on runtime data awaited outside `<Suspense>` |
@@ -16,6 +70,14 @@ runs, in every permission mode (bypass included), and the denial's reason goes b
 | Symbol claims | `lib/claim-guard.ts` | asks (doesn't deny) before an edit to a symbol another busy card is editing |
 | Bash claims | `lib/bash-claims.ts` | asks before a Bash line that writes a claimed file; claims what Bash wrote, drops claims on clean files, tells a failed check whose failures are another card's |
 | Folder gate | `lib/folder-guard.ts` | asks (doesn't deny) before a file tool or Bash command reaches a folder outside the card's project |
+
+**Worker CLI guard, what it can't see.** It reads the command line, so it refuses a runner given the script, a shell given
+`-c` (or `-lc`, `-ec`, `--`), `curl`/`cat` of the installer piped to a shell, and a shell or interpreter fed it by `<`.
+A `pnpm lint|test|typecheck|format` may name `scripts/weft-worker.ts` as a bare path, but not with `-c`, `--config`, `--plugin`,
+`--setupFiles`, `--import`, `-r`, a `wph.` code or a command word after it (a lint config is loaded as code). **Known gap:**
+`enrolRefusal`'s `--re-pair` check in `lib/worker-mac-keys.ts` asks only for a TTY, and a pty wrapper (`script`, `expect`,
+`tmux`) fakes one; the guard lists those wrappers, but a program a thread writes and runs can still open a pty. Closing it
+needs something a thread can't produce, such as the owner approving the re-pair from the Mac (Settings, Devices); not built yet.
 
 ## The local API's own gate
 
@@ -28,9 +90,9 @@ only Weft's own window can.
 
 There is no per-route "sensitive" flag any more: it existed when reads were unauthenticated and marked the six routes that leaked
 (account, account/team, account/billing, settings, services, github/collaborators). The desktop app adds the token to the board window's
-requests only (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser pane is another partition), and it is
+own requests only, never a frame's (`electron/api-token.cjs`, a `webRequest` hook on the default session; the browser pane is another partition), and it is
 the control server's token, which threads can't read. The one thing the pane gets is the plain read value `1` on GET/HEAD of
-`/api/attachments/*` on both `127.0.0.1` and `localhost` at Weft's port (`attachPaneAttachments`; Next names its own origin `localhost`, which the commit walk-through's picture links use), so a page a thread opens can show a card's pictures: an `<img>` can't send a header. With no token on disk (tests, or before Weft has ever launched) the check is off.
+`/api/attachments/*` on both `127.0.0.1` and `localhost` at Weft's port (`attachPaneAttachments`; Next names its own origin `localhost`, which the commit walk-through's picture links use), so a page a thread opens can show a card's pictures: an `<img>` can't send a header. With no token on disk the API fails closed (`lib/guard.ts`): a read without `1` and every elevated write get 403, since main writes the token before it starts the server (`electron/main.cjs` `boot`), so a missing file means something is wrong, not a first launch. Only Vitest and a server started with `WEFT_NO_TOKEN=1` (`pnpm dev` / `pnpm dev:web` in a plain browser, which set it) run without one.
 `weft://reply|commit` links act only from a real file under `~/.weft` (`ownPage`, `electron/page-links.cjs`).
 
 ## Auto mode's classifier denials
@@ -54,9 +116,22 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
   **Keep denied**. Once the last of them is answered, an allowed call becomes a one-time grant (keyed by tool name plus
   its input with sorted keys) and Weft sends the thread "retry exactly that call"; with nothing allowed the card goes back
   to the column the turn ended in.
-- `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call, which skips the classifier, and
-  uses the grant up. `canUseTool` checks the grant too, in case the retry asks instead. A deny hook (the secret guard, say)
-  still wins, and a grant the retry turn didn't use is dropped when that turn ends.
+- `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call and uses the grant up. A deny hook
+  (the secret guard, say) still wins, and a grant the retry turn didn't use is dropped when that turn ends.
+- In auto mode a hook's allow doesn't always count: the CLI sends an MCP tool's hook allow on to the classifier anyway
+  ("Hook approved tool use …, but auto mode requires classifier adjudication"), so the allow alone let the retry be
+  blocked again. So the granted call's own hook steps the live CLI out of auto mode first (`lib/retry-window.ts`:
+  `stepOut` awaits `query.setPermissionMode("default")`; the card's saved mode stays `auto`), and in default mode the
+  allow counts. The window closes, back to the card's mode, as soon as that call's PostToolUse or PostToolUseFailure
+  hook reports it ran, after `WINDOW_MS` (3 s) if it never does, or when the turn ends.
+- Only the granted call is decided in default mode. Every other call's PreToolUse hook, a background subagent's too,
+  waits for the window to close (`untilBackInAuto`), so the classifier decides it as usual. Before, the whole session
+  stepped out when you clicked **Allow once and retry** and stayed out until the retry used the grant: parallel
+  subagents asked about every path outside the cwd (worktrees in `/tmp`, say) on a card whose picker said Auto, and a
+  retry that never came, or came with other input, left the session in default for good.
+- `canUseTool` (`outOfAutoAnswer`, from `lib/guards/ask.ts`) allows the granted call if an ask rule still sends it
+  there, and turns back any other call caught in the window (its hook ran just before the window opened) with "run it
+  again", rather than asking you about something auto mode may well have allowed.
 - A reply instead of a click (`sendMessage`) drops the prompts and marks them denied in the thread.
 
 The mode's hint in `MODE_OPTIONS` (`lib/types-card.ts`) says this: "A classifier approves or blocks; Weft asks you about blocks".
@@ -87,8 +162,8 @@ it's the server asking, not a tool call.
   fit, so the board gets a 409 and you can answer again. `elicitationResult` turns the settled prompt into the server's
   answer: `accept` (with the typed `content` when there was a form), `decline` for Decline, and `cancel` when the call
   was stopped before anyone answered.
-- Codex (`codex exec`, no interactive approvals) and Goose have no channel for a prompt mid-call, so this is Claude Code
-  and puku-cli only.
+- Codex (`codex exec`, no interactive approvals) and Goose have no channel for an MCP server's prompt mid-call, so this
+  is Claude Code and puku-cli only. (Weft's own guards do ask on them: the guard route holds the hook, above.)
 
 ## Folder gate
 
@@ -98,14 +173,19 @@ would refuse it, so Weft, not the OS, decides. The paths come from the tool's fi
 Bash, from every absolute, `~/`, `$HOME` and `../` token in the command (a quoted token runs to its closing quote and
 `\ ` escapes a space, so a project in `~/My Drive` isn't read as `~/My`), and only those under the user's own files
 (home, `/Users`, `/Volumes`), a heuristic that can't see a path a script builds. Paths are resolved first (`~`, `..`,
-symlinks, a file not created yet by its nearest folder). A path with a glob in it (`* ? [ {`: a Bash token, or a Glob
+symlinks, a file not created yet by its nearest folder). A path only named in prose doesn't count (2026-11-02): a commit
+message, a PR's `--title` or `--body`, a sentence `echo` prints, a heredoc written to a page (`proseOf` in
+`lib/shell-text.ts`, the same words the secret guard skips). A `$(cat ~/x)` folded into a message still reaches `~/x`,
+so its own paths stay. Before this, a marketing card stalled on "Outside the project: use ~/.weftn", which was
+`~/.weft\n` inside a quoted string. A path with a glob in it (`* ? [ {`: a Bash token, or a Glob
 tool's absolute pattern) is expanded with `fs.globSync` (walk capped at 5,000 entries, 300 matches) and each match is
 checked: the first one outside is the one asked about, granting its real project (`~/dev/*weft*/node_modules` from
 the weft project asks about `~/dev/weft-build`, not a literal `~/dev/*weft*` that granting would never match). A glob
 with no matches stands for its fixed start, the folder before the first glob character.
 
 - **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
-  `~/.claude`, temp dirs, `/dev`, `/tmp` and the system's tool and library paths.
+  the card's own memory folder (`~/.claude/projects/<project>/memory`, `memoryDir`; nothing else in `~/.claude`), temp
+  dirs, `/dev`, `/tmp` and the system's tool and library paths.
 - **The prompt** reads "Outside the project: read ~/Downloads" with an **Outside project** chip. The folder is the call's
   project root (nearest ancestor with a `.git`, `package.json`…, below home), else the file's folder, never home itself
   (`grantRoot`). `folderAsk` carries the question, reason and folder from the hook to `canUseTool`
@@ -114,6 +194,19 @@ with no matches stands for its fixed start, the folder before the first glob cha
   `additionalDirectories` from the next session, and the folder guard reads it live for the current one: no `/add-dir`
   turn, which the SDK CLI refuses); **Always** (`POST /api/folders`
   → `settings.allowedFolders`, which every new session also gets as `additionalDirectories`); Deny.
+- **A card on another machine** (a worker's, or a Mac's card opened on weft.zip): the same three buttons, with a different
+  path. A grant goes **inside the answer command** as a scope (`grant: "card" | "always"`, `ThreadTransport.grantInAnswer`),
+  never as a path and never as a second command. The machine running the card applies it in `lib/cloud-inbox.ts` or
+  `lib/worker-daemon.ts`: `answerGrant` (`lib/cloud-commands.ts`) reads the folder from its own `card.pending`, and
+  refuses a stale `pendingId`, a question, an MCP form or a prompt with no folder, rather than fall back to Allow once.
+  The answer runs first and `applyFolderGrant` (`lib/folder-grant.ts`) writes after it, so a request that has gone leaves no
+  grant. Always means that machine: its own `settings.allowedFolders`, not this Mac's. `answerBody` drops a grant on a
+  Deny. A question's "Read from" stays local: its folder is guessed from the model's words and a question's answers
+  skip the signed-approval rule, so it must not buy a standing grant.
+- **`elevated()` for those answers**: `POST /api/worker-board` takes an `answer` only with the launch token, like the local
+  permission route, so a thread's `curl` with the plain `1` can't approve its own prompt on a worker. A reply or a Stop
+  still needs only `guard()`. On a Mac, a grant passes `approvalProblem` first (`lib/approval-check.ts`), and a phone's
+  signature covers it (`lib/approval-sig.ts`).
 - **After a grant**, a read-only call (Read, Glob, Grep, LS) whose paths are all in granted folders is allowed with no
   prompt at all (`grantedRead`), including the CLI's own working-directory prompt; writes and Bash in a granted folder
   follow the card's permission mode as usual.
@@ -124,7 +217,7 @@ with no matches stands for its fixed start, the folder before the first glob cha
   could never be untrusted. The revoke takes effect for new work; a card already holding the folder in `readScope` keeps
   it until that turn ends, since a permission already handed out isn't retracted. `allowFolder` dedups with a `Set`, so
   re-adding a folder already on the list is a no-op rather than a second row.
-- **Not covered**: Codex (no per-tool hooks), the copilot, and the macOS layer. If the OS still says "Operation not
+- **Not covered**: the copilot and the macOS layer (Codex and Goose are, through the guard route above). If the OS still says "Operation not
   permitted" after Weft allows it, that's `mcp__board__request_folder_access` (`electron/folder-access.cjs`), and the
   grant macOS needs is for the app that actually runs (dev Weft is `Electron.app`, not the `~/Applications/Weft.app` launcher).
 
@@ -173,23 +266,25 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   before <tool>" (`modeWhy` in `lib/runner-ask.ts`, labels from `MODE_OPTIONS`). The explanation every clash shares
   (one working tree, going ahead can undo their uncommitted change) is the chip's tooltip, `REASONS` in the component.
 - **Wait** (`lib/permission-wait.ts`, `PermissionActions` in `components/PermissionInput.tsx`): a clash prompt's
-  buttons are **Wait** (first), **Me first** and **Deny** (a plain **Go ahead** stands in for Me first on weft.zip). Wait (`POST /api/cards/:id/permission { wait, pendingId }`)
+  buttons are **Wait** (first), **This first** and **Others first** (a plain **Go ahead** stands in for This first on weft.zip).
+  Wait (`POST /api/cards/:id/permission { wait, pendingId }`)
   keeps the edit held, marks it `waiting`, moves the card back to Running ("Waiting for ‘<holder>’") and polls every 3 s
   (`checkWaits`). Once the holder lets go (no longer busy, archived or deleted, or its claim dropped because its change
   was committed), the held edit is denied with a message telling the thread to re-read the file and redo the edit on top
-  of that change: the old_string it planned to replace may be gone, and a Write would clobber it. Me first and Deny
-  still answer it while it waits. Waits live in memory; a restart ends the turn and them with it.
+  of that change: the old_string it planned to replace may be gone, and a Write would clobber it. This first and Others
+  first still answer it while it waits. Waits live in memory; a restart ends the turn and them with it. A wait is
+  checked against the wait graph first (**No wait closes a loop** below), so **Wait** never starts a deadlock.
 - **Waiting by itself** (`askUser` in `lib/runner-ask.ts`, `startWaiting` in `lib/permission-wait.ts`): a clash prompt
   doesn't park the card in Needs you at all. The card is already editing code another card holds, so the answer is
   almost always "wait": the card goes straight to Running with the request marked `waiting`, and the watcher starts
-  with it. The buttons stay where they were — **Me first** and **Deny** in the thread's prompt and on the card —
+  with it. The buttons stay where they were — **This first** and **Others first** in the thread's prompt and on the card —
   so the wait can still be cut short. Every other prompt (the card's permission mode, an outside folder, a question)
   still parks in Needs you, because those really need the user; so does a thread whose own
   `BOARD STATUS: column=needs_you` asks for something. A waiting card reads as held, not as working: a lock instead
   of a spinner, and Needs you's amber border.
-- **Me first / You first** (`lib/precedence.ts`, `lib/yields.ts`, `lib/waits-on.ts`, `components/YouFirst.tsx`): the user
-  can put the held card ahead of the holder. **Me first** sits on the held card's prompt and on its card, beside Wait (and
-  alone with Deny while it waits). It replaced Go ahead: going ahead on code another card holds now always tells that
+- **This first / You first** (`lib/precedence.ts`, `lib/yields.ts`, `lib/waits-on.ts`, `components/YouFirst.tsx`): the user
+  can put the held card ahead of the holder. **This first** sits on the held card's prompt and on its card, beside Wait (and
+  alone with Others first while it waits). It replaced Go ahead: going ahead on code another card holds now always tells that
   card to leave the file, since an edit going in under a thread that doesn't know is what tangles two changes.
   **You first** is a one-line strip on the holder's thread, above its prompt, for each card waiting on it (`useWaitersOn`, fed from the board's card list in
   `lib/use-board-card-actions.ts`, so no props run through the thread components). Either posts
@@ -199,16 +294,73 @@ into each other. Claims catch that at the moment it happens, instead of a standi
      first card (its edits there stop asking), while the holder's own edits there clash with the whole-file claim and
      wait on it like any clash, marked `first` ("Card ‘X’ goes first on Login.tsx. Wait, or go ahead?");
   3. tells the holder at once through a mid-turn message (`lib/runner-steer.ts`, "Weft: the user put card ‘X’ first on
-     Login.tsx…"), so it moves to other work instead of finding out at its next edit; Codex and Goose holders find out
-     from their prompt;
+     Login.tsx…"), so it moves to other work instead of finding out at its next edit; Codex and Goose holders, which
+     can't be messaged mid-turn, find out at their next edit there;
   4. answers the held edit with allow.
 
   A yield lasts while the first card is busy and still claims the file (`yieldHolds`): its commit drops the claim and
   so the yield, and its turn ending does too. `pruneYields` runs in both claim guards before `findClash`, so a stale
-  yield never outlives that. Pressing Me first on the holder's own held prompt turns the order around the same way.
+  yield never outlives that. Pressing This first on the holder's own held prompt turns the order around the same way.
   The clash prompt shows both faces before its reason chip (`components/CardFace.tsx`: thumbnail, else emoji, else
   initial; `clashWhy` copies the holder's `emoji` and `thumb` onto `why.holder`), holder first, then this thread, so
   who is in whose way reads at a glance without a new row. weft.zip's transport leaves `putFirst` out, like Wait.
+- **Others first** (`putHolderFirst` in `lib/precedence.ts`): the other way round — the card holding the code goes
+  ahead, and this card waits for it. It posts `POST /api/cards/:id/permission { otherFirst, pendingId }`, and:
+  1. checks `wouldGridlock` against the live wait graph **before** it yields anything (see **No wait closes a loop**
+     below); a wait that would close a loop is refused, and the card goes ahead instead;
+  2. puts `{ to: holder.id, file }` on this card's `card.yields`, so the holder's edits there skip this card's claims
+     (`findClash`), and this card's own later edits there clash and wait on the holder;
+  3. waits the held request (`waitPermission`), the same hold **Wait** uses, so it is released when the holder lets go.
+
+  The wait can still be refused after the yield is written (the holder let go in between), so the yield only stays
+  when `waitingOn(cardId, pendingId)` says the request really is waiting on the holder; otherwise it is taken back
+  with `withoutYield`, so a refused wait leaves the file the other way round.
+
+  On a clash the button is the order, not a refusal, so **Others first** replaces **Deny** there; **Deny** stays for
+  prompts that aren't a clash (the card's permission mode, an outside folder, a classifier block), where refusing the
+  call is the question.
+- **No wait closes a loop** (`lib/wait-chain.ts`, `breakGridlock` in `lib/permission-wait.ts`): two cards can wait on
+  each other — A holds f.ts, B holds g.ts, B's edit of f.ts waits for A and A's edit of g.ts waits for B. Neither is
+  ever released: a wait only ends when its holder stops being busy (`releasedBecause`), and both stay busy forever.
+  That is gridlock, and no button can break it, because both cards are already waiting and the order buttons only
+  re-point the yields.
+
+  So a wait may only be taken on a holder that isn't already waiting on this card, directly or through other cards.
+  The wait graph is read from the live sessions (`liveWaitTargets`: every waiting request a session holds and the
+  holder it names — a card with two waiting requests holds two edges, and a loop through the second is a loop just
+  as much), so a wait is checked against the chain as it stands at that moment. When the chain from the
+  holder leads back to this card, the loop would close, so the wait is refused and the card **goes ahead** instead:
+  it takes the whole-file claim, the holder leaves the file to it, and the holder is told mid-turn ("…waiting back
+  would leave you both stuck, so ‘X’ goes first…"). The holder was the one waiting on this card, so it is the one
+  that can be released — one of the two always keeps running. This is the same path **Others first** takes, so it
+  applies to the automatic wait too (`askUser` in `lib/runner-ask.ts` starts a wait by itself): the gridlock never
+  needs the user to notice it.
+
+  Every wait goes through the check, including a request queued behind the one the card is showing
+  (`startQueuedWaiting` in `lib/permission-wait.ts`): that one leaves the card's own state alone, since the request
+  in front owns it, but it is still a wait and a loop is still a loop.
+
+  The graph itself is pure and lives in `lib/wait-chain.ts` (55 lines), so it can be tested without a board:
+  `waitTargets(waiting)` builds the **waiter → holders** `Map` (a card may wait on more than one); `waitsOn(targets,
+  from, to)` walks the chain from `from` and says whether it reaches `to`, with a `seen` set so a graph that
+  already loops ends the walk instead of hanging; `wouldGridlock(targets, cardId, holderId)` is the question that
+  matters — would this wait close a loop? (a card waiting on itself counts); `gridlockChain(targets, cardId,
+  holderId)` names the cards on the loop that would close — the chain the wait would run in, this card first and
+  the holder last. `lib/wait-chain.test.ts` covers the logic (16 tests); the board's own behaviour is in
+  `lib/permission-wait.test.ts`'s `describe("gridlock")` (5 tests).
+- **The blocking stamp** (`lib/waits-on.ts`, `components/BlockingMark.tsx`): a card that other cards are waiting
+  on carries a "blocking N" chip, so the card that went first shows what it is holding up. The count comes from
+  the same published card list the **You first** strip reads (`publishWaits`, fed from the board's card list in
+  `lib/use-board-card-actions.ts`): `waitersOf` groups the waiting cards by the card they wait on, and
+  `useBlockingCount` reads that card's group size. Live, like the strip: when the waiters are released the chip
+  goes with them. The chip sits in the card's mark row (`components/CardMarks.tsx`), so it costs no new row.
+- **Released by the write, not by the commit** (`lib/blocking.ts`, `releaseOnWrite`): a card waiting on another's
+  code used to be held until the holder committed or its turn ended, even though the change it was waiting for
+  had already landed. Now the write itself releases it: the claim hooks call `releaseOnWrite` when the edit runs
+  (`lib/claim-guard.ts`: every file the edit claimed) or when a Bash line writes files (`lib/bash-claims.ts`: every
+  file the card claims), and the waiting card is answered with a message naming the holder and the file and
+  telling the thread to re-read it and redo the edit on top (`writeMessage`). The file is the unit, not the
+  symbol: the waiter waits on the holder's claim key, so the whole file is released.
 - **Recording**: the PreToolUse hook keeps what the edit will claim by tool use id, and the PostToolUse hook puts
   it on `card.claims` (most recent first, last 50) once the edit has run, so a denied edit claims nothing.
 - **Dropping**: `updateCard` (`lib/store.ts`) clears a card's claims when it reaches Done or is archived;
@@ -227,8 +379,8 @@ into each other. Claims catch that at the moment it happens, instead of a standi
   `run_in_background` call stays open 30 minutes, Bash's default background timeout, since its process outlives
   the call), and a written file is claimed only when this card's windows are the only ones open at its mtime, or
   the line names it as written. Otherwise its writer is unknown: no card claims it, and a failed check that names
-  it hears "unknown", never another card's title. A busy Codex or Goose card in the tree runs no such hooks, so
-  while one is, every Bash-written file's writer is unknown. A failed check (`tsc`,
+  it hears "unknown", never another card's title. Codex and Goose cards open the same windows through
+  the guard route, so their Bash writes are seen too. A failed check (`tsc`,
   `typecheck`, `test`, `lint`, `build` in the line, an error word in the output; Bash failures arrive as
   PostToolUseFailure, so the hook listens to both) gets `additionalContext`: the failing paths another busy card
   claims, with "leave those to that card", the ones whose writer is unknown, or else the files other cards have open, since a signature changed
@@ -237,12 +389,102 @@ into each other. Claims catch that at the moment it happens, instead of a standi
 - **Speed**: `typescript` loads on the first edit of a source file (~170 ms, once per server), never on the
   start-a-card path; parsing the 46 KB `Board.tsx` and walking it takes 5–13 ms warm, ~40 ms the first time.
 
+### Markdown blocks and own-line commits
+
+MAP.md, README.md and ROADMAP.md are edited by nearly every card, usually a bullet at a time. Two Edits on
+different lines never collide, since each re-reads the file; the real risk is a commit, which takes the whole
+file, carrying another card's half-written line.
+
+- **Claims** (`lib/symbols-markdown.ts`): an Edit on Markdown claims blocks: a paragraph, table, fence or top-level
+  list item, named by its h2-and-deeper headings and opening words (`File map/lib∕runner.ts`). Heading-only claims
+  wouldn't do: MAP's File map is one section of 635 lines. The claim covers `old_string` and `new_string`, so a bullet
+  inserted beside another is the card's own. Write still claims the whole file.
+- **Commits** (`lib/commit-held.ts`): before a commit, for each Markdown path where another busy card holds blocks,
+  the file is rebuilt as HEAD plus every hunk not in those blocks (a hunk in a block both cards hold stays in). The
+  result is a blob, named in a note at `.git/weft-held/<sha of the path>` with HEAD and the working file's blob.
+  commit.sh commits it through a temp index, then resets those paths in the real index. The held hunks stay in the working
+  tree. A note whose HEAD or working file moved is ignored and the path commits whole, so a stale note can't
+  revert a commit, and a failure only falls back to today's behaviour.
+- **Why a note**: a warm spare's env is set before it has a card, so commit.sh can't know who's committing. The Bash
+  guard does (`lib/commit-held-guard.ts`, on lines naming commit.sh, in the guard set every CLI runs); the page buttons call `holdBack` in `lib/pile-commit.ts`, and `releaseClaims` then drops only the committer's claims on a
+  partly committed file.
+- **Only busy cards hold lines.** A Review card is finished, and holding its lines would leave the commit
+  walk-through nothing to commit. A bare `git commit -- file` isn't covered: it takes the whole file, as ever.
+
 ## Reading a command line
 
 The Bash guards don't match strings: `lib/shell-parse.ts` reads the line the way the shell would, and
 `steps()` in `lib/restart-guard.ts` turns it into every command it would run, each with the folder it runs in.
 That covers `a && b; c | d`, `$( )` and backticks, `sh -c '…'`, a heredoc fed to `bash`, `eval`, `xargs`,
 `sudo`/`env FOO=1` prefixes, and `cd x &&` carrying to the commands after it. The git guard uses the same walk.
+`lib/shell-text.ts` says which words a command takes as text rather than as a path (`textWords`: `--message`, `--body`,
+`--title`, `--notes`… for any command that doesn't run its words, `-m`/`-t`/`-b` for git, gh and glab, and echo's
+quoted sentences), so neither the secret guard nor the folder gate reads a PR body as a list of files.
+
+## The CLI's folder and a project's `.claude/`
+
+`inTranscriptDir` seals the CLI's own folder: `~/.claude` (and its realpath), any `/Users/*/.claude` or
+`/home/*/.claude`, `CLAUDE_CONFIG_DIR`, and `~/.claude.json`, judged by where a path lands from the card's cwd
+(`lib/secret-guard-cli-home.ts`), so `.claude/x` from home and a project link into `~/.claude` stay sealed. A
+project's checked-in `.claude/` (skills, agents, commands) is open to read: it used to match any `.claude` segment,
+so a card couldn't read its own repo's skills (2026-11-03). A Glob or Grep that names `.claude` is sealed only when its
+search root holds the CLI's folder. A project's `.claude/settings*.json` still can't be changed (`changesCliSettings`):
+Write/Edit refuse it, and in Bash so does naming it or the `.claude` folder itself, or redirecting into it, since its
+hooks are the guard.
+
+### The session's own project folder
+
+A thread reads its own project's folder in the CLI's home, `~/.claude/projects/<project>/`, whole
+(`lib/secret-guard-own-project.ts`, 2026-11-04). When an MCP tool's answer overflows the context (`changelog_list` with 158
+entries, ~80k chars), Claude Code saves it to `<project>/<session-id>/tool-results/<name>.txt` and tells the thread to read
+it in chunks; with the folder sealed the thread never saw the answer. The user chose the whole project over just
+`tool-results`: its sessions' transcripts and memory open too.
+
+- **Which project**: the one holding the hook call's own `session_id` (`<id>.jsonl` or `<id>/`, `ownProjectDirs`, cached
+  per session), never the cwd: a thread can `cd` into another repo, but can't change the session id the CLI hands its
+  hooks. No session id (Codex and Goose through `lib/guards/decide.ts`, the cardless scout), a non-UUID, or one the CLI
+  hasn't written yet opens nothing.
+- **Reads only**: Read, LS, and a Grep or Glob rooted or patterned inside it (`toolVerdict`'s `mine`). Write and Edit
+  still meet the seal. In Bash, `withoutOwnProject` swaps each of the project's plain *files* for a `/tmp` stand-in
+  before `bashVerdict` reads the line, so `head -c 20000 <result>` and `jq` run; a folder is never swapped, so
+  `cd <project>; cat ../other/x.jsonl` and `rm -rf <project>` stay refused.
+- **Never past it**: a `..` in the name is refused before folding, and a path must land inside both where it's named and
+  where it really is (a link to another project or to `settings.json` stays sealed). Other projects, the CLI's settings,
+  hooks and skills stay sealed.
+- **The folder gate** counts it as the card's own (`ownProjectDirs` joins the granted folders in `folderGuard`), so a
+  Read there doesn't ask "Outside the project".
+- The trade-off: a transcript holds every value its thread saw in plaintext, so a thread can now read what earlier
+  threads of the same project saw. Other projects' transcripts stay sealed.
+
+`changelog_list` pages too (`pageOf` in `lib/changelog-tool.ts`): 40 entries a page (`limit` up to 100, `offset` for the
+next), each line clipped to 300 chars, a footer naming the next offset, and `mine: true` for the card's own entries, so its
+answer stays under the size the CLI spills to a file.
+
+## Credential CLIs
+
+A thread can run the user's own CLIs, and some of them print the sign-in they hold. Their output lands in the
+thread's context, and so in the model request and its transcript for good, so `lib/secret-guard-credentials.ts`
+refuses the command itself (a red-team review, 2026-11-02). `credentialVerdict` reads the command's words past its
+flags and their values, so `gh auth token -h github.com`, `gog -a me auth tokens export me` and
+`git -C . credential fill` are caught, and it runs on every command the line holds: `$(gh auth token)`, `sh -c '…'`,
+a heredoc fed to `bash`, `npx`/`pnpm exec` children. Refused:
+
+- gh: `auth token`, `auth status -t/--show-token`, `auth git-credential`, `config get oauth_token`
+- gog: `auth tokens export` (`gog auth tokens list` names keys only and stays open)
+- git: `credential fill|get`, `credential-<helper> get`, and the `git-credential-*` helpers run directly
+- macOS `security`: `find-generic-password`/`find-internet-password` with `-w` or `-g`, `dump-keychain -d`, `export`
+- supabase: `projects api-keys`, `branches get`; gcloud: `auth [application-default] print-access-token|print-identity-token`;
+  aws: `configure export-credentials`, `configure get` of a key or token. `vercel env pull` to stdout was already refused.
+
+The refusal names the command and says to keep the value in the 🔐 vault and use `mcp__secrets__run`. Everything else
+the CLIs do runs as ever: `gh pr`, `gh api`, `gh auth status`, `gog gmail search`, `supabase db push`.
+Because the check reads parsed words, a commit message, PR body or heredoc that only mentions `gh auth token` is one
+word of text, not a command, and isn't refused.
+
+The files those CLIs keep their sign-in in are sealed like a `.env` (`isCliCredential`, called from `isSecretFile`, so
+Bash, Read and Grep alike): `~/.config/gh/hosts.yml` (and the `~/.config/gh` folder, for `grep -r`), `~/.git-credentials`,
+`~/.config/git/credentials`, `.netrc`, `~/.supabase/access-token`, the Vercel CLI's `com.vercel.cli/auth.json`, and gog's
+`gogcli/credentials.json` and file keyring. Globs are tried against the known paths; `~/.config/gh/config.yml` stays open.
 
 ## Git guard
 
@@ -359,6 +601,14 @@ parser (comments and strings don't count):
   cold lambda (the client is cached after) cacheComponents refuses it mid-prerender, even inside `<Suspense>` and after
   `cookies()`; only `connection()` moves past it (/invite/[token] on 2026-10-18; /login, /team, /[orgSlug]/* the same day).
   `webClient()` awaits `connection()` itself, so every `requireTeam`/`webUser` gate is covered.
+- **Metadata ahead of the static gate** (`facts.ungated`, `lib/prerender-gate.ts`, blocking): a page whose default export
+  returns JSX on an `if (gate)` before any `<Suspense>` (`if (!isWebEnabled()) return <NotDeployed />`), while its
+  `generateMetadata`/`generateViewport` reads params or searchParams (an `await`, or a same-file helper it hands them to
+  or that awaits them) before its own `if (<same gate>) return …`. Where the gate holds at build time the page prerenders
+  whole and its metadata, even `"use cache"`, is runtime data: "Next.js encountered uncached or runtime data in
+  generateMetadata()". Vercel builds with the web side on, so only the Mac release build (no VERCEL/WEFT_WEB) refused
+  five share pages and kept 0.7.1 from packing (2026-11-03, fixed in 03d0bb60 with `linkPreview(params)`). The gate
+  matches by source text; the generic "awaits outside <Suspense>" message is dropped for a function this one names.
 - **Where it runs**: `lib/prerender-check.test.ts` walks the real tree (`treeProblems`) so `pnpm test` fails before a
   deploy; and the route import guard runs `prerenderCheck` on every Edit/MultiEdit/Write to a route file, only when the
   project's next.config turns cacheComponents on, and only for problems the edit adds: a segment config is denied, a

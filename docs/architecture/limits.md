@@ -68,6 +68,11 @@ caller falls back to "wait an hour" rather than pretending to know.
     carries (`seven_day_opus`, `seven_day_sonnet`, `model_scoped[]`) against that model.
   - `PlanRateLimits` — the SDK's rate-limit windows, spelled out so the SDK's shape is depended on
     in one place.
+- `lib/limit-upgrade.ts` — noticing that the user raised their plan (see below).
+  - `releasedModels(limits, now)` → the models Weft holds a cap on whose family the CLI now reports
+    with room, on a window that is still open.
+  - `releaseUpgradedModels(limits, now)` → forgets those caps (`clearModelLimit`), and says which
+    models it freed.
 - `lib/limit-reset.ts` (new) — the pure module.
   - `planWindow(samples, backend, kind, now)` → the newest reading of one window by THAT CLI
     (`lib/plan-pools.ts`), since each CLI has its own plan; `undefined` once its reset has
@@ -93,11 +98,14 @@ caller falls back to "wait an hour" rather than pretending to know.
 - `lib/new-card.ts` — `startCard(card)` gates and schedules (see below).
 - `lib/reply-mode.ts` — `ReplyBoxState` gained `limitResetAt`; `replyBoxMode` prefers it over the
   card's own 5-hour window.
-- `lib/use-plan-limits.ts` — `useLimitedModels()` (and the `LimitedModel` type) for the model
-  pickers; the same route ships the models that have hit their own cap.
+- `lib/use-plan-limits.ts` — `useLimitedModels(cwd)` (and the `LimitedModel` type) for the model
+  pickers; the same route ships the models that have hit their own cap. A worker card's project
+  (`hostFor(cwd).workerId`, lib/project-host.ts) reads `/api/limits/plans?worker=<id>` instead: the
+  worker's own caps, one copy per host.
 - `app/api/cards/route.ts` — `POST` returns the `start` answer: `{ started, at }`.
 - `app/api/limits/plans/route.ts` — `GET` returns `{ plans, models }`: one entry per CLI that has
-  reported, carrying that CLI's own newest window readings, and the models at their cap.
+  reported, carrying that CLI's own newest window readings, and the models at their cap. With
+  `?worker=<id>`, that worker's, from its `cloud_workers.limits` row (`workerLimits`, lib/worker-limits-read.ts).
 - `lib/plan-pools.ts` — which CLIs read one plan's counter: `poolOf()`, `samePool()`, `poolKey()`.
   Every CLI has its own plan, so each is its own pool.
 - `components/NewCardDialog.tsx`, `components/NewCardDialogFooter.tsx` — the button's label and the
@@ -108,6 +116,49 @@ caller falls back to "wait an hour" rather than pretending to know.
 The stores themselves are documented in `docs/architecture/limits-burndown.md` (the plan log, the
 chart, the status strip) and in `lib/model-limit.ts` (the per-model store, written when a turn
 comes back with a limit error, `lib/rate-limit.ts`).
+
+## The upgrade path
+
+A user who upgrades their plan does not wait for a window to reset — the limits simply stop
+applying. Weft has to notice that, or the upgrade looks like it did nothing.
+
+There are two stores, and only one of them was watching.
+
+**The plan log** (`lib/limit-history.ts`) watches the plan's own windows and fires `onReset` when a
+window drops from 100% to below it. An upgrade usually moves those numbers too, so a plan whose
+utilization falls resumes its parked cards through that path.
+
+**The per-model store** (`lib/model-limit.ts`) did not watch anything. A cap recorded there — "Opus
+ran out, until Tuesday" — was only ever cleared by its own window passing. Nothing cleared it when
+the PLAN changed, so after an upgrade Weft carried on calling Opus spent: the model picker said "—
+at its limit", the New thread dialog said "Start at 2:30am", and a card parked on Opus stayed
+parked. `clearModelLimit()` existed; nothing called it.
+
+`lib/limit-upgrade.ts` is the join. It reads the CLI's own answer — which carries the per-model
+weekly windows (`seven_day_opus`, `seven_day_sonnet`, `model_scoped[]`) — and compares it with the
+caps Weft holds. A cap is released when **both** are true:
+
+- the CLI reports a weekly window for that model's family, and that window has room
+  (`utilization < 100`);
+- the window it names is still open — its reset has not already passed (`resetsAt * 1000 > now`).
+  A window that already reset says nothing about the cap, because the reading may be about a
+  different window than the one that capped it.
+
+The family is matched the same way `lib/limit-kind.ts` matches it: the SDK names "opus", Weft
+stores "claude-opus-5-5" — so the stored id contains the family the SDK names.
+
+Two callers:
+
+- **The poll** (`lib/limit-poll.ts`), every 15 minutes: `recordLimits()` first (which is where the
+  plan-window *reset* path fires), then `releaseUpgradedModels()` frees the stale caps, then
+  `resumeParkedOnModels()` wakes the cards parked on those models.
+- **A card's own turn** (`lib/runner-turn.ts`), at the CLI's `init`: release the caps, so a thread
+  that starts after the upgrade is not gated by a stale one. This path frees the cap but does not
+  wake parked cards — only the poll does that.
+
+The card says why it restarted: `card.autoResumedReason` is `"upgrade"` (the chip reads "Resumed ·
+plan upgraded") or `"reset"` (the chip reads "Auto-resumed · 2:30pm"). `lib/limit-resume.ts` sets
+it as it replays the last user message.
 
 ## The new-thread path
 

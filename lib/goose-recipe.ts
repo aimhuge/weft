@@ -10,7 +10,7 @@
 // Pure: no fs, no env, no globals. Everything it needs is passed in.
 
 import { gooseAttributionPrompt } from "./attribution";
-import { codexProjectInstructions } from "./puku-context";
+import { codexProjectInstructions, gooseReadsProjectInstructions } from "./puku-context";
 import { skillIndex, skillInvocation } from "./skills";
 import { GOOSE_DEFAULT_MODEL } from "./new-thread";
 import { weftSystemPrompt } from "./weft-prompts";
@@ -64,7 +64,9 @@ export function gooseSystemText(plan: GooseTurnPlan): string {
   // Goose has none, so it is told. The copilot does not commit.
   if (!plan.copilot) parts.push(gooseAttributionPrompt(gooseModelFor(plan) || undefined));
   // Goose reads the folder's own instructions and skills, but not a CLAUDE.md, so Weft puts that here.
-  const project = codexProjectInstructions(plan.cwd);
+  // Unless the folder has an AGENTS.md: Goose loads that one itself, and resolves the `@./path` imports in
+  // it, so a CLAUDE.md or SOUL.md behind it reaches the model without us sending it a second time.
+  const project = gooseReadsProjectInstructions(plan.cwd) ? "" : codexProjectInstructions(plan.cwd);
   if (project) parts.push(`# Project instructions\n${project}`);
   const skills = skillIndex(plan.cwd, { weft: true, off: plan.skillsOff });
   if (skills) parts.push(skills);

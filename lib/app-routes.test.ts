@@ -150,6 +150,19 @@ describe("appLinkTarget (org rule)", () => {
   });
 });
 
+describe("appLinkTarget for shared threads", () => {
+  it("rewrites /@<user>/threads/<slug> to /u/<user>/threads/<slug>", () => {
+    expect(appLinkTarget("/@fotoflo/threads/login-fix")).toBe("/u/fotoflo/threads/login-fix");
+    expect(appLinkTarget("/@fotoflo/threads/login-fix/")).toBe("/u/fotoflo/threads/login-fix");
+  });
+
+  it("has no org form and refuses bad shapes", () => {
+    expect(appLinkTarget("/aimhuge/threads/login-fix")).toBeNull();
+    expect(appLinkTarget("/@fotoflo/threads/Login_Fix")).toBeNull();
+    expect(appLinkTarget("/@fotoflo/threads")).toBeNull();
+  });
+});
+
 describe("appLinkTarget is a pure function", () => {
   it("returns null for non-string input without throwing", () => {
     // The proxy never calls it with non-strings, but the contract is "pure, fail-safe at the boundary".
@@ -166,7 +179,7 @@ describe("appLinkMatchers", () => {
   const matchers = appLinkMatchers();
 
   it("returns the user and org matchers", () => {
-    expect(matchers).toEqual(["/@:username/apps/:slug", "/:org/apps/:slug"]);
+    expect(matchers).toEqual(["/@:username/apps/:slug", "/:org/apps/:slug", "/@:username/threads/:slug"]);
   });
 
   it("the user matcher accepts /@<user>/apps/<slug> and rejects /u/...", () => {

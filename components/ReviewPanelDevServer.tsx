@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/client";
 import type { DevServerStatus, ReviewPlan } from "@/lib/types";
 
@@ -11,17 +11,27 @@ const STATE_LABEL: Record<DevServerStatus["state"], string> = {
   failed: "crashed",
 };
 
-// Starts the plan's dev server when its url doesn't answer, and keeps checking that it does.
-export function ReviewPanelDevServer({ cardId, plan }: { cardId: string; plan: ReviewPlan }) {
+// Starts the plan's dev server when its url doesn't answer, and keeps checking that it does. stepUrl is
+// the page the tour is on.
+export function ReviewPanelDevServer({ cardId, plan, stepUrl }: { cardId: string; plan: ReviewPlan; stepUrl?: string }) {
   const [status, setStatus] = useState<DevServerStatus>();
   const [error, setError] = useState("");
+  // Checks missed in a row, and whether the page still waits on the server's first answer (undefined until the first status).
+  const misses = useRef(0);
+  const waiting = useRef<boolean>(undefined);
 
   useEffect(() => {
     let alive = true;
     const poll = () =>
       api
         .devStatus(cardId)
-        .then((r) => alive && setStatus(r.status))
+        .then((r) => {
+          if (!alive) return;
+          misses.current = r.status.reachable ? 0 : misses.current + 1;
+          // A busy server misses a check now and then: one miss isn't down yet, unless it really crashed.
+          const blip = misses.current === 1 && r.status.state !== "failed";
+          setStatus((prev) => (prev?.reachable && blip ? prev : r.status));
+        })
         // Best-effort 3-second poll; a transient error is picked up on the next tick.
         .catch(() => {});
     api
@@ -35,11 +45,26 @@ export function ReviewPanelDevServer({ cardId, plan }: { cardId: string; plan: R
     };
   }, [cardId]);
 
-  // The page opened before the server was up is blank; show it once the server answers.
+  // The page opened before the server was up shows nothing yet; show it the first time the server answers.
+  // Only that once, and only if the server was down when the tour opened: after that the page is the user's, so a
+  // restart or a missed check never moves them. The pane's error page reloads itself (electron/pane-error.cjs),
+  // this covers the rest, and leaves the pane alone if it's mid-load or the user has gone elsewhere.
   const up = status?.reachable;
   useEffect(() => {
-    if (up && plan.url) window.weft?.browser.open(plan.url, cardId).catch(() => {});
-  }, [up, plan.url, cardId]);
+    if (!status) return;
+    waiting.current ??= !up;
+    if (!up || !waiting.current) return;
+    waiting.current = false;
+    const bridge = window.weft?.browser;
+    if (!bridge || !stepUrl) return;
+    void bridge
+      .getState()
+      .then((pane) => {
+        const blank = !pane.url || pane.url === "about:blank";
+        if (!pane.loading && (blank || pane.url === stepUrl)) return bridge.open(stepUrl, cardId);
+      })
+      .catch(() => {});
+  }, [status, up, stepUrl, cardId]);
 
   async function act(action: "start" | "restart" | "stop") {
     setError("");

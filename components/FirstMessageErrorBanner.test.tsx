@@ -20,6 +20,9 @@ vi.mock("@/lib/client", () => ({
   },
 }));
 
+const fetchMock = vi.hoisted(() => vi.fn<(url: string, init?: RequestInit) => Promise<Response>>());
+vi.mock("@/lib/api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
+
 vi.mock("@/lib/settings-nav", () => ({
   rememberPage: vi.fn(),
 }));
@@ -109,6 +112,26 @@ describe("FirstMessageErrorBanner", () => {
     expect(onDeleted).not.toHaveBeenCalled();
   });
 
+  it("on a worker's card, reruns on the backup model your Settings sync to it, on the worker", async () => {
+    const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+    fetchMock.mockImplementation((url) => Promise.resolve(json(url.startsWith("/api/workers") ? { status: "done", error: null } : { commandId: "cmd-1" })));
+    const card = makeCard({ id: "w-card", cwd: "worker://w1/ling", error: "rate limit", backend: "claude", model: "claude-fable-5-1" });
+    render(<FirstMessageErrorBanner card={card} items={failedThread()} openSettings={() => {}} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Rerun on Sonnet 5\.5/ }));
+    await waitFor(() => {
+      const posted = fetchMock.mock.calls.filter(([url, init]) => url === "/api/worker-board" && init?.method === "POST").map(([, init]) => JSON.parse(init!.body as string) as unknown);
+      expect(posted).toEqual([{ action: "host", cardId: "w-card", verb: "card.rerunModel", args: { id: "w-card", model: "claude-sonnet-5-5" } }]);
+    });
+    expect(api.rerunModel).not.toHaveBeenCalled();
+  });
+
+  it("on a worker's card with no Settings to read (weft.zip), reruns on its own CLI's default", () => {
+    const card = makeCard({ id: "w-card", cwd: "worker://w1/ling", error: "rate limit", backend: "claude", model: "claude-fable-5-1" });
+    render(<FirstMessageErrorBanner card={card} items={failedThread()} />);
+    expect(screen.getByRole("button", { name: "Rerun on Opus 5.5" })).toBeInTheDocument();
+    expect(api.settings).not.toHaveBeenCalled();
+  });
+
   it("with no backup configured, the Rerun button is 'Pick a backup model' and opens Settings", async () => {
     vi.mocked(api.settings).mockResolvedValue({ backupModel: "" } as never);
     const card = makeCard({ error: "rate limit" });
@@ -121,14 +144,22 @@ describe("FirstMessageErrorBanner", () => {
     expect(api.rerunModel).not.toHaveBeenCalled();
   });
 
-  it("with no openSettings, the no-backup button is still shown but does nothing on click", async () => {
-    vi.mocked(api.settings).mockResolvedValue({ backupModel: "" } as never);
+  it("with no openSettings (weft.zip) reads no settings and offers no rerun, only the error", async () => {
     const card = makeCard({ error: "rate limit" });
     render(<FirstMessageErrorBanner card={card} items={failedThread()} />);
-    const button = await screen.findByRole("button", { name: "Pick a backup model" });
-    fireEvent.click(button);
-    expect(rememberPage).toHaveBeenCalledWith("models");
-    expect(api.rerunModel).not.toHaveBeenCalled();
+    await screen.findByTestId("first-message-error-banner");
+    expect(api.settings).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /Pick a backup model|Rerun on/ })).toBeNull();
+  });
+
+  it("offers no Delete where the card's host has no delete verb (weft.zip's host for every card)", async () => {
+    const { setHostForEveryCard } = await import("@/lib/project-host");
+    const { webHost } = await import("@/lib/web-host");
+    const undo = setHostForEveryCard(webHost({ act: vi.fn() }, { desktop: false } as never, vi.fn()));
+    render(<FirstMessageErrorBanner card={makeCard({ error: "rate limit" })} items={failedThread()} />);
+    await screen.findByTestId("first-message-error-banner");
+    expect(screen.queryByRole("button", { name: "Delete this card" })).toBeNull();
+    undo();
   });
 
   it("Delete calls api.remove and the parent's onDeleted", async () => {
@@ -156,7 +187,7 @@ describe("FirstMessageErrorBanner", () => {
   it("shows an error message if Rerun fails", async () => {
     vi.mocked(api.rerunModel).mockRejectedValue(new Error("network down"));
     const card = makeCard({ error: "rate limit" });
-    render(<FirstMessageErrorBanner card={card} items={failedThread()} />);
+    render(<FirstMessageErrorBanner card={card} items={failedThread()} openSettings={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: /Rerun on/ }));
     expect(await screen.findByText("network down")).toBeInTheDocument();
   });

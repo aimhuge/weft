@@ -30,7 +30,7 @@ vi.mock("next/navigation", () => navMock);
 vi.mock("next/server", () => nextServerMock);
 
 const { SharedAppPageBody } = await import("./shared-app-body");
-const { ShareNotice } = await import("@/components/share-view/ShareNotice");
+const { ShareNotice, SignInNotice } = await import("@/components/share-view/ShareNotice");
 
 const SHARE_ROW = {
   id: "share-abc-123",
@@ -119,15 +119,18 @@ describe("SharedAppPageBody (the other branches stay intact)", () => {
     expect(node).toEqual(expect.objectContaining({ type: ShareNotice }));
   });
 
-  it("redirects to login with the public URL as ?next", async () => {
+  // A redirect thrown inside the streamed <Suspense> body left the page on "Loading the app…" for good,
+  // so a signed-out visitor gets a sign-in card instead, with the public URL as ?next.
+  it("shows a sign-in card with the public URL as ?next, not a redirect", async () => {
     accessMock.appShareAccessBySlug.mockResolvedValue({ kind: "login" });
-    await expect(renderBodyUser("fotoflo", "growth")).rejects.toThrow("NEXT_REDIRECT");
-    expect(navMock.redirect).toHaveBeenCalledWith("/login?next=%2F%40fotoflo%2Fapps%2Fgrowth");
+    const node = await renderBodyUser("fotoflo", "growth");
+    expect(node).toEqual(expect.objectContaining({ type: SignInNotice, props: { next: "/@fotoflo/apps/growth" } }));
+    expect(navMock.redirect).not.toHaveBeenCalled();
   });
 
-  it("redirects to login with the org public URL as ?next", async () => {
+  it("shows a sign-in card with the org public URL as ?next", async () => {
     accessMock.appShareAccessBySlug.mockResolvedValue({ kind: "login" });
-    await expect(renderBodyOrg("aimhuge", "growth")).rejects.toThrow("NEXT_REDIRECT");
-    expect(navMock.redirect).toHaveBeenCalledWith("/login?next=%2Faimhuge%2Fapps%2Fgrowth");
+    const node = await renderBodyOrg("aimhuge", "growth");
+    expect(node).toEqual(expect.objectContaining({ type: SignInNotice, props: { next: "/aimhuge/apps/growth" } }));
   });
 });

@@ -4,11 +4,12 @@ import { useEffect, useRef, useState } from "react";
 import { describeCron } from "@/lib/cron-schedule";
 import { onRepeatFrom, type CronAnchor } from "@/lib/cron-events";
 import { newForm, inputOf, runLabel } from "@/lib/cron-form";
-import type { Cron } from "@/lib/cron-types";
+import type { Cron, CronInput } from "@/lib/cron-types";
 import { useCrons } from "@/lib/use-crons";
 import { useEscape } from "@/lib/use-escape";
 import type { Card } from "@/lib/types";
 import CronEditor from "./CronEditor";
+import CronSwitch from "./CronSwitch";
 import Icon from "./Icon";
 import "./crons.css";
 
@@ -31,9 +32,7 @@ function CronRow({ cron, now, onToggle, onDelete }: { cron: Cron; now: number; o
           {describeCron(cron.expr)} · {cron.enabled && cron.nextAt ? `next ${runLabel(cron.nextAt, now)}` : "off"} · {cron.count} runs
         </p>
       </div>
-      <button type="button" role="switch" aria-checked={cron.enabled} aria-label={cron.enabled ? "Pause" : "Turn on"} onClick={onToggle} className={`relative h-4 w-7 shrink-0 rounded-full ${cron.enabled ? "bg-[var(--cron)]" : "bg-line-strong"}`}>
-        <span className={`absolute top-0.5 size-3 rounded-full bg-white transition-all ${cron.enabled ? "right-0.5" : "left-0.5"}`} />
-      </button>
+      <CronSwitch enabled={cron.enabled} label={cron.enabled ? "Pause" : "Turn on"} onToggle={onToggle} />
       <button type="button" aria-label={`Delete ${cron.name}`} onClick={onDelete} className="shrink-0 rounded p-0.5 text-faint hover:text-danger">
         <Icon name="x" size={13} />
       </button>
@@ -41,10 +40,14 @@ function CronRow({ cron, now, onToggle, onDelete }: { cron: Cron; now: number; o
   );
 }
 
+// How a new cron is made on the card's host (components/ThreadCronButton.tsx): `local` is this Mac's own create, which a
+// remote host ignores; the list is read again once a remote host would have republished it.
+export type MakeCron = (input: CronInput, local: () => Promise<unknown>) => Promise<unknown>;
+
 // The thread header's ⏰: put this thread on a cron. Each run is a new card, forked from the anchor message (the
 // thread's last one, or the one whose "Repeat from here" was clicked) or fresh. Violet when the thread has crons.
-export default function CronButton({ card, last, now }: { card: Card; last?: CronAnchor; now: number }) {
-  const { crons, create, update, remove } = useCrons();
+export default function CronButton({ card, last, now, make }: { card: Card; last?: CronAnchor; now: number; make?: MakeCron }) {
+  const { crons, create, update, remove, later } = useCrons();
   const mine = crons.filter((c) => c.sourceId === card.id);
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<CronAnchor | undefined>(last);
@@ -110,7 +113,10 @@ export default function CronButton({ card, last, now }: { card: Card; last?: Cro
                 onSubmit={async (form) => {
                   const input = inputOf(form, { cardId: card.id, ...(form.mode === "fork" && anchor?.id ? { fromMessage: anchor.id } : {}) }, now);
                   if ("error" in input) throw new Error(input.error);
-                  await create(input);
+                  if (make) {
+                    await make(input, () => create(input));
+                    later();
+                  } else await create(input);
                   setAdding(false);
                   setOpen(false);
                 }}

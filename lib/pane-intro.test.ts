@@ -1,26 +1,9 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadSeenIntros, markIntroSeen } from "./feature-intros";
-import { hasPane, paneIntroUrl, playPaneIntro, takePaneIntro } from "./pane-intro";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { markIntroSeen } from "./feature-intros";
+import { hasPane, paneIntroUrl, playPaneIntro } from "./pane-intro";
 
 const intro = `${window.location.origin}/intros/newthread.html?live=1`;
-
-describe("takePaneIntro", () => {
-  beforeEach(() => localStorage.clear());
-  afterEach(() => vi.restoreAllMocks());
-
-  it("hands out the intro the first time, once, and marks it seen", () => {
-    expect(takePaneIntro("newthread")).toBe(intro);
-    expect(loadSeenIntros().has("newthread")).toBe(true);
-    expect(takePaneIntro("newthread")).toBeNull();
-  });
-
-  it("stays shut for reduced motion", () => {
-    vi.spyOn(window, "matchMedia").mockReturnValue({ matches: true } as MediaQueryList);
-    expect(takePaneIntro("newthread")).toBeNull();
-    expect(loadSeenIntros().has("newthread")).toBe(false);
-  });
-});
 
 describe("playPaneIntro", () => {
   afterEach(() => {

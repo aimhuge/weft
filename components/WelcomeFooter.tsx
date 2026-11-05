@@ -19,7 +19,7 @@ export const welcomeSteps = (signIn: boolean, history: boolean): WelcomeStep[] =
 
 export function welcomeNote(step: WelcomeStep, cliReady: boolean | null, cwd: string): string {
   if (step === "ready") return cliReady === false ? "You can log in later from Settings → Accounts." : "Replay this any time from your avatar's menu or the command palette.";
-  if (step === "account") return "Sign in opens GitHub in your browser, then brings you back here.";
+  if (step === "account") return "Sign in opens GitHub in your browser, then brings you back here. You can skip it for now.";
   if (step === "projects") return "Start empty leaves your old sessions off the board. Bring them in later from Settings.";
   return cwd ? "It lands in Running and the browser pane shows its work." : "Pick the folder in the next dialog.";
 }
@@ -59,10 +59,12 @@ export function WelcomeFooter({
   cwd,
   canStart,
   canNext = true,
+  signedIn = false,
   onNext,
   onAnswer,
   onSkip,
   onStart,
+  onDefer,
 }: {
   step: WelcomeStep;
   note: string;
@@ -74,11 +76,17 @@ export function WelcomeFooter({
   canStart: boolean;
   // The sign-in screen's Next waits for you to be signed in.
   canNext?: boolean;
+  // Whether the Weft account is signed in: the sign-in screen offers "Not now" only while it isn't.
+  signedIn?: boolean;
   onNext: () => void;
   onAnswer: (fresh: boolean) => void;
   onSkip: () => void;
   onStart: () => void;
+  // The sign-in screen's "Not now": past the step without an account.
+  onDefer?: () => void;
 }) {
+  // The sign-in screen never blocks: "Not now" moves past it without an account.
+  const deferrable = step === "account" && !signedIn && Boolean(onDefer);
   return (
     <div className="flex items-center gap-3 border-t border-line px-5 py-3">
       <span className="flex-1 text-[11.5px] text-muted">{note}</span>
@@ -86,6 +94,11 @@ export function WelcomeFooter({
         {(step === "ready" || step === "account") && (
           <button type="button" ref={okRef} className={primary} disabled={busy || !canNext} onClick={onNext}>
             Next ↵
+          </button>
+        )}
+        {deferrable && (
+          <button type="button" className={button} disabled={busy} onClick={onDefer}>
+            Not now
           </button>
         )}
         {step === "projects" && (

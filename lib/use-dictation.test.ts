@@ -1,121 +1,27 @@
 // @vitest-environment happy-dom
-import { act, cleanup, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ShellBridge } from "./client";
+import {
+  audioClose,
+  FakeRecorder,
+  FakeRecognizer,
+  final,
+  flush,
+  frames,
+  getUserMedia,
+  installFakes,
+  loadHook,
+  recorder,
+  samples,
+  setSupportedTypes,
+  trackStop,
+} from "./dictation.harness";
 
 const api = vi.hoisted(() => ({ dictation: vi.fn(), transcribe: vi.fn() }));
 vi.mock("./client", () => ({ api }));
 
-// The whisper status is cached at module level, so each test loads a fresh copy of the hook.
-async function loadHook() {
-  vi.resetModules();
-  return (await import("./use-dictation")).useDictation;
-}
-
-async function flush() {
-  for (let i = 0; i < 5; i++) await act(async () => {});
-}
-
-// ---- Fake recorder, audio graph and mic --------------------------------------------------------
-
-let supportedTypes: string[];
-let samples: number[];
-
-class FakeRecorder {
-  static instances: FakeRecorder[] = [];
-  static isTypeSupported = (type: string) => supportedTypes.includes(type);
-  state: "inactive" | "recording" = "inactive";
-  mimeType: string;
-  ondataavailable: ((e: { data: Blob }) => void) | null = null;
-  onstop: (() => Promise<void>) | null = null;
-  start = vi.fn(() => {
-    this.state = "recording";
-  });
-  stop = vi.fn(() => {
-    this.state = "inactive";
-    void Promise.resolve().then(() => this.onstop?.());
-  });
-  constructor(
-    public stream: unknown,
-    public options?: { mimeType: string },
-  ) {
-    this.mimeType = options?.mimeType ?? "";
-    FakeRecorder.instances.push(this);
-  }
-  emit(text: string) {
-    this.ondataavailable?.({ data: new Blob([text]) });
-  }
-}
-
-const audioClose = vi.fn(() => Promise.resolve());
-class FakeAudioContext {
-  createAnalyser() {
-    return {
-      fftSize: 0,
-      getByteTimeDomainData(out: Uint8Array) {
-        out.set(samples.slice(0, out.length));
-      },
-    };
-  }
-  createMediaStreamSource() {
-    return { connect: vi.fn() };
-  }
-  close = audioClose;
-}
-
-const trackStop = vi.fn();
-const getUserMedia = vi.fn();
-let frames: FrameRequestCallback[];
-
-function recorder() {
-  return FakeRecorder.instances[FakeRecorder.instances.length - 1]!;
-}
-
-// ---- Fake browser speech recognition ----------------------------------------------------------
-
-type Result = { isFinal: boolean; 0: { transcript: string } };
-class FakeRecognizer {
-  static instances: FakeRecognizer[] = [];
-  continuous = false;
-  interimResults = true;
-  lang = "";
-  onresult: ((e: { resultIndex: number; results: Result[] }) => void) | null = null;
-  onerror: ((e: { error: string }) => void) | null = null;
-  onend: (() => void) | null = null;
-  start = vi.fn();
-  stop = vi.fn(() => this.onend?.());
-  constructor() {
-    FakeRecognizer.instances.push(this);
-  }
-}
-
-function final(transcript: string, isFinal = true): Result {
-  return { isFinal, 0: { transcript } };
-}
-
-beforeEach(() => {
-  supportedTypes = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
-  samples = new Array<number>(512).fill(128);
-  frames = [];
-  FakeRecorder.instances = [];
-  FakeRecognizer.instances = [];
-  api.dictation.mockResolvedValue({ available: true });
-  api.transcribe.mockResolvedValue("hello world");
-  getUserMedia.mockResolvedValue({ getTracks: () => [{ stop: trackStop }, { stop: trackStop }] });
-  Object.defineProperty(navigator, "mediaDevices", { value: { getUserMedia }, configurable: true });
-  vi.stubGlobal("MediaRecorder", FakeRecorder);
-  vi.stubGlobal("AudioContext", FakeAudioContext);
-  vi.stubGlobal("requestAnimationFrame", (cb: FrameRequestCallback) => frames.push(cb));
-  vi.stubGlobal("cancelAnimationFrame", vi.fn());
-});
-
-afterEach(() => {
-  cleanup();
-  vi.useRealTimers();
-  vi.unstubAllGlobals();
-  vi.clearAllMocks();
-  delete window.weft;
-});
+installFakes(api);
 
 async function startRecording(onText = vi.fn()) {
   const useDictation = await loadHook();
@@ -140,13 +46,13 @@ describe("useDictation with whisper", () => {
   });
 
   it("records in the first audio format the browser supports", async () => {
-    supportedTypes = ["audio/mp4"];
+    setSupportedTypes(["audio/mp4"]);
     await startRecording();
     expect(recorder().options).toEqual({ mimeType: "audio/mp4" });
   });
 
   it("lets the browser pick a format when none on the list is supported", async () => {
-    supportedTypes = [];
+    setSupportedTypes([]);
     await startRecording();
     expect(recorder().options).toBeUndefined();
   });
@@ -163,8 +69,26 @@ describe("useDictation with whisper", () => {
     expect(result.current.state).toBe("idle");
   });
 
+  it("tells the server which language the browser is in", async () => {
+    const { result } = await startRecording();
+    recorder().emit("audio");
+    act(() => result.current.toggle());
+    await flush();
+    expect(api.transcribe.mock.calls[0]![1]).toBe(navigator.language);
+  });
+
+  it("names the browser's language even when it has none", async () => {
+    const language = vi.spyOn(navigator, "language", "get").mockReturnValue("");
+    const { result } = await startRecording();
+    recorder().emit("audio");
+    act(() => result.current.toggle());
+    await flush();
+    expect(api.transcribe.mock.calls[0]![1]).toBe("");
+    language.mockRestore();
+  });
+
   it("labels the upload audio/webm when the recorder reports no type", async () => {
-    supportedTypes = [];
+    setSupportedTypes([]);
     const { result } = await startRecording();
     recorder().emit("audio");
     act(() => result.current.toggle());
@@ -271,7 +195,7 @@ describe("useDictation with whisper", () => {
   });
 
   it("meters mic loudness from 0 to 1 every animation frame", async () => {
-    samples = new Array<number>(512).fill(128);
+    samples.fill(128);
     samples[3] = 160; // a peak of 32 out of 64
     const { result } = await startRecording();
     expect(result.current.level).toBe(0.5);
@@ -349,8 +273,16 @@ describe("useDictation with whisper", () => {
     await flush();
     act(() => result.current.toggle());
     await flush();
-    expect(api.dictation).toHaveBeenCalledOnce();
+    // Once for the cached status, and once more per start to warm Advanced dictation's server.
+    expect(api.dictation).toHaveBeenCalledTimes(3);
     expect(FakeRecorder.instances).toHaveLength(2);
+  });
+
+  it("asks the server again on each start, so a warm server is ready by Stop", async () => {
+    await startRecording();
+    expect(api.dictation).toHaveBeenCalledTimes(2);
+    await startRecording();
+    expect(api.dictation).toHaveBeenCalledTimes(4);
   });
 
   it("does nothing on cancel when nothing is recording", async () => {

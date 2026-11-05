@@ -1,6 +1,6 @@
 import { folderName, timeAgo } from "./format";
 import { validName } from "./vault-view";
-import type { Delivery, Webhook } from "./webhooks";
+import type { Delivery, Webhook } from "./webhook-types";
 
 // What the 🪝 drawer and its rail icon show (components/WebhooksDrawer.tsx), from the registry
 // (lib/webhooks.ts, GET /api/webhooks). Pure and browser-safe: only types come from lib/webhooks.ts, which

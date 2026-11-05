@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useRef, useState, type ChangeEvent } from "react";
 import { api } from "@/lib/client";
 import type { GogAccount, GogStatus } from "@/lib/gog-view";
+import { useConnectorStatus } from "@/lib/use-connector-status";
 import Icon, { Spinner } from "./Icon";
 
 const CONSOLE_URL = "https://console.cloud.google.com/apis/credentials";
@@ -10,7 +11,6 @@ const GUIDE_URL = "https://github.com/steipete/gogcli#readme";
 // How often the card checks back while a browser sign-in is under way.
 const POLL_MS = 2_000;
 
-type Load = { kind: "loading" } | { kind: "error"; error: string } | { kind: "ready"; status: GogStatus };
 type Ready = Extract<GogStatus, { installed: true }>;
 
 function message(err: unknown) {
@@ -132,38 +132,24 @@ function GogAccounts({
 
 // Settings → Connectors → Google Workspace: gog's OAuth client, the Google accounts it holds, and a browser sign-in.
 export default function GogConnector({ titleClass, hintClass }: { titleClass: string; hintClass: string }) {
-  const [load, setLoad] = useState<Load>({ kind: "loading" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [readonly, setReadonly] = useState(false);
   const file = useRef<HTMLInputElement>(null);
 
-  const fetchStatus = useCallback(
-    () =>
-      api.gogStatus().then(
-        (status) => setLoad({ kind: "ready", status }),
-        (err: unknown) => setLoad({ kind: "error", error: message(err) }),
-      ),
-    [],
-  );
-
-  useEffect(() => {
-    void fetchStatus();
-  }, [fetchStatus]);
-
-  const adding = load.kind === "ready" && load.status.installed ? load.status.adding : null;
-  useEffect(() => {
-    if (!adding) return;
-    const timer = setInterval(() => void fetchStatus(), POLL_MS);
-    return () => clearInterval(timer);
-  }, [adding, fetchStatus]);
+  const { load, refresh, accept } = useConnectorStatus<GogStatus>({
+    load: () => api.gogStatus(),
+    pollMs: POLL_MS,
+    // While a browser sign-in is under way, the status says so; keep asking until it doesn't.
+    pollWhile: (status) => (status && status.installed ? status.adding : null),
+  });
 
   async function act(body: Parameters<typeof api.gog>[0]) {
     setBusy(true);
     setError(null);
     try {
-      setLoad({ kind: "ready", status: await api.gog(body) });
+      accept(await api.gog(body));
       return true;
     } catch (err) {
       setError(message(err));
@@ -244,10 +230,7 @@ export default function GogConnector({ titleClass, hintClass }: { titleClass: st
       <div className="flex items-center justify-between gap-4">
         <h3 className={titleClass}>Google Workspace</h3>
         <button
-          onClick={() => {
-            setLoad({ kind: "loading" });
-            void fetchStatus();
-          }}
+          onClick={refresh}
           disabled={load.kind === "loading"}
           className="flex items-center gap-1 text-[12.5px] text-accent hover:underline disabled:text-faint disabled:no-underline"
         >

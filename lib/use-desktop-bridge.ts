@@ -3,6 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { BrowserState } from "./client";
 import { COPILOT_ID, type Card } from "./types";
+import { syncDictationShortcut } from "./shortcuts";
 import { useTitleBarZoom } from "./use-title-bar-zoom";
 
 const noopSubscribe = () => () => {};
@@ -24,6 +25,8 @@ export function useDesktopBridge(closed: BrowserState, selectedId: string | null
     void bridge.browser.getState().then(setBrowser);
     const offBrowser = bridge.browser.onState(setBrowser);
     const offCopilot = bridge.copilot.onState((state) => setCopilotOpen(state.open));
+    // The dictation key is the board's own setting; main registers it in every app.
+    syncDictationShortcut();
     return () => {
       offBrowser();
       offCopilot();

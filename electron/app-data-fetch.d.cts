@@ -42,6 +42,8 @@ export function createAppDataFetch(opts: {
   fetch?: (url: string, init?: unknown) => Promise<unknown>;
   // dns.lookup-style (callback form). See `DnsLookup` above.
   lookup?: DnsLookup;
+  // The clock a saved grant is stamped with; Date.now by default.
+  now?: () => number;
 }): AppDataFetch;
 
 export function registerAppDataFetch(

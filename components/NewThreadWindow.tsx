@@ -14,6 +14,8 @@ interface NewThreadForm {
   recentCwd?: string;
   restart?: RestartStatus | null;
   onCreate: (input: NewCardInput, opts?: { stay?: boolean }) => Promise<void>;
+  // Opens Settings → Agents, from the Agent menu's "Manage agents…".
+  onManageAgents?: () => void;
 }
 
 interface NewThreadBrowser {

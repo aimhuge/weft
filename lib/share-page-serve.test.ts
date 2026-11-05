@@ -4,6 +4,10 @@
 // same key-shaped redaction the thread does; binary bytes pass through untouched.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const signPageAssets = vi.fn((_c: unknown, _o: string, html: string) => Promise.resolve(html.replace("blob:sha256:x", "https://signed/x")));
+vi.mock("./blob-page-sign", () => ({ signPageAssets: (...a: [unknown, string, string]) => signPageAssets(...a) }));
+
 import { folderFileType, NO_STORE, serveBlobFile, serveBlobPage } from "./share-page-serve";
 
 beforeEach(() => {
@@ -33,6 +37,24 @@ describe("serveBlobPage", () => {
     expect(res.headers.get("x-content-type-options")).toBe("nosniff");
     expect(res.headers.get("cache-control")).toBe("private, max-age=300");
     expect(await res.text()).toBe(html);
+  });
+
+  it("draws the 🔒 stand-in for a page sealed before its card was shared", async () => {
+    const sealed = new Uint8Array([0x77, 0x73, 0x62, 0x31, 0, 0, 0, 1, 7, 7]);
+    const res = await serveBlobPage(serviceWith({ data: new Blob([sealed], { type: "text/plain" }), error: null }), "org-1", "a".repeat(64));
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("content-security-policy")).toBe("sandbox allow-scripts allow-popups allow-forms");
+    expect(await res.text()).toContain("Sealed");
+  });
+
+  it("signs a pane page's asset refs only when asked, and only for HTML", async () => {
+    const html = `<!doctype html><img src="blob:sha256:x">`;
+    const signed = await serveBlobPage(serviceWith({ data: new Blob([html], { type: "text/plain" }), error: null }), "org-1", "a".repeat(64), { signAssets: true });
+    expect(await signed.text()).toBe(`<!doctype html><img src="https://signed/x">`);
+    const plain = await serveBlobPage(serviceWith({ data: new Blob([html], { type: "text/plain" }), error: null }), "org-1", "a".repeat(64));
+    expect(await plain.text()).toBe(html);
+    await serveBlobPage(serviceWith({ data: new Blob(["blob:sha256:x"], { type: "text/css" }), error: null }), "org-1", "a".repeat(64), { signAssets: true });
+    expect(signPageAssets).toHaveBeenCalledTimes(1);
   });
 
   it("masks key-shaped text in a text page, the way the thread is", async () => {

@@ -7,6 +7,7 @@ export const ONBOARDING_EVENTS = {
   onboarding_tour_nav: ["action", "from", "to"],
   onboarding_narration_muted: ["muted", "beat"],
   onboarding_signin_clicked: [],
+  onboarding_account_deferred: [],
   onboarding_cli_login: ["backend"],
   onboarding_step: ["step", "seconds_on_last"],
   onboarding_projects_answered: ["brought", "count_history", "start_empty"],

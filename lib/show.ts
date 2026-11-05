@@ -1,13 +1,15 @@
 import fs from "node:fs";
 import path from "node:path";
-import { saveImageData } from "./attachments";
+import { mimeFor, saveImageData } from "./attachments";
 import { openInPane, paneThumb, paneUrl } from "./browser-tools";
 import { emojiPrompt, parseEmoji } from "./card-pictures";
 import { complete } from "./haiku";
 import { clip } from "./format";
 import { nameNeeds, namePrompt, parseName, tagVocabulary, titleEmoji } from "./retitle";
+import { siteNotesAfterTurn } from "./site-notes-live";
 import { DATA_DIR, decorateCard, getCard, listCards } from "./store";
 import { listTags } from "./tag-store";
+import { nextTipIndex, tipCard, TIPS, TIP_CSS } from "./new-thread-tips";
 import type { Card } from "./types";
 
 // The pane is never empty or stale: a card with no page gets a starter page when its turn starts, and a
@@ -22,7 +24,7 @@ export function showFile(cardId: string) {
 }
 
 export function showPrompt(ask: string, reply: string) {
-  return `You're a teammate on this build (product manager, engineer or designer: pick whichever lens fits this turn best) writing a one-screen update page for the person driving it. Answer: How's it going? What did we just do, and why does it matter? What should we do next? Have a point of view, be specific, make it visual (a progress bar, a before→after, a mini diagram, a next-step you'd bet on). Not a changelog. Only claim what the reply supports. One self-contained HTML file, inline CSS, no JS, fits ~400px wide. Output only HTML.
+  return `You're a teammate on this build (product manager, engineer or designer: pick whichever lens fits this turn best) writing a one-screen update page for the person driving it. Answer: How's it going? What did we just do, and why does it matter? What should we do next? Have a point of view, be specific, make it visual (a progress bar, a before→after, a mini diagram, a next-step you'd bet on). Not a changelog. Only claim what the reply supports. One self-contained HTML file, inline CSS, no JS, with <meta name="viewport" content="width=device-width,initial-scale=1"> and a fluid layout (nothing fixed wider than 360px) that reads on a 390px phone and the ~400px desktop pane. Output only HTML.
 
 The user asked: ${JSON.stringify(clip(ask, MAX_ASK_CHARS))}
 The agent replied:
@@ -53,13 +55,13 @@ const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": 
 
 // The splash screen's art (electron/splash.html), reused so a new card opens on the same scene.
 export const ASSETS = process.env.WEFT_ASSETS_DIR ?? path.join(process.cwd(), "electron", "assets");
-const asset = (name: string) => encodeURI(`file://${path.join(ASSETS, name)}`);
+const asset = (name: string) => encodeURI(`file://${path.join(/*turbopackIgnore: true*/ ASSETS, name)}`);
 
 // Shown the moment a turn starts on a card whose pane is blank, before any model has written anything:
 // a dimmed, slowly drifting scene behind the card's title, your ask (pasted images as thumbnails) and a
 // running clock. The scene is the card's own, picked from the backdrops by its id.
 export function starterPage(title: string, ask: string, now = new Date(), cardId = "") {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${escape(title)}</title><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escape(title)}</title><style>
 html,body{height:100%;margin:0}
 body{background:#120d10;color:#f6efe6;font:14px/1.5 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
 -webkit-font-smoothing:antialiased;overflow:hidden;position:relative}
@@ -70,7 +72,8 @@ main{position:relative;z-index:1;padding:9vh 8% 0;max-width:560px;animation:rise
 .k{font:500 10.5px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.14em;color:#d9a27e;text-transform:uppercase}
 h1{margin:8px 0 0;font-size:24px;line-height:1.25;font-weight:700;letter-spacing:-.015em}
 .ask{max-height:40vh;overflow:auto;margin-top:18px;white-space:pre-wrap;color:#cfc5b8;font-size:13px;border-left:2px solid rgb(217 162 126/.6);padding-left:12px}
-.ask img{display:block;max-width:220px;max-height:160px;border-radius:6px;margin:2px 0 8px;opacity:.92}
+.ask img,.ask video{display:block;max-width:220px;max-height:160px;border-radius:6px;margin:2px 0 8px;opacity:.92}
+.ask figure{margin:2px 0 8px}.ask figcaption{font-size:12px;opacity:.8;margin-bottom:4px}.ask audio{display:block;width:100%;max-width:320px;color-scheme:dark}
 .clock{position:absolute;left:8%;bottom:5vh;z-index:1;font:500 12px ui-monospace,"SF Mono",Menlo,monospace;color:#e8dccd}
 @keyframes drift{to{transform:translateX(-3%) scale(1.04)}}
 @keyframes rise{from{opacity:0;transform:translateY(8px)}}
@@ -96,7 +99,7 @@ setInterval(tick, 1000);
 // The scenes a working card can get: electron/assets/backdrop-*.jpg, plus the splash's own.
 function backdrops() {
   try {
-    const extra = fs.readdirSync(ASSETS).filter((f) => /^backdrop-.+\.(jpe?g|png|webp)$/i.test(f)).sort();
+    const extra = fs.readdirSync(/*turbopackIgnore: true*/ ASSETS).filter((f) => /^backdrop-.+\.(jpe?g|png|webp)$/i.test(f)).sort();
     return ["splash-speeder.jpg", ...extra];
   } catch {
     return ["splash-speeder.jpg"];
@@ -110,17 +113,27 @@ export function backdropFor(cardId: string, names = backdrops()) {
   return names[hash % names.length] ?? "splash-speeder.jpg";
 }
 
-// Your ask, escaped, with pasted images (`![name](/abs/path.png)`) shown as thumbnails.
+// Your ask, escaped, with pasted files (`![name](/abs/path.png)`) shown as thumbnails, players or a name.
 function askHtml(ask: string) {
-  return escape(ask).replace(/\n*!\[([^\]]*)\]\((\/[^)]+)\)\n*/g, (_, alt: string, file: string) => `<img src="${encodeURI(`file://${file}`)}" alt="${alt}">`);
+  return escape(ask).replace(/\n*!\[([^\]]*)\]\((\/[^)]+)\)\n*/g, (_, alt: string, file: string) => attachmentHtml(alt, file));
 }
 
-// Beside the New thread dialog while you write the prompt.
-export function newThreadPage(scene = "splash-speeder.jpg") {
-  return splashPage({ title: "New thread", note: "Engineering the future, one thread at a time", status: "Waiting for your prompt…", scene });
+function attachmentHtml(alt: string, file: string) {
+  const src = encodeURI(`file://${file}`);
+  const kind = mimeFor(file).split("/")[0];
+  if (kind === "image") return `<img src="${src}" alt="${alt}">`;
+  if (kind === "audio") return `<figure><figcaption>${alt}</figcaption><audio controls preload="metadata" src="${src}"></audio></figure>`;
+  if (kind === "video") return `<video controls preload="metadata" src="${src}"></video>`;
+  return `<figure><figcaption>📎 ${alt}</figcaption></figure>`;
 }
 
-function splashPage({ title, note, ask, status, scene = "splash-speeder.jpg" }: { title: string; note: string; ask?: string; status: string; scene?: string }) {
+// Beside the New thread dialog while you write the prompt, with a tip that changes as you write (lib/new-thread-tips.ts).
+export function newThreadPage(scene = "splash-speeder.jpg", tip = { start: 0, origin: undefined as string | undefined }) {
+  const tips = tipCard(TIPS, tip.start, tip.origin);
+  return splashPage({ title: "New thread", note: "Engineering the future, one thread at a time", status: "Waiting for your prompt…", scene, tips });
+}
+
+function splashPage({ title, note, ask, status, scene = "splash-speeder.jpg", tips = "" }: { title: string; note: string; ask?: string; status: string; scene?: string; tips?: string }) {
   return `<!doctype html><html><head><meta charset="utf-8"><title>${escape(title)}</title><style>
 html,body{height:100%;margin:0}
 body{--ink:#f4efe6;--muted:#d9d0c3;--faint:#b9afa2;--line:rgb(255 250 240/.2);--accent:#d9774b;--accent2:#8f97d6;
@@ -143,6 +156,7 @@ h1{margin:6px 0 0;font-size:24px;line-height:1.25;font-weight:700;letter-spacing
 @keyframes float{to{transform:translateY(-6px)}}
 @keyframes sheen{to{background-position:100% 0}}
 @keyframes push{from{transform:scale(1.08)}}
+${TIP_CSS}
 @media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important}}
 </style></head><body><main>
 <div class="mark"><img src="${asset("emblem.png")}" alt="" onerror="this.style.visibility='hidden'"></div>
@@ -151,6 +165,7 @@ h1{margin:6px 0 0;font-size:24px;line-height:1.25;font-weight:700;letter-spacing
 ${ask === undefined ? "" : `<div class="ask">${escape(clip(ask, MAX_ASK_CHARS))}</div>`}
 <div class="thread" aria-hidden="true"></div>
 <div class="status">${escape(status)}</div>
+${tips}
 </main></body></html>`;
 }
 
@@ -161,21 +176,44 @@ function write(cardId: string, html: string) {
   return file;
 }
 
+// The card's default page, written before its thread starts: the pane falls back to this file when
+// the card has no page of its own yet (electron/pane-pages.cjs), so a thread that opens on a blank
+// pane still has something to show. Fire and forget: a failed write leaves the pane as it was.
+export function writeShowFile(cardId: string, html: string) {
+  try {
+    return write(cardId, html);
+  } catch {
+    return undefined;
+  }
+}
+
 // Each New thread opens on the next scene, so the dialog never looks the same twice in a row.
 let sceneTurn = 0;
 export function nextScene(names = backdrops()) {
   return names[sceneTurn++ % names.length] ?? "splash-speeder.jpg";
 }
 
-// The New thread dialog's page, as a url the browser pane can load.
-export function newThreadUrl() {
-  return `file://${write("new-thread", newThreadPage(nextScene()))}`;
+// The New thread dialog's page, as a url the browser pane can load. `origin` is Weft's own, for the tips' ▶ Watch.
+export function newThreadUrl(origin?: string) {
+  return `file://${write("new-thread", newThreadPage(nextScene(), { start: nextTipIndex(), origin }))}`;
 }
 
 // Fire and forget from the start-a-card path: a file write and one local request, nothing awaited.
+//
+// A card that already has a page keeps it: a thread that was handed its own page before it started
+// (the agent-design thread's brief, lib/agent-brief-page.ts) shows that page, not the generic scene.
 export async function showStarter(cardId: string, title: string, ask: string) {
   if ((await paneUrl(cardId)) !== "") return;
+  if (fs.existsSync(showFile(cardId))) return;
   await openInPane(`file://${write(cardId, starterPage(title, ask, new Date(), cardId))}`, cardId);
+}
+
+// The card's page, opened in its pane: the brief a thread was handed before it started. Fire and
+// forget from the start-a-card path.
+export async function openShowFile(cardId: string) {
+  const file = showFile(cardId);
+  if (!fs.existsSync(file)) return;
+  await openInPane(`file://${file}`, cardId);
 }
 
 // After a turn ends, off the reply's path. `isCurrent` drops the page if a newer turn started meanwhile.
@@ -188,6 +226,8 @@ export async function showAfterTurn(
     await writeShow(cardId, turn.ask, turn.reply, isCurrent).catch(() => {});
   }
   retitleAfterTurn(cardId, turn);
+  // What the card learned in the pane becomes a site note; fire and forget, like the title (lib/site-notes-capture.ts).
+  void siteNotesAfterTurn(cardId, turn.ask);
   await pictureAfterTurn(cardId, isCurrent);
 }
 

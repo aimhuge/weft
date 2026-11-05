@@ -11,6 +11,7 @@ import { changedLines, gitBranch } from "./git-stats";
 import { showAfterTurn } from "./show";
 import { recordLimits } from "./limit-history";
 import { modelCapFor, planWindowOf, recordModelCaps } from "./limit-kind";
+import { releaseUpgradedModels } from "./limit-upgrade";
 import { recordModelLimit } from "./model-limit";
 import { isNotLoggedInError, isRateLimitError } from "./login";
 import { isLostSessionError, resumeLostSession } from "./lost-session";
@@ -136,6 +137,8 @@ function handleAssistant(id: string, session: Session, msg: Extract<SDKMessage, 
       const action = toolAction(block.name, input);
       if (block.name === "mcp__browser__open_url") session.openedPane = true;
       recordEdit(id, block.name, input);
+      // The in-thread input for an ask_add. On a Weft Worker too: the Mac draws it against its own checkout of the
+      // card's repo (lib/use-ask-folder.ts), so the worker's folder here is only the ask's own.
       const ask = secretAskOf(block.name, input, session.spec.cwd);
       // The diff (when the tool edits a file) and the path it touches, so the thread can show
       // a clickable file link and an inline diff instead of just the tool's raw result. Computed
@@ -367,6 +370,11 @@ async function refreshLimits(id: string, session: Session) {
     if (!limits) return;
     updateLimits(id, session.spec.backend, { fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) });
     recordModelCaps(getCard(id)?.model, limits);
+    // A plan upgrade gives the account more room, and the cap Weft is holding on this model is
+    // stale: the CLI's own answer says the model has room again, so the cap goes (lib/limit-upgrade.ts).
+    // Without this the card stays "at its limit" until the cap's own reset passes, even though the
+    // model can run right now.
+    releaseUpgradedModels(limits);
   } catch {}
 }
 

@@ -51,6 +51,8 @@ export interface Cron {
   endsAt?: number;
   createdAt: number;
   updatedAt: number;
+  // Set on a cron a Weft Worker published (lib/worker-lists-read.ts): that worker's name. It runs and changes there.
+  worker?: string;
 }
 
 // What the popover, the API and the MCP tool send to make one.

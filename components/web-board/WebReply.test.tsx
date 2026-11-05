@@ -45,12 +45,15 @@ describe("the web reply box", () => {
       table: "cloud_commands",
       row: { org_id: "o1", kind: "reply", target_device: "mac-1", folder: "/Users/me/dev/app", payload: { cardId: "c1", text: "ship it" } },
     });
+    // It says it's weft.zip, with this browser's zone: a hint for the thread's <weft-env> block, never a check.
+    expect(mockState.hints).toEqual([{ app: "web", tz: Intl.DateTimeFormat().resolvedOptions().timeZone }]);
     await waitFor(() => expect(box).toHaveValue(""));
     expect(within(dialog).getByText(/Waiting for your Mac/)).toBeInTheDocument();
   });
 
-  it("holds a reply while the card runs, as the desktop does, and Send now stops the turn first", async () => {
-    const dialog = await board({ column: "running" });
+  // A Claude Code or puku turn takes a reply mid-turn (components/ReplyBox.tsx midTurn), so a Codex card is the one that queues.
+  it("holds a reply while a Codex card runs, as the desktop does, and Send now stops the turn first", async () => {
+    const dialog = await board({ column: "running", card: { backend: "codex" } });
     const box = await within(dialog).findByRole("textbox", { name: "Message" });
     fireEvent.change(box, { target: { value: "and lint" } });
     fireEvent.keyDown(box, { key: "Enter" });
@@ -67,6 +70,23 @@ describe("the web reply box", () => {
     fireEvent.click(await within(dialog).findByRole("button", { name: "Allow" }));
     await waitFor(() => expect(mockState.inserts).toHaveLength(1));
     expect(mockState.inserts[0]?.row).toMatchObject({ kind: "answer", payload: { cardId: "c1", pendingId: "p1", allow: true } });
+  });
+
+  it("takes the prompt away as Allow is clicked, and brings it back when the answer is refused or fails", async () => {
+    const pending = { id: "p1", tool: "Bash", toolName: "Bash", title: "Run ls", input: { command: "ls" } };
+    db.insertError = "offline";
+    const dialog = await board({ column: "review", card: { pending } });
+    fireEvent.click(await within(dialog).findByRole("button", { name: "Deny" }));
+    expect(within(dialog).queryByRole("button", { name: "Allow" })).toBeNull();
+    expect(await within(dialog).findByRole("button", { name: "Allow" })).toBeInTheDocument();
+    db.insertError = null;
+    fireEvent.click(within(dialog).getByRole("button", { name: "Allow" }));
+    // The harness counts the refused insert too.
+    await waitFor(() => expect(mockState.inserts).toHaveLength(2));
+    expect(within(dialog).queryByRole("button", { name: "Allow" })).toBeNull();
+    const answer = commandRow({ id: "a1", kind: "answer", status: "failed", error: "no such request", payload: { cardId: "c1", pendingId: "p1", allow: true } });
+    mockState.clients[0]?.trigger("cloud_commands", { eventType: "UPDATE", new: answer, old: null });
+    expect(await within(dialog).findByRole("button", { name: "Allow" })).toBeInTheDocument();
   });
 
   it("keeps a new line on Shift+Enter and sends nothing empty", async () => {
@@ -99,11 +119,12 @@ describe("the web reply box", () => {
     expect(mockState.deletes).toEqual([{ table: "cloud_commands", filters: [["id", "r1"]] }]);
   });
 
-  it("lets a failed reply be dismissed, and shows what waits for the turn's end", async () => {
+  it("lets a failed reply be dismissed, and draws what waits on the card in the reply box, as the desktop does", async () => {
     const dialog = await board({ initialCommands: [reply({ status: "failed", error: "That thread isn't on this Mac anymore." })], card: { scheduled: [{ id: "s1", text: "and then lint", at: 1, afterTurn: true }, { id: "s2", text: "later", at: 9 }] } });
     expect(within(dialog).getByText(/isn't on this Mac/)).toBeInTheDocument();
+    // The reply box's own rows, each once: the one held for the turn and the timed one, both its to take back.
     expect(within(dialog).getByText("and then lint")).toBeInTheDocument();
-    expect(within(dialog).queryByText("later")).toBeNull();
+    expect(within(dialog).getByText("later")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Dismiss" }));
     await waitFor(() => expect(within(dialog).queryByText(/isn't on this Mac/)).toBeNull());
   });

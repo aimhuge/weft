@@ -17,6 +17,8 @@ vi.mock("./webhook-relays", () => ({ createRelays: vi.fn() }));
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-webhook-tools-"));
 process.env.WEFT_DATA = dir;
 vi.stubEnv("WEFT_SHELL_URL", "http://127.0.0.1:4567");
+// The Mac's tools (a worker's relay is lib/webhook-tools-worker.test.ts), even when this suite runs on a worker.
+vi.stubEnv("WEFT_WORKER", "");
 vi.mock("./shell-token", () => ({ shellToken: () => "tok" }));
 const wt = await import("./webhook-tools");
 const registry = await import("./webhooks");
@@ -46,8 +48,8 @@ describe("webhooksMcpServer", () => {
   it("is the webhooks server, loaded up front, and its prompt names every tool and warns off tunnels", () => {
     expect(server.name).toBe("webhooks");
     expect(server.alwaysLoad).toBe(true);
-    expect(server.tools.map((t) => t.name)).toEqual(["list", "add_blank", "ask_add", "relay", "mark_registered"]);
-    for (const name of ["add_blank", "ask_add", "relay", "mark_registered"]) expect(wt.WEBHOOKS_PROMPT).toContain(`mcp__webhooks__${name}`);
+    expect(server.tools.map((t) => t.name)).toEqual(["list", "add_blank", "ask_add", "relay", "tunnel", "close_tunnel", "mark_registered"]);
+    for (const name of ["add_blank", "ask_add", "relay", "tunnel", "close_tunnel", "mark_registered"]) expect(wt.WEBHOOKS_PROMPT).toContain(`mcp__webhooks__${name}`);
     expect(wt.WEBHOOKS_PROMPT).toContain("ngrok");
   });
 
@@ -69,7 +71,7 @@ describe("webhooksMcpServer", () => {
     expect(said(await run("list"))).toContain("last delivery unreachable");
   });
 
-  it("records a blank, and its secret as a vault blank (best effort)", async () => {
+  it("records a blank, and its secret as a vault blank, saying so when the vault can't take it", async () => {
     reply({ added: true });
     const r = await run("add_blank", { name: "stripe", target: "/api/stripe/webhook", events: ["x"], hint: "Stripe dashboard", secret: "STRIPE_WEBHOOK_SECRET" });
     expect([r.isError, said(r)]).toEqual([
@@ -79,9 +81,13 @@ describe("webhooksMcpServer", () => {
     expect(sent()).toEqual({ url: "http://127.0.0.1:4567/secrets/add-blank", body: { folder: "/proj", names: ["STRIPE_WEBHOOK_SECRET"], environment: "development", hint: "Stripe dashboard" } });
     expect(registry.listWebhooks(["/proj"])[0]).toMatchObject({ name: "stripe", events: ["x"], secret: "STRIPE_WEBHOOK_SECRET" });
 
-    // Again: updated, and a vault that can't be reached doesn't fail the tool.
+    // Again: updated, and a vault that can't be reached doesn't fail the tool, but the thread hears it.
     reply({ error: "no vault" }, false);
-    expect(said(await run("add_blank", { name: "Stripe", target: "/api/v2", secret: "STRIPE_WEBHOOK_SECRET", project: "/proj" }))).toContain("stripe is updated on 🪝");
+    const again = said(await run("add_blank", { name: "Stripe", target: "/api/v2", secret: "STRIPE_WEBHOOK_SECRET", project: "/proj" }));
+    expect(again).toContain("stripe is updated on 🪝");
+    expect(again).toMatch(/ STRIPE_WEBHOOK_SECRET isn't in the 🔐 vault as a blank \(.+\): tell the user its name so they add it\.$/);
+    fetchMock.mockRejectedValueOnce("down");
+    expect(said(await run("add_blank", { name: "Stripe", target: "/api/v2", secret: "STRIPE_WEBHOOK_SECRET", project: "/proj" }))).toMatch(/isn't in the 🔐 vault as a blank \(.*down.*\)/);
 
     fetchMock.mockReset();
     await run("add_blank", { name: "gh", target: "/g" });

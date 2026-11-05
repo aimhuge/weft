@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { folderName } from "@/lib/format";
-import { EVENT_KEYS, EVENT_LABELS, SOCKET_STATE, type SlackEventKey, type SlackSettings, type SlackStatus } from "@/lib/slack-view";
+import { EVENT_LABELS, SOCKET_STATE, SLACK_KINDS, type SlackEventKey, type SlackSettings, type SlackStatus } from "@/lib/slack-view";
 import type { SlackChannel, SlackSettingsPatch } from "@/lib/slack-types";
 import { SlackChannelButton, SlackChannelSelect } from "./SlackChannelPicker";
 import SlackLinks from "./SlackLinks";
@@ -66,7 +66,7 @@ export default function SlackSettings({
 
         <Field label="Post about">
           <div className="flex flex-col gap-1">
-            {EVENT_KEYS.map((key) => (
+            {SLACK_KINDS.map((key) => (
               <EventToggle key={key} eventKey={key} settings={settings} busy={busy} onSave={(patch) => run(() => save(patch))} />
             ))}
           </div>

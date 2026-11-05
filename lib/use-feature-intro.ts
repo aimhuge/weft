@@ -2,14 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
-import { hasVideo, introEvent, introSrc, loadSeenIntros, markIntroSeen, muteMessage, PAUSE_MESSAGE, REPLAY_MESSAGE, TOGGLE_MESSAGE, type IntroId } from "./feature-intros";
+import { introEvent, introSrc, markIntroSeen, muteMessage, PAUSE_MESSAGE, REPLAY_MESSAGE, TOGGLE_MESSAGE, type IntroId } from "./feature-intros";
 import { onIntroCovered } from "./intro-cover";
 import { setIntroModal } from "./intro-modal";
 import { useEscape } from "./use-escape";
 import { readMuted, writeMuted } from "./welcome-voice";
 
-// When a feature intro shows (lib/feature-intros.ts): the first time its drawer or dialog opens, unless you've seen it
-// or asked for reduced motion; again whenever you press ▶. It's seen once it plays to the end or you hide it. The page
+// When a feature intro shows (lib/feature-intros.ts): only when you press ▶ beside its title. It never opens on its own,
+// because a video whose voice starts unasked as a drawer opens is unwelcome; the New thread splash's tips point at them
+// instead (lib/new-thread-tips.ts). It's seen once it plays to the end or you hide it. The page
 // plays its own voiceover (public/intros/player.js), so a busy board can't start it late; this only hands it the
 // welcome tour's 🔊 setting, in its address when it loads and as a message when you flip it. Messages count only from
 // this intro's own iframe.
@@ -18,26 +19,14 @@ import { readMuted, writeMuted } from "./welcome-voice";
 // drawer or dialog, the width of it, and ⤢ blows it up again. A click on the video pauses it and plays it on, and so
 // does something coming over it (an achievement, the New thread dialog: lib/intro-cover.ts), until you click it.
 
-export const prefersStill = () => {
-  try {
-    return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  } catch {
-    return false;
-  }
-};
-
 // `muted` is the 🔊 setting as this showing loaded, kept so a flip messages the page instead of reloading it.
 type Showing = { id: IntroId | null; open: boolean; ended: boolean; paused: boolean; expanded: boolean; run: number; muted: boolean };
 
 export function useFeatureIntro(id: IntroId | null) {
   const [muted, setMuted] = useState(readMuted);
   const [showing, setShowing] = useState<Showing>({ id: null, open: false, ended: false, paused: false, expanded: false, run: 0, muted });
-  // A new drawer or dialog: its intro opens on its own the first time. One with no video yet (Slack's)
-  // never opens and shows no ▶ beside its title.
-  if (showing.id !== id) {
-    const open = !!id && hasVideo(id) && !loadSeenIntros().has(id) && !prefersStill();
-    setShowing({ id, open, ended: false, paused: false, expanded: open, run: 0, muted });
-  }
+  // A new drawer or dialog starts with its intro shut; ▶ opens it. One with no video yet shows no ▶ beside its title.
+  if (showing.id !== id) setShowing({ id, open: false, ended: false, paused: false, expanded: false, run: 0, muted });
 
   const frame = useRef<HTMLIFrameElement>(null);
   // The iframe's ref is handed over through attach() rather than returned, so no consumer reads a ref while it

@@ -13,6 +13,10 @@ vi.mock("./copilot-sources", async () => (await import("./board-tools.harness"))
 vi.mock("./tag-store", async () => (await import("./board-tools.harness")).tagStoreMock(state));
 vi.mock("./settings", async () => (await import("./board-tools.harness")).settingsMock(state));
 vi.mock("./folders", async () => (await import("./board-tools.harness")).foldersMock());
+vi.mock("./worker-board-reach", async () => (await import("./board-tools.harness")).reachMock(state));
+// Off a worker unless a test says so, whatever WEFT_WORKER the test run has (a worker's own checkout sets it).
+const worker = vi.hoisted(() => ({ on: false }));
+vi.mock("./worker-pane", async (load) => ({ ...(await load<typeof import("./worker-pane")>()), onWorker: () => worker.on }));
 
 const { card, capturedTool, nth, reset, textOf } = await import("./board-tools.harness");
 const { SAFE_BOARD_TOOLS, boardMcpServer, createBoardCard, describeBoardTool, isTrustedTool, weftMcpServer } = await import("./board-tools");
@@ -152,12 +156,13 @@ describe("weftMcpServer", () => {
     expect(nth(state.created, 0, "created card").input).toMatchObject({ tags: ["docs"], tagsBy: "user" });
   });
 
-  it("registers only list_cards, create_card, restart_weft_when_idle, request_folder_access, the changelog, the crons and the skill tools (no read, start, send, move, stop, answer)", () => {
+  it("registers only list_cards, create_card, restart_weft_when_idle, request_folder_access, the changelog, the crons, the skill tools and create_agent (no read, start, send, move, stop, answer)", () => {
     weftMcpServer(() => "parent-1", { start: vi.fn() });
     expect(state.captures.map((t) => t.name)).toEqual([
       "list_cards", "create_card", "restart_weft_when_idle", "request_folder_access", "changelog_add", "changelog_list", "changelog_edit",
       ...CRON_TOOL_NAMES,
       "skill_preview", "skill_review", "skill_install",
+      "create_agent",
     ]);
     expect(["list_cards", "create_card"].every((name) => SAFE_BOARD_TOOLS.has(name))).toBe(true);
     expect(SAFE_BOARD_TOOLS.has("start_card")).toBe(false);
@@ -329,5 +334,22 @@ describe("read_thread card header", () => {
     const text = textOf(await capturedTool(state, "read_thread").handler({ card_id: "c1" }));
     const header = nth(text.split("\n\n---\n\n"), 0, "section").split("\n");
     expect(header).toEqual(expect.arrayContaining(["stage: First shot", "latest: Which db?", "waiting on the user for: Run npm test"]));
+  });
+});
+
+describe("weftMcpServer on a Weft Worker", () => {
+  it("swaps the tools that write the board for ones that reach the user's (lib/worker-board-tools.ts)", async () => {
+    worker.on = true;
+    try {
+      weftMcpServer(() => undefined, { start: vi.fn() });
+      // No link bound in this test: the swapped list_cards says so instead of reading the worker's own store.
+      const listed = await capturedTool(state, "list_cards").handler({});
+      expect(listed.isError).toBe(true);
+      expect(textOf(listed)).toMatch(/can't reach your board/);
+      const agent = await capturedTool(state, "create_agent").handler({ name: "X", soul: "s" });
+      expect(textOf(agent)).toMatch(/Settings → Agents/);
+    } finally {
+      worker.on = false;
+    }
   });
 });

@@ -55,18 +55,22 @@ port.
 - **Closing the window keeps Weft running**, with your threads' CLIs open, so conversations stay
   alive. ⌘Q quits. Opening Weft again just brings the existing window forward.
 - **⌃⌥Space** opens the copilot from any app. In the app: ⌘N new thread, ⌘J copilot, ⇧⌘B
-  browser pane, ⌘F find cards (or find in the page, when the browser pane's page has focus), ⌘, settings,
-  ⌘1 board, ⌘2 copilot.
+  browser pane, ⌘F find (the page with focus in the browser, else the open thread, else the board's filter), ⌘G next match, ⌘, settings, ⌘1 board, ⌘2 copilot.
+- **Settings search**: the box in Settings' title bar (⌘F or `/` while Settings is open) finds any setting on any page
+  ("dark mode", "gmail", "max threads") and opens its page scrolled to it; each page's own top nav jumps between its sections.
 - **Shortcuts sheet**: `?` (or the "? Shortcuts" link in the footer) lists every shortcut in the app,
   board, thread, composer, terminal and app menu, and searches them by what they do or by key ("archive",
   "cmd k", "esc"). Hold ⌘ on the board for a moment, or Shift, and a card lists what that modifier does.
-  Buttons, the filter box and right-click menus show their keys too.
+  Buttons, the filter box and right-click menus show their keys too. **Print** puts them all on one landscape
+  page, and when your Mac has a printer the welcome's last screen offers it too.
 - **Full screen threads**: clicking a card opens its thread and its browser together in one large
   overlay over the board; Esc (or clicking outside) closes it, and so does sending `/done`. A card
   running `/done` sits in Done while it works and is archived when it finishes.
 - **List view**: the board as a sheet. The toggle in the project bar (or Esc, with nothing open) swaps the columns for a table —
   title, status, stage, tags, folder, age — one line per card, with the header stuck to the top and the
-  columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Click a header
+  columns lined up down the sheet, on frosted glass with grid lines and numbered rows. Esc pops a toast
+  under the toggle naming the view you landed in and what the next Esc does ("List view · hit Esc again
+  to switch to board view"), so the swap is never silent; it closes itself a moment later. Click a header
   and type: the Title filters cards as you go, any other column narrows its values (↑↓, Enter keeps
   only the match), and Age flips its sort on a click; the sheet remembers it all. Bands fold (the
   Backlog starts folded), and a card folds open to its subagents and the cards it started. Click a
@@ -109,12 +113,18 @@ port.
   (docs/architecture/mini-apps.md).
   A **React app** is a folder with an `App.tsx` and no `package.json`: Weft bundles it with its own React into a
   static page on save, and the pane reloads. Shared, a folder app's link lives under its owner,
-  `weft.zip/@you/apps/<slug>` or `weft.zip/<team>/apps/<slug>`, with every file of the folder served in a sandbox. With no card
+  `weft.zip/@you/apps/<slug>` or `weft.zip/<team>/apps/<slug>`, with every file of the folder served in a sandbox, and it follows the folder: a few seconds after you save, the hosted copy updates (same mode and address). With no card
   open, the pane opens on the left and shows the app's name instead of its `file://` path, with a Share button. An app
   never holds a key: it writes `{{secret:NAME}}` in a `weft.fetch` request and Weft puts the value in outside the
   browser, only for the hosts, methods and paths its `weft-app.json` allows. The value is the author's, or each viewer's
   own (`"from": "viewer"`, asked for in Weft's own form); on weft.zip it's stored encrypted under a server-only key
   (docs/architecture/mini-app-hosting.md).
+- **Site notes**: what a card learns driving a dashboard in the pane (Supabase, Vercel, Stripe, GitHub settings…) becomes
+  a short note per page: what it's for, the steps to each goal, the labels and selectors that worked, the gotchas. The
+  next card that opens that page gets the note with `open_url`, as reference data it may use but never obey. Notes stay on
+  your Mac and go to your team; Settings → Security → Site notes shares them with every Weft user, each one shown to you
+  before it's sent, and served to others once 3 people's cards have succeeded with it. Ids, emails and keys are scrubbed
+  out first, and anything about secrets, other sites or commands is stripped (docs/architecture/site-notes.md).
 - **Show rail**: a 72 px column right of the page in the browser pane, one mini per turn of the open thread
   (status dot, its first words, how long ago) and per page the pane showed, newest at the bottom like the chat. Each page
   is a small picture of what the pane showed (a few-KB WebP per page in `~/.weft/shots/`). Every message keeps the page on
@@ -126,11 +136,17 @@ port.
   orange ripple shows where each click lands. It can `wait_for` something to appear, check a phone or tablet layout
   with `set_viewport`, and read the page's `console_logs` and `network_errors` when something breaks, all in the pane
   you're watching, where you're logged in (docs/architecture/agent-browser.md).
-- **Search and find in the browser pane**: words typed in the pane's address bar search the web (a host or URL
-  still opens as one), and ⌘F on the page swaps the address bar for a find bar: matches highlighted, a count,
-  Enter / ⇧Enter or ⌘G / ⇧⌘G to step, Escape to close.
+- **Selectors that read like the page**: a thread can act on an element by CSS, or by the text a person would read
+  on it — `:text-is("Settings…")`, `:has-text("menu")`, `:has(span:text-is("Settings…"))` — the way Playwright
+  writes them. Same selector, same element, in every tool.
+- **The pane's address bar searches too**: type an address and it opens; type anything else and it's a Google search.
+- **Tabs in a thread's browser**: + in the pane's toolbar opens a blank tab for the open card, with the address bar
+  ready to type; links that open a new window land in a new tab, and an agent's `open_url` with `new_tab` keeps
+  the page it was showing. The tab strip only shows up under the toolbar once a card has two tabs; click to switch,
+  × or middle-click to close (a card's last tab stays). The other agent tools act on the tab on screen.
 - **Browser pane zoom**: the % button in the pane's toolbar zooms the page (Chrome's steps, plus
   50–200% presets); ⌘+ / ⌘− / ⌘0 and ⌘+scroll work on the page too, and a trackpad pinch magnifies.
+  Opening the menu doesn't blank the page — the pane steps the page aside around the menu.
 - **Failed loads say why**: a page that won't load in the browser pane (say a card's dev server stopped) shows Weft's
   error page instead of a blank white one: the URL, the reason, **Try again**, **Back to the last page**, and an
   automatic reload when a local dev server comes back (`electron/pane-error.cjs`).
@@ -154,6 +170,9 @@ port.
   `pmset -a disablesleep 0|1` (`/etc/sudoers.d/weft-keep-working`). Sleep also comes back at the battery floor, when you quit Weft, and,
   through a watchdog, if Weft crashes (`electron/keep-working.cjs`).
 - **Dock**: the Needs you count on the icon, and New Thread and Copilot in its menu.
+- **Away open** (off by default; Settings → General): when no card is open and the board has had no mouse or keys for a few
+  minutes (1–15, 2 by default), a card that moves to Needs you opens by itself. Cards after it stack behind it, with
+  *1 of 3 waiting · Next ›* in the thread's header, and answering the open one opens the next (`lib/away-open.ts`).
 - **Links**: `weft://new?prompt=…&folder=…&start=1` creates a card (in your most recent project
   if no folder is given), `weft://card/<id>` opens one, `weft://copilot` opens the copilot, and `weft://reply?text=…` on a
   thread's own local page in the browser pane sends that text to the thread as your reply (the buttons on
@@ -162,23 +181,24 @@ port.
   from Alfred, Raycast, or Shortcuts. (Registered by the packaged app.)
 - The window remembers its size and position, and the app reads your login shell's PATH, so it
   finds `claude` and `puku-cli` even when started from Finder.
-- **Puku trial**: a puku thread works with no Puku account. With no agent logged in, the welcome's puku-cli row offers
-  **Try free** (sign in with GitHub) before your first prompt, and the first thread runs on the trial. While you're signed in to your Weft account and
+- **Puku trial**: a puku thread works with no Puku account. While you're signed in to your Weft account and
   puku-cli has no login of its own, Weft runs it on Weft's own Puku key through a proxy on the deployed Weft, with a
-  daily cap per account (150 requests, 1M tokens); Weft's key never ships in the app. Signed out, the login pop-up
-  offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
+  daily cap per account (150 requests, 1M tokens); Weft's key never ships in the app. The welcome doesn't chase the
+  sign-up: a new user is asked to log in to an agent they already use, and the trial surfaces later, where a thread
+  needs it — the login pop-up offers **Sign in to Weft** or Puku's own login. See docs/architecture/puku-trial.md.
 - **Weft Pro**: every workspace has a plan. **Free** keeps the Puku trial's daily cap. **Pro** ($20/month or
-  $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. Every plan includes BlastCP
-  usage: Free has BlastCP Free (1 brand, 3 channels, 30 posts a month, $0.50 of AI generation once), and Pro and Team
-  have BlastCP Creator (every channel, unlimited posts, $3 a month of AI generation); BlastCP doesn't apply them yet.
+  $200/year) replaces it with a 300M Puku token allowance, refreshed every billing period. **Team** ($9 a seat a month)
+  bills the workspace's member count, and adding or removing a person moves the Stripe quantity with it.
+  weft.zip's pricing cards link to Checkout: **Get Pro** and **Get Team** sign you in and open the upgrade dialog on
+  your workspace's billing page.
   **Open Source** is free for a year for maintainers of an active, OSI-licensed public repo, checked on GitHub when you
-  sign in to weft.zip (or with **Check my GitHub now** on the billing page): teams and BlastCP Creator on the free tier's
+  sign in to weft.zip (or with **Check my GitHub now** on the billing page): teams on the free tier's
   Puku cap. **Education** (the GitHub Student Developer Pack) and **Regional pricing** (Pro at $5/month in low-income and
   $10 in lower-middle-income countries) are built in Weft and wait on the pack partnership and the billing package's price variants.
   Settings → Accounts shows your plan, workspace and the meter. **Upgrade** opens Weft's own pricing dialog (Free, Pro and Team,
   monthly or yearly) and goes on to Stripe Checkout; it also opens by itself whenever you hit something a plan unlocks, like
   inviting a teammate on Free, running out of room for shared apps, or the free Puku cap. **Manage billing** opens the
-  workspace's billing page on weft.zip (the Stripe-hosted portal to manage). Billing is per workspace, not per seat;
+  workspace's billing page on weft.zip (the Stripe-hosted portal to manage). Pro is billed per workspace and Team per seat;
   owner or admin manages. The billing page also gives each workspace a referral code: the team you refer gets 20% off
   three months and you get $20 off your bill. Super-admins run plans from **Admin → Billing** (upgrade, downgrade,
   switch, seats, refunds in full or part, people, discounts, and a reset for sandbox ids on a real workspace, each in the
@@ -189,7 +209,7 @@ port.
   background, and a notification (click it for the Software Update window, or **Restart Now**) and the Weft menu offer
   **Restart to Update**. With threads running it asks: **Restart When Idle** (the default) waits for them to finish,
   **Restart Now** cuts them off. Left alone, Weft restarts into the update by itself once no thread is running and
-  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… opens the Software Update window (versions, last check, release notes, the next step). What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
+  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… (or File → Check for Updates…) opens the Software Update window (versions, last check, release notes, the next step). The first time Weft opens on a new version, a short **What's new** splash says what changed in a few lines (sometimes with a video), written by the Copywriter when the release is cut. Between versions, **server patches** bring a newer board and server without a new app: signed, checked against the app's own packages, and switched in by restarting only the server once nobody's using it (a patch that fails to start rolls back by itself). What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
 - If the server crashes, it restarts on its own; its output is in `~/Library/Logs/Weft/server.log`
   (Help → Open Logs Folder). If the dev server dies repeatedly (4 times in 2 minutes) while the
   board is up, a small bar at the bottom-left offers **Restart server**, **Open logs**, and
@@ -248,9 +268,19 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   New thread opens with them attached. A pill says where they'll go and the card under the cursor
   lights up; dropped right on a composer, they land where you let go.
 - **The mic dictates** on this Mac with whisper.cpp: click it, talk, click again, and the text lands
-  at the cursor (Esc throws the recording away). It needs `brew install whisper-cpp ffmpeg` and a
+  at the cursor (Esc throws the recording away). `⌥'` starts and stops it, and `⌘⌥'` works too; rebind it
+  in Settings → Shortcuts. It needs `brew install whisper-cpp ffmpeg` and a
   model; it uses superwhisper's or Homebrew's models, or the one in `WEFT_WHISPER_MODEL`. In a
   normal browser tab without whisper it falls back to the browser's speech recognition.
+  Settings → General → Dictation picks its language (naming it is faster than detecting it), takes a
+  vocabulary of names and terms whisper should expect, and turns on **Advanced dictation**: Weft
+  downloads large-v3-turbo if this Mac has none and keeps it warm in `whisper-server`, so text is back
+  in about half a second (it lets go of the memory after 5 idle minutes).
+- **Dictate in any app.** In the desktop app `⌥'` works everywhere on the Mac, like Superwhisper: a red
+  pill floats at the top of the screen with the time and your voice's pulse, a soft chime starts and stops
+  it, and Esc cancels. The text is pasted where you're typing, or copied to the clipboard when there's no
+  text box. Pasting into other apps needs Weft allowed in System Settings → Privacy & Security →
+  Accessibility; the composer's mic starts the same pill.
 - **Drafts are kept** per card and for the new-thread dialog until sent, so closing it loses nothing.
 - **One button that says what Enter does.** The reply box is in one mode at a time, named on a chip inside it
   and on its button: **Send**; while a Claude Code or puku turn runs, **Send** goes in after the agent's next tool
@@ -293,7 +323,9 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   The plan limits are per CLI — each CLI has its own plan (Claude Code on Anthropic's, puku-cli on
   Puku's) — so the chart draws that CLI's own history.
 - **Status strip: the thread and the plan.** An open card's strip names its CLI and model (`[puku · opus-4-8]`,
-  the model its session started on), then context, cache and tokens, then that CLI's plan limits. Every card
+  the model its session started on), then context, cache and tokens, then that CLI's plan limits. The context
+  reads as how much is left and how big the stack is (`ctx:44% 112.0k/200.0k` — the tokens the last request
+  carried, out of the model's window). Every card
   on one CLI shows the same limits, the newest any of them read, and a window whose reset has passed reads
   full. With no card open, the footer lists each CLI's plan by name and nothing else.
 - **Suggested next message.** After a turn, a Claude thread's reply box shows the CLI's guess at what
@@ -319,23 +351,25 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
 
 The folder picker lists your recent projects, the git repos in `~/dev` and other usual code folders
 (with their branch), and your GitHub repos from `gh`. Picking a GitHub repo that isn't on this Mac
-clones it into `~/dev`. **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). The dialog's one model menu is also its CLI picker, the same menu as Settings → Models: each CLI is a heading with its own default first, picking a model moves the thread to the CLI that serves it, and Goose lists only the models a saved provider key serves. Cards are titled from the
+clones it into `~/dev`, with a progress bar that follows git (receiving objects, resolving deltas, checking out). **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). The dialog's one model menu is also its CLI picker, the same menu as Settings → Models: each CLI is a heading with its own default first, picking a model moves the thread to the CLI that serves it, and Goose lists only the models a saved provider key serves. Cards are titled from the
 prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
 approves safe calls and blocks risky ones, and a blocked call comes to Needs you with the classifier's reason and
 **Allow once and retry** / **Keep denied**; an MCP server that asks you to confirm something, like the Supabase MCP before
-destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, or **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy) with every tool a thread has. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and a ✍️ in the card's footer marks a copywriter (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
+destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy), or one of your own. **Settings → Agents** (or **Manage agents…** at the bottom of that menu) is where you make them: an emoji, a name, a line saying what it's for, its soul (the start of every system prompt its threads get) and the skills it turns off. Built-ins can be edited too, and **Reset** pulls a built-in's latest text from Weft's repo on GitHub. Pick a default agent for each project there, and new threads in that project start as it. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and the agent's emoji in the card's footer says who it is (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
 
-**Every model is on offer, and there is no default model.** Wherever Weft asks for a model — the New
+**Every model is on offer, and no row lets the CLI choose.** Wherever Weft asks for a model — the New
 thread dialog, Settings → Models (New threads, Use for subagents, Copilot, Review all, Run /weft:done
 on, Backup model), the thread header's chip — the list is every model any CLI serves, grouped under
 Claude, Puku, Codex and Goose. Nothing is locked to one CLI: picking a model moves the card to the CLI that
-serves it, so the choice is one row, not two. The first entry is **Default model**, which means "let
-the CLI decide" — Weft leaves the model off the command line rather than picking one behind your
-back. A changed default takes effect at once: the open New thread dialog follows it, and an idle
-thread picks it up on its next message.
+serves it, so the choice is one row, not two. Every row is a model: the two CLIs whose model lives in their
+own config (Codex and Goose) each have one row for it — **Codex's configured model** and **Your BYOK
+model** — and a menu with nothing picked shows the model that CLI actually runs, so you always see what will
+answer. The menu is a search box: type a name or a model id and every CLI's rows filter at once. A changed
+default takes effect at once: the open New thread dialog follows it, and an idle thread picks it up on its
+next message.
 
 **A model that hits its limit hands over to the backup.** Plan limits are per model (Opus has its own
 weekly cap, Sonnet another), so Weft remembers which model ran out and until when. A model that is
@@ -348,9 +382,18 @@ to Sonnet 5.5". The reset time comes from the limit message itself and is read i
 message names, on that timezone's own day: a window that resets at 1:00am in Bangkok ends at 1:00am
 there, whichever day that is.
 
-Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); the per-tool `.env`, git, restart and check guards aren't available to Codex threads. Codex's sandbox mode and reasoning effort are fixed when a session starts.
+**An upgrade is noticed, not waited for.** Raise your plan and the limits stop applying — but only
+if Weft notices, and the per-model caps used to sit there until their own window passed, so an
+upgraded plan still read "— at its limit" in the model menus and a card parked on Opus stayed
+parked. Now Weft compares the CLI's own weekly windows with the caps it holds: a model whose
+window has room again is freed, the menus drop the "at its limit" mark, and every card parked on
+that model restarts on its own. The card says why — its chip reads "Resumed · plan upgraded"
+rather than "Auto-resumed", which is a window resetting on its own. The check rides the same
+15-minute poll that watches the plan's windows, and runs again whenever a thread starts.
 
-Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Goose default** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
+Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); and every tool call goes through Weft's guards first, the same ones Claude Code threads run behind ([thread guards](docs/architecture/thread-guards.md)). Codex's sandbox mode and reasoning effort are fixed when a session starts.
+
+Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on, and its models are the ones the Goose group of every model menu lists — your provider's own ids, not another provider's. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Your BYOK model** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. Give your models a name in the same page's **Model names** section, and every menu shows "Big Opus" instead of the raw id, with the id beside it. A name says the model runs on Goose, so it stays in the Goose group even when the id is another CLI's too — name `puku-ai-2.8` and the row reads "Big Opus" under Goose, and the thread starts on Goose. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
 
 ## How cards move
 
@@ -375,6 +418,16 @@ message again in a fresh CLI.
 The Backlog column is hidden by default. Turn it on with Settings → General → Show backlog. It also shows
 whenever cards are waiting in it.
 
+The board comes in two modes. **Regular** is just your threads: columns, cards with their folder and age, the
+browser pane, and ★ and 🔐 on the rail. **Advanced** is everything: the tool rail, the header's badges, list view,
+sorting, each card's stage and model, and the footer's stats. A new install starts on Regular, a board that was
+already in use stays on Advanced, and Settings → General → Advanced mode switches between them.
+
+Any column folds out of the way: click the chevron in its header and it becomes a thin strip with its name and
+count. Click the strip to open it again; you can still drop cards on it. When the board has room, the fullest
+columns spread their cards over two columns: the column with the most cards first, then the next, as long as its
+cards don't fit its height and another column's width still fits. Narrow the window and they go back to one.
+
 Drag a Backlog card onto another one to set the order: drop on its top half to place the card before it,
 or its bottom half to place it after. Weft saves that order and uses it for the Backlog list, whatever
 sort is selected for the other columns. Review ignores the sort too: its most recently updated card is always on top.
@@ -396,14 +449,23 @@ in Done, also show or hide archived cards and archive all the Done cards on scre
 shown beside it, that picks it while the menu is open: right-click, then `D` for Done, `1` for `/weft:done`,
 `Y` for YOLO. (Desktop app only.)
 
+Right-click a project chip in the project bar, or a project under **More**, for its own menu: start a new
+thread in it, reveal it in Finder, open it in your editor or terminal (the first one installed: Cursor,
+VS Code, Zed… and Ghostty, iTerm, Warp or Terminal), open it on GitHub, copy its path, **Add Folder…** (a
+project can span several folders, say an app and its API: every thread in it may read and edit the added folders
+with no "Outside project" prompt, and each one gets a **Remove** item), open its 🔐 Secrets, Dev Servers or Changelog, **Pin to Bar** (a pinned project always has a chip, ahead of the recent
+ones), **Hide from Bar** (its chip goes until you use it again; **More** still lists it), archive its Done
+cards and stop its running ones. (Desktop app only.)
+
 Archive from the keyboard: `Shift+A` archives the card you've moved to with `j`/`k`, or else the
 open thread, and focus steps to the next card, so `Shift+A` three times clears three cards. `Shift+E`
-archives every Done card on screen, and `Z` (or the toast's Undo) brings back the last archive. The command palette (`Cmd+K`) has all of them too.
+archives every Done card on screen, and `Shift+Z` (or the toast's Undo) brings back the last archive. `Z` reopens the last card you had open
+(the one still outlined on the board). The command palette (`Cmd+K`) has all of them too.
 
 Cards share one working tree by default, so two cards in one folder see each other's edits. When that
-would hurt (a big change, or other cards busy in the folder), switch **Shared** to **Isolated** beside the
-folder in New thread (it reads **Isolate?** with an amber dot when Weft suggests it): the card gets a git
-worktree of its own on a `weft/<title>` branch, taken in milliseconds from a warm pool under `~/.weft/worktrees`
+would hurt (a big change, or other cards busy in the folder), open the **Shared** menu beside the folder in New
+thread (it reads **Isolate?** with an amber dot when Weft suggests it) and pick **Worktree**: the card gets a git
+worktree of its own on a `weft/<title>` branch, or on a branch you search for or name new in the same menu, taken in milliseconds from a warm pool under `~/.weft/worktrees`
 with `node_modules` already in (an APFS clone), and shows ⑃ on the card. Its CLI, Bash, `!` commands, tests and dev
 server (on a port of its own) all run there. On Done it commits what's left, rebases on the project's branch and
 fast-forwards it, never touching other cards' uncommitted work; a conflict goes back to the thread to resolve
@@ -417,19 +479,28 @@ When two cards actually clash, Weft asks. Each card claims the top-level symbols
 component, class, type or interface around an Edit's `old_string`, found with the TypeScript parser
 (`Board.tsx#CommandPalette`). A symbol over 150 lines is split: the claim is the statement inside it that holds
 the edit, and so on down (`Board.tsx#Board/moveFocus`, `Board/useEffect#3`, `Board/return/main`), since Board() alone is
-85% of its file. Imports are never claimed; a Write, a non-TS/JS file or an edit spanning more than five symbols
-claims the whole file. When another busy card in the same tree goes to edit a claimed symbol, its thread
+85% of its file. Markdown is claimed by block, a paragraph or top-level bullet under its headings, so two cards adding
+lines to MAP.md pass each other, and a commit leaves out the lines another busy card is still writing there. Imports
+are never claimed; a Write, any other file or an edit spanning more than five symbols claims the whole file. When another busy card in the same tree goes to edit a claimed symbol, its thread
 stops on a permission prompt: "Card ‘Fix login’ is editing LoginForm in Login.tsx. Wait, or go ahead?" A card's
 claims drop when it reaches Done or is archived, and a file's as soon as `git status` shows it clean (the commit
 walk-through, or a thread's own `git commit`). Bash counts too: a line that writes a claimed file (`sed -i`, `> file`,
 `prettier --write`) asks the same way, and whatever a Bash call wrote becomes the card's claim. When a typecheck, test
 or lint run fails, the thread is told which failures sit in files another card is mid-edit on, so it leaves them alone.
-When one card matters more right now, press **Me first** on its prompt: its edit goes ahead with the whole file, and
+When one card matters more right now, press **This first** on its prompt: its edit goes ahead with the whole file, and
 the card holding the code is told mid-turn to leave that file to it until it commits or finishes (its own edits there
 wait). The holder's thread shows **You first** for each card waiting on it, to do the same from that side, and the
-prompt shows both cards' faces (thumbnail or emoji), so who is in whose way reads at a glance.
+prompt shows both cards' faces (thumbnail or emoji), so who is in whose way reads at a glance. The other way round
+is **Others first**: the card holding the code goes ahead and this one waits for it. A clash asks who goes first, not
+whether to go ahead, so **Deny** is gone from that prompt — it stays on the prompts that really are a refusal (the
+card's permission mode, a folder outside the project). The card other cards are waiting on carries a **blocking N**
+chip, so you can see what going first is holding up. And the wait ends when the change lands, not when the holder
+commits: the moment the holder's edit (or the file its Bash wrote) is on disk, the waiting thread is let go with a
+message to re-read the file and redo its edit on top of the new one. Two cards can never wait on each other: a wait
+that would close such a loop is refused and the card goes ahead instead, so one of the two always keeps running
+instead of the board locking up.
 
-A thread works in its card's project folder. When a file tool or a Bash command reaches anywhere else (say `~/Downloads`), Weft asks first, whether or not macOS would have refused it: **Allow once**, **This card** or **Always**, with an **Outside project** chip saying which folder. **Always** used to be a one-way door — nothing listed those folders and nothing took one back. Settings → General now has a **Trusted folders** row: **Add folder** opens the OS folder dialog, **Remove** takes one back out, and a thread already holding the folder keeps it only until that turn ends (`lib/folder-guard.ts`, `components/TrustedFolders.tsx`).
+A thread works in its card's project folder. When a file tool or a Bash command reaches anywhere else (say `~/Downloads`), Weft asks first, whether or not macOS would have refused it: **Allow once**, **This card** or **Always**, with an **Outside project** chip saying which folder. **Always** used to be a one-way door — nothing listed those folders and nothing took one back. Settings → General now has a **Trusted folders** row: **Add folder** opens the OS folder dialog, **Remove** takes one back out, and a thread already holding the folder keeps it only until that turn ends (`lib/folder-guard.ts`, `components/TrustedFolders.tsx`). A folder only mentioned in a commit message, a PR body or a page a thread writes doesn't ask, and the thread's own memory folder (`~/.claude/projects/<project>/memory`) is its own (`lib/shell-text.ts`). The secret guard reads the same way: a PR body that mentions the vault is fine, and a refusal says what it refused, the CLI's folder, another card's paste or a worker's key, instead of always "secret values" (`lib/secret-guard-why.ts`).
 
 Every thread runs inside Weft's own server, so restarting Weft cuts off every running turn. A thread
 can't do that behind your back: while other cards are running, a `kill`, `pkill`, `killall` or port-freeing
@@ -460,7 +531,8 @@ keeps their file dumps out of the thread's context. Settings → Models → Use 
   threads, the thread runs that CLI headless as the subagent (`puku-cli -p … --model opus-4.8`, or
   `claude -p`), read-only unless the task needs edits. That needs the other CLI installed and logged in.
   A Goose thread has no Agent tool, so every subagent is a Bash run: `goose run --text …` on the thread's own
-  provider and model (or `--model` for a picked Goose model), or the other CLI's headless line.
+  provider and model (or `--model` for a picked Goose model), or the other CLI's headless line. A Goose model
+  shows the name you gave it in Settings → Models → Bring your own key, with its id beside it.
 
 **Backup model** (`Settings → Models → Backup model`) is the model a card reruns its first message on
 when that very first turn came back an error (a rate limit, mostly), and the model every thread moves
@@ -553,6 +625,15 @@ prompt's first line), or one longer than six words, is renamed after its next tu
 like "🐞 Compile Error: missing CoverageBadge import"; its emoji becomes the tile. Titles are never cut off
 mid-sentence. A title you typed or edited is
 never replaced, and Claude Code's own session title stops overwriting it once Weft has named the card.
+
+### What a thread knows each turn
+
+Every message Weft sends a thread starts with a few lines you don't see in the thread: which machine runs the card
+(your Mac, or a Weft Worker by name, with its OS, Weft's version and commit, and how far behind main it is), where the
+message came from (this board, weft.zip, the phone, a cron, another card, Slack) and the time in your zone and the
+host's. So a thread on a worker stamps a progress page with the real time, and knows its worker needs an update. It's
+about 270 bytes a turn and built in microseconds; where the message came from is the sender's own word, used for the
+thread's information and nothing else (docs/architecture/thread-env.md).
 
 ## Skills and automations
 
@@ -663,7 +744,8 @@ another refactor, a stricter lint rule or a better type:
 - The scout's report is cached in `~/.weft/scout/` with the commit it ran on. It runs on its own only
   once, for a project with no report; after that `/weft:done` scouts the session's files and merges its findings
   in, and **Re-scout now** reads the whole project again. A new commit alone never starts a run.
-  It never runs on the start-a-card path.
+  It never runs on the start-a-card path. On a Weft Worker project, **Re-scout now** starts a card there that scouts and saves
+  the report, and the Backlog counter starts a sprint-planning card there.
 
 Hover the badge for how the number is made. Click it for a menu: **Fix the checklist, weakest first**
 starts one thread on the checklist, and each scout finding starts its own small card ("Long Function:
@@ -781,6 +863,12 @@ You can be in many teams. **Settings → Teams** lists every one with your role 
 click another to manage its projects, members and invites below the list, or **New team** to make one you own.
 Owners and admins choose who sees each project: **Access** on a project's row ticks the members who get it. Owners
 and admins see every project; a member sees only the ones they've been given.
+A linked project's synced cards go to the team instead of each member's own workspace, so `weft.zip/<team>/board`
+shows everyone's cards for it. A folder syncs only once its owner switches Sync on; turning Sync off and on again moves
+its older cards into the team (docs/architecture/cloud-sync.md#team-projects).
+Your teammates' cards for it show on your desktop board too, inside your own project of the same repo: each with their
+picture and "Zulker's Mac" on the tile. They're read-only: open one to read its thread and pane, but only its owner
+can reply, stop or move it.
 The pencil beside a team you own renames it; its weft.zip address stays the same. The trash deletes it, once you
 type its name, as long as you're in another team too and it has no paid plan still running.
 
@@ -819,27 +907,49 @@ in the project menu runs it again; the copilot's chips offer the same finds. Mor
 ### GitHub issues
 
 GitHub's mark at the bottom of the left rail opens the GitHub drawer: who the `gh` CLI is signed in as (or how to sign
-in, with `gh auth login --web`), and each board project's repo with an **Issues → Backlog cards** switch, its last sync
+in, with `gh auth login --web`), and each board project's repo with an **Issues → cards** switch, its last sync
 ("Synced 3m ago · 2 added"), **Sync now** and links to the repo and its issues in the browser pane. Weft never holds a
 GitHub token; `gh` keeps its own. ⌘K → **Import GitHub issues into <project>** turns sync on too. Signed in to a Weft
 account, **Instant, by webhook** adds a webhook to the repo (you need admin on it), relayed by the deployed Weft on Vercel and Weft's Supabase, so
 cards follow issue changes within seconds instead of on the next 5-minute check.
 
-A synced project's open issues become Backlog cards, through the `gh` CLI. Each card gets the issue's title, its body plus a link and a reminder to put `Fixes owner/name#N` in the commit,
+A synced project's open issues become cards, through the `gh` CLI. Each card gets the issue's title, its body plus a link and a reminder to put `Fixes owner/name#N` in the commit,
 and its labels as tags (in their GitHub colours). The card shows "#N", linked to the issue. Weft checks again every 5
 minutes: a closed issue archives its card if the card never started, and a card that has started is never touched. A
 card you delete stays deleted. It's one direction for now; Weft never edits an issue. More in
 [docs/architecture/github-issues.md](docs/architecture/github-issues.md).
+
+#### The project's workflow
+
+Each project picks where its issue cards land, in the GitHub drawer under the sync switch:
+
+- **Backlog** — a cold card, yours to pick up.
+- **Needs you** — the card is made in Needs you, so a fresh import stands out. It never starts on its own, and it keeps
+  following its issue until you run it: a new label reaches it, a closed issue archives it.
+- **Run** — the card's thread starts at once and the agent works the issue, parking in Needs you when it needs a
+  decision and going to Review when it finishes, exactly as any other thread does.
+
+A **Run** card can be checked before any work happens: **Checks with** picks the skill that runs as the card's first
+turn, and **Works as** picks the agent that works it. **Design the agent** starts a new thread that designs that agent
+for you: it asks what it should check, what it must refuse, what it leaves behind, when it stops and asks, and its
+name — one question at a time — then writes the soul and saves it as a real agent, whose soul opens every system prompt
+its threads get. The workflow is per project and saved with your settings; changing it changes where the *next* cards
+land.
 
 ### Server-side cards (off by default)
 
 Weft asks once, after a thread in your project has reached Review: "Turn on Project Sync for <project>?" with **Sync**, **Not now**
 and a **Don't show me again** box (it asks again next launch until you sync or tick it; Settings → General → Reset tips brings it back).
 Signed out, it is Weft's one sign-in ask instead: "Sign in to Weft?" with what an account gets you (Project Sync, share links,
-leagues, the Puku trial) and **Sign in with GitHub**; once you're in, it offers to sync the project. Settings → Sync lists your recent projects with a switch each. A project that's on uploads its cards and threads to your
+leagues, the Puku trial) and **Sign in with GitHub**; once you're in, it offers to sync the project. Settings → Sync lists your recent projects with a switch each, and the switch follows you between Macs: sign in on a second Mac
+and each project you sync elsewhere turns on there too, matched by its GitHub repo (a clone you make on that Mac included). A project that's on uploads its cards and threads to your
 workspace on Supabase while you're signed in: an outbox sends a batch when a turn ends (never on the way to starting one),
 pictures and pages go up once each by content, and the page shows the last sync, how many items went up, how many wait and the
-last error, with **Sync now**. At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
+last error, with **Sync now**. The avatar menu says it in one line under your plan ("Synced 2m ago · 3 projects", "Syncing 12
+items…", "Sync failed" with why), with **Resync now** and **Sync <project>** / **Don't sync <project>** for the board's project,
+and the avatar wears a dot while an upload runs (amber) or after one failed (red). A project's right-click menu has the same switch
+for that project: **Sync <project>** / **Don't Sync <project>**, with the project's own state on the same line — "Not Synced",
+"Synced 7m ago", "Syncing…", "Sync Failed". At `weft.zip/<workspace>/board` the same cards show live, drawn by the desktop's **own
 components** — the same header (New thread on N, your avatar with workspaces, Team, Billing and Sign out), the same project
 chips, filter and sort, the same 38px rail (★ starred, 🏷 tags, Board, Team, Billing), the same columns and cards (stage,
 tags, model, picture or emoji, what's left) and the same open-card window. One implementation, two hosts: a `variant="web"`
@@ -851,15 +961,29 @@ open them. **New thread** on the web board starts a card on your Mac: pick one o
 owns the folder makes the card and runs it, then the board opens it (the Mac has to be on and running Weft). The open card's reply
 box is the desktop's own and sends to that Mac too: your message goes into the thread as if typed there (held until the running
 turn ends, or **Send now** to stop it first), a permission request or question the thread is waiting on can be answered right there,
-■ stops the turn, and what the thread says comes back within about a second. Thread text isn't encrypted yet, so
-turn it on only for projects you're fine storing on Weft's servers. Separately, a long thread opens on its newest 50 items
+■ stops the turn, and what the thread says comes back within about a second. Your own cards act there as on the desktop:
+★, Stop, archive with Undo, drag between columns, the right-click menu, rename, tags, the CLI, model and mode pickers in the
+open card's header, Wait / This first / Others first on a held edit, ⌘F over the whole thread and the show rail beside the pane.
+A picture or PDF you paste into the reply box goes up to your workspace and down to the machine that runs the card. New thread
+takes the CLI, model, effort, mode, tags and Backlog too (and Plan first on a worker). A teammate's card stays read-only. Thread text goes up unencrypted unless you
+turn on **Seal synced threads** in Settings → Sync → Pair a phone: then thread items, card titles and prompts, long tool
+output and the files they name (pasted pictures, the pane's pages and captures) are encrypted with a workspace key that only
+your Mac and the devices you pair hold; a paired browser opens them itself and seals what you paste into a sealed card. A paired
+Weft Worker seals too once you press **Seal…** on its line in Settings → Devices (Touch ID): your Mac seals the key to the box key
+it pinned and signs it, the worker checks the signature against the Mac it was paired with, and its threads, pages and files go
+up sealed from then on; both boards open them. **Pair a phone** shows a QR code
+for the Weft phone app (or a link to open in another browser); your Mac checks the claim and asks for Touch ID, and once a
+phone is paired an **Allow** has to come from it, signed after Face ID, so a stolen sign-in can't run tools on your Mac.
+More in [docs/architecture/mobile-security.md](docs/architecture/mobile-security.md). Separately, a long thread opens on its newest 50 items
 and loads older ones as you scroll up. More in [docs/architecture/cloud-sync.md](docs/architecture/cloud-sync.md).
 
 **Share…** on a card's right-click menu (or the share icon in the browser pane's toolbar, beside ☆ and Archive) makes a link, `weft.zip/s/<id>`, that shows the card's thread and the page in its browser
 pane side by side, updating as it works: private to your workspace, public, behind an email or behind a password. A
 `~/.weft/show` page runs in a sandbox; a localhost page shows as its latest capture. Key-shaped text is masked and long tool
-outputs stay on your Mac. It reads what sync uploads, so the dialog turns sync on for the folder first. More in
-[docs/architecture/sharing.md](docs/architecture/sharing.md).
+outputs stay on your Mac. It reads what sync uploads, so the dialog turns sync on for the folder first. Like a mini app, the
+link lives under you, `weft.zip/@you/threads/<slug>` (the card's title by default; edit it in the dialog), and a public one
+unfurls in Slack or iMessage with the card's title, its first ask and its pane capture. **Show the chat** off shares only the
+browser pane; viewers can also hide the chat themselves. More in [docs/architecture/sharing.md](docs/architecture/sharing.md).
 
 **Share the board** (the share icon beside your avatar, its menu, ⌘K, or **Share** in the weft.zip board's header) shares the whole board: its link is your workspace's web board,
 `weft.zip/<workspace>/board`, with Copy and Open, a list of who can open it (members and pending invites), and an email box.
@@ -873,6 +997,99 @@ used in the last 30 days and your records, plus the mini apps and threads you've
 card every 10 minutes while you're signed in (`lib/profile-card.ts`). It never shows your email, workspace, projects
 or folders. More in
 [docs/architecture/profiles.md](docs/architecture/profiles.md).
+
+**Phone push.** Sign in on the Weft phone app and it pairs itself: when one of your synced cards moves into Needs you or
+Review, the phone buzzes with the card's title and its question ("Wants to run pnpm test", "Ready for review"), whichever Mac
+moved it. A database trigger and a Supabase Edge Function send it through Expo, once per move (a card flapping columns buzzes
+once), and drop phones that uninstalled the app. Settings → Sync → **Phones** lists the paired phones with **Remove**
+(docs/architecture/mobile.md#push).
+
+**A worker's simulator in the pane.** A worker streams its simulator to the card's pane, marked "streaming from" the worker.
+On the desktop board you can drive it without asking the thread: **📱 Start simulator** on a React Native or Expo card, a device
+menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / Medium / High quality menu for the WebRTC video
+(15, 30 or 60 fps; Medium is full size). An Android emulator gets the same live video, from `screenrecord`, and ⌘V on the
+live screen types your clipboard's text on the device (docs/architecture/weft-worker.md#the-fast-path).
+
+**Goose on a worker.** Settings → Threads → On a worker sets a worker's Goose provider and endpoint. They say where a Goose
+card's traffic goes, so Save asks Touch ID and the worker checks the Mac's signature. The provider's key stays in your
+Mac's Keychain: each Goose turn on the worker asks for it, your Mac asks Touch ID naming the worker, provider and
+endpoint, and sends it sealed to that worker for that one Goose process, only for the provider and endpoint it set there
+(docs/architecture/weft-worker.md#goose-on-a-worker).
+
+**Local Simulator** (was Manual QA). Testing a worker's app by hand? The **host chip** at the top right of the card's pane, beside Share, names
+where the card runs ("m1mini", "m1mini + simulator" while one streams, "this Mac + simulator" in Local Simulator mode). Its menu starts the
+worker's simulator or switches its device, or picks a simulator on your Mac: the build comes to it, shown live with no tap latency, while the
+worker's agent keeps driving it. A build runs as you, so it asks for Touch ID, once per card for 8 hours. If the Mac sleeps, the agent falls
+back to the worker's own device. Run this card on this Mac is in the menu but off: moving a running card between machines isn't built yet.
+
+**Dev servers and tunnels on a worker.** A worker's dev servers show in 🖥 Services under the worker's name. **Open**
+gives one a private address that only you can open, after your Touch ID on your Mac, and shows it in the pane; a worker
+card's `mcp__webhooks__tunnel` and `relay` ask your Mac the same way, so a provider's webhook reaches the worker's route
+through that address.
+
+**Live worker simulators.** Watching an iOS simulator on a worker streams live video to the pane over an encrypted WebRTC connection, and your clicks, drags and keys reach it as you make them. If the connection can't be made, the pane stays on the slower picture stream.
+
+**Weft Workers.** A worker is a Mac or Linux box that runs cards headless while your laptop sleeps. Settings → Sync →
+**Workers** → **Add a worker** shows one line to run on the box (`curl -fsSL https://weft.zip/worker.sh | sh -s -- <token>`).
+It installs the toolchain and Weft, enrols with a one-time token, and starts a launchd or systemd service.
+Or pair it instead: Settings → **Devices** → **Add a worker** gives a line with a pairing code; the box makes its own key,
+claims the code, prints a check code, and joins once you confirm the same code with Touch ID on the Mac. Settings → Devices
+also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
+**Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
+shows on the box. A worker never switches Macs without the one it trusts signing off. Its threads come along: a re-paired
+box that keeps its signing key takes its old row's threads in the same step, and a worker that owns threads it can't
+run (revoked or offline) offers **Move threads to…** another worker of yours, as does **Revoke**.
+With two Macs signed in, a worker asks for secrets and the vault only from the Mac it's paired with, and says so when
+that Mac is closed. Revoke a phone, browser or Mac on any of your Macs and it stops being trusted everywhere: the Mac that
+paired a phone or browser unpins it within a minute, its passkeys leave every worker's set, and a worker whose Mac was
+revoked takes nothing from that Mac again. A worker also refuses a passkey approval until it holds your Mac's latest
+passkey set, which your Mac publishes where a stolen session can't take it back.
+**Sign in to Claude** on its row signs its Claude Code in with one click: Weft opens Claude's approval page in a
+window beside the button, and the token it gets back is sealed to the worker's own key, so Supabase never holds it
+in the clear (or run `weft-worker login` on the box). **Sign in to GitHub** beside it does the same for private repos:
+paste a fine-grained token (the link fills in Contents read and write), and the row shows the account or an expired
+sign-in. Every card on that worker can use the token. **Clone from GitHub** in the project menu has a target beside the
+repo field once you have a worker, so you can clone onto it with no prompt and see the real result on the board.
+A project on a worker shows in the project chips and **More** beside your local ones, marked with the worker's name, even when the worker is offline. Pick it to see its cards on this board, reply to them, answer them or stop them, and start new threads there; nothing runs on your Mac, and an offline worker's new thread says so.
+An outside-folder prompt on a worker's card offers **This card** and **Always**, and Always means every card on that worker.
+**Allow on a worker's card asks for Touch ID.** Your Mac signs each Allow with its own key, in words that name the
+command and the worker, and the worker runs it only with that signature (or a passkey your Mac let approve there): an
+Allow from anywhere else, or from a Mac too old to sign, is refused with a message saying so, and the request keeps waiting.
+A paired phone can approve there too: Settings → **Devices** → a worker's **Passkeys** (one Touch ID) lets your paired
+phones' Face ID Allow count on that worker, and unpairing a phone takes it back.
+**The riskiest Allows on your Mac ask for Touch ID.** An Allow on a request that reaches a vault secret, skips permission
+prompts or writes an agent's settings is signed by your Mac after Touch ID before it runs, and the copilot can't give one
+for you. Every other Allow is still one click.
+
+**Change what a worker card can touch, with Touch ID.** Moving a worker card to another of its projects, giving it another
+agent, letting it skip permission prompts, a "!" shell line, **Read from** on a question, a new thread with an agent and
+the **terminal** on a worker project used to be refused from the network. Now each asks for Touch ID on your Mac, in
+words that say exactly what will change, and the worker runs it only with that approval: once, within two minutes, and
+only from the Mac it was paired with. The terminal opens over the direct line to the worker and closes with it. On
+weft.zip, a paired passkey approves moving a card, changing its agent and a plain shell line; Settings → **Devices** →
+a worker's **Passkeys** lets your passkeys approve there too.
+A worker's card can run a command with your vault's secrets (`mcp__secrets__run`): your Mac asks for Touch ID, naming the command, the secrets and the worker, and the values go to that worker sealed for that one run, never through Supabase in the clear.
+The rest of the vault works from a worker's card too, through your Mac: it lists the names in its project's vault, adds blanks (the user fills them in 🔐 on the Mac), stores a value it generated (sealed to your Mac, stored after Touch ID) and pushes one to Vercel (Touch ID). Its dev server starts with the project's development secrets after a Touch ID on your Mac, asked again at every start and restart; the values reach only the server, and its log shows ‹NAME›. Typing a secret into a page (`fill_field`) stays on your Mac, whose browser pane it types into.
+If you'd rather a worker kept a project's development or preview secrets itself, turn on **Secrets** for it in Settings → Devices: after a warning and Touch ID your Mac sends them sealed to that worker and signed with your Mac's key, every use still asks Touch ID on your Mac, and Stop, Wipe all or revoking the worker deletes them. It's off by default because any code a card runs on that worker can read what's kept.
+A worker's card has the mode picker in its thread (Ask me, Accept edits or Auto; YOLO stays local), and when a thread watches a simulator or emulator on the worker, its screen streams to the pane, where you can tap and swipe it from the desktop.
+A worker's card opens like any card, with the show rail beside its pane, and you work it the same way: rename it, tag, star or archive it, drag it to another column, pick its model or CLI, stop it, continue or restart it, edit your last message, and answer Wait, This first or Others first, from the tile, its right-click menu or the open thread. Each change shows at once and goes back if the worker refuses it. A new thread in a worker project shows on the board the moment you press Start, reading "Sending to your worker…" until the worker's own card takes its place; if the worker refuses it (offline, say), it goes again and the dialog says why. A worker's card can't be deleted, shared, given another agent or folder, or run a "!" shell command from here yet.
+A worker's project shows the header's code quality, uncommitted pile and Backlog counts too, from what the worker last measured; when that's stale or the worker is offline, the header says how old it is ("12m ago, m1mini offline"). A worker card's editor opens, edits and saves the worker's files, and file names in its thread link there (over the direct line an open file reloads when the worker's copy changes, keeping your unsaved edits behind the same conflict banner as a local file; the worker won't open credentials such as `.ssh` or `.npmrc`, won't take a save into `.git`, an agent's settings, hook managers or `package.json`, and logs every remote read and save).
+A thread on a worker works on your real board: `list_cards` lists your cards from every Mac and worker (titles and columns, never their threads), `create_card` starts a card on that worker or sends it to your Mac or another worker, and the crons and webhooks it makes run on the worker and show in your ⏰ and 🪝 drawers, where you can pause, edit, run or delete them like your Mac's (a worker project's drawers show only that worker's). Its `list_crons` shows your Mac's crons too, read-only. A card a worker sends your Mac waits in Backlog, tagged `from-worker`, for you to start; one it sends another worker starts in Ask me mode. A worker can send at most 30 cards an hour.
+A new thread in a worker project keeps everything the dialog picked: tags, CLI, model, effort, mode and **Isolated** (a worktree from the worker's own pool, landed on Done). **Add to Backlog** puts it in the worker's Backlog, where you can reorder it. A worker's cards chime, notify and count on the dock badge like yours, and the header counts, ⌘K, Archive all Done, Resume all, Switch all and the 🏷 drawer include them. A worker project's right-click menu pins, hides, archives its Done cards and stops its running ones.
+A worker's card shows its pages in the browser pane too, on this board and on weft.zip: it writes a page, opens it, and Weft uploads it with its images. Only web files from the card's project and show folder can leave the box. In the desktop app those pages, and the sites a worker's card opens, load in the same browser pane a local card uses, with its address bar, tabs, zoom, find and Save as app; the page keeps the worker's sandbox, so it can't reach Weft or follow a weft:// link.
+Your Mac's automations, /weft:done's model and effort, push on done, the subagent and backup models and the thread instructions sync to your workers, so a worker card behaves as you set it up here. Settings → **Threads** → **On a worker** sets a worker's own threads at once, keep-alive, worktree pool and default CLI; its folders and modes are only ever set on that machine. A worker card's 5hr and 7d chart is the worker's own week, and work on your workers counts toward your streak and XP, on every day a worker card's turns ran.
+A worker card's thread header has the ⏰ and the ✦ too: a cron made there fires on the worker (never in a mode that skips prompts), and the ✦ lists the worker's own skills and turns them on or off for that card. The agents you made in Settings → **Agents** sync to your workers with your settings, and Settings → Agents lists your workers' projects so each can have a default agent: the New thread dialog starts on it, and a thread a worker's own thread starts there takes it too.
+The left rail works on a worker's project too. 🔐 shows the vault of its repo on your Mac (found by the project's name), and Vercel, Supabase, Cloudflare, BlastCP, Slack and Skills read that same checkout. 🖥 Services shows that worker's dev servers with **Log** (its last lines), **Restart** and **Stop**. GitHub's issue sync works for it: each new issue starts as a card on the worker (set the project's issues to **Run**; Backlog waits on the worker making unstarted cards). **Save as app** on a page a worker card wrote brings the page to your Mac as a mini app, which opens on the rail, reaches your other Macs and shares at `weft.zip/a/<id>`. The uncommitted pile's walk-through starts a card on the worker.
+A worker's card can browse like a local one: it opens a site or the worker's own dev server in a headless browser on the box, reads it, clicks, types, scrolls and checks its console, and you watch that browser live in the pane and can click it yourself. It can't open the worker's own secret files.
+Paste a screenshot or a PDF into a worker card's reply, or into a new thread for a worker, and it goes along: the worker saves its own copy before the turn starts, so the thread can read it. Images and PDFs up to 25 MB travel; anything else says it can't go.
+A worker updates itself: when Weft has a new commit and no card is running there, it installs it, tests that it loads and restarts, and goes back on its own if the new code is bad. A push to main reaches it in seconds. Its row in Settings shows what it runs, which cards are holding an update, and **Update now** to ask by hand.
+**Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the
+web board, where you can reply to it, answer it or stop it. Right-click a project chip and tick **Run on Worker**
+(or back to **Run on This Machine**): every new thread in that project then goes to your worker instead of starting
+here, and its card on this board records the prompt and which worker took it. A Weft desktop that syncs a folder
+lists itself there too, as a **headed** worker (browser pane, vault and all), so a team sees every box that can run
+its cards, and a run sent to another of your Macs starts a card in the synced folder of that name. More in
+[docs/architecture/weft-worker.md](docs/architecture/weft-worker.md).
 
 ## Secrets vault
 
@@ -904,7 +1121,8 @@ four characters showing.
   `.env` files into 🔐 with no click (never over a value the vault holds, never from a file git tracks: those get
   "rotate" instead). The keys its code reads, the names `.env.example` lists and the webhook routes it serves come
   in as 🔐 and 🪝 blanks with a link to each provider's page. A screen lists what moved and what's left, by name, with
-  **Set it up in a thread** to start a card that walks you through the blanks and webhooks. Anything you remove stays removed.
+  **▶ Get it running** to start a card that installs the project, asks you for each blank key
+  (with the provider page open in the pane) and starts the dev server, with one Touch ID at most. Anything you remove stays removed.
 - A dot on 🔐 means `.env.local` has values the vault doesn't hold yet; its count is names still missing a value.
 - **Weft can write `.env.local` for you.** Tick "Then let Weft write .env.local from the vault" in the import preview:
   the file gets a `# Managed by Weft` header, stays gitignored and readable only by you, and follows every change to
@@ -920,14 +1138,21 @@ four characters showing.
   each line uploads within seconds and is then deleted from the Mac, the database stamps when it arrived, and lines
   are numbered, so a line held back or removed before upload shows. See it in Settings → Security → **Keychain access**.
 - **Give a thread standing access.** Right-click a card → **Give 🔐 Vault Access for 1 Hour**, or let the thread ask
-  (`mcp__secrets__request_access`): one Touch ID and its fills, commands and dev server stop asking for an hour. It
-  still never sees a value, and writes still ask. Revoke it from the same menu or from Settings → Security.
+  (`mcp__secrets__request_access`): one Touch ID and its fills, commands and dev server stop asking for an hour. A
+  grant that covers typing a value into a page names the page in the Touch ID prompt and covers that page only, so a
+  thread can't use it on a page it controls; a grant with no page covers only the commands and dev servers. It still
+  never sees a value. A thread setting up a service asks once, up front: with `writes` the grant also covers storing
+  the secrets it makes and pushing them to Vercel (an overwrite still asks), and with `span: "thread"` it lasts until
+  the card is Done (12 hours at most) instead of an hour. The Touch ID prompt names both. Revoke it from the same menu
+  or from Settings → Security.
 - **Threads save a key they need as a blank right away.** When a key isn't in the vault yet, the thread
   calls `mcp__secrets__add_blank` (with a hint for where to get the value) and keeps going with what
   doesn't need it; 🔐's count goes up, the row shows **Fill in** and the hint under the name, and you
   paste the value when you're ready. Blocked on it now, the thread calls `mcp__secrets__ask_add` and shows
   an input for the key right in the thread: paste the value, click **Add to vault**, and the thread carries on.
-  A key that already has a value stays as it is, and the thread is told so.
+  Asked for several keys, every box stays open and one **Add** takes them all; the thread hears once, when the last is in.
+  A key that already has a value stays as it is, and the thread is told so. On a Weft Worker card the input shows
+  too, and the value goes into your Mac's checkout of the same repo, never through the worker.
 - **Threads store values they made or got themselves.** A signing secret it generated, or new price ids from a
   Stripe sandbox: `mcp__secrets__set_value` adds the name or fills its blank, and with `replace: true` overwrites
   the old value. Touch ID asks every time and says which it is ("let a thread overwrite the production value of
@@ -943,16 +1168,36 @@ four characters showing.
 - **Threads run commands with secrets without seeing them.** `mcp__secrets__run("pnpm run job", ["DATABASE_URL"])`
   shows you the exact command, the `package.json` script behind it and the names, with **Allow once** or **Always
   allow**, then Touch ID. Electron main runs it with no shell and the values in its env only, and the thread gets the
-  exit code and output with every value (raw, URL-encoded, JSON-escaped or base64) shown as `‹DATABASE_URL›`. Pipes,
+  exit code and output with every value (raw, URL-encoded, JSON-escaped, base64, hex, zipped or reversed) shown as `‹DATABASE_URL›`. Pipes,
   redirects, `$VAR`, `sh -c`, `node -e`, `printenv` and network tools like `curl` are turned away. Always allow is
   remembered per vault, folder and command, and asks again if a thread edits the script.
 - **Dev servers get the vault's development values.** Starting a card's dev server from its review tour asks the same
   way the first time; the values reach the server only, its log is redacted, and threads' own shells never get them.
   A card that used secrets has them swapped for `‹NAME›` in every tool result Weft stores or indexes.
+- **A shared vault has a recovery key: 24 words that open it when every machine is gone.** A vault shared with a
+  workspace offers **Show recovery key** in the drawer, which opens the vault's own page; Touch ID asks, the
+  words appear in a grid to write down, and **Copy words** puts them on the clipboard for a minute. Weft keeps no
+  copy — not a file, not the server, not the event log — so they are yours to write down. An optional passphrase
+  rides on the words (it is never sent anywhere), and asking to see the key again makes a *new* one, so the old
+  words stop working.
+- **Removing a teammate can turn the shared vaults' keys.** On the workspace's Team page, **Remove** carries a
+  **Rotate shared vaults** box, on by default. Ticked, the vault's key changes: the removed party's plaintext
+  stops being worth anything, their machine is revoked, and the values are re-encrypted under the new key. Weft
+  then names the values to change at their providers — the *names* only, never a value. The key is made on your
+  own Mac and never leaves it; the server only writes sealed boxes and ciphertext. A browser on weft.zip has no
+  Mac to make the key in, so it can only cut the machines off.
 - Values are encrypted at rest (XChaCha20-Poly1305 under a per-vault key sealed to this device's X25519 key,
   whose private half safeStorage keeps in the Keychain), in `~/.weft/vault/`. Only the board window can open
   the drawer's side of the vault, never the copilot or a browser-pane page; threads get names, and values only
   through a Touch ID'd fill, run or dev server. More in [docs/architecture/secrets.md](docs/architecture/secrets.md).
+- **A vault can be shared with your workspace, and then it follows you across machines.** The drawer's **Share this
+  vault with `<workspace>`** turns a local vault into a shared one; the header then shows the workspace's name, a
+  *shared* badge and the key version. Every Mac you own — and every teammate you invite — reads and writes the same
+  secrets. The server stores ciphertext and nothing else: the vault's key is sealed to each device's public key and
+  never leaves a Mac, so Weft's servers can't read a value, and neither can an agent — a thread still gets names, and
+  values only through a Touch ID'd fill, run or dev server. A teammate's machine is added by **fingerprint**: both
+  sides show the same string, you compare them out of band, and only then is the key sealed to that device. More in
+  [docs/architecture/teams-vault.md](docs/architecture/teams-vault.md).
 
 ## Vercel
 
@@ -1004,6 +1249,13 @@ its account, address (custom domain, else `pages.dev` or `workers.dev`; click to
 deploy (Ready, Building, Failed for Pages; Deployed and by what for Workers), where it deploys from, and links to its
 deploys, logs, settings, domains and dashboard. More in [docs/architecture/cloudflare.md](docs/architecture/cloudflare.md).
 
+**R2 for synced blobs.** On weft.zip, screenshots, pasted images and mini app pages are read from a Cloudflare R2 copy of
+the `weft-blobs` bucket, where egress is free, instead of Supabase Storage, whose free plan allows 5 GB a month. Supabase
+stays where the desktop uploads. The server copies each blob to R2 once and signs R2 URLs after the same membership and
+share checks, and anything not copied yet still loads from Supabase. Set `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID` and
+`R2_SECRET_ACCESS_KEY` on the deployment, run `pnpm r2:backfill` once, and `WEFT_BLOBS_R2=off` turns it off again. More in
+[docs/architecture/r2.md](docs/architecture/r2.md).
+
 ## BlastCP
 
 The BlastCP rocket under 🔐 and ▲ on the left rail shows what each board project has queued on [BlastCP](https://blastcp.com), the
@@ -1015,7 +1267,11 @@ every workspace you're in, best name match first, or **+ New property** makes on
 search or the project, in the workspace you pick) and links it. A linked project shows its next scheduled posts with their
 platform and time, a line of drafts, posts to approve and failures, and when the last one went out; clicking any of
 them opens it in the browser pane. BlastCP sign-ins last 30 days: one made through your Weft account renews itself in its
-last week, and one made in the browser warns and offers Reconnect. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
+last week, and one made in the browser warns and offers Reconnect. Your Weft plan comes with BlastCP: connected with
+your Weft account, your own BlastCP workspace goes on BlastCP Creator while you're on Team, or own a Pro, Open Source
+or Education workspace, and back to BlastCP Free when that ends (a BlastCP plan you pay for yourself is never touched).
+Every thread can use BlastCP's tools too (`mcp__blastcp__generate_image` and the rest) through that same sign-in, with
+no claude.ai connector to sign in; the token stays in Electron main. More in [docs/architecture/blastcp.md](docs/architecture/blastcp.md).
 
 ## Connectors
 
@@ -1025,9 +1281,20 @@ Contacts and Tasks from any thread's Bash. Choose a Google Cloud OAuth client JS
 with Google** for each account; tick **Read-only** to keep threads from changing anything. Threads ask before
 they send mail, change events or share files. More in [docs/architecture/connectors.md](docs/architecture/connectors.md).
 
+**GitHub on a Weft Worker.** A worker's cards can push and open pull requests as you, with Weft, without your GitHub
+sign-in ever reaching the box: connect GitHub once on weft.zip, then turn it on for a worker from its **Connectors**
+badge in Settings → Devices (one Touch ID). Every yes is signed by your Mac's own approval key and checked again by
+weft.zip, so a stolen session can't turn it on; a new Mac's key counts once you open the link Weft emails you, or as soon
+as a Mac you already trust vouches for it. weft.zip mints short tokens, narrowed to the card's repo by default, for cards
+you started there and rotates them hourly; Scope, Approval, Lifetime and Ask before tighten it, and Turn off ends the
+tokens at GitHub. More in
+[docs/architecture/connectors.md](docs/architecture/connectors.md#connectors-on-a-worker-github-p1-as-built).
+
 **Simulators** sits beside it: threads drive iOS simulators and Android emulators with `mcp__simulator__*` (boot,
 install and launch an app, open a deep link or your dev server in mobile Safari or Chrome, read the screen, tap and
-type by element, screenshot, logs), and `watch` puts the device live in the browser pane. The card shows what's on
+type by element, screenshot, logs), and `watch` puts the device live in the browser pane: its window captured at
+30 fps, where a click is a tap and a drag a swipe (a screenshot a second without Screen Recording permission). For a
+React Native or Expo app, your AI offers `npx expo start --web` in the pane first, so no device boots at all. The card shows what's on
 your Mac (Xcode, an iOS runtime, AXe, the Android SDK, adb, a virtual device), and **Install** beside each missing
 piece downloads and sets it up for you, showing its progress in the row (Xcode and Android Studio themselves get a link). More in [docs/architecture/simulators.md](docs/architecture/simulators.md).
 
@@ -1049,26 +1316,36 @@ a card in that channel's project (or your default one), and **@Weft** in a card'
 
 ## Copilot
 
-Press ⌘J (or the Copilot button) to open the copilot, an orchestrator thread in its own window.
+Press ⌘J (or the Copilot button) to open the copilot, your product partner: it helps you decide what to build next,
+shapes an idea into cards, answers anything about your projects, and keeps an eye on refactors and your analytics. It
+doesn't report the board back to you (the swim lanes do that), so its launcher shows a dot only when it has said
+something you haven't read, never a count.
 It uses `mcp__board__*` tools to list cards, read threads, create cards, start them, reply to
 them, move and stop them, and answer their permission requests. Reading and rearranging the board
 happen without asking; starting a thread, replying to one, or answering for one asks you first in
 the copilot window. Each message you send it also carries a short note, which only the copilot
 sees, of what finished, needs you or failed on the board since your last message
-(`lib/copilot-digest.ts`); nothing runs a copilot turn on its own. "New chat" starts a fresh copilot session. In a normal browser tab the
+(`lib/copilot-digest.ts`), as context it brings up only when it changes the answer.
+
+The copilot also speaks first, at most three times a day and never from 21:00 to 7:00: once in the morning, with the one
+thing it would build or fix next (from the roadmap, recent commits and, when it can read them, your analytics), and after
+work lands in a project, with the refactor worth doing now. When it has nothing worth your time it answers QUIET and the
+check-in leaves the chat. Turn it off with "Checks in on its own" in the copilot's name menu
+(`lib/copilot-initiative.ts`, docs/architecture/copilot-initiative.md). "New chat" starts a fresh copilot session. In a normal browser tab the
 copilot opens as a pop-up at `/copilot`.
 
-Pick who your copilot is from its name in the lane header (`lib/copilot-personas.ts`). **Wingman**, the default, runs the
-board. **Founder** tests the business before you build it: competitors, buyers, pricing, offer and unit economics, one
+Pick who your copilot is from its name in the lane header (`lib/copilot-personas.ts`). **Wingman**, the default, is your
+partner on what to build next. **Founder** tests the business before you build it: competitors, buyers, pricing, offer and unit economics, one
 thread per step writing to a `founder/` folder, every number traced to an input (adapted from
 [founder-skill](https://github.com/Jakeschincariol/founder-skill), MIT). **Captain** runs the work as a sprint: office
 hours, CEO, engineering and design reviews, build, a staff-engineer review, QA, ship, retro, each step a thread (adapted
 from [gstack](https://github.com/garrytan/gstack), MIT). Both run those projects' own skills when they're installed.
 Switching persona starts a new chat, since the copilot reads its persona only when its CLI starts.
 
-A new copilot chat suggests what to ask: up to four chips Haiku writes from what Weft knows about your work, most
-urgent first ("Restart the deckcp auth wiring card, it was killed by SIGTERM", "Fill the Stripe vault blanks in weft:
-STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET"). It reads every open card in full (how long it has waited, its latest reply,
+A new copilot chat suggests what to ask: up to four chips Haiku writes from what Weft knows about your work, about
+direction more than status: what to build next, a refactor worth doing, your users, then anything blocking ("Build the
+diff view in Review next, 20 cards wait on review", "Fill the Stripe vault blanks in weft: STRIPE_SECRET_KEY and
+STRIPE_WEBHOOK_SECRET"). It also reads each project's roadmap and last week's commits (`lib/copilot-sources-product.ts`). It reads every open card in full (how long it has waited, its latest reply,
 an open question with each option's meaning, the error, rate limits), the last day's finished cards, cards editing the
 same file, spend and plan limits, the uncommitted pile, code quality and the refactor scout, your streak, Backlog, vault
 and webhook blanks, what you asked the copilot lately and which chips you clicked, the latest Vercel deploy, unapplied
@@ -1082,28 +1359,21 @@ the GitHub CLI's sign-in, Vercel, Supabase, Cloudflare, analytics), offers one "
 on "Help me get started" (or when a task needs it) reads `setup_status` and walks you through one link at a time, pointing
 at the right rail drawer or offering a thread that adds PostHog or GA4 to a project.
 
-On the board the copilot is a lane of its own on the right, after Done, instead of a card. Minimized (236px) it reads
-like a column: what finished since you last asked it something, the cards waiting on you (click one to open it), its
-latest reply, a peek into the cockpit and an ask box that sends your question and opens the lane. Open (520px), it's
-the conversation over a picture of the cockpit: you in the driver's seat of the hovercaddy, the copilot in a flight
-helmet beside you. The board's columns narrow beside it (thumbnails and header extras like Review all drop away in a
-narrow column) so all five stay in view. The top bar's ✨ Copilot button, ⌘J and the command palette open and minimize
-it, and the choice sticks; ⌃⌥Space still opens the separate copilot window, which works with the board hidden.
-
-## Feedback
-
-The little dot at the right end of the board's footer is a line to the people building Weft. Click it and an AI asks
-you what's in your way, then a few short follow-ups: what you were doing, what happened, how often, what you'd want.
-Once it has enough (or you click "That's all"), it writes a short summary for you to check. Send it, and it goes to
-the Weft team's Slack, signed with your Weft account when you're signed in so they can write back. A copy stays in
-`~/.weft/feedback/`.
+On the board the copilot floats in the bottom-right corner like Intercom's messenger: a round launcher with its face
+and a count of what's new, over the board, the New thread and card windows, Settings, the welcome and every other
+dialog, so it's there wherever you are. Rest the mouse on it to peek (what finished since you last asked, the cards
+waiting on you, its latest reply and an ask box; the maximize button opens the chat); click it to open the chat above
+it, click again (the ×) to close it. The board keeps its full width. The browser pane stops short of the launcher and
+steps aside while the chat covers it, since nothing in the page can draw over that native view. The top bar's ✨ Copilot
+button, ⌘J and the command palette open and close it, and the choice sticks; ⌃⌥Space still opens the separate copilot
+window, which works with the board hidden.
 
 ## Terminal
 
-Press Control-backtick (⌃\`, as in VS Code) anywhere, `t` on the board, View > Terminal, or the terminal button in the header to
+Press Control-backtick (⌃\`, as in VS Code) anywhere, `t` on the board itself (with no card open and nothing focused), View > Terminal, or the terminal button in the header to
 open a real shell in a drawer along the bottom of the window, for the commands a thread wasn't
 allowed to run. Each folder gets its own shell: the drawer shows the open card's folder, else the
-selected project's, else the latest card's, and switching project or card switches shell. Hidden or
+selected project's, else the latest card's, and switching project or card switches shell. A worker's terminal (Touch ID, then a shell over its line) opens only when you toggle the drawer on that worker's card or project: switching to one with the drawer open hides it instead. A worker too old for it says it needs to update. Hidden or
 switched-away shells keep running with their output. Split (or ⌘\\ in a terminal) adds a shell side
 by side, up to three per folder; hover a terminal for its restart and close buttons. It's your login shell on a pty (`node-pty`, `electron/terminal.cjs`), drawn
 with xterm.js (`components/TerminalDrawer.tsx`). Desktop app only.
@@ -1133,7 +1403,9 @@ Nothing runs on your Mac. `pnpm resend -- create|verify|webhook` sets up the Res
   the CLI the card runs on.
 - `lib/board-tools.ts` gives the copilot its board tools, and every board thread a small `board`
   server with just `list_cards` and `create_card` (a card made this way records its `parentId`; `list_cards` prints
-  one line per open card, newest first, and lists done and archived ones only with `include_done`); `lib/copilot.ts` keeps its thread, which
+  one line per open card, newest first, and lists done and archived ones only with `include_done`). Your Weft Workers' cards
+  are on that board too: `list_cards` lists them, `read_thread` reads them, `create_card` into a `worker://` project starts
+  the thread on that worker, and the copilot's acts on one go to its worker (`lib/board-tools-hosts.ts`); `lib/copilot.ts` keeps its thread, which
   has the fixed id `copilot` and is left off the board.
 - `plugin/` is Weft's own skills, loaded into every board thread with the SDK's `plugins` option;
   `lib/skills.ts` lists them with yours and a project's. `lib/automations.ts` turns the Settings
@@ -1146,10 +1418,15 @@ Nothing runs on your Mac. `pnpm resend -- create|verify|webhook` sets up the Res
   working page the moment its turn starts: a dimmed, slowly drifting scene of the Weft hovercar (one per card, from
   `electron/assets/backdrop-*.jpg` plus the splash's desert) behind the card's title, your ask with pasted images as
   thumbnails, and a running clock; the splash screen's desert scene sits beside the New thread
-  dialog while you write the prompt, and starting the thread opens its card. A turn that ends without opening
+  dialog while you write the prompt, with a tip under it that changes every 8 seconds (a shortcut, or a drawer with
+  **▶ Watch** for its intro; `lib/new-thread-tips.ts`), and starting the thread opens its card. Nothing plays there on
+  its own: an intro and its voice start only when you click ▶ Watch or ▶ by the dialog's title. A turn that ends without opening
   anything in the pane gets a teammate's update page (how it's going, what we did, what's next),
   written in the background by Haiku with a bare CLI (~12s) and opened in that card's pane. A live app
-  (an http page) and pages the thread opened itself are left alone. Pages live in `~/.weft/glance/`.
+  (an http page) and pages the thread opened itself are left alone. Pages live in `~/.weft/glance/`. Threads are asked to
+  write their pages to read on a 390px phone as well as the pane (a viewport tag, a fluid layout, tap-sized controls), and a
+  synced card's row names the page its pane shows now (`page`, `pages`), Weft's own starter and update pages included, so
+  the phone app draws each card as its page without loading the thread (docs/architecture/cloud-sync.md#the-cards-page).
 - `electron/pane-pages.cjs` remembers each card's page in `~/.weft/pages/index.json` (pages a thread wrote to
   `/tmp` are copied beside it), so a card opened after a restart shows its last page again, or its last
   update page when that page won't load (a dev server that isn't running).
@@ -1205,6 +1482,12 @@ Under the five pillars sits a short FAQ (`components/home/FaqTeaser.tsx`, six qu
 (`app/faq/page.tsx`, `components/home/FaqDoc.tsx`) with the home page's nav and footer, so the repo and the site never
 drift; the FAQ's pictures live in `public/brand/faq/` so GitHub and the site show the same files.
 
+`weft.zip/terms` and `weft.zip/privacy` are the Terms of Service and the Privacy Policy (`app/terms/page.tsx`,
+`app/privacy/page.tsx`), linked from the footer. Google Analytics and PostHog (with session replay) load on weft.zip only
+after a visitor presses Accept in a small corner banner (`components/ConsentBanner.tsx`, the choice in `lib/consent.ts`);
+the privacy page's Cookies section switches it back (`components/ConsentChoice.tsx`). One rule for every visitor, no
+geo check. A local Weft never shows the banner, because it never loads either tool.
+
 `weft.zip/login` is a real sign-in page (GitHub only) so a visitor can leave the marketing site with
 a Weft account without the desktop app first. It has its own cookie session (`/auth/sign-in`, `/auth/callback`,
 `/auth/sign-out`, refreshed by `proxy.ts`), so each visitor is their own account. A sign-in lands on the team page
@@ -1242,7 +1525,7 @@ Weft™ and the Weft logo aren't covered by the license: a fork you share needs 
   it was last read from disk, not live, until you reply in Weft.
 - Automated tests are thin: `pnpm test` runs a Vitest suite over `lib/` (status parser, review tour,
   API guard, automations, formatting, settings, store, board tools) and over the API routes, with the
-  runner and store mocked, and over the runner's SDK loop with a fake `query()`. UI tests have only started: the card, the reply box and the new-thread dialog (`components/*.test.tsx`, jsdom + Testing Library); the board and thread view have none. CI runs lint, typecheck and tests; a pre-commit hook type-checks what's staged.
+  runner and store mocked, and over the runner's SDK loop with a fake `query()`. UI tests have only started: the card, the reply box and the new-thread dialog (`components/*.test.tsx`, jsdom + Testing Library); the board and thread view have none. CI runs lint, typecheck and tests; a pre-commit hook type-checks what's staged. A "use client" module that reaches a Node built-in or a server-only module fails lint (`weft/no-client-server-leak`), because Turbopack panics on it and the board route 500s with nothing the UI can show.
 - The packaged app's terminal drawer (`node-pty` now ships in the Electron bundle) hasn't been tried on a fresh Mac yet.
 - Cards share a working tree unless you make one Isolated (docs/architecture/worktrees.md). An isolated card
   starts a cold CLI (no warm spare in its worktree yet), and its dev server's own port reaches it as `PORT`, which

@@ -1,9 +1,12 @@
 import { createSdkMcpServer, tool } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
-import { AGENT_ORDER, storedAgent, type ThreadAgent } from "./agents";
+import { storedAgent, type ThreadAgent } from "./agents";
+import { listAgents, projectAgent } from "./agent-store";
+import { agentTools } from "./agent-tools";
 import { firstMessage } from "./automations";
-import { boardCard, cardLine, LIST_LIMIT, readThreadText } from "./board-tools-format";
-import { markSeen } from "./copilot-digest";
+import { LIST_LIMIT } from "./board-tools-format";
+import { attempt, copilotCardTools, readThreadTool, tagsPatch, type BoardActions } from "./board-tools-copilot";
+import { createWorkerCard, hostListText, workerFolder } from "./board-tools-hosts";
 import { setupReport } from "./copilot-setup";
 import { activeProjects } from "./copilot-sources";
 import { resolveFolder } from "./folders";
@@ -14,31 +17,19 @@ import { folderAccessTool } from "./folder-access-tool";
 import { restartTool } from "./restart-tool";
 import { cleanTitle, titleFromPrompt } from "./format";
 import { defaultPermissionMode, touchProject } from "./settings";
-import { createCard, getCard, listCards, updateCard } from "./store";
-import { rememberTags } from "./tag-store";
-import { normalizeTags } from "./tags";
+import { createCard, getCard, listCards } from "./store";
+import { workerReach, type WorkerReach } from "./worker-board-reach";
+import { onWorkerBoard } from "./worker-board-tools";
+import { onWorker } from "./worker-pane";
 import type { Backend, Card, PermissionMode } from "./types";
+
+export type { BoardActions };
 
 // Re-exports for callers that import these from ./board-tools: lib/weft-mcp.ts builds the MCP
 // servers, lib/runner-ask.ts labels the permission prompt, lib/weft-prompts.ts the copilot prompt.
 export { COPILOT_PROMPT, SAFE_BOARD_TOOLS, isTrustedTool } from "./board-tools-trust";
 export { describeBoardTool } from "./board-tools-format";
-
-// What the board tools need from the runner, passed in to avoid a circular import.
-export interface BoardActions {
-  start(cardId: string, text: string): void;
-  stop(cardId: string): Promise<void>;
-  answer(cardId: string, allow: boolean, answers?: Record<string, string>): void;
-  isBusy(cardId: string): boolean;
-}
-
-async function attempt(run: () => string | Promise<string>) {
-  try {
-    return { content: [{ type: "text" as const, text: await run() }] };
-  } catch (err) {
-    return { content: [{ type: "text" as const, text: err instanceof Error ? err.message : String(err) }], isError: true };
-  }
-}
+export { COPILOT_PHONE_ONLY } from "./board-tools-copilot";
 
 const COLUMN = z.enum(["backlog", "running", "needs_you", "review", "done"]);
 
@@ -58,11 +49,13 @@ interface NewBoardCard {
 
 // The one place a card is made on behalf of a thread, whether it is the copilot's or a board thread's.
 export function createBoardCard(args: NewBoardCard): Card {
-  const agent = storedAgent(args.agent);
+  const cwd = resolveFolder(args.folder);
+  // The agent named, else the project's default (Settings → Agents).
+  const agent = storedAgent(args.agent ?? projectAgent(cwd), listAgents());
   const card = createCard({
     title: cleanTitle(args.title ?? "") || titleFromPrompt(args.prompt),
     prompt: args.prompt,
-    cwd: resolveFolder(args.folder),
+    cwd,
     backend: args.cli ?? "claude",
     permissionMode: args.permissionMode,
     parentId: args.parentId,
@@ -73,19 +66,12 @@ export function createBoardCard(args: NewBoardCard): Card {
   return card;
 }
 
-// Tags a thread or the copilot set count as the user's, so retitle leaves them alone.
-function tagsPatch(raw: string[] = []): Pick<Card, "tags" | "tagsBy"> {
-  const tags = normalizeTags(raw);
-  if (!tags.length) return {};
-  rememberTags(tags);
-  return { tags, tagsBy: "user" };
-}
-
 const TAGS = z.array(z.string()).optional().describe("Short labels for the card, like bug or launch");
-const AGENT = z.enum(AGENT_ORDER as [ThreadAgent, ...ThreadAgent[]]).optional()
-  .describe("Who the thread is: builder (default) builds; copywriter writes in Weft's voice (pages, intros, changelog, UI copy)");
+// Who the thread is, from the agents there are as the server is made (Settings → Agents adds more; lib/agent-store.ts).
+const agentParam = () =>
+  z.string().optional().describe(`Who the thread is, by id (default builder): ${listAgents().map((a) => `${a.id} (${a.name}${a.tagline ? `: ${a.tagline}` : ""})`).join("; ")}`);
 
-function listCardsTool() {
+function listCardsTool(reach: WorkerReach) {
   return tool(
     "list_cards",
     "List the threads on the board, one line each: id | column | title (★ when starred) | folder | tags | stage | remaining | waiting on | latest. Open cards only unless include_done is true (then done and archived ones too); newest first, up to limit (default 40).",
@@ -94,22 +80,12 @@ function listCardsTool() {
       include_done: z.boolean().optional().describe("Also list done and archived cards (default false)"),
       limit: z.number().int().positive().optional().describe(`Most cards to list (default ${LIST_LIMIT})`),
     },
-    ({ column, include_done = false, limit = LIST_LIMIT }) =>
-      attempt(() => {
-        const all = listCards().filter((c) => c.role !== "copilot" && (!column || c.column === column));
-        const cards = all
-          .filter((c) => include_done || (c.column !== "done" && !c.archived))
-          .sort((a, b) => b.updatedAt - a.updatedAt);
-        const hidden = all.length - cards.length;
-        const notes = [
-          cards.length > limit && `${cards.length - limit} more not shown; raise limit or pass column.`,
-          hidden > 0 && `${hidden} done or archived left out; pass include_done=true to list them.`,
-        ].filter(Boolean);
-        if (!cards.length) notes.unshift(`No ${hidden ? "open " : ""}cards${column ? ` in ${column}` : ""}.`);
-        return [...cards.slice(0, limit).map(cardLine), ...notes].join("\n");
-      }),
+    // This Mac's cards and the user's Weft Workers' (lib/board-tools-hosts.ts).
+    (opts) => attempt(() => hostListText(opts, reach)),
   );
 }
+
+type BoardTools = NonNullable<Parameters<typeof createSdkMcpServer>[0]["tools"]>;
 
 // What every board thread gets: look at the board and hand work off, nothing that touches other cards.
 // The card is read when the tool runs, since a spare CLI only gets its card later.
@@ -118,26 +94,26 @@ export function weftMcpServer(
   actions: Pick<BoardActions, "start">,
   // The thread's folder, for its project's changelog before the card is known (a warm spare).
   getCwd: () => string = () => "",
+  reach: WorkerReach = workerReach(),
 ) {
-  return createSdkMcpServer({
-    name: "board",
-    version: "0.1.0",
-    alwaysLoad: true,
-    tools: [
-      listCardsTool(),
+  const tools: BoardTools = [
+      listCardsTool(reach),
       tool(
         "create_card",
         "Hand work to a new thread on the board, started right away unless start is false. Its prompt must be self-contained: the thread knows nothing else. Call list_cards first so you don't duplicate a card that already exists.",
         {
           prompt: z.string(),
           title: z.string().optional(),
-          folder: z.string().optional().describe("Project folder; defaults to this thread's own folder"),
+          folder: z.string().optional().describe("Project folder, or a worker:// project on one of the user's Weft Workers; defaults to this thread's own folder"),
           start: z.boolean().optional().describe("Run it now (default true); false leaves it in Backlog"),
           tags: TAGS,
-          agent: AGENT,
+          agent: agentParam(),
         },
         ({ prompt, title, folder, start, tags, agent }) =>
-          attempt(() => {
+          attempt(async () => {
+            // A worker project's card starts on that worker, in default mode (lib/board-tools-hosts.ts).
+            const there = folder ? await workerFolder(folder, reach) : null;
+            if (there) return createWorkerCard({ folder: there, prompt, title, tags, start, agent }, reach);
             const parentId = getCardId();
             const parent = parentId ? getCard(parentId) : undefined;
             const card = createBoardCard({
@@ -160,117 +136,59 @@ export function weftMcpServer(
       ...changelogTools(getCardId, getCwd),
       ...cronTools(getCardId),
       ...skillTools(getCwd),
-    ],
+      ...agentTools(getCardId),
+    ];
+  return createSdkMcpServer({
+    name: "board",
+    version: "0.1.0",
+    alwaysLoad: true,
+    // On a Weft Worker the tools that write the board reach the user's, not the worker's own store.
+    tools: onWorker() ? onWorkerBoard(tools, { getCardId, start: actions.start, create: createBoardCard, defaultMode: defaultPermissionMode }) : tools,
   });
 }
 
-// A fresh server per query: an MCP server instance serves one connection.
-export function boardMcpServer(actions: BoardActions) {
+// A fresh server per query: an MCP server instance serves one connection. The tools on one card reach it on whichever
+// host holds it (lib/board-tools-copilot.ts).
+export function boardMcpServer(actions: BoardActions, reach: WorkerReach = workerReach()) {
   return createSdkMcpServer({
     name: "board",
     version: "0.1.0",
     alwaysLoad: true,
     tools: [
-      listCardsTool(),
-      tool(
-        "read_thread",
-        "Read a thread's conversation: user messages, agent replies, tool calls, and permission requests.",
-        { card_id: z.string(), last: z.number().int().positive().optional().describe("Only the last N entries (default 30)") },
-        ({ card_id, last }) =>
-          attempt(() => readThreadText(card_id, last)),
-      ),
+      listCardsTool(reach),
+      readThreadTool(reach),
       tool(
         "create_card",
         "Add a new thread to Backlog. Its prompt must be self-contained: the thread knows nothing else. It doesn't run until started.",
         {
           prompt: z.string(),
-          folder: z.string().describe("Project folder, absolute or ~/..."),
+          folder: z.string().describe("Project folder, absolute or ~/..., or a worker:// project on one of the user's Weft Workers"),
           title: z.string().optional(),
           cli: z.enum(["claude", "puku", "codex", "goose"]).optional(),
           permission_mode: z.enum(["default", "acceptEdits", "auto", "bypassPermissions"]).optional(),
           tags: TAGS,
-          agent: AGENT,
+          agent: agentParam(),
         },
         (args) =>
-          attempt(() => {
+          attempt(async () => {
+            // On a worker it lands in that worker's Backlog, in default mode whatever permission_mode asks.
+            const there = await workerFolder(args.folder, reach);
+            if (there) return createWorkerCard({ ...args, folder: there, start: false }, reach);
             const card = createBoardCard({ ...args, permissionMode: args.permission_mode ?? defaultPermissionMode() });
             return `Created ${card.id} in Backlog: ${card.title}`;
           }),
       ),
-      tool(
-        "set_tags",
-        "Replace a card's tags (an empty list clears them). Tags are short lowercase labels, like GitHub's.",
-        { card_id: z.string(), tags: z.array(z.string()) },
-        ({ card_id, tags }) =>
-          attempt(() => {
-            const card = boardCard(card_id);
-            const patch = tagsPatch(tags);
-            updateCard(card.id, { tags: patch.tags ?? [], tagsBy: "user" });
-            return patch.tags ? `Tagged “${card.title}”: ${patch.tags.join(", ")}.` : `Cleared “${card.title}”'s tags.`;
-          }),
-      ),
-      tool("start_card", "Start a Backlog card running its prompt.", { card_id: z.string() }, ({ card_id }) =>
-        attempt(() => {
-          const card = boardCard(card_id);
-          if (card.column !== "backlog") {
-            throw new Error(`“${card.title}” is in ${card.column}, not Backlog. Use send_message to continue it.`);
-          }
-          actions.start(card.id, firstMessage(card));
-          return `Started “${card.title}”.`;
-        }),
-      ),
-      tool(
-        "send_message",
-        "Reply to a thread that isn't running. It continues the same session with your message.",
-        { card_id: z.string(), text: z.string() },
-        ({ card_id, text }) =>
-          attempt(() => {
-            const card = boardCard(card_id);
-            actions.start(card.id, text);
-            return `Sent to “${card.title}”.`;
-          }),
-      ),
-      tool(
-        "move_card",
-        "Move a card to Backlog, Review, or Done. Running and Needs you follow the thread itself. Unlike the user's own moves, this doesn't run the board's automations; to run a skill on a card, send_message it /<skill> (for example /weft:done).",
-        { card_id: z.string(), column: z.enum(["backlog", "review", "done"]) },
-        ({ card_id, column }) =>
-          attempt(() => {
-            const card = boardCard(card_id);
-            if (actions.isBusy(card.id)) throw new Error(`“${card.title}” is running. Stop it first.`);
-            updateCard(card.id, { column });
-            markSeen(card.id, column);
-            return `Moved “${card.title}” to ${column}.`;
-          }),
-      ),
-      tool("stop_card", "Stop a running thread's current turn.", { card_id: z.string() }, ({ card_id }) =>
-        attempt(async () => {
-          const card = boardCard(card_id);
-          await actions.stop(card.id);
-          return `Stopped “${card.title}”.`;
-        }),
-      ),
+      ...copilotCardTools(actions, reach),
       tool(
         "setup_status",
         "What isn't linked yet for the user's projects (Weft account, GitHub CLI, Vercel, Supabase, Cloudflare, analytics): what each unlocks and where the user links it. Read-only. Defaults to the projects of open cards.",
         { folder: z.string().optional().describe("One project folder, absolute or ~/..., instead of the open cards' projects") },
         ({ folder }) => attempt(() => setupReport(folder ? [resolveFolder(folder)] : activeProjects(listCards()))),
       ),
-      tool(
-        "answer_permission",
-        "Allow or deny the permission request a thread is waiting on, or answer the question it asked (pass answer). Only do this when the user has told you to.",
-        { card_id: z.string(), allow: z.boolean(), answer: z.string().optional().describe("Your answer, when the thread asked a question") },
-        ({ card_id, allow, answer }) =>
-          attempt(() => {
-            const card = boardCard(card_id);
-            const questions = card.pending?.questions;
-            const answers = questions && answer ? Object.fromEntries(questions.map((q) => [q.question, answer])) : undefined;
-            actions.answer(card.id, allow, answers);
-            return `${allow ? "Allowed" : "Denied"} on “${card.title}”.`;
-          }),
-      ),
       // The copilot has no thread to fork: its crons are fresh ones in a folder, or forks of a card it names.
       ...cronTools(() => undefined),
+      // The copilot writes agents too, the same way any other thread does.
+      ...agentTools(() => undefined),
     ],
   });
 }

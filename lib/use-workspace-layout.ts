@@ -94,23 +94,24 @@ export function useWorkspaceLayout(): UseWorkspaceLayout {
   const layout = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
   const [dragging, setDragging] = useState(false);
 
+  // Every writer reads the store's latest layout, not this render's. A closed-over `layout` would
+  // write a stale copy back: a resize report still holding the layout from before a card opened put
+  // the pane column back to closed. A divider's pointermove handler, bound once at pointerdown,
+  // would apply every move to the pointerdown layout, and the column would only move a few pixels.
   const toggle = useCallback(
-    (id: Parameters<typeof toggleColumn>[1]) => commit(toggleColumn(layout, id)),
-    [layout],
+    (id: Parameters<typeof toggleColumn>[1]) => commit(toggleColumn(getSnapshot(), id)),
+    [],
   );
   const setOpenCol = useCallback(
-    (id: Parameters<typeof setOpen>[1], open: boolean) => commit(setOpen(layout, id, open)),
-    [layout],
+    (id: Parameters<typeof setOpen>[1], open: boolean) => commit(setOpen(getSnapshot(), id, open)),
+    [],
   );
-  // Drag reads the store's latest layout, not this render's: a divider's pointermove handler
-  // is bound once at pointerdown, so a closed-over `layout` would apply every move to the
-  // pointerdown layout and the column would only ever move by the last few pixels.
   const drag = useCallback(
     (leftId: Parameters<typeof dragDivider>[1], rightId: Parameters<typeof dragDivider>[2], dx: number, containerWidth: number) =>
       commit(dragDivider(getSnapshot(), leftId, rightId, dx, containerWidth)),
     [],
   );
-  const fit = useCallback((containerWidth: number) => commit(fitToWidth(layout, containerWidth)), [layout]);
+  const fit = useCallback((containerWidth: number) => commit(fitToWidth(getSnapshot(), containerWidth)), []);
   const reset = useCallback(() => commit(DEFAULT_LAYOUT), []);
 
   return {

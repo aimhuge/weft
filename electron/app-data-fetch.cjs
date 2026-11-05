@@ -15,6 +15,7 @@ const {
   findSavedApp,
   err,
 } = require("./app-data-frame.cjs");
+const { loadGrants, saveGrants, manifestNeeds, newGrant, effectiveGrant } = require("./app-data-grants.cjs");
 
 // What the page may call weft.fetch with: the bridge's AppFetchRequest (lib/app-bridge.ts) with
 // optional body. Headers must be a flat string map; a non-string value is refused upstream.
@@ -38,10 +39,12 @@ function cleanRequest(raw) {
 
 // Builds the getValues function runFetch uses: for each name the placeholders asked for, look
 // up the value in the granted env's vault. A `from: "viewer"` name resolves from the viewer's
-// own vault (the Mac) just like an author name, since there's no other viewer on the Mac.
-function makeGetValues({ vault, folder, env }) {
+// own vault (the Mac) just like an author name, since there's no other viewer on the Mac. ensure
+// is the env grant: it runs before any value leaves the vault.
+function makeGetValues({ vault, folder, env, ensure = async () => {} }) {
   return async (asked) => {
     if (!asked.length) return {};
+    await ensure();
     const out = {};
     const { values } = await vault.valuesFor(folder, asked, env);
     for (const n of asked) {
@@ -51,15 +54,12 @@ function makeGetValues({ vault, folder, env }) {
   };
 }
 
-function createAppDataFetch({ dataDir, vault, fetch: fetchImpl = globalThis.fetch, lookup = dns.promises.lookup.bind(dns.promises) }) {
+function createAppDataFetch({ dataDir, vault, fetch: fetchImpl = globalThis.fetch, lookup = dns.promises.lookup.bind(dns.promises), now = Date.now }) {
   if (!dataDir) throw new Error("createAppDataFetch needs dataDir.");
   if (!vault) throw new Error("createAppDataFetch needs the vault.");
 
   // Resolves a sender frame the same way app-data.cjs does: file: under <dataDir>/apps/<slug>/,
-  // with a weft-app.json, and the folder saved as a mini app. Grants are NOT required for a
-  // fetch/env/requestSecret the way they are for the named reads: the policy (manifest) is its
-  // own gate, and a fetch that needs a secret is refused at runFetch with 409 if the value is
-  // missing from the vault.
+  // with a weft-app.json, and the folder saved as a mini app.
   async function resolve(event) {
     if (!event?.senderFrame?.url) throw err("not-weft", "Open this app in Weft on your Mac to use its data.");
     const { folder: realPath, manifestPath } = appFolderFromUrl(dataDir, event.senderFrame.url);
@@ -68,6 +68,28 @@ function createAppDataFetch({ dataDir, vault, fetch: fetchImpl = globalThis.fetc
     const saved = findSavedApp(dataDir, folder);
     if (!saved) throw err("not-saved", "Save this page as an app on the rail first.");
     return { folder, manifest, saved };
+  }
+
+  // A value leaves the vault (a filled fetch, weft.env) only under the env grant the named reads use,
+  // over every name the manifest may hand out. Threads may edit ~/.weft/apps, so without it a thread
+  // could add `"public": ["SUPABASE_SECRET_KEY"]` and read the value off the page (2026-10-29). With no
+  // live grant, main asks Touch ID itself, naming the names, so a fetch-only page needs no grant bar.
+  // Calls that arrive while it asks share the one prompt.
+  const asking = new Map();
+  async function askGrant(folder, manifest, needs) {
+    const { label } = await vault.names(manifest.folder);
+    const ok = await vault.confirm(`let ${manifest.name} use ${label}'s ${manifest.env} env (${needs.join(", ")})`);
+    if (!ok) return false;
+    const grants = loadGrants(dataDir);
+    grants[folder] = newGrant(manifest, needs, now);
+    saveGrants(dataDir, grants, now);
+    return true;
+  }
+  async function ensureGrant(folder, manifest) {
+    const needs = manifestNeeds(manifest);
+    if (effectiveGrant(loadGrants(dataDir)[folder], manifest, needs)) return;
+    if (!asking.has(folder)) asking.set(folder, askGrant(folder, manifest, needs).finally(() => asking.delete(folder)));
+    if (!(await asking.get(folder))) throw err("not-granted", `Grant ${manifest.env} access first.`);
   }
 
   // weft.fetch: parse the request, run the policy, fill the placeholders, send, mask, return.
@@ -80,7 +102,7 @@ function createAppDataFetch({ dataDir, vault, fetch: fetchImpl = globalThis.fetc
     // is still bound to one allowed URL via anyRuleAllows (a placeholder-less request).
     const policy = parsePolicy(manifest);
     const env = manifest.env;
-    const getValues = makeGetValues({ vault, folder, env });
+    const getValues = makeGetValues({ vault, folder, env, ensure: () => ensureGrant(folder, manifest) });
     const result = await runFetch({ policy, request, getValues, fetch: fetchImpl, lookup });
     return result;
   }
@@ -92,6 +114,7 @@ function createAppDataFetch({ dataDir, vault, fetch: fetchImpl = globalThis.fetc
     const policy = parsePolicy(manifest);
     const names = policy.public;
     if (!names.length) return {};
+    await ensureGrant(folder, manifest);
     const { values } = await vault.valuesFor(folder, names, manifest.env);
     return { ...values };
   }

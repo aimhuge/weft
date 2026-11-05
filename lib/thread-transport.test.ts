@@ -16,6 +16,10 @@ const api = vi.hoisted(() => ({
   putFirst: vi.fn(),
   stopTask: vi.fn(),
   fresh: vi.fn(),
+  skills: vi.fn(),
+  schedule: vi.fn(),
+  unschedule: vi.fn(),
+  uploadAttachment: vi.fn(),
 }));
 vi.mock("./client", () => ({ api }));
 // The card folder's files, for the file names in a thread.
@@ -94,13 +98,27 @@ describe("localTransport's actions", () => {
     expect(localTransport.desktop).toBe(true);
   });
 
+  it("lists, schedules and uploads through the same routes the composer always used", async () => {
+    api.skills.mockResolvedValue({ skills: [{ name: "ship" }] });
+    await expect(localTransport.listSkills?.("c1", "/dev/app")).resolves.toEqual([{ name: "ship" }]);
+    expect(api.skills).toHaveBeenCalledWith("/dev/app");
+    await localTransport.schedule?.("c1", "later", 5);
+    expect(api.schedule).toHaveBeenCalledWith("c1", "later", 5);
+    await localTransport.unschedule?.("c1", "m1");
+    expect(api.unschedule).toHaveBeenCalledWith("c1", "m1");
+    const file = new Blob(["x"]);
+    const progress = vi.fn();
+    await localTransport.upload?.(file, "a.png", progress);
+    expect(api.uploadAttachment).toHaveBeenCalledWith(file, "a.png", progress);
+  });
+
   it("fresh sends the message to a new session of the card", async () => {
     api.fresh.mockResolvedValue({ ok: true });
     await localTransport.fresh?.("c1", "go on");
     expect(api.fresh).toHaveBeenCalledWith("c1", "go on");
   });
 
-  it("putFirst answers the pending prompt with Me first", async () => {
+  it("putFirst answers the pending prompt with This first", async () => {
     api.putFirst.mockResolvedValue({ ok: true });
     await localTransport.putFirst?.("c1", "p1");
     expect(api.putFirst).toHaveBeenCalledWith("c1", "p1");

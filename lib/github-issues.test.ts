@@ -6,14 +6,21 @@ import type { Card } from "./types";
 
 // gh is a mocked execFile, the store an in-memory Map, settings and the tag catalog mocks; the
 // imported-issues record is a real file in a temp folder.
+//
+// The project's workflow — where its cards land, and how a "run" card works — has its own file
+// (lib/github-issues-workflow.test.ts).
 
 type Callback = (err: unknown, out?: { stdout: string }) => void;
 
-const h = vi.hoisted(() => ({
-  dir: "",
-  cards: new Map<string, Card>(),
-  folders: [] as string[],
-}));
+const h = vi.hoisted(() => {
+  const landings: Record<string, { landing: string; skill?: string; agent?: string }> = {};
+  return {
+    dir: "",
+    cards: new Map<string, Card>(),
+    folders: [] as string[],
+    landings,
+  };
+});
 h.dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-issues-"));
 
 const execFile = vi.hoisted(() => vi.fn());
@@ -37,7 +44,25 @@ vi.mock("./settings", () => ({
     h.folders = h.folders.filter((f) => f !== folder);
     if (on) h.folders.push(folder);
   }),
+  issueWorkflow: vi.fn((folder: string) => h.landings[folder] ?? { landing: "backlog" }),
 }));
+
+// The card's thread: the importer starts it when the project asked for its issues to be worked.
+// Mocked here so the runner never loads; the workflow's own file checks what it starts with.
+const started = vi.hoisted(() => [] as string[]);
+vi.mock("./issue-run", () => ({
+  startIssueCard: vi.fn((card: Card) => {
+    started.push(card.id);
+    return Promise.resolve();
+  }),
+}));
+
+// A worker project's sync (lib/issue-worker.ts has its own file): here, only that runSync hands it over with gh's calls.
+const onWorker = vi.hoisted(() => ({
+  syncWorkerIssues: vi.fn<(project: string, deps: unknown) => Promise<unknown>>(() => Promise.resolve({ repo: "acme/app", counts: { added: 3, updated: 0, archived: 0 } })),
+  workerIssueDeps: vi.fn(() => ({ folders: () => [] })),
+}));
+vi.mock("./issue-worker", () => onWorker);
 
 vi.mock("./tag-store", () => ({
   createTag: vi.fn((name: string) => {
@@ -88,6 +113,8 @@ const cards = () => [...h.cards.values()];
 beforeEach(() => {
   h.cards.clear();
   h.folders = [];
+  h.landings = {};
+  started.length = 0;
   execFile.mockReset();
   vi.clearAllMocks();
   fs.rmSync(path.join(h.dir, "github-issues.json"), { force: true });
@@ -249,6 +276,19 @@ describe("opting in, status and the poll", () => {
     gi.disableIssueSync(FOLDER);
     expect(gi.issueSyncStatus()).toEqual({});
     warn.mockRestore();
+  });
+
+  it("syncs a worker project's issues onto the worker, keeping its status like a folder's", async () => {
+    expect(await gi.syncIssues("worker://w1/app")).toEqual({ added: 3, updated: 0, archived: 0 });
+    const [project, deps] = onWorker.syncWorkerIssues.mock.calls[0]!;
+    expect(project).toBe("worker://w1/app");
+    expect(deps).toMatchObject({ repoOf: gi.repoOf, fetchIssues: gi.fetchIssues, issuePrompt: gi.issuePrompt });
+    gi.enableIssueSync("worker://w1/app");
+    expect(gi.issueSyncStatus()["worker://w1/app"]).toMatchObject({ repo: "acme/app", counts: { added: 3 } });
+    onWorker.syncWorkerIssues.mockRejectedValueOnce(new Error("no checkout"));
+    await expect(gi.syncIssues("worker://w1/app")).rejects.toThrow("no checkout");
+    expect(gi.issueSyncStatus()["worker://w1/app"]!.error).toBe("no checkout");
+    gi.disableIssueSync("worker://w1/app");
   });
 
   it("startIssueSync syncs shortly after start and then every 5 minutes, once per process", async () => {

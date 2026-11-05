@@ -4,16 +4,32 @@
 // and ReplyBox: pages read from cloud_thread_items through the visitor's session (RLS gates them), live changes from
 // the board's one Realtime channel (useWebBoard hands them on through `bus`), blob refs signed as the items draw (the
 // URLs come through CloudBlobContext, so a URL landing redraws the items without making a new transport), and
-// Stop sent as a command for the Mac that runs the card (lib/cloud-inbox.ts). What only the Mac itself can do (a "!"
-// command, ↑ edit, folder grants, Wait, a subagent's Stop) is left out, so its views don't offer it.
+// Stop sent as a command for the Mac that runs the card (lib/cloud-inbox.ts). ↑ edit, Send fresh, Send later, the "/"
+// list, Wait / This first / Others first and a subagent's Stop go as host verbs to whichever machine runs it
+// (lib/cloud-host-acts.ts), and so does every card edit the board makes: the same acts are the board's one host for every
+// card (lib/web-host.ts). Pasted files go up to the workspace's blobs (lib/web-upload.ts) and travel on the row. Find
+// covers the whole thread (lib/cloud-thread-search.ts). What widens what a card can touch (a "!" command, a folder grant
+// outside an answer) is left out, so its views don't offer it; folder grants go inside the answer.
 import { createContext, useContext, useEffect, useMemo, useRef } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { NewCommand } from "@/lib/cloud-commands";
-import { THREAD_PAGE_SIZE, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
+import { stopCommand, type NewCommand } from "@/lib/cloud-commands";
+import { cloudHostActs, workerOfTarget, type CardTarget, type CloudHostActs } from "@/lib/cloud-host-acts";
+import { BLOB_BUCKET, THREAD_PAGE_SIZE, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import { pageFromRows, pageUpdateFor, type CloudItemChange } from "@/lib/cloud-thread-page";
+import { SEARCH_BATCH, searchCloudThread } from "@/lib/cloud-thread-search";
+import { useLineThread } from "@/lib/line-thread";
+import { firstNow, otherFirstNow, stopNow, waitNow } from "@/lib/optimistic-cards";
+import { lineFor } from "@/lib/session-lines";
+import type { ProjectHost } from "@/lib/project-host";
 import type { PageUpdate, ThreadTransport } from "@/lib/thread-transport";
+import type { ToolResultSource } from "@/lib/use-tool-result";
+import { webHost } from "@/lib/web-host";
+import { webUploads, type WebUploads } from "@/lib/web-upload";
+import { webKeyring } from "@/lib/web-sync-key";
 import type { ThreadItem } from "@/lib/types";
+import type { CommandResult } from "@/lib/worker-command-wait";
 import { collectBlobRefs, rewriteBlobRefs } from "@/lib/web-board";
+import { openWidenWindow, useHasPasskey } from "./useSignWindow";
 
 // Where useWebBoard's channel sends thread item changes, and its reconnects, to the open thread.
 export interface ItemBus {
@@ -34,9 +50,50 @@ export interface CloudTransportInput {
   client: SupabaseClient;
   orgId: string;
   bus: ItemBus;
-  // Puts a command in for the Mac that runs the card; resolves to why it couldn't, or null.
-  stopCommand: (cardId: string) => NewCommand | string;
-  sendCommand: (row: NewCommand) => Promise<string | null>;
+  // Where the card runs, to address a command to, or why it can't be.
+  target: (cardId: string) => CardTarget | string;
+  // Puts a command in for the machine that runs the card; resolves to its id, or why it couldn't be sent.
+  sendCommand: (row: NewCommand) => Promise<{ id: string } | string>;
+  // Where the composer's pasted files go (webUploadsFor).
+  uploads: WebUploads;
+  // The full result of a trimmed tool call, for the host's `tools`.
+  tools: ToolResultSource;
+}
+
+// The visitor's pasted files, up to the workspace's blobs as them; one already there counts as uploaded. A browser that
+// holds a workspace key keeps each until its message goes, to seal it for a sealed card (lib/web-upload.ts).
+export function webUploadsFor(client: SupabaseClient, orgId: string): WebUploads {
+  return webUploads({
+    orgId,
+    holds: () => webKeyring().size > 0,
+    put: async (sha, bytes, mime) => {
+      const { error } = await client.storage.from(BLOB_BUCKET).upload(`${orgId}/${sha}`, bytes, { contentType: mime, upsert: false });
+      return !error || /exists|duplicate/i.test(error.message) ? null : error.message;
+    },
+  });
+}
+
+// The card's rows past seq `after`, oldest first, for ⌘F over the whole thread.
+function rowsAfter(client: SupabaseClient, orgId: string, cardId: string) {
+  return async (after: number) => {
+    const { data, error } = await client
+      .from("cloud_thread_items")
+      .select("card_id, seq, item")
+      .eq("org_id", orgId)
+      .eq("card_id", cardId)
+      .gt("seq", after)
+      .order("seq", { ascending: true })
+      .limit(SEARCH_BATCH)
+      .overrideTypes<CloudThreadItemRow[]>();
+    return error ? null : data;
+  };
+}
+
+// How a command went, read with the visitor's session (RLS: their own rows).
+async function readCommand(client: SupabaseClient, id: string): Promise<CommandResult> {
+  const { data, error } = await client.from("cloud_commands").select("status, error, result").eq("id", id).maybeSingle<CommandResult>();
+  if (error || !data) throw new Error(error?.message ?? "That command is gone.");
+  return data;
 }
 
 function useCloudLive(bus: ItemBus, cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
@@ -72,9 +129,24 @@ function useCloudView(items: ThreadItem[]) {
   return useMemo(() => rewriteBlobRefs(items, urls), [items, urls]);
 }
 
-export function useCloudTransport({ client, orgId, bus, stopCommand, sendCommand }: CloudTransportInput): ThreadTransport {
-  return useMemo<ThreadTransport>(
-    () => ({
+// The held-edit choices and a subagent's Stop, as host verbs, drawn at once (lib/optimistic-cards.ts).
+function holds(acts: CloudHostActs): Pick<ThreadTransport, "waitPermission" | "putFirst" | "putHolderFirst" | "stopTask"> {
+  return {
+    waitPermission: (cardId, pendingId) => waitNow(cardId, pendingId, () => acts.act("card.permission.wait", cardId, { pendingId })),
+    putFirst: (cardId, pendingId) => firstNow(cardId, pendingId, () => acts.act("card.permission.first", cardId, { pendingId })),
+    putHolderFirst: (cardId, pendingId) => otherFirstNow(cardId, pendingId, () => acts.act("card.permission.otherFirst", cardId, { pendingId })),
+    stopTask: (cardId, taskId) => acts.act("card.stopTask", cardId, { taskId }).then(() => {}),
+  };
+}
+
+// The open thread's transport, and the host every card on the board has (lib/web-host.ts), over the same acts.
+export function useCloudTransport({ client, orgId, bus, target, sendCommand, uploads, tools }: CloudTransportInput): { transport: ThreadTransport; host: ProjectHost } {
+  // A widening goes to sign.weft.zip to be signed with the passkey, when there is one (lib/sign-widen.ts).
+  const hasPasskey = useHasPasskey(client);
+  return useMemo(() => {
+    // A worker card's verbs go on the worker's session line while this board holds one that's up (lib/web-lines.ts).
+    const acts = cloudHostActs({ target, insert: sendCommand, read: (id) => readCommand(client, id), widen: hasPasskey ? openWidenWindow : undefined, line: lineFor });
+    const transport: ThreadTransport = {
       async loadPage(cardId, before) {
         let query = client.from("cloud_thread_items").select("card_id, seq, item").eq("org_id", orgId).eq("card_id", cardId);
         if (before !== undefined) query = query.lt("seq", before);
@@ -83,15 +155,31 @@ export function useCloudTransport({ client, orgId, bus, stopCommand, sendCommand
       },
       useLive(cardId, onUpdate, onReconnect) {
         useCloudLive(bus, cardId, onUpdate, onReconnect);
+        // A worker's line pushes the same items as they're made, ahead of Realtime; both land by index.
+        useLineThread(workerOfTarget(target(cardId)), cardId, onUpdate);
       },
       useView: useCloudView,
-      async stop(cardId) {
-        const row = stopCommand(cardId);
-        const failed = typeof row === "string" ? row : await sendCommand(row);
-        if (failed) throw new Error(failed);
-      },
+      searchThread: (cardId, query) => searchCloudThread(cardId, query, rowsAfter(client, orgId, cardId)),
+      // Out of Running at once, as the tile's and the menu's Stop (lib/optimistic-cards.ts).
+      stop: (cardId) =>
+        stopNow(cardId, async () => {
+          const to = target(cardId);
+          const sent = typeof to === "string" ? to : await sendCommand(stopCommand(to));
+          if (typeof sent === "string") throw new Error(sent);
+        }),
+      editLast: acts.editLast,
+      fresh: acts.fresh,
+      schedule: acts.schedule,
+      unschedule: acts.unschedule,
+      listSkills: acts.listSkills,
+      ...holds(acts),
+      upload: uploads.upload,
+      // A "!" line, signed with the passkey on sign.weft.zip (lib/sign-widen.ts).
+      ...(hasPasskey ? { shell: (cardId: string, command: string) => acts.act("card.shell", cardId, { command }).then(() => {}) } : {}),
+      grantInAnswer: true,
+      cardEdits: true,
       desktop: false,
-    }),
-    [client, orgId, bus, stopCommand, sendCommand],
-  );
+    };
+    return { transport, host: webHost(acts, transport, tools, hasPasskey) };
+  }, [client, orgId, bus, target, sendCommand, uploads, tools, hasPasskey]);
 }

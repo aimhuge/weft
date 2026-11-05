@@ -3,8 +3,10 @@
 // on the right. The hidden file input lives here too, so its ref is the same the bar's click opens.
 import { type ReactNode, type RefObject } from "react";
 import { useDictation } from "@/lib/use-dictation";
+import { useThreadTransport } from "@/lib/thread-transport";
 import type { Editor } from "@tiptap/react";
 import { insertFiles } from "./MediaNode";
+import { currentBinding, formatBinding } from "@/lib/shortcuts";
 import ComposerMicButton from "./ComposerMicButton";
 import Icon, { type IconName } from "./Icon";
 import Tip from "./Tip";
@@ -62,6 +64,7 @@ export default function ComposerBottomBar({
   uploadIntoSource: (files: File[]) => Promise<void>;
   actions?: ReactNode;
 }) {
+  const { upload } = useThreadTransport();
   return (
     <>
       <div className="flex shrink-0 items-center gap-0.5 px-1.5 pb-1.5 pt-0.5">
@@ -91,7 +94,7 @@ export default function ComposerBottomBar({
               {dictation.error}
             </button>
           ) : dictation.state === "recording" ? (
-            <span className="text-muted">Listening… click the mic again to insert the text</span>
+            <span className="text-muted">Listening… {formatBinding(currentBinding("dictation"))} or the mic again to insert, Esc cancels</span>
           ) : null}
         </span>
         {actions}
@@ -107,7 +110,7 @@ export default function ComposerBottomBar({
           e.target.value = "";
           if (!files.length) return;
           if (source !== null) void uploadIntoSource(files);
-          else if (editor) insertFiles(editor, files);
+          else if (editor) insertFiles(editor, files, upload);
         }}
       />
     </>

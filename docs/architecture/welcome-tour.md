@@ -18,9 +18,14 @@ This is the tour *inside* the welcome. The dialog around it — the steps, the r
 | `beats.html` | 68.4 s | Connect your tools, the 🔐 vault (Touch ID fills in a key the thread never sees), a pane as a shared live dashboard, code quality and the refactor scout, BlastCP built in (your socials, image, video and voice for a launch post), the Wefter Profile, Weft is open source (make a pull request), and Weft is driven by keyboard shortcuts: double-click the board or ⌘N for New thread, Esc closes it, ⌘K opens the search and action HUD, ? lists the shortcuts |
 
 Each page is plain HTML plus a paused GSAP timeline on `window.__timelines.root`; the renderer seeks it frame by
-frame, so nothing uses timers. `beats.html` draws each scene from its start time and lists them in `SCENES`, so the
-order (build → ship → show) lives in one place. A scene that speaks several lines (the keyboard one) gives each
-caption its own `data-scene`, its line's cue, so `live.js` lights it with that line; keep it in step with `BEATS` in `lib/welcome-loop.ts` and the cues in
+frame, so nothing uses timers. `beats.html` draws each scene from its start time and lists them in `SCENES`. The one
+list of them is `lib/welcome-scenes.ts` (each scene's beat, element and length in seconds): the tour
+(`lib/welcome-loop.ts` derives `BEATS`, `SCENE_STARTS` and `SCENE_SECONDS` from it), the narration
+(`scripts/narrate-welcome.mjs` times its lines against a scene) and the render script
+(`scripts/render-welcome-loop.mjs` cuts the video where the keyboard shortcuts start) all read it, and
+`lib/welcome-loop.test.ts` pins the page's own `SCENES` to it, so the order (build → ship → show) can't drift. A
+scene that speaks several lines (the keyboard one) gives each
+caption its own `data-scene`, its line's cue, so `live.js` lights it with that line; keep it in step with the cues in
 `NARRATION`. Backgrounds are Weft's own scenes (`bg-*.jpg`, from `electron/assets`), the icon is
 `icon.png` (a copy of `public/app-icon.png`), and `gsap.min.js` is vendored.
 
@@ -58,7 +63,7 @@ line runs past its beat. Spell tricky words for the voice ("see-ell-eyes" for CL
 `pnpm welcome:render` renders each page with `hyperframes render` (pinned version), copies only assets and the one
 page into a temp folder (HyperFrames treats every root HTML file as an entry point), and writes
 `public/brand/welcome-loop.mp4` (the loop) and `public/brand/weft-tour.mp4`, weft.zip's homepage video: intro + loop +
-beats cut where its keyboard shortcuts start (`keysStart` reads the cut from beats.html's `SCENES`, faded over 0.6 s) +
+beats cut where its keyboard shortcuts start (`keysStart` reads the cut from `lib/welcome-scenes.ts`, faded over 0.6 s) +
 `outro.html`, re-encoded as one MP4. Shortcuts only help once Weft is installed, so the homepage ends on downloading it
 instead: `outro.html` (13 s, voice `narration-outro.m4a`) shows Weft in a Mac window with an agent on each card ("Weft
 runs right on your Mac, with the AI you already use."), the cursor clicking Download for Mac and the icon landing in the
@@ -67,5 +72,8 @@ future."). The in-app welcome never loads it. Needs ffmpeg. After changing a cap
 
 ## Editing
 
-Captions live in the HTML and the voice in `NARRATION` (`scripts/narrate-welcome.mjs`); change both. Lines that run
-past their beat keep the stage's timing honest, so move the beat's cues in the HTML to match.
+Captions live in the HTML and the voice in `NARRATION` (`scripts/narrate-welcome.mjs`); change both. The beats page's
+scenes live in `lib/welcome-scenes.ts` (and in the page's own `SCENES`, which a test keeps the same): a scene's
+length is how long it runs, and the narration's lines are timed against it, so changing a length moves everything
+after it. Lines that run past their beat keep the stage's timing honest, so move the beat's cues in the HTML to
+match.

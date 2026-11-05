@@ -1,7 +1,7 @@
 // The achievements: what each one asks for and whether you have it, from the activity log, your
 // records and the projects' production-ready trees. Pure (see lib/game.ts).
 import { isRefactor } from "./badge-kit";
-import type { Habit } from "./craft";
+import type { Habit } from "./craft-types";
 import { EXTRA_DEFS } from "./extra-badges";
 import type { ActivityEvent, Records } from "./game";
 import { LIMIT_DEFS } from "./limit-badges";

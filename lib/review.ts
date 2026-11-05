@@ -64,10 +64,11 @@ function mentionedPage(text?: string): string | undefined {
   return m ? (m[1] ?? m[0]).replace(/[.,;:]+$/, "") : undefined;
 }
 
-// The address of a step's page: its own full URL, a file on this machine, or its path on the plan's base URL.
+// The address of a step's page: its own full URL, the uploaded copy of a host's file (a worker's card on this board,
+// lib/review-blobs.ts), a file on this machine, or its path on the plan's base URL.
 export function stepUrl(plan: ReviewPlan, step: ReviewStep): string | undefined {
   const target = step.path ?? mentionedPage(step.look);
-  if (target && /^https?:\/\//i.test(target)) return target;
+  if (target && /^(https?:\/\/|blob:sha256:)/i.test(target)) return target;
   const local = target?.startsWith("/") ? localFileUrl(target) : undefined;
   if (local) return local;
   if (!plan.url) return undefined;

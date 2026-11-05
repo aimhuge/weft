@@ -1,4 +1,5 @@
-import { execFile, execFileSync, spawn } from "node:child_process";
+import { spawn } from "node:child_process";
+import { runCliText, whichBin } from "./cli-exec";
 import { cliEnv } from "./env";
 import { globalSingleton } from "./global-singleton";
 import type { GogAccount, GogStatus } from "./gog-view";
@@ -19,21 +20,11 @@ type AddRun = { email: string; child: ReturnType<typeof spawn>; cancelled: boole
 const state = globalSingleton("__weftGog", () => ({ adding: null as AddRun | null, lastError: null as string | null }));
 
 export function gogPath(): string | null {
-  try {
-    return execFileSync("/usr/bin/which", ["gog"], { encoding: "utf8", env: cliEnv() }).trim() || null;
-  } catch {
-    return null;
-  }
+  return whichBin("gog", { env: cliEnv() });
 }
 
 function run(bin: string, args: string[], input?: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = execFile(bin, args, { env: cliEnv(), timeout: RUN_MS, encoding: "utf8" }, (err, stdout, stderr) => {
-      if (err) reject(new Error(stderr.trim() || err.message));
-      else resolve(stdout);
-    });
-    if (input !== undefined) child.stdin?.end(input);
-  });
+  return runCliText(bin, args, { env: cliEnv(), timeout: RUN_MS, input });
 }
 
 // "v0.47.0 (f7dab31f …)" or "0.12.0 (Homebrew …)" → "0.47.0".

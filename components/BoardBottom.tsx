@@ -12,7 +12,9 @@ const TerminalDrawer = guarded(() => import("./TerminalDrawer"), { what: "termin
 export interface BoardBottomProps {
   footer: ReturnType<typeof footerFor>;
   onHelp: () => void;
-  terminal: { open: boolean; cwd: string; height: number; onHeight: (height: number) => void; onClose: () => void };
+  // `away` names the worker the open card or project is on where this Mac can't sign for its terminal: the drawer is
+  // this Mac's shell, so it says so instead (lib/board-derive.ts terminalAway).
+  terminal: { open: boolean; cwd: string; height: number; onHeight: (height: number) => void; onClose: () => void; away?: string | null; host?: string | null };
 }
 
 export default function BoardBottom({ footer, onHelp, terminal }: BoardBottomProps) {
@@ -20,10 +22,18 @@ export default function BoardBottom({ footer, onHelp, terminal }: BoardBottomPro
     <>
       <BoardFooter stats={footer.stats} cwd={footer.cwd} backend={footer.backend} onHelp={onHelp} />
       {/* After the footer so an open card can stop just above it; z-40 keeps it over the card's backdrop. */}
-      {terminal.open && (
+      {terminal.open && terminal.away && (
+        <div style={NO_DRAG} className="relative z-40 m-3 flex items-center justify-between rounded-md border border-line bg-panel px-3 py-2 text-[12px] text-muted">
+          <span>The terminal isn&apos;t available for cards on {terminal.away} yet: it would open a shell on this Mac.</span>
+          <button onClick={terminal.onClose} className="text-faint hover:text-ink" aria-label="Close terminal">
+            ✕
+          </button>
+        </div>
+      )}
+      {terminal.open && !terminal.away && (
         <div style={NO_DRAG} className="relative z-40">
           {/* Each folder has its own shell: a new folder starts a new drawer. */}
-          <TerminalDrawer key={terminal.cwd} cwd={terminal.cwd} height={terminal.height} onHeight={terminal.onHeight} onClose={terminal.onClose} />
+          <TerminalDrawer key={terminal.cwd} cwd={terminal.cwd} height={terminal.height} onHeight={terminal.onHeight} onClose={terminal.onClose} host={terminal.host} />
         </div>
       )}
     </>

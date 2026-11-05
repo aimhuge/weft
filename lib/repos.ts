@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { runClone } from "./clone-progress";
 import { worktreeParent } from "./format";
 import { listProjects } from "./settings";
 import type { GithubRepo, LocalRepo } from "./types";
@@ -13,7 +14,7 @@ import { globalSingleton } from "./global-singleton";
 
 const run = promisify(execFile);
 const HOME = os.homedir();
-const ROOTS = ["dev", "code", "projects", "src", "Developer", "GitHub", "repos", "work", "Sites"].map((d) => path.join(HOME, d));
+const ROOTS = ["dev", "code", "projects", "src", "Developer", "GitHub", "repos", "work", "Sites"].map((d) => path.join(/*turbopackIgnore: true*/ HOME, d));
 // How many folders a scan looks inside, so a huge code folder can't stall the picker.
 const MAX_SCANNED = 1500;
 const SKIP = new Set(["node_modules", "dist", "build", "vendor", "target", "Library"]);
@@ -76,12 +77,18 @@ function originOf(dir: string) {
   return url ? githubSlug(url) : undefined;
 }
 
+// The GitHub repo ("owner/name") a folder's origin points at, read from its git config; undefined for anything else.
+export function githubRepoOf(folder: string) {
+  const dir = gitDir(folder);
+  return dir ? originOf(dir) : undefined;
+}
+
 // When the repo last changed: the latest of its HEAD, index, and last fetch.
 function activityOf(dir: string) {
   let latest = 0;
   for (const file of ["HEAD", "index", "FETCH_HEAD"]) {
     try {
-      latest = Math.max(latest, fs.statSync(path.join(dir, file)).mtimeMs);
+      latest = Math.max(latest, fs.statSync(/*turbopackIgnore: true*/ path.join(/*turbopackIgnore: true*/ dir, file)).mtimeMs);
     } catch {}
   }
   return latest;
@@ -204,9 +211,9 @@ export async function cloneRepo(fullName: string): Promise<string> {
   // FULL_NAME guarantees an owner/name pair.
   const name = fullName.split("/")[1] ?? fullName;
   let target = path.join(parent, name);
-  for (let n = 2; fs.existsSync(target); n++) target = path.join(parent, `${name}-${n}`);
+  for (let n = 2; fs.existsSync(/*turbopackIgnore: true*/ target); n++) target = path.join(parent, `${name}-${n}`);
   try {
-    await run("gh", ["repo", "clone", fullName, target], { timeout: 10 * 60_000, maxBuffer: 8 * 1024 * 1024 });
+    await runClone(fullName, target);
   } catch (err) {
     throw new Error(`Couldn't clone ${fullName}: ${errorText(err)}`);
   }

@@ -1,17 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
-import { createPortal } from "react-dom";
-import { CopyLinkButton, ShareAccessFields, ShareDialog, useShareAccess, type SaveShareAccess } from "@aimhuge/share/client";
+import { ShareAccessFields, useShareAccess, type SaveShareAccess } from "@aimhuge/share/client";
 import { seedAppShareState, type AppShareState } from "@/lib/app-share-types";
 import type { MiniApp } from "@/lib/mini-apps";
-import { useOverlay } from "@/lib/overlay";
 import { isCardShareMode } from "@/lib/share-types";
 import { useAccount } from "@/lib/use-account";
-import { useEscape } from "@/lib/use-escape";
 import { appsApi, reloadApps } from "@/lib/use-mini-apps";
 import { OwnerSlugRow } from "./ShareAppDialogOwnerSlug";
 import { UploadSecretsButton } from "./ShareAppDialogUploadSecrets";
+import WeftShareDialog from "./WeftShareDialog";
 import { ShareAppPreview } from "./ShareAppPreview";
 import { ShareAppQuota } from "./ShareAppQuota";
 import { errorText, NoWorkspace, ShareNote, SignedOut } from "./ShareParts";
@@ -51,9 +49,6 @@ export default function ShareAppDialog({ app, onClose }: { app: MiniApp; onClose
   const [state, setState] = useState<AppShareState>(() => seedAppShareState(app, signedOut));
   const [error, setError] = useState<string | null>(null);
 
-  // The package's ShareDialog closes on Escape itself; this only keeps Weft's own layers from closing too.
-  useEscape(true, () => {});
-  useOverlay(true);
 
   const save: SaveShareAccess = async (next, password) => {
     if (!isCardShareMode(next.mode)) return { ok: false, error: "Mini apps can't be edited from a link." };
@@ -92,13 +87,8 @@ export default function ShareAppDialog({ app, onClose }: { app: MiniApp; onClose
   // showing, so the copy buttons point at it (not the bare /a/<id> for the link's old self). Fall back to
   // the bare /a/<id> for the first paint before the owner and slug land, so the dialog still has a copy.
   const copyUrl = state.kind === "ok" ? state.publicUrl ?? state.url : null;
-  return createPortal(
-    <ShareDialog
-      title={`Share “${app.name}”`}
-      onClose={onClose}
-      headerAction={copyUrl ? <CopyLinkButton size="sm" url={copyUrl} /> : undefined}
-      footerStart={copyUrl ? <CopyLinkButton url={copyUrl} /> : undefined}
-    >
+  return (
+    <WeftShareDialog title={`Share “${app.name}”`} url={copyUrl} onClose={onClose}>
       {error ? (
         <p role="alert" className="text-[13px] text-danger">
           {error}
@@ -106,8 +96,7 @@ export default function ShareAppDialog({ app, onClose }: { app: MiniApp; onClose
       ) : (
         <AppShareBody state={state} app={app} access={access} account={account} setState={setState} setError={setError} />
       )}
-    </ShareDialog>,
-    document.body,
+    </WeftShareDialog>
   );
 }
 

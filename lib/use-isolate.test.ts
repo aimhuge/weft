@@ -31,6 +31,24 @@ describe("useIsolate", () => {
     expect(result.current.promptLength).toBe(20);
   });
 
+  it("picks a branch, which turns a worktree on, and forgets it for another folder", () => {
+    const { result, rerender } = renderHook(({ cwd }) => useIsolate(cwd), { initialProps: { cwd: "/repo" } });
+    expect(result.current.branch).toBe("");
+    act(() => result.current.pickBranch("feat/x"));
+    expect(result.current).toMatchObject({ branch: "feat/x", isolated: true });
+    act(() => result.current.setIsolated(false));
+    expect(result.current).toMatchObject({ branch: "feat/x", isolated: false });
+    rerender({ cwd: "/other" });
+    expect(result.current.branch).toBe("");
+  });
+
+  it("leaves a worker project's pool to its worker", () => {
+    const { result } = renderHook(() => useIsolate("worker://w1/ling"));
+    act(() => result.current.toggleIsolated());
+    expect(result.current.isolated).toBe(true);
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
   it("shrugs off a failed warm", () => {
     const failed = { catch: vi.fn() };
     apiFetch.mockReturnValue(failed);

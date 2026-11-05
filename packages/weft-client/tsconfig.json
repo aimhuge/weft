@@ -1,0 +1,19 @@
+{
+  // The package's own check (pnpm typecheck runs it after the app's): no DOM and no Node types, so a browser global,
+  // a node: import or a lib/ import fails here before the phone finds out. The root tsconfig still type-checks these
+  // files with the app, which is what the board and the routes see.
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "types": [],
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.test.ts"]
+}

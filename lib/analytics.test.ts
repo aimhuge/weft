@@ -2,15 +2,18 @@
 /* eslint-disable @typescript-eslint/unbound-method -- asserting on vi.fn() mocks */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const posthog = vi.hoisted(() => ({ __loaded: false, init: vi.fn(), capture: vi.fn() }));
+const posthog = vi.hoisted(() => ({ __loaded: false, init: vi.fn(), capture: vi.fn(), opt_out_capturing: vi.fn() }));
 vi.mock("posthog-js", () => ({ default: posthog }));
 
 import { analyticsOn, startAnalytics, track, trackClick } from "./analytics";
+import { CONSENT_KEY, writeConsent } from "./consent";
 
 beforeEach(() => {
   posthog.__loaded = false;
   posthog.init.mockReset();
   posthog.capture.mockReset();
+  posthog.opt_out_capturing.mockReset();
+  localStorage.clear();
   vi.stubEnv("NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN", "phc_x");
   vi.stubEnv("NEXT_PUBLIC_POSTHOG_HOST", "https://us.i.posthog.com");
 });
@@ -28,7 +31,32 @@ describe("startAnalytics", () => {
     expect(doc.addEventListener).not.toHaveBeenCalled();
   });
 
-  it("starts PostHog and the click listener on weft.zip", () => {
+  it("adds the click listener on weft.zip but holds PostHog until the visitor accepts", () => {
+    const doc = { addEventListener: vi.fn() } as unknown as Document;
+    expect(startAnalytics("weft.zip", doc)).toBe(true);
+    expect(posthog.init).not.toHaveBeenCalled();
+    expect(doc.addEventListener).toHaveBeenCalledWith("click", trackClick, { capture: true });
+    writeConsent("granted");
+    expect(posthog.init).toHaveBeenCalledWith("phc_x", expect.objectContaining({ api_host: "https://us.i.posthog.com" }));
+  });
+
+  it("never starts PostHog for a visitor who declined", () => {
+    localStorage.setItem(CONSENT_KEY, "denied");
+    startAnalytics("weft.zip", { addEventListener: vi.fn() } as unknown as Document);
+    writeConsent("denied");
+    expect(posthog.init).not.toHaveBeenCalled();
+  });
+
+  it("stops capture and replay when the visitor changes their mind", () => {
+    localStorage.setItem(CONSENT_KEY, "granted");
+    startAnalytics("weft.zip", { addEventListener: vi.fn() } as unknown as Document);
+    posthog.__loaded = true;
+    writeConsent("denied");
+    expect(posthog.opt_out_capturing).toHaveBeenCalled();
+  });
+
+  it("starts PostHog at once for a visitor who accepted before", () => {
+    localStorage.setItem(CONSENT_KEY, "granted");
     const doc = { addEventListener: vi.fn() } as unknown as Document;
     expect(startAnalytics("weft.zip", doc)).toBe(true);
     expect(posthog.init).toHaveBeenCalledWith("phc_x", expect.objectContaining({ api_host: "https://us.i.posthog.com" }));

@@ -4,11 +4,13 @@
 // settings `syncFolders` the listener drops every event and the inbox holds nothing open, so this costs nothing
 // on a board that doesn't sync (docs/architecture/cloud-sync.md).
 import { accountClient } from "./account";
+import { startAccountSettingsPush } from "./account-settings";
 import { startPreviewRefresh } from "./app-preview-refresh";
 import { createBlobStore, type BlobStoreBundle } from "./blob-store";
 import type { BlobStore } from "./cloud-sync-types";
 import { startCloudInbox } from "./cloud-inbox";
 import { startCloudSync } from "./cloud-sync";
+import { startSyncRepos } from "./cloud-sync-repos";
 
 export function startAccountCloudSync(): () => void {
   let store: BlobStoreBundle | null = null;
@@ -16,12 +18,19 @@ export function startAccountCloudSync(): () => void {
   const lazy: BlobStore = {
     refFor: (localPath) => blobs().refFor(localPath),
     upload: (localPath, orgId) => blobs().upload(localPath, orgId),
+    uploadPage: (localPath, orgId) => blobs().uploadPage(localPath, orgId),
     rewriteItem: (item, orgId) => blobs().rewriteItem(item, orgId),
   };
   const stopSync = startCloudSync({ blobs: lazy });
   const stopInbox = startCloudInbox();
   const stopPreviews = startPreviewRefresh();
+  // Turn sync on for projects you sync from another Mac (lib/cloud-sync-repos.ts).
+  const stopRepos = startSyncRepos();
+  // Your account's settings to your workers (lib/account-settings.ts); a save pushes again.
+  const stopSettings = startAccountSettingsPush();
   return () => {
+    stopSettings();
+    stopRepos();
     stopPreviews();
     stopInbox();
     stopSync();

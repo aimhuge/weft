@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeCount, cronSummary, cronsTitle, runTone, sortCrons, TONE_CLASS, TONE_LABEL } from "./crons-view";
+import { activeCount, cronSummary, cronsTitle, isLiveCron, runTone, sortCrons, TONE_CLASS, TONE_LABEL } from "./crons-view";
 import type { Cron, CronRun } from "./cron-types";
 
 const cron = (over: Partial<Cron> = {}): Cron => ({
@@ -58,6 +58,18 @@ describe("activeCount", () => {
   });
 });
 
+describe("isLiveCron", () => {
+  it("is true for a cron that is on and has a next run", () => {
+    expect(isLiveCron(cron({ nextAt: 100 }))).toBe(true);
+  });
+
+  it("is false for a cron that is switched off, or has no next run", () => {
+    expect(isLiveCron(cron({ enabled: false, nextAt: 100 }))).toBe(false);
+    expect(isLiveCron(cron({ enabled: true }))).toBe(false);
+    expect(isLiveCron(cron({ enabled: false }))).toBe(false);
+  });
+});
+
 describe("cronsTitle", () => {
   it("says what to do when there are none", () => {
     expect(cronsTitle([])).toBe("Crons: run a thread again on a schedule (⏰ in a thread's header)");
@@ -98,6 +110,7 @@ describe("runTone", () => {
 describe("cronSummary", () => {
   it("says a fresh thread makes a fresh thread", () => {
     expect(cronSummary(cron())).toBe("every day at 9:00 · fresh thread");
+    expect(cronSummary(cron({ worker: "mini" }))).toBe("every day at 9:00 · fresh thread · on mini");
   });
 
   it("names the source a fork continues", () => {

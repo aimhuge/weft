@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Design an agent in a thread</title>
+<style>
+html,body{height:100%;margin:0}
+body{--ink:#f4efe6;--muted:#d9d0c3;--faint:#a99f92;--line:rgb(255 250 240/.14);--accent:#d9774b;
+background:#14101a;color:var(--ink);font:14px/1.65 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif;
+-webkit-font-smoothing:antialiased;overflow-y:auto}
+body::before{content:"";position:fixed;inset:-4%;background:radial-gradient(ellipse 70% 55% at 50% 0%,rgb(217 119 75/.15),transparent 70%);pointer-events:none}
+main{position:relative;padding:7vh 7% 8vh;max-width:700px;margin:0 auto}
+.k{font:500 10.5px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.16em;color:var(--accent);text-transform:uppercase}
+h1{margin:10px 0 0;font-size:28px;line-height:1.2;font-weight:700;letter-spacing:-.02em}
+.lead{margin-top:14px;color:var(--muted);font-size:15px}
+.lead b{color:var(--ink);font-weight:600}
+h2{margin:34px 0 10px;font:500 10.5px ui-monospace,"SF Mono",Menlo,monospace;letter-spacing:.16em;color:var(--faint);text-transform:uppercase}
+p{color:var(--muted);margin:0 0 10px}
+ol{list-style:none;margin:0;padding:0;display:grid;gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+li{background:#181320;padding:12px 14px}
+li .n{font:600 11px ui-monospace,"SF Mono",Menlo,monospace;color:var(--accent);margin-right:8px}
+li b{color:var(--ink);font-weight:600}
+li span{color:var(--muted);font-size:13px}
+code{font:500 12px ui-monospace,"SF Mono",Menlo,monospace;color:#c8bcd6;background:rgb(255 250 240/.05);padding:1px 5px;border-radius:4px}
+pre{margin:0;padding:12px 14px;background:#181320;border:1px solid var(--line);border-radius:10px;overflow-x:auto;font:500 12px/1.7 ui-monospace,"SF Mono",Menlo,monospace;color:#c8bcd6}
+pre b{color:var(--accent);font-weight:600}
+.grid{display:grid;gap:10px;grid-template-columns:1fr 1fr}
+.card{background:#181320;border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h3{margin:0 0 6px;font-size:13.5px;font-weight:600;color:var(--ink)}
+.card p{font-size:12.5px;margin:0}
+.gone{text-decoration:line-through;color:var(--faint)}
+.rule{height:1px;background:var(--line);margin:30px 0 0}
+</style>
+</head>
+<body><main>
+
+<div class="k">Review · github drawer</div>
+<h1>Design an agent in a thread, not a form</h1>
+<p class="lead">The drawer's <b>Design the agent</b> used to open a form with five pre-formulated questions. It now starts a <b>special kind of new thread</b>: Weft hands over the brief, the thread asks the questions and writes the soul.</p>
+
+<h2>What the button does now</h2>
+<ol>
+  <li><span class="n">1</span><b>The drawer starts a thread</b> <span>— with the brief as its prompt, and a page of its own already written.</span></li>
+  <li><span class="n">2</span><b>The thread asks</b> <span>— one question at a time, and only the ones that change what it writes.</span></li>
+  <li><span class="n">3</span><b>The thread writes the soul</b> <span>— standing instructions, not a description — and saves it with <code>create_agent</code>.</span></li>
+  <li><span class="n">4</span><b>The agent lands</b> <span>— in Settings → Agents, ready to pick as a card's agent.</span></li>
+</ol>
+
+<h2>The pieces</h2>
+<div class="grid">
+  <div class="card"><h3><code>lib/agent-thread.ts</code></h3><p>The brief (project + job) and the prompt the designing thread runs on.</p></div>
+  <div class="card"><h3><code>lib/agent-brief-page.ts</code></h3><p>The page the thread opens on: the brief, and what happens next.</p></div>
+  <div class="card"><h3><code>app/api/agents/design</code></h3><p>POST {project, job} → the card, the start, and the show file. Only Weft's own window.</p></div>
+  <div class="card"><h3><code>components/IssueWorkflowPicker.tsx</code></h3><p>The Land in control, the skill and agent pickers, and the design button.</p></div>
+</div>
+
+<h2>The prompt the thread runs on</h2>
+<pre><b>Help me design an agent for weft</b> that triages this project's GitHub issues
+
+Ask me what you need to know — one question at a time, and only the
+ones that change what you write. Do not ask me what I already said.
+
+Then write the agent's soul and save it with the create_agent tool.</pre>
+
+<h2>What went away</h2>
+<p>The old interview is gone: <span class="gone"><code>lib/agent-interview.ts</code></span>, <span class="gone"><code>app/api/agents/interview</code></span>, the two client methods and the <code>InterviewQuestion</code> type. Nothing else in Weft used them.</p>
+
+<div class="rule"></div>
+
+</main></body></html>

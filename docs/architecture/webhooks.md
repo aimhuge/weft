@@ -42,6 +42,21 @@ webhook declares `svix` explicitly. `providerFor` resolves it; a webhook with ne
 | `relay` | Gives it a public relay URL, to register at the provider (its dashboard in the pane, or a CLI). Needs the provider (`stripe`, `github`, `vercel`, `svix`) and the vault name of its signing secret: the secret is sealed into the relay row after one Touch ID. |
 | `mark_registered` | The thread registered it at the provider itself. |
 
+`add_blank` and `ask_add` say so when the signing secret couldn't go into the vault as a blank (no vault on a Weft
+Worker, the app closed), instead of dropping it silently.
+
+**On a Weft Worker** a webhook's target is the worker's own dev server, so the registry stays in the worker's store and
+`list`, `add_blank` and `mark_registered` work there. `lib/webhooks.ts` tells `onWebhooksWrite` listeners after every
+write; the worker republishes its webhooks with its crons (`lib/worker-lists.ts`, `cloud_worker_lists`, owner-only), and
+the Mac's `GET /api/webhooks` adds them for the folders asked (`worker://<id>/<name>`, ids `worker:<id>:<hook>`,
+`worker` set to its name), so 🪝 lists and counts them, and a worker project's 🪝 shows that worker's. Mark registered and
+Remove reach the worker as `webhook.update` and `webhook.delete` host verbs (`lib/worker-list-acts.ts`; a delete also
+takes its relay row down); a change from the Mac may name only `name`, `events`, `hint` and `registered`, never the
+target, provider or secret, and its relay comes from a thread there, so the drawer shows the URL without Get a public URL
+or Stop relay ([project-hosts.md](project-hosts.md#crons-and-webhooks-both-ways-as-built)). `relay`,
+`tunnel`, `close_tunnel` and `ask_add` don't work on a worker yet: `lib/worker-tools.ts` says why in the prompt and its
+gate answers a call with it ([project-hosts.md](project-hosts.md#board-tools-on-a-worker)).
+
 `WEBHOOKS_PROMPT` tells threads to record each webhook as soon as they know its route, use `relay` rather than a
 tunnel, register it themselves when they can and `ask_add` only when blocked.
 
@@ -110,6 +125,22 @@ own signature.
 Existing relay rows keep their deliveries in `webhook_deliveries` flowing, but stop accepting new ones until the
 local Weft recreates them with a known provider and a sealed secret.
 
+## On a worker
+
+Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). A worker has neither a Weft session nor the
+vault, so `mcp__webhooks__relay` on a worker card (`lib/relay-worker.ts`) asks its owner's Mac with a `relay_create`
+device call carrying names only: the provider, the secret's vault name, the checkout's GitHub repo and the target.
+
+- **The Mac** (`lib/device-call-approvals.ts`) checks each, finds its own clone of that repo (`localRepos`), so the vault
+  is the one keyed by the same remote, seals the secret through `POST /webhooks/relay-seal` after Touch ID as for its own
+  relays, and inserts the `webhook_relays` row as the owner with `worker_id`, `worker_origin` (the server) and
+  `tunnel_path` (the route), plus `tunnel_id` when that worker already has a tunnel to the server open. It answers the
+  relay id and URL; the worker keeps them on its webhook. A Mac with no clone of the repo says so.
+- **Deliveries** reach the route only through the worker's tunnel: `worker_tunnel_open` links the worker's relays for that
+  server, close unlinks them. With no tunnel, or one that didn't reach the route, the deployed relay answers **503** and
+  stores nothing (`lib/webhook-relay.ts`), so the provider retries later; a stored row would be dropped by a Mac that
+  doesn't know the relay. The relay still reads a database without `worker_id` (a 400 retries the old select).
+
 ## The drawer
 
 `components/WebhooksDrawer.tsx`, `lib/use-webhooks.ts` (loads through `/api/webhooks`, polls while open so
@@ -120,7 +151,7 @@ name, the latest deliveries, **Mark registered** and Remove. `+ Add` takes the s
 ## Gaps
 
 - The relay answers the provider before your route runs, so a provider that reads the reply (a URL verification
-  challenge) doesn't see your route's answer.
+  challenge) doesn't see your route's answer, unless a tunnel to that server is open (docs/architecture/tunnels.md).
 - One Weft per account forwards: two Macs signed in to the same account race for each delivery.
 - Only the four providers above can be relayed. A provider with its own signature scheme needs a verifier added
   to `lib/webhook-signatures.ts` before it gets a relay URL.

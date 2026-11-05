@@ -16,6 +16,8 @@ let prompts: Prompts;
 let DEFAULT_THREAD_PROMPT: string;
 
 beforeEach(async () => {
+  // A Mac's prompts, whatever WEFT_WORKER the run has (a worker's own checkout sets it); toolPrompts covers a worker's.
+  vi.stubEnv("WEFT_WORKER", "");
   vi.resetModules();
   ({ DEFAULT_THREAD_PROMPT } = await import("./settings"));
   s.threadPrompt = DEFAULT_THREAD_PROMPT;
@@ -55,15 +57,26 @@ describe("weftSystemPrompt", () => {
 
   it("the copilot gets the browser and copilot prompts, not the thread's", () => {
     const text = prompts.weftSystemPrompt({ backend: "claude", copilot: true });
-    const { WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, SECRETS_PROMPT, REVIEW_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
-    expect(text).toBe(`${WEFT_SOUL_PROMPT}\n\n${BROWSER_PROMPT}\n\n${COPILOT_PROMPT}`);
+    const { WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, SECRETS_PROMPT, REVIEW_PROMPT, ENV_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
+    expect(text).toBe(`${WEFT_SOUL_PROMPT}\n\n${BROWSER_PROMPT}\n\n${COPILOT_PROMPT}\n\n${ENV_PROMPT}`);
     for (const part of [DEFAULT_THREAD_PROMPT, SECRETS_PROMPT, REVIEW_PROMPT]) expect(text).not.toContain(part);
   });
 
+  it("a thread on a Weft Worker gets the worker's browser prompt", async () => {
+    vi.resetModules();
+    vi.stubEnv("WEFT_WORKER", "1");
+    const worker = await import("./weft-prompts");
+    const text = worker.weftSystemPrompt({ backend: "claude" });
+    vi.stubEnv("WEFT_WORKER", "");
+    expect(text).toContain("You are running on a Weft Worker");
+    expect(text).not.toContain(worker.WEFT_PINNED_PROMPTS.BROWSER_PROMPT);
+  });
+
   it("a persona's prompt follows the copilot prompt; Wingman adds none", () => {
-    const { COPILOT_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
+    const { COPILOT_PROMPT, ENV_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
     const founder = prompts.weftSystemPrompt({ backend: "claude", copilot: true, persona: "founder" });
-    expect(founder.endsWith(`${COPILOT_PROMPT}\n\n${PERSONAS.founder.prompt}`)).toBe(true);
+    expect(founder.endsWith(`${COPILOT_PROMPT}\n\n${PERSONAS.founder.prompt}\n\n${ENV_PROMPT}`)).toBe(true);
+    expect(prompts.weftSystemPrompt({ backend: "claude" })).toContain(ENV_PROMPT);
     expect(prompts.weftSystemPrompt({ backend: "claude", copilot: true, persona: "wingman" })).toBe(prompts.weftSystemPrompt({ backend: "claude", copilot: true }));
     expect(prompts.WEFT_PINNED_PROMPTS.COPILOT_PERSONA_PROMPTS).toContain(PERSONAS.captain.prompt);
   });
@@ -117,6 +130,7 @@ describe("promptsBuild", () => {
     ["./browser-tools", "BROWSER_PROMPT"],
     ["./board-tools", "COPILOT_PROMPT"],
     ["./secret-tools", "SECRETS_PROMPT"],
+    ["./blastcp-tools", "BLASTCP_PROMPT"],
     ["./webhook-tools", "WEBHOOKS_PROMPT"],
     ["./decisions-prompt", "MIGRATIONS_PROMPT"],
     ["./decisions-prompt", "ASK_BUTTONS_PROMPT"],
@@ -153,5 +167,26 @@ describe("promptsBuild", () => {
 
   it("WEFT_SOUL_PROMPT is pinned too", () => {
     expect(Object.keys(prompts.WEFT_PINNED_PROMPTS)).toContain("WEFT_SOUL_PROMPT");
+  });
+});
+
+describe("toolPrompts", () => {
+  it("is every tool group's prompt on a Mac", () => {
+    const { BROWSER_PROMPT, SECRETS_PROMPT, BLASTCP_PROMPT } = prompts.WEFT_PINNED_PROMPTS;
+    const parts = prompts.toolPrompts(false);
+    expect(parts).toHaveLength(6);
+    expect(parts.slice(0, 3)).toEqual([BROWSER_PROMPT, SECRETS_PROMPT, BLASTCP_PROMPT]);
+  });
+
+  it("on a worker drops the groups that don't work there and says what doesn't, from lib/worker-tools.ts", () => {
+    const parts = prompts.toolPrompts(true);
+    const text = parts.join("\n\n");
+    expect(text).toContain("Weft Worker");
+    // The vault tools reach the Mac from a worker, so their prompt stays.
+    expect(text).toContain("mcp__secrets__ask_add");
+    expect(text).toContain("mcp__webhooks__add_blank");
+    // BlastCP's sign-in is the Mac's, so a worker isn't told to use it.
+    expect(text).not.toContain("mcp__blastcp__generate_image");
+    expect(parts.at(-1)).toMatch(/^On this Weft Worker some of Weft's tools don't work yet/);
   });
 });

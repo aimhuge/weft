@@ -15,6 +15,8 @@ vi.mock("@anthropic-ai/claude-agent-sdk", async () => (await import("./simulator
 vi.mock("./simulator-devices", async () => (await import("./simulator-tools.harness")).devicesMock(devices));
 vi.mock("./simulator-ui", async () => (await import("./simulator-tools.harness")).uiMock(ui));
 vi.mock("./simulator-watch", async () => (await import("./simulator-tools.harness")).watchMock(watch));
+const screenOnWorker = vi.hoisted(() => vi.fn());
+vi.mock("./worker-screen", () => ({ screenOnWorker }));
 vi.mock("./browser-tools", async () => (await import("./simulator-tools.harness")).browserToolsMock(openInPane));
 
 const st = await import("./simulator-tools");
@@ -47,6 +49,12 @@ describe("SIMULATOR_PROMPT", () => {
     }
   });
 
+  it("offers a React Native app's web build before booting a device", () => {
+    expect(st.SIMULATOR_PROMPT).toContain("npx expo start --web");
+    expect(st.SIMULATOR_PROMPT).toContain("set_viewport phone");
+    expect(st.SIMULATOR_PROMPT.indexOf("--web")).toBeLessThan(st.SIMULATOR_PROMPT.indexOf("list_devices"));
+  });
+
   it("points at Settings → Connectors → Simulators when a toolchain is missing", () => {
     expect(st.SIMULATOR_PROMPT).toContain("Settings → Connectors → Simulators");
   });
@@ -71,6 +79,16 @@ describe("simulatorMcpServer", () => {
       "logs",
       "watch",
     ]);
+  });
+});
+
+describe("watch on a worker", () => {
+  it("streams to the card's pane and never opens the Mac's", async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    screenOnWorker.mockResolvedValue("Streaming");
+    expect(said(await run("watch"))).toBe("Streaming");
+    expect(openInPane).not.toHaveBeenCalled();
+    vi.unstubAllEnvs();
   });
 });
 

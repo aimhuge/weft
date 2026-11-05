@@ -1,8 +1,8 @@
 # Cloud sync
 
 Status: usable, off by default, 2026-10-16. A card can be started from the web board (see Commands); the `cloud_commands` migration is applied. Settings → Sync turns a project on, and the web board at
-`weft.zip/<workspace>/board` reads its cards back live. The migration is applied. Item bodies go up as plain JSON, so
-this isn't offered to anyone else until they're sealed (see Gaps).
+`weft.zip/<workspace>/board` reads its cards back live. The migration is applied. Item bodies go up as plain JSON unless
+sealing is on (mobile-security.md), so this isn't offered to anyone else until sealing is the default (see Gaps).
 
 The goal: a card's thread reads the same on another device as on the Mac that runs it. `lib/cloud-sync-types.ts`
 is the contract between the parts:
@@ -38,9 +38,35 @@ is the contract between the parts:
   That includes the page each `mcp__browser__open_url` call opened (its `summary` becomes `blob:sha256:<hex>#anchor`, the
   anchor kept verbatim) and a message's `page` with its anchor, so a card's pane history reads remotely (sharing.md). The path
   rules live in `lib/blob-paths.ts`.
-- `lib/cloud-sync-cards.ts`: builds the `cloud_cards` rows, uploading each card's pane capture (`thumb`, an
-  `/api/attachments/…` file) as a blob and putting the ref in the uploaded copy only; the web board resolves it with
-  the thread's refs (`lib/web-board-thumbs.ts`).
+- A Weft Worker uses this same store through a stand-in client and a narrower path rule (`lib/worker-blobs.ts`,
+  [Pages from a worker](weft-worker.md#pages-from-a-worker)).
+- `lib/blob-page-assets.ts`: an HTML page goes up with the local files it names, so its images load on weft.zip and the
+  phone. `uploadPage` in the blob store finds each relative (or absolute, or `file://`) reference in `img`/`video`/`audio`/
+  `source`/`track`/`script`/`embed` `src`, `poster`, `srcset`, icon links and CSS `url()` (in `<style>` and `style=""`),
+  uploads each file as its own blob under the same `lib/blob-paths.ts` rules (never the vault, a token or a `.env*`; at most
+  50 MB each), and writes its `blob:sha256:<hex>` ref (plus any `#fragment`) in its place. A local `<link rel=stylesheet>` is
+  inlined as a `<style>` block with its own `url()`s read against the stylesheet's folder, since a stylesheet loaded from a
+  signed URL couldn't have its refs signed. Only the uploaded copy changes, so the page blob's sha is of the rewritten
+  bytes, not the file on disk. Web URLs, `data:`, missing files and `<a href>` links stay as written. Used for a message's
+  `page`, an `open_url` call's page and the card row's `page` (`withUploadedPage`).
+- `lib/blob-page-sign.ts`: the serving half. The web board's pane route (`app/api/web-board/[orgId]/page/[sha]`, as the
+  visitor) and a share link's frame (`app/api/s/[id]/page/[sha]`, as the service client after the share check, via
+  `serveBlobPage(…, { signAssets: true })`) swap each ref in an HTML page for a signed URL from `lib/blob-urls.ts`, R2 first,
+  after redaction so a URL's token isn't masked. Signed URLs rather than a cookie route per asset: the page is sent with a CSP
+  sandbox, so it runs in an opaque origin and its image requests carry no session cookie. A share signs whatever refs the
+  owner's page names; those are blobs of the owner's own workspace, which the owner chose to share.
+- `lib/card-rows.ts`: **one card schema** for both hosts (project-hosts.md H5a). `projectCard` and `projectItem` turn a
+  host's `Card` and its thread items into what the rows carry: blobs up (`lib/card-rows-blobs.ts`), long tool results cut
+  out (`splitToolResult`), redacted, scrubbed. The Mac's flush and a Weft Worker's publisher (`lib/worker-publish.ts`)
+  both call it; each adds its own identity (`owner_device`, `folder`), transport and sealer. Where the hosts differ, a
+  `RowHost` field says so: `thumbs` (a Mac uploads its pane capture and fills `page_thumb`; a worker has no pane),
+  `onBlobError` (a Mac's failed upload fails the flush, which backs off; a worker logs and keeps the path) and `copilot`
+  (a Mac syncs it like any card in a synced folder; a worker never publishes it). The `page` column is the redacted
+  card's page (before H5a a Mac's column was taken before redaction, so a key in a page URL reached it plain).
+  Golden snapshots of both paths' rows: `lib/card-rows.golden.test.ts`.
+- `lib/cloud-sync-cards.ts`: the Mac's `cloud_cards` rows: each card's projection under this Mac's identity
+  (`macRowHost`). The pane capture (`thumb`, an `/api/attachments/…` file) goes up as a blob with the ref in the
+  uploaded copy only; the web board resolves it with the thread's refs (`lib/web-board-thumbs.ts`).
 - `lib/thread-page.ts` + `app/api/cards/[id]/thread`: the reader side's shape, already used locally. `?before=&limit=`
   pages from the newest item back; a tool result over 2 KB (`TOOL_RESULT_INLINE_MAX`) is left out with
   `resultBytes`, and `/thread/tool/[toolId]` (or `cloud_tool_outputs` remotely) serves it when the row opens
@@ -53,6 +79,26 @@ is the contract between the parts:
   and, when on, `queueFolder()` queues its existing cards and items; `POST { sync: true }` flushes now). The status
   (`cloudSyncStatus()`, type in `lib/cloud-sync-view.ts`) is `waiting` (outbox lines), `lastSyncAt`, `uploaded` since start,
   `lastError`, `signedOut`, `noWorkspace`. Folders live in settings `syncFolders` (`setSyncFolder`).
+- Across your Macs (`lib/cloud-sync-repos.ts`, `supabase/migrations/20261026145209_cloud_sync_repos.sql`): `syncFolders` holds
+  local paths, which differ from Mac to Mac, so a second Mac used to start with every project off. The switch is also kept per
+  GitHub repo in `cloud_sync_repos` (`owner_user`, `repo`, `enabled`; each user reads and writes only their own rows): the POST
+  above records it (`rememberSyncRepo`, never holding up the answer), and every Mac publishes the repos it already syncs without
+  overriding a switch made elsewhere (`ignoreDuplicates`), then turns sync on (and `queueFolder`s) for each recent project whose
+  origin (`githubRepoOf` in `lib/repos.ts`) is an enabled repo: at start, every minute (`ADOPT_EVERY_MS`, which catches a fresh
+  sign-in), and the moment a project lands on the board (`onProjectOpen("sync-repos")`, so a clone made on the new Mac syncs at
+  once). It only turns sync on: a repo switched off elsewhere stays on where it already is. A folder with no GitHub origin stays per Mac.
+- The avatar menu (`components/AccountSync.tsx`, lines from `lib/sync-menu.ts`): under your plan, one status line from the same
+  `/api/cloud-sync` answer ("Synced 2m ago" + how many projects, "Syncing N items…", "Sync failed" + `lastError`, "Sync is off",
+  "No workspace yet" with **Open the web board**), then **Resync now** (`POST { sync: true }`) and **Sync <project>** / **Don't sync
+  <project>** (`POST { folder, on }`) for the board's work folder as its main checkout (`menuProject` in `lib/board-derive.ts`, never a
+  scratch folder). These items keep the menu open, so the line shows the answer. `components/AccountButton.tsx` owns the hook, polling every
+  30 s (`IDLE_POLL_MS`) for the avatar's dot (amber pulsing while `waiting`, red after an error, none otherwise) and every 5 s while the menu is open.
+- The project's right-click menu (`lib/project-menu.ts`, run by `components/project-menu-handler.ts`): **Sync <project>** /
+  **Don't Sync <project>** for that folder, with the project's own sync state on the same line as its sublabel — "Not Synced",
+  "Synced 7m ago", "Syncing…", "Sync Failed", "Sign in to sync" (`projectSyncLine` in `lib/sync-menu.ts`). The board owns the
+  hook (`components/Board.tsx`) and the menu reads it fresh when it opens (`readSync`, `read()` in the hook), so the line says how
+  it stands now rather than when the board last looked; a failed read keeps the last known state and opens the menu anyway.
+  **Sync** is greyed out when there's no account or no workspace yet, and a project that already syncs can still be turned off.
 - The sync prompt (`components/SyncPromptDialog.tsx`, mounted beside the welcome in `components/HeaderBadges.tsx`; rules in
   `lib/sync-prompt.ts`, state in `lib/use-sync-prompt.ts`): "Turn on Project Sync for <project>?" for the project you're working on — the
   one the board is narrowed to, else the folder of the card that moved last, never the copilot, an archived card or a scratch folder
@@ -176,6 +222,74 @@ drops the review panel and Send later; the web's `footer` (WebReplyStatus) stand
 desktop's too; a pasted image, dictation and the `/skill` typeahead call the local server's routes, which weft.zip refuses, so
 there they fail (a paste shows the refusal) until the transport carries an upload.
 
+## Team projects
+
+A synced folder whose GitHub repo a team you're in has linked (Settings → Teams → Projects, `public.org_projects`) syncs
+to that team, so every member reads it on `weft.zip/<team>/board`; any other folder syncs to your personal workspace, as
+before. `lib/cloud-sync-route.ts` decides per card in each flush: the card's folder → `githubRepoOf` → the team, from
+`public.team_orgs_for_repos(repos)` (`supabase/migrations/20261105065328_team_orgs_for_repos.sql`, security definer:
+it answers only for the repos asked and only in teams the caller is in, so it never lists a team's other projects; a
+repo linked in two of them goes to the oldest link). Answers are kept a minute (`ROUTE_TTL_MS`), so a new link reaches
+the Macs within one; `forgetSyncOrg` drops them. A database without the function routes everything home; any other
+error fails the flush, so a team's card never lands at home by accident.
+
+- `uploadPending` (`lib/cloud-sync-upload.ts`) takes the route: cards, items and tool outputs go to each card's own
+  workspace, sealed with that workspace's key (asked once a flush). A card that now goes to a team marks its home copy
+  deleted, so the personal board doesn't keep a stale one. A delete is marked in every workspace the Mac sends to.
+- The inbox (`macCheck` in `lib/cloud-inbox-cards.ts`) takes a command for the workspace that folder routes to, and a
+  pasted file comes down from the command's own workspace (`macReceive`, `lib/cloud-inbox-receive.ts`).
+- Only folders switched on in Sync are routed: linking a repo never uploads a folder its owner left off.
+- `syncOrgId` stays the personal workspace: Workers, mini apps and the workers' board still read it.
+- Moving a folder's old cards into the team: turn its Sync off and on (`queueFolder` re-uploads them, now to the team).
+- A teammate can read the team's cards but not drive them: `cloud_commands` inserts need a device you own and the
+  inbox runs only its own user's commands.
+
+### Team projects on the desktop board
+
+Status: built 2026-11-05; `team_orgs_for_repos` and `cloud_cards.repo` applied to prod the same day. Cards synced before
+then have no repo until they change (or the folder's Sync is turned off and on).
+
+Your teammates' cards for a linked project show on **your** desktop board, inside your own project of the same repo
+(the `~/dev/exitingcom` chip), not only on `weft.zip/<team>/board`. They are read-only, on purpose (above).
+
+```
+Zulker's Mac ── flush ──▶ cloud_cards (org = team, repo = exitingcom/exitingcom)
+                                     │  RLS: members read
+your Mac: /api/team-board ◀──────────┘  repo → your folder for it → Card.team
+```
+
+- **The repo on each row.** `folder` is a path on its owner's Mac and differs per teammate, so `cloud_cards.repo`
+  (`supabase/migrations/20261105065331_cloud_cards_repo.sql`, nullable, indexed on `(org_id, repo)`, no backfill) names
+  the GitHub repo, lowercased: `cardRows` in `lib/cloud-sync-cards.ts` sets it from `githubRepoOf(card.cwd)`. The app
+  ships ahead of the migration: a database without the column refuses the row with PGRST204, and `putWithRepo`
+  (`lib/cloud-cards-repo.ts`) sends the rows again without it and leaves it out until a restart. A Worker's publisher
+  doesn't set it yet, so a teammate's worker cards stay on weft.zip.
+- **The read.** `lib/team-board.ts` `readTeamBoard`, signed in as you (`accountClient`, so RLS decides): this Mac's
+  projects (`listProjects`) → their GitHub repos (`repoFolders`, kept a minute; when two folders share a repo the most
+  recently used wins) → `teamOrgsFor` (the same cached `team_orgs_for_repos` answer the flush uses) → per team, the
+  `cloud_cards` rows in those repos whose `owner_user` isn't you, not deleted, not a copilot, at most `TEAM_CARD_LIMIT`
+  per team. Sealed cards open with this Mac's ring for that org (`openCardRows`); without the key they draw their 🔒
+  stand-in. Owners' names and pictures come from `profiles` ("profiles: read teammates"). Each card gets `cwd` = your
+  folder and `team: { org, owner, name, avatar, device }` (`TeamMark`, `lib/types-card-detail.ts`). With `since`, only
+  the rows changed after it (2 s overlap), deletes as `removed`; a database without the column reads as no cards.
+- **The route.** `GET /api/team-board` (`app/api/team-board/route.ts`, guarded): the board, `?since=`, and
+  `?org=&card=` for a thread page (`before`, `after`) or `&tool=` for a cut output. There is no POST. The thread reads
+  are `lib/cloud-thread-read.ts` (`threadPageIn`, `toolOutputIn`), shared with the worker board, in the card's own org.
+  A page the card wrote loads through `/api/worker-board/page/<sha>?org=<team>` (`workerPage` with an org).
+- **The board.** `lib/use-team-board.ts` polls every 5 s while there are cards and the window is visible, once a
+  minute otherwise, and at once when it comes back on screen; a whole read every `FULL_READ_EVERY_MS`
+  (`mergeTeamBoard` in `lib/team-board-types.ts`). `useBoardWorkers` appends the cards to `boardCards` and passes them
+  on as `workers.team`, so `components/Board.tsx` didn't change. They never enter the local store or `cards`.
+- **The read-only host.** `hostOf(card)` (`lib/project-host.ts`) gives a card with `team` the team's host
+  (`teamHostOf`, `lib/team-host.ts`, one per org) before looking at its folder, so no call site asks whose card it is:
+  every `act` refuses with `READ_ONLY`, `can()` is false for every feature, the menu keeps only Open, and the thread
+  transport pages and polls through the team route with `stop` refused. The tile is CardView's `readOnly` (no drag,
+  answer, stop, star or archive), with `TeamOwnerMark` (avatar or initial + "Zulker's Mac") where its buttons would be;
+  a list row only opens. `openWorkerThread` opens it with `teamThreadHandlers` (close only); `OpenCard` passes
+  `readOnly` to the thread panel (no reply box, no answers) and draws `components/TeamPane.tsx` in the pane column.
+- **Gaps.** Pictures inside a teammate's thread are signed in your own workspace (`useWorkerView`), so they don't load
+  yet; Share… and Save as app aren't offered for them; a teammate's Worker cards have no repo yet.
+
 ## Ownership
 
 The Mac running a card owns it: `owner_user` is the account that runs it and the only one that may write its rows,
@@ -192,7 +306,46 @@ policy covers them.
 One row per synced card, upserted on every change. The jsonb body is the card's metadata
 (`lib/types.ts`'s `Card`): column, title, tags, assignee, the latest cli/model, the unread count. Not
 the thread — that's `cloud_thread_items`. `updated_at` is touched by `private.touch_updated_at`, the same
-trigger the teams and profiles tables use, so Realtime subscribers know the card moved.
+trigger the teams and profiles tables use, so Realtime subscribers know the card moved. Three columns
+beside the jsonb name the card's current page, so a feed draws a card from this row alone; see
+[The card's page](#the-cards-page).
+
+### The card's page
+
+`page`, `page_thumb` and `pages` (`supabase/migrations/20261029104011_cloud_cards_page.sql`) are for a reader that shows
+each card as its pane, the way the phone app (`~/dev/weft-mobile`) does: one row, no thread items.
+
+| Column | Type | What it holds |
+|---|---|---|
+| `page` | `text`, null when the pane has shown nothing | The page the card's pane shows now, in one of three forms (below). The same string is in `card.page`. |
+| `page_thumb` | `text`, null | Only when `page` is a local page: the card's pane capture as a `blob:sha256:<hex>` ref, to draw instead. |
+| `pages` | `integer`, default 0 | How many pages the pane has opened on this card (also `card.pages`). It counts up by one for every open, including the same file opened again. |
+
+`page` is one of:
+
+- **`blob:sha256:<hex>#anchor`**: a page Weft uploaded to `weft-blobs/<org>/<hex>` (a `~/.weft/show` page or any file under
+  home). The `#anchor`, when there is one, is kept verbatim: scroll to it after loading the blob. The blob's bytes are the page
+  as it was when the row was written; a later write to the same file is a new hex.
+  An HTML page names its images, videos and fonts as `blob:sha256:<hex>` refs too (`lib/blob-page-assets.ts`). Before showing
+  it, take `pageBlobRefs(html)`, POST them to `/api/web-board/<org>/blob-urls`, and `signPageRefs(html, urls)`
+  (`lib/blob-page-sign.ts`); or load `/api/web-board/<org>/page/<hex>`, which has already done that.
+- **an `https://` URL**: a public site. Load it directly; it may refuse to be framed.
+- **any other URL** (`http://localhost:3000/…`, a dev server, a `file://` page that couldn't upload): only the owner's Mac
+  reaches it. Show `page_thumb` (null if no capture has been taken yet) and the URL as a label.
+
+`paneFromUrl` in `lib/share-types.ts` is the classifier (`blob` / `site` / `local`); a reader can port it as is.
+
+Where it comes from: `lib/card-page.ts` `notePage()` sets `card.page` and bumps `card.pages` every time a card's pane opens
+a page, both from the agent's `mcp__browser__open_url` and from Weft's own `openInPane()` (`lib/browser-tools.ts`). That
+covers the pages `lib/show.ts` writes: the starter page a turn opens on a blank pane, and the update page Haiku writes after
+a turn that showed nothing. Those two are not thread items, so before this column a phone saw a blank card for such a turn.
+`withUploadedPage()` in `lib/card-rows-blobs.ts` builds the columns at flush time, after the thumbnail upload, so `page_thumb`
+is already a ref. A card change (and `notePage` is one) flushes at once.
+
+The swipe-through history is still the thread: each `mcp__browser__open_url` item's `summary` (and a `user` item's `page`),
+oldest to newest, as `paneFor` reads them. Weft's own starter and update pages aren't in it; when the row's `page` differs from
+the newest item's page, put it last. A page the user navigated to by hand in the pane isn't recorded, and neither is a
+link an agent clicked into; `page` is the last page the pane was *told* to open.
 
 ### `cloud_thread_items`
 
@@ -218,6 +371,9 @@ so the second upload is a no-op). Members of the org may read and insert; there 
 policies for clients. A blob is alive for as long as anything still references it — a `cloud_thread_items`
 item, a pane image, a `~/.weft/show` page — and a sync sweep on the owner Mac prunes the unreferenced
 ones.
+
+Readers on weft.zip are served from a Cloudflare R2 copy of this bucket when the blob has been copied there (a row in
+`blob_mirror`), and from here otherwise: docs/architecture/r2.md.
 
 ## Policies
 
@@ -245,8 +401,8 @@ opened.
 
 ## Gaps
 
-- Item bodies go up as plain JSON. Sealing them with the workspace key (teams-vault.md) has to land before
-  sync is offered to anyone else.
+- Item bodies go up as plain JSON unless Settings → Sync's **Seal synced threads** is on; then items, card text and long tool
+  outputs are sealed with the workspace key (mobile-security.md). Page blobs aren't sealed yet, and old rows stay plain until they change.
 - A question or permission a thread asks waits in Needs you; a reply from the web doesn't answer it (it queues for after the turn). The assistant's text doesn't stream to the web either: it arrives as a whole item when written (`delta` events stay on the Mac).
 - A teammate's Mac never acts on your requests and yours never acts on theirs: the Mac only runs commands its own account made. Sending work to a teammate would need an explicit opt-in.
 - Finished commands stay in `cloud_commands`; nothing prunes them yet. A command whose Mac crashed between claiming and reporting stays `claimed` until it's cancelled.
@@ -257,4 +413,3 @@ opened.
 - Blobs are never pruned.
 - `Board.tsx` still fetches a card's whole thread and hands it to ThreadView as a seed, so paging doesn't yet save the
   first load; ThreadView then opens its own event stream (`useBoardEvents`) to keep its window live.
-- An HTML page uploaded as a blob still points at its images by their local relative paths.

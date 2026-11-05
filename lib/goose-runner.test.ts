@@ -4,12 +4,13 @@
 // files a progress note marks on the card.
 import fs from "node:fs";
 import path from "node:path";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { EXE, setupGoose } from "./goose-runner.harness";
 import type { Card } from "./types";
 
 const s = await vi.hoisted(async () => (await import("./goose-runner.harness")).gooseState());
 
+vi.mock("./guards/goose", async () => (await import("./goose-runner.harness")).gooseGuardsMock());
 vi.mock("./runner-turn", async () => (await import("./goose-runner.harness")).runnerTurnMock(s));
 vi.mock("./store", async () => (await import("./goose-runner.harness")).storeMock(s));
 vi.mock("node:child_process", async () => (await import("./goose-runner.harness")).childProcessMock(s));
@@ -35,6 +36,27 @@ describe("driveGoose starts goose run", () => {
     expect(rig().opts().env.GOOSE_PATH_ROOT).toContain("goose");
     expect(rig().opts().env.GOOSE_MODE).toBe("auto");
     expect(rig().opts().env.GOOSE_DISABLE_KEYRING).toBe("1");
+  });
+
+  it("runs every turn behind Weft's guards and closes them after", async () => {
+    const closed = vi.fn();
+    const { openGooseGuards } = await import("./guards/goose");
+    vi.mocked(openGooseGuards).mockReturnValueOnce(closed);
+    await rig().run([]);
+    expect(openGooseGuards).toHaveBeenCalledWith(rig().session);
+    expect(closed).toHaveBeenCalled();
+  });
+
+  it("refuses to start a turn whose guards can't be installed, and says why", async () => {
+    const { openGooseGuards } = await import("./guards/goose");
+    vi.mocked(openGooseGuards).mockImplementationOnce(() => {
+      throw new Error("Weft didn't start this turn: its guards couldn't be installed (no port).");
+    });
+    const r = rig();
+    const turn = r.goose.driveGoose(r.session, EXE);
+    r.session.inbox.push("do it");
+    await expect(turn).rejects.toThrow("guards couldn't be installed");
+    expect(s.spawned).toHaveLength(0);
   });
 
   it("stops before starting a turn once the session is aborted", async () => {
@@ -238,5 +260,31 @@ describe("what a Goose thread passes on", () => {
     const r = rig();
     const args = r.goose.argsFor({ ...r.session, spec: { ...r.session.spec, copilot: true } }, "hi");
     expect(args[args.indexOf("--system") + 1]).not.toContain("Co-Authored-By");
+  });
+});
+
+describe("a worker card's Goose key in what the turn files", () => {
+  const leak = async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    vi.stubEnv("WEFT_SHELL_URL", "");
+    const { markInUse } = await import("./secret-run");
+    const { remember } = await import("./worker-secret-run");
+    markInUse("card-1");
+    remember("card-1", { ANTHROPIC_API_KEY: "sk-ant-leak-123456" });
+  };
+  afterEach(() => vi.unstubAllEnvs());
+
+  it("swaps the key for ‹NAME› in the reply, the tool steps and the result", async () => {
+    await leak();
+    await rig().run([event({ type: "message", message: "Your key is sk-ant-leak-123456." }), event({ type: "notification", progress: "echo sk-ant-leak-123456" }), event({ type: "complete", text: "Done with sk-ant-leak-123456" })]);
+    const filed = JSON.stringify(s.handled);
+    expect(filed).not.toContain("sk-ant-leak-123456");
+    expect(filed).toContain("‹ANTHROPIC_API_KEY›");
+  });
+
+  it("swaps it in a failed turn's error too", async () => {
+    await leak();
+    const failed = await rig().start(["error: bad key sk-ant-leak-123456"], { code: 1 }).then(() => null, (err: unknown) => err as Error);
+    expect(failed?.message).toBe("error: bad key ‹ANTHROPIC_API_KEY›");
   });
 });

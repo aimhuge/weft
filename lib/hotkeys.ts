@@ -85,6 +85,20 @@ export function isTyping(target: EventTarget | null) {
   return target instanceof HTMLInputElement && TEXT_INPUTS.has(target.type);
 }
 
+// Where a key may come from and still be meant for the board: anything a click leaves focus on that isn't the board
+// (a control, a dialog, a frame) says the key was meant for that, even when it isn't a text field.
+const NOT_THE_BOARD = "[role='dialog'], [aria-modal='true'], dialog, button, a, input, select, textarea, iframe, webview, [contenteditable]";
+
+// True when a key was pressed on the board itself: nothing focused (the page's body) with no dialog up, or an element
+// inside the board's columns ([data-board-surface], components/BoardColumns.tsx) that isn't a control. A plain letter
+// that opens something heavy (the terminal) checks it, so a stray key from a panel or a review box never does.
+export function onBoardItself(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  if (target === document.body || target === document.documentElement) return !document.querySelector("[aria-modal='true'], dialog[open]");
+  if (isTyping(target) || target.closest(NOT_THE_BOARD)) return false;
+  return Boolean(target.closest("[data-board-surface]"));
+}
+
 let entries: Entry[] = [];
 const listeners = new Set<() => void>();
 

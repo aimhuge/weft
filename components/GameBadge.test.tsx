@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GameState } from "@/lib/game-server";
 import type { ProjectReport } from "@/lib/project-badges";
 import GameBadge from "./GameBadge";
@@ -39,6 +39,12 @@ function game(over: Partial<GameState> = {}): GameState {
     ...over,
   };
 }
+
+// GameBadge loads the popup and the loom with next/dynamic, so the first test to open one used to pay for
+// transforming the module inside findByRole's 1s window, and lost the race on a loaded CI shard. Pay it up front.
+beforeAll(async () => {
+  await Promise.all([import("./AchievementPopup"), import("./LoomDialog")]);
+}, 60_000);
 
 let state = game();
 let league: unknown = { state: "signed-out" };
@@ -102,6 +108,10 @@ describe("GameBadge", () => {
   it("replays the last popup on the replay event, and the current level before any", async () => {
     setup();
     await screen.findByRole("button", { name: /Wefter Profile/ });
+    // The button shows on the commit that sets `game`, but the replay listener is a passive effect of that same
+    // render. findByRole resolves from a MutationObserver microtask, before React flushes passive effects, so an
+    // event fired right away has no listener yet and is lost. Flush effects inside act before dispatching.
+    await act(async () => {});
     window.dispatchEvent(new Event("weft:achievement-replay"));
     expect(await screen.findByRole("dialog", { name: "Level up!" })).toHaveTextContent("Level 2 · Thread");
     await userEvent.click(screen.getByRole("button", { name: "Nice!" }));

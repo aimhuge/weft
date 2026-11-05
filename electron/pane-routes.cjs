@@ -11,19 +11,53 @@ const { sharedSnapshot, snapshotRoutes } = require("./page-snapshot.cjs");
 const { gooseRoutes } = require("./goose-ipc.cjs");
 const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { slackRoutes } = require("./slack.cjs");
+const { touchIdPrompt } = require("./touch-id.cjs");
+const { desktopSignerFor, settingsSignRoutes } = require("./settings-sign.cjs");
+const { lanLineRoutes } = require("./lan-line-sign.cjs");
+const { workerLabel } = require("./worker-label.cjs");
+
+// The pairing routes, looked up when called: pairing is set up after the pane (it needs the account client).
+const PAIRING_ROUTES = ["POST /sync/key", "POST /sync/keyring", "POST /pairing/verify", "POST /pairing/passkey-verify", "POST /pairing/widen-nonce", "POST /pairing/status", "POST /connectors/sign-start"];
+function pairingRoutes(pairing) {
+  return Object.fromEntries(
+    PAIRING_ROUTES.map((route) => [
+      route,
+      (body) => {
+        const p = pairing();
+        if (!p) throw new Error("Pairing isn't ready yet.");
+        return p.routes[route](body);
+      },
+    ]),
+  );
+}
 
 // The copilot's chips (lib/copilot-sources.ts): a linked service's state per folder, read-only.
 function statusRoute(api) {
   return ({ folders }) => api()?.status((folders ?? []).map(String)) ?? { folders: [] };
 }
 
-function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null }) {
+// The worker pins, opened when a prompt needs one (the keychain is ready by then).
+function pinsFor(dataDir) {
+  const { createWorkerPins } = require("./worker-pins.cjs");
+  return createWorkerPins({ dir: dataDir, safeStorage: () => require("./keychain-audit.cjs").keychainFor("worker pins") });
+}
+
+// " on <worker>" for a prompt about a worker's ask, nothing for this Mac's own (no worker id in the body).
+function onWorker(dataDir, worker, name) {
+  return worker ? ` on ${workerLabel(pinsFor(dataDir), worker, name)}` : "";
+}
+
+function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, pairing = () => null, cardFor = () => "" }) {
+  // This Mac's device key, opened once for the settings and LAN-offer signatures.
+  const deviceKey = desktopSignerFor(dataDir);
   return {
+    // The workspace sync key and paired-phone checks the server asks for (electron/pairing-ipc.cjs).
+    ...pairingRoutes(pairing),
     // The Weft account's session, sealed by safeStorage; the server reads it here instead of a plain file.
     ...accountRoutesFor(dataDir),
     // mcp__secrets__add_blank, ask_add, set_value and set_values: blanks into the card's vault (a fill or run that found a key
     // missing goes through ask-add too), and a value a thread generated into one.
-    ...vaultRoutes(vault),
+    ...vaultRoutes(vault, cardFor),
     // A new mini-app link's keys, pushed in the request that makes it (lib/app-share-keys.ts).
     ...appSecretsRoutes(),
     // mcp__board__request_folder_access: a thread that got "Operation not permitted" on Downloads asks;
@@ -37,9 +71,23 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
       return { ok: true };
     },
     // mcp__webhooks__relay: webhooks' signing secrets sealed for the deployed relay, after Touch ID (electron/relay-seal.cjs).
-    ...relaySealRoutes(vault),
+    // A worker's ask names the worker in the prompt.
+    ...relaySealRoutes(vault, (worker, workerName) => onWorker(dataDir, worker, workerName)),
+    // Opening a tunnel puts a local port on the internet, so a person says yes each time, a thread's call included
+    // (lib/tunnels.ts). Cancelled means no tunnel; only the answer goes back.
+    "POST /tunnels/approve": async ({ folder, target, hours, worker, workerName }) => {
+      const ask = touchIdPrompt({ systemPreferences, dialog, window });
+      return { approved: await ask(`open a private tunnel to ${target} from ${folder}${onWorker(dataDir, worker, workerName)} for ${hours} hours`) };
+    },
+    // Local Simulator mode: a worker's build runs on this Mac as a process with your permissions, so a person says yes, and only
+    // the answer goes back. The server keeps the grant for 8 hours (lib/qa-grants.ts).
+    "POST /qa/approve": async ({ worker, folder, device }) => {
+      const clean = (v) => String(v ?? "").replace(/[^\p{L}\p{N} ._:()-]/gu, "").slice(0, 60);
+      const ask = touchIdPrompt({ systemPreferences, dialog, window });
+      return { approved: await ask(`run builds from ${clean(worker)} (${clean(folder)}) on ${clean(device)} as you for 8 hours`) };
+    },
     // mcp__secrets__push_to_vercel: a vault value onto the card's linked Vercel project, after Touch ID.
-    ...envRoutes(vercelEnv),
+    ...envRoutes(vercelEnv, cardFor),
     // The latest deploy and the unapplied migrations, per folder.
     "POST /vercel/status": statusRoute(vercelApi),
     "POST /supabase/status": statusRoute(supabaseApi),
@@ -53,10 +101,17 @@ function paneRoutes({ dataDir, app, dialog, shell, window, board, sendMenu, upda
       if (!blastcp) throw new Error("BlastCP isn't set up in this Weft yet. Restart Weft.");
       return blastcp.connectWeft(String(subjectToken ?? ""), { force: force === true });
     },
+    // mcp__blastcp__*: a thread's tools/list or tools/call, sent on to BlastCP by main with the sealed sign-in
+    // (electron/blastcp-thread.cjs). The token never comes back, only BlastCP's answer or why there isn't one.
+    "POST /blastcp/mcp": ({ method, params }) => blastcpApi()?.forward(String(method ?? ""), params ?? {}) ?? { state: "unavailable" },
     // A mini app's link-preview screenshot (lib/app-preview-capture.ts): the page in a hidden window at 1200×630.
     ...snapshotRoutes(sharedSnapshot),
     // The server asks main to post to Slack, and how the socket is doing (electron/slack.cjs).
     ...slackRoutes(slackApi),
+    // Your account's settings for your workers, signed with this Mac's device key on each push (electron/settings-sign.cjs).
+    ...settingsSignRoutes(deviceKey),
+    // A worker's pinned keys and this Mac's signature over a line offered to it over the LAN (electron/lan-line-sign.cjs).
+    ...lanLineRoutes({ pins: () => pinsFor(dataDir), signer: deviceKey }),
     // mcp__board_view__*: threads see and drive the board itself, secrets redacted (electron/board-view.cjs).
     ...boardViewRoutes(createBoardView({ board })),
   };

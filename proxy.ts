@@ -13,9 +13,23 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { appLinkTarget } from "@/lib/app-routes";
 import { isWebEnabled } from "@/lib/home";
+import { SIGN_HEADERS, signCsp, signHosts, signRoute } from "@/lib/sign-origin";
 import { SUPABASE_KEY, SUPABASE_URL } from "@/lib/supabase-project";
 
+// sign.weft.zip serves only its passkey pages, under their own CSP; their files are a 404 on every other host
+// (lib/sign-origin.ts). Decided before anything else, and with no session work: that host has no cookies of weft.zip's.
+function signResponse(request: NextRequest): NextResponse | null {
+  const route = signRoute(request.headers.get("host"), request.nextUrl.pathname, signHosts(process.env));
+  if (!route) return null;
+  const response = "rewrite" in route ? NextResponse.rewrite(new URL(route.rewrite, request.url)) : new NextResponse("Not found", { status: 404 });
+  response.headers.set("Content-Security-Policy", signCsp());
+  for (const [key, value] of Object.entries(SIGN_HEADERS)) response.headers.set(key, value);
+  return response;
+}
+
 export async function proxy(request: NextRequest) {
+  const signed = signResponse(request);
+  if (signed) return signed;
   // isWebEnabled(), not isDeployed(): WEFT_WEB=1 turns the weft.zip routes on for a local
   // server too, and those routes read the cookie session. Gating the refresh on the
   // deployed-only check would let a local visitor's expired access token bounce them
@@ -57,7 +71,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // The weft.zip pages that read the session: sign-in, the workspace's team page and invite links.
+  // The weft.zip pages that read the session: sign-in, the workspace's team page, /billing (the pricing cards' way in) and invite links.
   // /s/:path* is included so a private share's redirect-to-login sees the visitor's cookie state.
   // The app-link matchers let the proxy decide on every request; non-matches still hit the function
   // but return NextResponse.next() at once (no session work for them).
@@ -65,14 +79,25 @@ export const config = {
     "/login",
     "/app",
     "/team",
+    "/billing",
     "/invite/:token*",
+    "/pair",
     "/:orgSlug/team/:path*",
     "/:orgSlug/billing/:path*",
     "/s/:path*",
+    // A tunnel's address reads the visitor's session the same way (lib/tunnel-address.ts).
+    "/t/:path*",
     // /@<username>/apps/<slug> and /<org>/apps/<slug> rewrites (lib/app-routes.ts). The strings
     // are inlined here so Next's static parser can see them; a spread into appLinkMatchers()
     // makes `config` unparseable and the proxy throws on every request.
     "/@:username/apps/:slug",
     "/:org/apps/:slug",
+    // sign.weft.zip (and its dev host): every path, so anything but its pages is a 404 (lib/sign-origin.ts). And its
+    // files under /sign, refused on every other host.
+    // Next anchors a host value as a regex (^…$), so the dots are escaped; a trailing dot is the same host.
+    { source: "/:path*", has: [{ type: "host", value: "sign\\.weft\\.zip\\.?" }] },
+    { source: "/:path*", has: [{ type: "host", value: "sign\\.localhost\\.?" }] },
+    "/sign/:path*",
+    "/@:username/threads/:slug",
   ],
 };

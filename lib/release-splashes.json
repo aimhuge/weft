@@ -1,0 +1,65 @@
+{
+  "0.7.5": {
+    "lines": [
+      "A linked project's cards sync to your team, so the team's board holds everyone's work, not one person's.",
+      "Turn on a folder's Sync and it joins the team too; switch it off and on again and its older cards move over.",
+      "Your teammates' cards for a linked project show on your desktop board, read-only, with whose Mac runs each."
+    ]
+  },
+  "0.7.3": {
+    "lines": [
+      "Give Weft a project and one button installs the deps, asks for your keys, and shows the app.",
+      "Weft is on your phone: each card shows its page, full screen, with your AI's last sentence below.",
+      "Share a card and it gets its own address, a preview that unfurls in Slack, and a choice to hide the chat."
+    ]
+  },
+  "0.7.2": {
+    "lines": [
+      "Dictate in any app: press ⌥' anywhere on your Mac, and Weft types what you say where you're typing",
+      "A Weft Worker's cards now work like your Mac's: their pages in the pane, the live simulator, the browser and the vault",
+      "A shared thread gets your own address and a link preview, and can hide the chat to share it as a mini app"
+    ]
+  },
+  "0.6.6": {
+    "lines": [
+      "Imported GitHub issues can now work themselves: choose where each project lands them, and your AI runs the issue.",
+      "Design the agent starts a thread that interviews you, then writes a real agent with its own soul.",
+      "Weft now checks its own bundle on launch, so a broken update tells you to reinstall instead of dying."
+    ]
+  },
+  "0.6.5": {
+    "lines": [
+      "Your vault now follows you across machines, so your AI finds the same keys on every Mac.",
+      "Esc says where it took you, so you know which view you landed in.",
+      "Name your models, so every menu shows the model you'll actually run."
+    ]
+  },
+  "0.6.4": {
+    "lines": [
+      "The copilot now brings you ideas, not a list of cards, and speaks up at most three times a day.",
+      "The Skills menu opens over the whole window now, so nothing gets cut off in a narrow panel.",
+      "Puku threads no longer say \"Not logged in\" in projects that use Puku's API themselves."
+    ]
+  },
+  "0.6.3": {
+    "lines": [
+      "Cloning shows its progress, so you know what's happening before your thread starts.",
+      "Fold any column to a strip, and let the fullest ones spread out when you need the room.",
+      "Press Z to reopen the last card you had open, so you never lose your place."
+    ]
+  },
+  "0.6.2": {
+    "lines": [
+      "Your board now reads like a spreadsheet: every card on one sheet, searchable as you type",
+      "Sign in to Weft on first launch, so your profile, Project Sync and share links are ready",
+      "The New thread dialog picks the model and the agent together, so a thread starts in your voice"
+    ]
+  },
+  "0.7.1": {
+    "lines": [
+      "Dictate in any app: press ⌥' anywhere on your Mac, and Weft types what you say where you're typing",
+      "A Weft Worker's cards now work like your Mac's: their pages in the pane, the live simulator, the browser and the vault",
+      "A shared thread gets your own address and a link preview, and can hide the chat to share it as a mini app"
+    ]
+  }
+}

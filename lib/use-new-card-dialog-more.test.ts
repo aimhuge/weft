@@ -175,14 +175,24 @@ describe("useNewCardDialog: submit", () => {
     );
   });
 
-  it("leaves out the agent and the isolated flag when they're the defaults", async () => {
+  it("sends the branch an isolated card's worktree works on", async () => {
+    const { result } = renderHook(() => useNewCardDialog("/home", "/repo/web", undefined));
+    act(() => result.current.pickBranch("feat/x"));
+    const onCreate = vi.fn<(i: NewCardInput) => Promise<void>>(() => Promise.resolve());
+    await act(async () => {
+      await result.current.submit(true, { stay: false, read: () => "hi", clear: () => {}, focus: () => {}, onCreate, onClose: () => {} });
+    });
+    expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ isolated: true, branch: "feat/x" }));
+  });
+
+  it("names the agent so the folder's default never wins over it, and leaves out the isolated flag when it's the default", async () => {
     const { result } = renderHook(() => useNewCardDialog("/home", "/repo/web", undefined));
     const onCreate = vi.fn<(i: NewCardInput) => Promise<void>>(() => Promise.resolve());
     await act(async () => {
       await result.current.submit(false, { stay: false, read: () => "hi", clear: () => {}, focus: () => {}, onCreate, onClose: () => {} });
     });
     const input = onCreate.mock.calls[0]?.[0];
-    expect(input).not.toHaveProperty("agent");
+    expect(input?.agent).toBe("builder");
     expect(input).not.toHaveProperty("isolated");
     expect(input?.start).toBe(false);
   });

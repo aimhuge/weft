@@ -1,22 +1,39 @@
-// Find in page for the browser pane: the board's find bar (components/PaneFindBar.tsx) asks for a word, Chromium
-// highlights its matches in the page, and each count comes back to the bar as "browser:found".
+// Find in the page on screen in the browser pane. The field is the board's (components/PaneFind.tsx), since
+// nothing in the board can sit over the native view; this drives Chromium's own find on the active tab and
+// reports its count back. Only one page has a find going: the board moves it when the tab or card changes.
+const MAX_QUERY = 1000;
 
-// next is false while the user types (a new search) and true for Enter / Shift+Enter (the next or previous match).
-function findInPage(wc, text, { forward = true, next = false } = {}) {
-  if (!wc || wc.isDestroyed()) return;
-  const query = String(text ?? "");
-  if (!query) return stopFind(wc);
-  wc.findInPage(query, { forward: forward !== false, findNext: !next });
+function createPaneFind({ current, send }) {
+  let searched = null;
+
+  function clear(wc, refocus) {
+    if (!wc || wc.isDestroyed()) return;
+    wc.stopFindInPage("clearSelection");
+    if (refocus) wc.focus();
+  }
+
+  // next: a step within the same search. Electron's own findNext option means the opposite: true starts a new one.
+  function find(text, { forward = true, next = false } = {}) {
+    const wc = current();
+    if (!wc || wc.isDestroyed() || !text) return;
+    if (searched !== wc) clear(searched);
+    searched = wc;
+    wc.findInPage(String(text).slice(0, MAX_QUERY), { forward, findNext: !next });
+  }
+
+  // refocus hands the keyboard back to the page, where the find started.
+  function stop(refocus = false) {
+    clear(searched ?? (refocus ? current() : null), refocus);
+    searched = null;
+  }
+
+  function watch(wc) {
+    wc.on("found-in-page", (_e, result) => {
+      if (wc === searched) send({ active: result.activeMatchOrdinal ?? 0, matches: result.matches ?? 0 });
+    });
+  }
+
+  return { find, stop, watch };
 }
 
-// Clears the highlights and leaves the current match selected, as Chrome does when its find bar closes.
-function stopFind(wc) {
-  if (wc && !wc.isDestroyed()) wc.stopFindInPage("keepSelection");
-}
-
-// Chromium reports the active match and the count in pieces; send whatever it knows.
-function watchFind(wc, onFound) {
-  wc.on("found-in-page", (_e, result) => onFound({ active: result.activeMatchOrdinal ?? 0, matches: result.matches ?? 0 }));
-}
-
-module.exports = { findInPage, stopFind, watchFind };
+module.exports = { createPaneFind };

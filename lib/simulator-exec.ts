@@ -1,10 +1,10 @@
 // The command-line tools behind the simulator tools (lib/simulator-tools.ts), found and run here: xcrun simctl
 // (ships with Xcode), AXe for iOS taps and the UI tree (one Homebrew binary), and the Android SDK's adb and
 // emulator. They run from Weft's server as plain programs, no shell, so nothing a thread passes is parsed twice.
-import { execFile } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { runCliBuffer } from "./cli-exec";
 
 // Long enough for a cold boot or an install; screenshots and taps come back in well under a second.
 export const RUN_MS = 120_000;
@@ -27,6 +27,10 @@ export function findBin(name: string, candidates: string[] = [], env: NodeJS.Pro
 const HOMEBREW = ["/opt/homebrew/bin", "/usr/local/bin"];
 // Where Settings → Connectors → Simulators → Install puts the tools that don't need Homebrew (AXe).
 export const TOOLS_DIR = path.join(os.homedir(), ".weft", "tools");
+
+// The apps the simulator tools live in: Xcode (for xcrun simctl) and Android Studio (for its Java and the SDK).
+export const XCODE_APP = "/Applications/Xcode.app";
+export const STUDIO_APP = "/Applications/Android Studio.app";
 
 export function bins() {
   const sdk = androidSdk();
@@ -58,16 +62,7 @@ export function binPath(name: Bin): string {
 // the tool's own words, which say more than an exit code.
 export function run(name: Bin, args: string[], { timeout = RUN_MS }: { timeout?: number } = {}): Promise<Buffer> {
   const file = binPath(name);
-  return new Promise((resolve, reject) => {
-    execFile(file, args, { encoding: "buffer", timeout, maxBuffer: MAX_BUFFER }, (err, stdout, stderr) => {
-      if (!err) {
-        resolve(stdout);
-        return;
-      }
-      const said = `${stderr.toString().trim()}\n${stdout.toString().trim()}`.trim();
-      reject(new Error(said || `${name} ${args[0] ?? ""} failed: ${err.message}`));
-    });
-  });
+  return runCliBuffer(file, args, { timeout, maxBuffer: MAX_BUFFER, name });
 }
 
 export const runText = async (name: Bin, args: string[], opts?: { timeout?: number }) => (await run(name, args, opts)).toString("utf8");

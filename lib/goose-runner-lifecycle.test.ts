@@ -8,6 +8,7 @@ import type { Card } from "./types";
 
 const s = await vi.hoisted(async () => (await import("./goose-runner.harness")).gooseState());
 
+vi.mock("./guards/goose", async () => (await import("./goose-runner.harness")).gooseGuardsMock());
 vi.mock("./runner-turn", async () => (await import("./goose-runner.harness")).runnerTurnMock(s));
 vi.mock("./store", async () => (await import("./goose-runner.harness")).storeMock(s));
 vi.mock("node:child_process", async () => (await import("./goose-runner.harness")).childProcessMock(s));
@@ -170,6 +171,20 @@ describe("a Goose turn started through the launch helper", () => {
     r.session.inbox.push("do it");
     await vi.waitFor(() => expect(s.spawned.length).toBe(1));
     expect(r.opts().command).toBe(EXE);
+    expect(r.opts().env.ANTHROPIC_HOST).toBeUndefined();
+    r.child().run(s, [event({ type: "complete", text: "Done." })]);
+    await r.finish(promise);
+  });
+
+  it("still points the plain binary at the endpoint the settings name (a worker has no grant)", async () => {
+    const r = rig();
+    r.session.spec.provider = "anthropic";
+    r.session.spec.gooseBaseUrl = "https://gw.example";
+    launch.value = undefined;
+    const promise = r.goose.driveGoose(r.session, EXE);
+    r.session.inbox.push("do it");
+    await vi.waitFor(() => expect(s.spawned.length).toBe(1));
+    expect(r.opts().env.ANTHROPIC_HOST).toBe("https://gw.example");
     r.child().run(s, [event({ type: "complete", text: "Done." })]);
     await r.finish(promise);
   });

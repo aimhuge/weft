@@ -1,16 +1,12 @@
-import { randomUUID } from "node:crypto";
 import { restartArmed } from "./restart-when-idle";
 import { freeSlots, isBusy, sendUserMessage } from "./runner";
-import { addScheduled, dueMessage } from "./schedule";
+import { holdMessage } from "./scheduled-hold";
+import { dueMessage } from "./schedule";
 import { prebakeBriefs } from "./splice";
+import { startClock } from "./tick-clock";
 import { getCard, listCards, updateCard } from "./store";
 import { COPILOT_ID, type Card } from "./types";
-
-// How often the server looks for scheduled messages whose time has come. A Mac that slept past
-// one sends it on the first check after waking; a Weft that was closed, on the first after starting.
-const CHECK_EVERY_MS = 15_000;
-
-const g = globalThis as unknown as { __weftScheduleTimer?: ReturnType<typeof setInterval> };
+import { noteClient } from "./turn-client";
 
 export function scheduleMessage(cardId: string, text: string, at: number): Card {
   const card = getCard(cardId);
@@ -18,7 +14,7 @@ export function scheduleMessage(cardId: string, text: string, at: number): Card 
   if (cardId === COPILOT_ID) throw new Error("The copilot can't take a scheduled message.");
   if (!Number.isFinite(at)) throw new Error("Pick a time to send it.");
   if (at <= Date.now()) throw new Error("That time has already passed.");
-  return updateCard(cardId, { scheduled: addScheduled(card.scheduled, { id: randomUUID(), text, at }) });
+  return holdMessage(card, text, { reason: "timed", at });
 }
 
 export function unscheduleMessage(cardId: string, messageId: string): Card {
@@ -38,9 +34,15 @@ export function sendDueMessages(now = Date.now()) {
     // The list is read once, so a card with nothing scheduled takes the same path as one with a due message.
     const scheduled = card.scheduled ?? [];
     const due = dueMessage(card, now);
-    if (!due || isBusy(card.id)) continue;
+    if (!due) continue;
+    if (isBusy(card.id)) {
+      afterRestartIsAfterTurn(card);
+      continue;
+    }
     const rest = scheduled.filter((m) => m.id !== due.id);
     updateCard(card.id, { scheduled: rest.length ? rest : undefined });
+    // Send later, not a held message or a card's first turn waiting on a limit (which says who made the card).
+    if (card.turns && !due.afterRestart) noteClient(card.id, { app: "scheduled" });
     try {
       sendUserMessage(card.id, due.text);
     } catch (err) {
@@ -49,12 +51,24 @@ export function sendDueMessages(now = Date.now()) {
   }
 }
 
-// Once per server process.
-export function startScheduler() {
-  if (g.__weftScheduleTimer) return;
-  g.__weftScheduleTimer = setInterval(() => {
+// A message held for a restart, on a card that is mid-turn once no restart is armed (it happened, or was cancelled), is
+// only waiting for that turn now: it says "after this turn", the reply box offers Send now, and it goes out with what
+// else waited for the turn (lib/runner.ts sendHeld).
+function afterRestartIsAfterTurn(card: Card) {
+  const scheduled = card.scheduled ?? [];
+  if (!scheduled.some((m) => m.afterRestart)) return;
+  const relabelled = scheduled.map(({ afterRestart, ...m }) => (afterRestart ? { ...m, afterTurn: true } : m));
+  updateCard(card.id, { scheduled: relabelled });
+}
+
+// Once per server process. How often the server looks for scheduled messages whose time has come.
+// A Mac that slept past one sends it on the first check after waking; a Weft that was closed, on
+// the first after starting. A Weft Worker's daemon runs it too, for Send later on its cards, without
+// the briefs: baking one is a model call, which a worker leaves until a card asks for Send fresh.
+export function startScheduler({ briefs = true }: { briefs?: boolean } = {}) {
+  // The first check looks only for due messages; the briefs are baked after that, on the interval.
+  startClock("schedule", () => {
     sendDueMessages();
-    prebakeBriefs();
-  }, CHECK_EVERY_MS);
-  sendDueMessages();
+    if (briefs) prebakeBriefs();
+  }, { first: () => sendDueMessages() });
 }

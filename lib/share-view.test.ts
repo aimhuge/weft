@@ -1,7 +1,7 @@
 // lib/share-view.ts: pure view-side logic for the share viewer. How a poll merges by seq, how the
 // load-earlier and poll-after cursors are computed, and when the "Load earlier" button is hidden.
 import { describe, expect, it } from "vitest";
-import { canLoadEarlier, mergeShareLive, newestSeq, oldestSeq, publicPane, toShareCard } from "./share-view";
+import { BLOB_URL_RENEW_MS, canLoadEarlier, mergeBlobUrls, mergeShareLive, newestSeq, oldestSeq, publicPane, signedUrlExpiry, toShareCard } from "./share-view";
 import type { Card, ThreadItem } from "./types";
 import type { ShareLive } from "./share-types";
 
@@ -27,6 +27,7 @@ function makeLive(over: Partial<ShareLive> = {}): ShareLive {
     hasOlder: false,
     pane: null,
     blobUrls: {},
+    showChat: true,
     ...over,
   };
 }
@@ -69,6 +70,35 @@ describe("mergeShareLive", () => {
     const prev = makeLive();
     const next = makeLive({ items: [{ seq: 1, item: makeItem(1, "first") }] });
     expect(mergeShareLive(prev, next).items.map((i) => i.seq)).toEqual([1]);
+  });
+
+  it("takes showChat from next", () => {
+    expect(mergeShareLive(makeLive(), makeLive({ showChat: true })).showChat).toBe(true);
+    expect(mergeShareLive(makeLive({ showChat: true }), makeLive({ showChat: false })).showChat).toBe(false);
+    expect(mergeShareLive(makeLive({ showChat: false }), makeLive({ showChat: true })).showChat).toBe(true);
+  });
+
+  it("drops what the viewer already has when the sharer hides the chat mid-view", () => {
+    const prev = makeLive({
+      items: [{ seq: 3, item: makeItem(3, "old-3") }, { seq: 2, item: makeItem(2, "old-2") }],
+      hasOlder: true,
+      blobUrls: { a: "u-a", b: "u-b" },
+    });
+    const next = makeLive({ items: [{ seq: 4, item: makeItem(4, "new-4") }], hasOlder: true, showChat: false, blobUrls: { b: "u-b2", c: "u-c" } });
+    const merged = mergeShareLive(prev, next);
+    expect(merged.showChat).toBe(false);
+    expect(merged.items).toEqual([]);
+    expect(merged.hasOlder).toBe(false);
+    // The blob URLs are still merged, so the card's picture keeps rendering.
+    expect(merged.blobUrls).toEqual({ a: "u-a", b: "u-b2", c: "u-c" });
+  });
+
+  it("takes the card and the pane from next even when the chat is hidden", () => {
+    const prev = makeLive({ card: { ...makeLive().card, title: "old" }, pane: { kind: "site", url: "https://old", label: "old" } });
+    const next = makeLive({ card: { ...makeLive().card, title: "new" }, pane: { kind: "site", url: "https://new", label: "new" }, showChat: false });
+    const merged = mergeShareLive(prev, next);
+    expect(merged.card.title).toBe("new");
+    expect(merged.pane).toEqual({ kind: "site", url: "https://new", label: "new" });
   });
 });
 
@@ -140,5 +170,43 @@ describe("publicPane", () => {
     const site = { kind: "site", url: "https://example.com", label: "example.com" } as const;
     expect(publicPane(site)).toBe(site);
     expect(publicPane(null)).toBeNull();
+  });
+});
+
+describe("signed blob URLs across polls", () => {
+  const now = Date.UTC(2026, 9, 29, 9, 0, 0);
+  const signed = (expMs: number, tag: string) => {
+    const payload = btoa(JSON.stringify({ url: "weft-blobs/org/sha", exp: Math.floor(expMs / 1000) })).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    return `https://x.supabase.co/storage/v1/object/sign/weft-blobs/org/sha?token=h.${payload}.${tag}`;
+  };
+
+  it("reads the expiry out of the token", () => {
+    expect(signedUrlExpiry(signed(now + 3_600_000, "a"))).toBe(now + 3_600_000);
+  });
+
+  it("answers null for a URL with no token, a bad token, or no exp", () => {
+    expect(signedUrlExpiry("https://x.supabase.co/a")).toBeNull();
+    expect(signedUrlExpiry("https://x.supabase.co/a?token=nodots")).toBeNull();
+    expect(signedUrlExpiry("https://x.supabase.co/a?token=h.!!!.s")).toBeNull();
+    expect(signedUrlExpiry(`https://x.supabase.co/a?token=h.${btoa("{}")}.s`)).toBeNull();
+    expect(signedUrlExpiry("not a url")).toBeNull();
+  });
+
+  it("keeps the URL the viewer has, so the picture isn't downloaded again every poll", () => {
+    const held = signed(now + 3_600_000, "first");
+    const out = mergeBlobUrls({ thumb: held }, { thumb: signed(now + 3_604_000, "second"), b: "u-b" }, now);
+    expect(out).toEqual({ thumb: held, b: "u-b" });
+  });
+
+  it("swaps in the fresh URL once the held one is near expiry", () => {
+    const fresh = signed(now + 3_600_000, "fresh");
+    const nearlyDone = signed(now + BLOB_URL_RENEW_MS - 1000, "old");
+    expect(mergeBlobUrls({ thumb: nearlyDone }, { thumb: fresh }, now).thumb).toBe(fresh);
+  });
+
+  it("keeps a held URL across a whole poll through mergeShareLive", () => {
+    const held = signed(Date.now() + 3_600_000, "first");
+    const merged = mergeShareLive(makeLive({ blobUrls: { thumb: held } }), makeLive({ blobUrls: { thumb: signed(Date.now() + 3_604_000, "second") } }));
+    expect(merged.blobUrls.thumb).toBe(held);
   });
 });

@@ -1,8 +1,10 @@
 import { storedAgent } from "./agents";
+import { listAgents, projectAgent } from "./agent-store";
 import { firstMessage } from "./automations";
+import { validBranch } from "./branch-name";
 import { resolveFolder } from "./folders";
 import { asText, cleanTitle, titleFromPrompt } from "./format";
-import { effortFor, BACKEND_IDS } from "./new-thread";
+import { effortFor, BACKEND_IDS, GOOSE_PREFIX } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { sendMessage } from "./runner";
 import { scheduleMessage } from "./scheduler";
@@ -12,6 +14,7 @@ import { createCard } from "./store";
 import { rememberTags } from "./tag-store";
 import { normalizeTags } from "./tags";
 import { MODES, type Backend, type Card, type Effort, type PermissionMode } from "./types";
+import { asTurnClient, noteClient } from "./turn-client";
 
 // Making a card from a request body: POST /api/cards (the New thread dialog) and the cloud inbox (a card
 // started on the weft.zip board, lib/cloud-inbox.ts) both go through here, so a card reads the same either way.
@@ -21,10 +24,31 @@ import { MODES, type Backend, type Card, type Effort, type PermissionMode } from
 // instead, with nothing to say so.
 const BACKENDS: Backend[] = BACKEND_IDS;
 
-const MODEL_ID = /^[\w.\-\[\]]{1,60}$/;
+// The shape a model id has to have, so a body can't hand a card an arbitrary string to put on
+// a CLI's command line. It is a shape check, not a list: a card's model can be any id a
+// provider serves, and those use "/" ("anthropic/claude-opus-4.1"), ":" ("llama3:8b") and ":"
+// ("host:port"), which a stricter pattern rejected. A rejected id became no model at all, so
+// the card silently ran on the CLI's own default instead of the one that was asked for.
+const MODEL_ID = /^[\w.:\-/[\]]{1,120}$/;
 
-// Throws with a message to show when the body can't make a card (no prompt, a folder that isn't one).
-export function createCardFromBody(body: Record<string, unknown>): Card {
+// The model a card runs, from a picker's value. A Goose model arrives as "goose:<id>" and the
+// prefix comes off, because a card's model is the id the CLI takes.
+function modelFromBody(body: Record<string, unknown>): string | undefined {
+  const value = body.model;
+  if (typeof value !== "string") return undefined;
+  // A "goose:" prefix names a Goose model, so the prefix comes off. With no model after it there
+  // is nothing to run, and the card takes its CLI's own choice.
+  if (value.startsWith(GOOSE_PREFIX)) {
+    const id = value.slice(GOOSE_PREFIX.length);
+    return id && MODEL_ID.test(id) ? id : undefined;
+  }
+  if (!MODEL_ID.test(value)) return undefined;
+  return value;
+}
+
+// Throws with a message to show when the body can't make a card (no prompt, a folder that isn't one). `id` is the
+// card's id when the caller picked it (card.create, so a board can name the card it asked a worker for).
+export function createCardFromBody(body: Record<string, unknown>, id?: string): Card {
   const prompt = asText(body.prompt).trim();
   if (!prompt) throw new Error("Write a prompt for this thread.");
   const typedTitle = cleanTitle(asText(body.title));
@@ -37,7 +61,7 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     ? (body.permissionMode as PermissionMode)
     : defaultPermissionMode();
 
-  const model = typeof body.model === "string" && MODEL_ID.test(body.model) ? body.model : undefined;
+  const model = modelFromBody(body);
 
   // A model that has hit its limit is a bad place to start a thread: the first turn would fail on
   // it. The card starts on the backup model instead (lib/model-fallback.ts), and the CLI moves with
@@ -57,20 +81,31 @@ export function createCardFromBody(body: Record<string, unknown>): Card {
     permissionMode,
     model: startModel,
     effort,
-    ...marksFromBody(body),
+    ...marksFromBody(body, cwd),
     // Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts).
-    ...(body.isolated === true ? { isolated: true } : {}),
-  });
+    ...isolationFromBody(body),
+  }, ...(id === undefined ? [] : [id]));
   touchProject(cwd);
+  // Who asked for it, for its first turn's <weft-env> block (lib/turn-client.ts): a hint the entry point set.
+  noteClient(card.id, asTurnClient(body.client));
   return card;
 }
 
+// Its own worktree, taken from the pool before its first turn (lib/worktree-start.ts), on the branch named when it
+// names a valid one (an existing branch is checked out, a new name made from HEAD), else on its own weft/* branch.
+function isolationFromBody(body: Record<string, unknown>): Pick<Card, "isolated" | "worktreeBranch"> {
+  if (body.isolated !== true) return {};
+  const branch = asText(body.branch).trim();
+  return { isolated: true, ...(validBranch(branch) ? { worktreeBranch: branch } : {}) };
+}
+
 // The card's tags and agent from the body. Tags given here are yours, so retitle won't pick others (lib/retitle.ts);
-// new ones join the catalog. The agent is who the thread is (lib/agents.ts); an unknown name or Builder stores none.
-function marksFromBody(body: Record<string, unknown>): Pick<Card, "tags" | "tagsBy" | "agent"> {
+// new ones join the catalog. The agent is who the thread is (lib/agents.ts): the one named, else the project's default
+// (Settings → Agents); an unknown name or Builder stores none.
+function marksFromBody(body: Record<string, unknown>, cwd: string): Pick<Card, "tags" | "tagsBy" | "agent"> {
   const tags = Array.isArray(body.tags) ? normalizeTags(body.tags.map((t) => asText(t))) : [];
   rememberTags(tags);
-  const agent = storedAgent(body.agent);
+  const agent = storedAgent(body.agent ?? projectAgent(cwd), listAgents());
   return { ...(tags.length ? { tags, tagsBy: "user" as const } : {}), ...(agent ? { agent } : {}) };
 }
 

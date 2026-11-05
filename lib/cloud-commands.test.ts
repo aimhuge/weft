@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { answerBody, answerCommand, commandText, isOpenCommand, newCardBody, newCardCommand, replyBody, replyCommand, stopBody, stopCommand, type CloudCommandRow } from "./cloud-commands";
+import { answerBody, answerCommand, answerGrant, commandText, isOpenCommand, newCardBody, newCardCommand, replyBody, replyCommand, stopBody, stopCommand, type CloudCommandRow } from "./cloud-commands";
 import { CODEX_DEFAULT_MODEL } from "./new-thread";
 
 const target = { orgId: "o1", device: "mac-1", folder: "/dev/app" };
@@ -30,6 +30,18 @@ describe("newCardCommand", () => {
     expect(newCardCommand(target, { prompt: "x", model: CODEX_DEFAULT_MODEL })?.payload).toMatchObject({ backend: "codex", model: CODEX_DEFAULT_MODEL });
   });
 
+  it("carries the CLI with no model, a mode other than default, the tags and Backlog", () => {
+    expect(newCardCommand(target, { prompt: "x", backend: "codex", permissionMode: "plan", tags: [" ui ", ""], backlog: true })?.payload).toEqual({
+      prompt: "x",
+      backend: "codex",
+      permissionMode: "plan",
+      tags: ["ui"],
+      start: false,
+    });
+    expect(newCardCommand(target, { prompt: "x", tags: [] })?.payload).toEqual({ prompt: "x" });
+    expect(newCardCommand(target, { prompt: "x", permissionMode: "default" })?.payload).toEqual({ prompt: "x", permissionMode: "default" });
+  });
+
   it("leaves out a model no CLI serves and an empty pick", () => {
     expect(newCardCommand(target, { prompt: "x", model: "gpt-9", effort: "" })?.payload).toEqual({ prompt: "x" });
     expect(newCardCommand(target, { prompt: "x", model: "" })?.payload).toEqual({ prompt: "x" });
@@ -46,14 +58,25 @@ describe("newCardBody", () => {
       effort: "low",
       tags: ["a", "b"],
       cwd: "/dev/app",
+      client: { app: "remote" },
     });
   });
 
+  it("carries the sender's hint for the first turn's <weft-env> block, checked", () => {
+    expect(newCardBody({ folder: "/f", payload: { prompt: "p", client: { app: "web", tz: "Asia/Bangkok" } } as never }).client).toEqual({ app: "web", tz: "Asia/Bangkok" });
+    expect(newCardBody({ folder: "/f", payload: { prompt: "p", client: { app: "cron" } } as never }).client).toEqual({ app: "remote" });
+  });
+
   it("carries over only what a card is made from, as the types it must be", () => {
-    const payload = { prompt: 4, tags: ["a", 7], permissionMode: "bypassPermissions", cwd: "/etc", start: false } as never;
+    const payload = { prompt: 4, tags: ["a", 7], permissionMode: "bypassPermissions", cwd: "/etc", start: true } as never;
     const body = newCardBody({ folder: "/dev/app", payload });
-    expect(body).toEqual({ prompt: undefined, title: undefined, backend: undefined, model: undefined, effort: undefined, tags: ["a"], cwd: "/dev/app" });
+    expect(body).toEqual({ prompt: undefined, title: undefined, backend: undefined, model: undefined, effort: undefined, tags: ["a"], cwd: "/dev/app", client: { app: "remote" } });
     expect(Object.keys(body)).not.toContain("permissionMode");
+    expect(Object.keys(body)).not.toContain("start");
+  });
+
+  it("carries a mode a new card may start in, and Backlog when asked", () => {
+    expect(newCardBody({ folder: "/f", payload: { prompt: "p", permissionMode: "plan", start: false } as never })).toMatchObject({ permissionMode: "plan", start: false });
   });
 
   it("copes with a payload that isn't an object", () => {
@@ -97,7 +120,47 @@ describe("commandText", () => {
   it("is a new card's prompt or a reply's text", () => {
     expect(commandText({ kind: "new_card", payload: { prompt: "Add dark mode" } })).toBe("Add dark mode");
     expect(commandText({ kind: "reply", payload: { cardId: "c1", text: "go" } })).toBe("go");
-    expect(commandText({ kind: "new_card", payload: {} as never })).toBe("");
+    expect(commandText({ kind: "new_card", payload: {} })).toBe("");
+  });
+});
+
+describe("folder grants on an answer", () => {
+  const to = { orgId: "o", device: "d", folder: "f", cardId: "c" };
+  const body = (payload: unknown) => answerBody({ payload } as never);
+  const prompt = { id: "p1", toolName: "Read", title: "t", input: {}, readScope: { directory: "/w/data", token: "~/data" } };
+
+  it("carries the scope on an Allow and never on a Deny", () => {
+    expect(answerCommand(to, { pendingId: "p1", allow: true, grant: "always" })?.payload).toEqual({ cardId: "c", pendingId: "p1", allow: true, grant: "always" });
+    expect(answerCommand(to, { pendingId: "p1", allow: false, grant: "always" })?.payload).toEqual({ cardId: "c", pendingId: "p1", allow: false });
+  });
+
+  it("carries a browser's passkey signature", () => {
+    const auth = { kind: "webauthn" as const, device: "b", credId: "c", issuedAt: 1, authenticatorData: "a", clientDataJSON: "j", signature: "s" };
+    expect(answerCommand(to, { pendingId: "p1", allow: true, auth })?.payload).toEqual({ cardId: "c", pendingId: "p1", allow: true, auth });
+  });
+
+  it("reads back only a known scope, on an Allow, and never a path", () => {
+    expect(body({ cardId: "c", pendingId: "p1", allow: true, grant: "card", directory: "/" })).toEqual({ cardId: "c", pendingId: "p1", allow: true, grant: "card" });
+    expect(body({ cardId: "c", pendingId: "p1", allow: true, grant: "everything" })?.grant).toBeUndefined();
+    expect(body({ cardId: "c", pendingId: "p1", allow: false, grant: "always" })?.grant).toBeUndefined();
+  });
+
+  const answer = { cardId: "c", pendingId: "p1", allow: true, grant: "card" as const };
+
+  it("takes the folder from the waiting request", () => {
+    expect(answerGrant(answer, prompt)).toEqual({ directory: "/w/data", scope: "card" });
+    expect(answerGrant({ ...answer, grant: undefined }, prompt)).toBeNull();
+  });
+
+  it("refuses a request that isn't the one answered", () => {
+    expect(() => answerGrant(answer, null)).toThrow("isn't waiting");
+    expect(() => answerGrant(answer, { ...prompt, id: "p2" })).toThrow("isn't waiting");
+  });
+
+  it("refuses a question, a form, and a prompt with no folder", () => {
+    expect(() => answerGrant(answer, { ...prompt, questions: [] })).toThrow("no folder");
+    expect(() => answerGrant(answer, { ...prompt, elicitation: { message: "m", fields: [] } } as never)).toThrow("no folder");
+    expect(() => answerGrant(answer, { ...prompt, readScope: undefined })).toThrow("no folder");
   });
 });
 
@@ -196,7 +259,7 @@ describe("stopBody", () => {
   });
 
   it("is null when the card is missing or the wrong type, or the payload isn't an object", () => {
-    expect(stopBody({ payload: {} as never })).toBeNull();
+    expect(stopBody({ payload: {} })).toBeNull();
     expect(stopBody({ payload: { cardId: 4 } as never })).toBeNull();
     expect(stopBody({ payload: null as never })).toBeNull();
   });

@@ -82,7 +82,7 @@ describe("hidden characters", () => {
   });
 
   it("finds a tag character", () => {
-    const scan = scanFiles([file("SKILL.md", `hello${"\u{E0061}"}`)]);
+    const scan = scanFiles([file("SKILL.md", "hello\u{E0061}")]);
     expect(ofRule(scan.findings, "hidden-chars")[0]?.message).toContain("U+E0061");
   });
 

@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import type { SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
+import { bindCap, dropCap } from "./connector-env";
 import { globalSingleton } from "./global-singleton";
 import { findDescendantGroups, signalGroups } from "./process-tree";
 
@@ -73,6 +74,9 @@ export function spawnCli(options: SpawnOptions, onStderr?: (text: string) => voi
   });
   const pgid = child.pid;
   if (pgid) groups.add(pgid);
+  // On a worker, the connector capability in this env answers only this process tree, and ends with it (lib/connector-env.ts).
+  bindCap(options.env, pgid);
+  child.once("exit", () => dropCap(options.env));
   let tail = "";
   child.stderr.setEncoding("utf8");
   child.stderr.on("data", (text: string) => {

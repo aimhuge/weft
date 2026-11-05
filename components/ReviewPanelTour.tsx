@@ -10,6 +10,8 @@ import {
   writeFeedback,
 } from "@/lib/review-feedback";
 import { lastLocalUrl } from "@/lib/review-tour";
+import { usePaneOpen } from "@/lib/pane-open";
+import { hostFor } from "@/lib/project-host";
 import type { ReviewPlan, ThreadItem } from "@/lib/types";
 import Composer, { type ComposerHandle } from "./Composer";
 import Icon from "./Icon";
@@ -19,7 +21,9 @@ import { ReviewPanelLookFor } from "./ReviewPanelLookFor";
 import { ReviewPanelTourNav } from "./ReviewPanelTourNav";
 
 // The tour a thread left for its Review card: one step at a time, with what to look for, the page
-// opened in the browser pane when it's a web product, and a box to send feedback on that step.
+// opened in the browser pane when it's a web product, and a box to send feedback on that step. A worker card's tour is
+// the same card data: its pages go to the card's own pane column (lib/pane-open.ts), and its dev server step is this
+// Mac's alone, so it stays out (hostFor(cwd).can("dev")).
 export function ReviewPanelTour({
   cardId,
   cwd,
@@ -53,6 +57,7 @@ export function ReviewPanelTour({
   const steps = plan.steps;
   const step = steps[Math.min(index, steps.length - 1)];
   const url = step ? stepUrl(plan, step) : undefined;
+  const openPage = usePaneOpen(cardId);
 
   // The steps that still hold feedback you haven't sent. Kept in state so the count follows what you
   // type, what you send and where you step to: feedback written on a step you step away from must
@@ -73,8 +78,8 @@ export function ReviewPanelTour({
 
   // Show each step's page as you reach it.
   useEffect(() => {
-    if (url) window.weft?.browser.open(url, cardId).catch(() => {});
-  }, [url, cardId]);
+    if (url) openPage(url);
+  }, [url, openPage]);
 
   const last = index >= steps.length - 1;
 
@@ -170,14 +175,14 @@ export function ReviewPanelTour({
               {step.title}
             </h3>
             <button
-              onClick={() => void (url ? window.weft?.browser.open(url, cardId) : window.weft?.browser.setVisible(true))}
+              onClick={() => openPage(url)}
               title={url ?? "Show the browser pane"}
               className="flex shrink-0 items-center gap-1 rounded-md border border-line-strong px-2 py-0.5 text-[11.5px] text-ink hover:bg-sunken"
             >
               <Icon name="globe" size={11} /> Open browser
             </button>
           </div>
-          {plan.dev && plan.url && <ReviewPanelDevServer cardId={cardId} plan={plan} />}
+          {plan.dev && plan.url && hostFor(cwd).can("dev") && <ReviewPanelDevServer key={cardId} cardId={cardId} plan={plan} stepUrl={url} />}
           {step.look && <ReviewPanelLookFor key={index} text={step.look} />}
           <div className="mt-2">
             <Composer

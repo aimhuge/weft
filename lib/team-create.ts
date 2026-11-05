@@ -1,9 +1,10 @@
 // Make a new workspace the caller owns (POST /api/teams {action:"create"} and the createTeam server action),
 // or rename one they own ({action:"rename"} through runTeamOp, and the renameTeam server action).
-// The slug mirrors private.org_slug_for in the teams migration: slugify, skip reserved names, -2, -3... on a clash.
+// The slug mirrors private.org_slug_for: slugify, skip lib/reserved-slugs.ts names, -2, -3... on a clash.
 import "server-only";
-import { isReservedSlug, setCurrentOrg, slugify } from "@aimhuge/teams";
+import { setCurrentOrg, slugify } from "@aimhuge/teams";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { isReservedWorkspaceSlug } from "./reserved-slugs";
 import { TEAM_NAME_MAX, type NewTeamResult, type TeamActionResult } from "./team-types";
 import type { TeamContext } from "./teams";
 import { serviceClient, type WebUser } from "./web-session";
@@ -12,7 +13,7 @@ async function freeSlug(service: SupabaseClient, name: string): Promise<string> 
   const base = slugify(name).slice(0, 40).replace(/-+$/, "") || "workspace";
   for (let n = 1; ; n += 1) {
     const candidate = n === 1 ? base : `${base}-${n}`;
-    if (candidate.length < 2 || isReservedSlug(candidate)) continue;
+    if (isReservedWorkspaceSlug(candidate)) continue;
     const { data } = await service.from("orgs").select("id").eq("slug", candidate).maybeSingle<{ id: string }>();
     if (!data) return candidate;
   }

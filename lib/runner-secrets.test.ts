@@ -91,6 +91,17 @@ describe("a thread's ask for a key", () => {
     expect(toolItem("c3")).toMatchObject({ id: "t3", result: "ok", ask: { folder: cwd, name: "SUPABASE_SECRET_KEY", environment: "preview" } });
   });
 
+  it("is marked on a worker card too: the Mac draws the input against its own checkout of the repo", async () => {
+    vi.stubEnv("WEFT_WORKER", "1");
+    vi.stubEnv("WEFT_SHELL_URL", "");
+    makeCard(h, cwd, { id: "c5" });
+    const q = await send("c5");
+    q.emit(assistant(toolUse("t5", "mcp__secrets__ask_add", { name: "SUPABASE_SECRET_KEY" })));
+    await flush();
+    vi.unstubAllEnvs();
+    expect(toolItem("c5")).toMatchObject({ id: "t5", ask: { folder: cwd, name: "SUPABASE_SECRET_KEY", environment: "development" } });
+  });
+
   it("isn't marked when the name can't be a secret's", async () => {
     makeCard(h, cwd, { id: "c4" });
     const q = await send("c4");

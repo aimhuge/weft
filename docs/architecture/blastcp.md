@@ -15,6 +15,7 @@ Instagram, YouTube, email…); a property is one brand you post as, inside a wor
 | Hook | `lib/use-blastcp.ts` | Loads status only while the drawer is open (and on window focus, at most every 30s); opens on the cached last status (`lib/use-linked-status.ts`) |
 | Drawer | `components/BlastcpDrawer.tsx`, wired in `components/LibraryRail.tsx` | Connect, the queue; linked folders on the shared `components/FolderRow.tsx` |
 | Weft connect | `lib/blastcp-auto.ts` + `app/api/blastcp` + `connectWeft` / `exchangeWeft` | Your Weft account's sign-in swapped for a BlastCP one, below |
+| Thread tools | `lib/blastcp-tools.ts` (wired in `lib/weft-mcp.ts`) + `electron/blastcp-thread.cjs` | BlastCP's MCP tools for every thread, relayed through main's sealed sign-in, below |
 | Picker | `components/BlastcpPicker.tsx` (on the shared `components/DbSelect.tsx`, fed by `lib/blastcp-view.ts` `propertyOptions`) | Link a property, or make a new one and link it |
 
 ## Connecting
@@ -103,12 +104,13 @@ own wording from `weftConnectNote()`, so no server or BlastCP string reaches the
 ### What a Weft plan buys
 
 Every Weft plan includes a BlastCP tier (`plan.blastcp`, a `BlastcpTier` in `lib/billing/plans.ts`): Free carries
-`BLASTCP_FREE` (1 brand, 3 channels, 30 posts a month, $0.50 of generation credit once), and Pro and Team carry
-`BLASTCP_CREATOR` (1 brand, every channel, unlimited posts, $3 a month of credit). weft.zip's pricing says so
-([billing.md](billing.md#blastcp-usage), [marketing-site.md](marketing-site.md)). **Nothing enforces it yet**: the token
-exchange above carries only the Weft JWT, so BlastCP knows who you are and not which plan you're on. BlastCP would read
-the plan there and set its own `org_subscriptions` row; until then the drawer and the posting queue behave exactly as they
-do for any BlastCP account.
+`BLASTCP_FREE` (1 brand, 3 channels, 30 posts a month, $0.50 of generation credit once); Pro, Open Source and Education
+give their workspace owners `BLASTCP_CREATOR` (1 brand, every channel, unlimited posts, $3 a month of credit), and Team
+gives it to every seat. **BlastCP enforces it** (2026-10-27): it reads `GET weft.zip/api/billing/blastcp` with the
+user's Weft token during the exchange above and whenever Weft nudges `POST blastcp.com/api/weft/plan`
+(`lib/blastcp-plan.ts`: on sign-in, every 12 hours, and when the billing row sees a new plan), then comps the person's
+own BlastCP workspace to that tier. Only a Weft-linked account gets it. The full rules are in
+[billing.md](billing.md#blastcp-usage).
 
 ## Reading
 
@@ -142,12 +144,43 @@ changes on BlastCP.
 Post rows open the post's BlastCP page (`review_url`) in the browser pane; the property name opens its queue, and
 the counts line opens its drafts. Your BlastCP session in the pane is separate from Weft's token.
 
+## Threads
+
+Built 2026-11-04. Every thread (not the copilot) gets a `blastcp` MCP server, beside its board, secrets and browser
+ones, so `mcp__blastcp__generate_image` and the rest of BlastCP's tools work through the drawer's sign-in, with no
+claude.ai connector to sign in. It only relays:
+
+```
+thread ─ tools/list · tools/call ─► lib/blastcp-tools.ts (in-process; Codex and Goose over lib/mcp-bridge.ts)
+       ─► control server POST /blastcp/mcp  { method, params }   (token-guarded, 127.0.0.1; electron/pane-routes.cjs)
+       ─► main: electron/blastcp-thread.cjs forward() unseals the token, JSON-RPC to blastcp.com/api/mcp
+       ◄─ { state: "ok", result } or why not: off · expired · refused · error · unavailable
+```
+
+- **BlastCP's own list.** The tools are whatever BlastCP's `tools/list` says, so a new BlastCP tool reaches threads
+  with no Weft change. Main keeps the last list in `~/.weft/blastcp-tools.json` (schemas, nothing secret) and answers
+  from it while it refreshes behind, so starting a card never waits on blastcp.com; only the very first list does.
+- **`call`** is always listed beside them: `{ tool, arguments }` reaches any BlastCP tool, for a thread that started
+  before BlastCP was connected (its list was just `call` then).
+- **Only two methods.** `forward()` refuses anything but `tools/list` and `tools/call`, so a thread can't use the
+  sign-in for anything else.
+- **Saying what to do.** No sign-in: "BlastCP isn't connected … open 🚀 … click Connect". Past `expiresAt` (checked
+  in main before calling) or a 401/403: "… click Reconnect". A main from before this landed answers the route with
+  "Not found", and the tool asks for a restart. On a Weft Worker the tools say they don't work there (the sign-in is
+  the Mac's) and the worker's prompt leaves `BLASTCP_PROMPT` out.
+- **Pictures.** An image block in a result is also written to `~/.weft/show/blastcp/<time>-<n>.<ext>` and its path
+  added, so the thread shows it inline right away.
+- `BLASTCP_PROMPT` (pinned in `lib/weft-prompts.ts`) tells threads to prefer these over the claude.ai BlastCP
+  connector and to send the user to 🚀, never claude.ai.
+
 ## Safety
 
-- The token never reaches the board, a thread, or a pane page: main seals it with safeStorage and makes every call.
+- The token never reaches the board, a thread, or a pane page: main seals it with safeStorage and makes every call,
+  a thread's included (`/blastcp/mcp` sends back BlastCP's answer, never the token).
 - The IPC handlers answer the board window only (`isBoard(sender)`), like the vault and Vercel.
 
 ## Not built yet
 
-- Drafting or scheduling a post from a card (a thread can already do that through the BlastCP MCP connector).
+- A drafting or scheduling flow of Weft's own on a card (a thread can already do both with `mcp__blastcp__*`).
+- Telling a running thread when its tool list changes (`notifications/tools/list_changed`); `call` covers it.
 - A rail badge for posts waiting on you, which would need a poll while the drawer is shut.

@@ -1,6 +1,6 @@
 // The builder card: seven attributes (0-100) worked out from what you build and how, the class your
 // top two make, and a level per technology from the cards you shipped with it. Pure (see lib/game.ts).
-import type { Habit } from "./craft";
+import type { Habit } from "./craft-types";
 import { addDays, XP, type ActivityEvent, type DayTally } from "./game";
 import { isRefactor } from "./game-badges";
 import { branchProgress, type ProjectReport } from "./project-badges";

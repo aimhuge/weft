@@ -179,7 +179,7 @@ still says something about the recent past.
 
 **The daily summary** is the headline numbers — new in 7 and 30 days, accounts, signed in, workspaces, paying,
 syncing, cards synced — with a link to the growth dashboard (`WEFT_GROWTH_DASHBOARD_URL`, else
-`https://weft.zip/apps/growth`). `POST /api/slack/growth-summary` posts it and answers with what it posted;
+`https://weft.zip/@fotoflo/apps/growth`, the shared Growth app; `/apps/growth` was never a route). `POST /api/slack/growth-summary` posts it and answers with what it posted;
 `GET` reads the numbers without posting. The answer says `ok: false` when it did not go out, so the card that calls it
 never claims a message that never arrived. A cron card calls the `POST` every morning at 9:00.
 

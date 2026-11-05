@@ -7,42 +7,18 @@
 // (a "!" command, ↑ edit, folder grants, Wait), the way ToolResultSourceContext swaps where a long tool output comes from.
 import { createContext, useContext } from "react";
 import { apiFetch } from "./api-client";
+import type { PageUpdate, ThreadTransport } from "@weft/client";
 import { api } from "./client";
-import { firstNow, stopNow, waitNow } from "./optimistic-cards";
+import { firstNow, otherFirstNow, stopNow, waitNow } from "./optimistic-cards";
 import { filesApi } from "./client-files";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
+import type { FindMatch } from "./thread-find";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
 import type { BoardEvent, ThreadItem } from "./types";
 import { useBoardEvents } from "./use-events";
 
-// A change to the loaded window, applied to whatever it holds when it lands.
-export type PageUpdate = (prev: ThreadPage) => ThreadPage;
-
-export interface ThreadTransport {
-  // One page of the thread: the newest (before omitted) or the one ending at index `before`. Null when it can't be read.
-  loadPage(cardId: string, before?: number): Promise<ThreadPage | null>;
-  // A hook: live changes to this card's thread, and a reconnect (when the caller re-reads the newest page).
-  useLive(cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void): void;
-  // A hook: the items as they are drawn (the web's blob refs become signed URLs).
-  useView(items: ThreadItem[]): ThreadItem[];
-  // Interrupt the running turn.
-  stop(cardId: string): Promise<void>;
-  // Only where the Mac itself runs the card:
-  shell?: (cardId: string, command: string) => Promise<void>;
-  editLast?: (cardId: string, text: string) => Promise<void>;
-  // A cold card's next message in a new session of the same card, started from a brief of the thread.
-  fresh?: (cardId: string, message: string) => Promise<void>;
-  // An outside-folder prompt's "This card" (and the question form's "Read from"); "always" adds it to every card.
-  grantFolder?: (cardId: string, directory: string, scope: "card" | "always") => Promise<void>;
-  waitPermission?: (cardId: string, pendingId: string) => Promise<void>;
-  // Me first on a held edit: it goes ahead and the card holding the code yields the file (lib/precedence.ts).
-  putFirst?: (cardId: string, pendingId: string) => Promise<void>;
-  stopTask?: (cardId: string, taskId: string) => Promise<void>;
-  // The card folder's files, so file names in the thread link to the editor column (lib/use-file-index.ts).
-  listFiles?: (cardId: string) => Promise<string[]>;
-  // Send later, the review panel and the copilot's starters: the desktop board's own.
-  desktop: boolean;
-}
+// The transport's shape lives in @weft/client (packages/weft-client/src/transport.ts); this is the desktop's own.
+export type { PageUpdate, ThreadTransport };
 
 async function localPage(cardId: string, before?: number): Promise<ThreadPage | null> {
   const params = new URLSearchParams();
@@ -59,6 +35,15 @@ async function localPage(cardId: string, before?: number): Promise<ThreadPage | 
   }
 }
 
+async function localSearch(cardId: string, query: string): Promise<FindMatch[] | null> {
+  try {
+    const res = await apiFetch(`/api/cards/${cardId}/thread/search?q=${encodeURIComponent(query)}`);
+    return res.ok ? ((await res.json()) as { matches: FindMatch[] }).matches : null;
+  } catch {
+    return null;
+  }
+}
+
 function useLocalLive(cardId: string, onUpdate: (update: PageUpdate) => void, onReconnect: () => void) {
   useBoardEvents((event: BoardEvent) => {
     if (event.type === "thread_cleared" && event.cardId === cardId) onUpdate(() => ({ items: [], start: 0, total: 0 }));
@@ -70,6 +55,7 @@ const same = (items: ThreadItem[]) => items;
 
 export const localTransport: ThreadTransport = {
   loadPage: localPage,
+  searchThread: localSearch,
   useLive: useLocalLive,
   useView: same,
   stop: (cardId) => stopNow(cardId),
@@ -79,8 +65,15 @@ export const localTransport: ThreadTransport = {
   grantFolder: (cardId, directory, scope) => (scope === "always" ? api.allowFolder(directory) : api.setReadScope(cardId, directory)).then(() => {}),
   waitPermission: waitNow,
   putFirst: firstNow,
+  putHolderFirst: otherFirstNow,
   stopTask: (cardId, taskId) => api.stopTask(cardId, taskId).then(() => {}),
   listFiles: (cardId) => filesApi.list(cardId),
+  // The same /api/skills?cwd= read the composer always made, so a local card's "/" list is unchanged.
+  listSkills: (_cardId, cwd) => api.skills(cwd).then((r) => r.skills),
+  schedule: (cardId, text, at) => api.schedule(cardId, text, at),
+  unschedule: (cardId, messageId) => api.unschedule(cardId, messageId),
+  upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
+  cardEdits: true,
   desktop: true,
 };
 

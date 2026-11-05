@@ -54,16 +54,28 @@ lives in its own component under `components/`.
   first and starts folded). It hands every card row to `Board` with its place in the tree (`RowNest`), so it
   holds no card details of its own, and draws subagent rows itself (`components/AgentRow.tsx`). The corner
   cell clears the filters, or with none on opens New thread.
+- `components/SheetRow.tsx` — one row of the sheet: the numbered gutter and the row's content beside it.
+  Every row of the list view is one of these — a card, a subagent, a cron's run — so the grid lines up
+  down the sheet.
 - `lib/list-sheet.ts` — the board's columns on `@aimhuge/sheet` (the shared sheet kit, docs/architecture/sheet.md),
-  pure: `BOARD_SHEET`, each column's values (`cellValues`; tags can be several, blanks are `(blank)`), `sortRows`/`sortBy` (stages in pipeline order, statuses loudest first,
+  pure: `BOARD_SHEET`, each column's values (`cellValues`; tags can be several, blanks are `(blank)`), `sortBy` (stages in pipeline order, statuses loudest first,
   age by real time, blanks last both ways, ties in board order), `rowMatches` (the title search, then
-  unticked values, stored as the hidden ones so a new value shows by default), `flipSort` for number
-  columns, `keepOnly`, folded bands, and the row status `CardRow` draws.
+  unticked values, stored as the hidden ones so a new value shows by default), `filterCount`, and the row
+  status `CardRow` draws. The sorts, filters and value counts themselves are the kit's
+  (`@aimhuge/sheet`), driven by `SheetHeader`; Weft keeps only the board's own names and rules.
+- `lib/column-tone.ts` — each column's colour, in one place (`COLUMN_TONE`): the text a column's name and
+  stage take, the bar its stage steps fill with and the dot its band is marked by. The card's progress
+  line, the list view's row cells and the sheet's band all read it, so a column that changes colour
+  changes in one edit.
 - `lib/list-tree.ts` — the rows as a tree: a card started by another (`parentId`) or a cron run (`cronOf`)
   folds under it; an opened card lists its subagents (`card.tasks`, kind `agent`), then its child cards. A
   child waiting on you, or whose tree's top sits in a folded band, also stands on its own in its band; a
   parent loop leaves both top-level; a match deep in a tree keeps its path. `bandsToDraw` keeps an empty
   Backlog and Running so there's always somewhere to type a card. Type-ahead matches are ranked by `@aimhuge/sheet`'s `typeahead`.
+- `lib/cron-fold.ts` — the one rule for which card a card folds under (`foldParentOf`): a cron run under
+  its holder (`Card.cronOf`), anything else under the thread that started it (`Card.parentId`). The board's
+  stacks, the list view's tree and the crons drawer all read it, so the column view and the sheet never
+  disagree about who owns a run.
 - `SheetHeader` + `SheetFilterMenu` (from `@aimhuge/sheet/client`, fed `BOARD_SHEET`) — the header row: a click on a name opens
   its menu with the cursor in the search box. Title filters cards as you type; other columns narrow their
   values (↑↓, Enter keeps only the match, Only per value, Show/Hide all) under a two-button sort bar. Age
@@ -100,6 +112,19 @@ lives in its own component under `components/`.
   (`lib/board-prefs.ts`), read through `lib/use-view-mode.ts`.
   Escape flips it too, from `lib/use-escape-view.ts`: the bottom Escape layer, on only while no thread,
   new-thread dialog, browser or closable drawer is up, and never for an Escape typed in a field.
+  The flip pops a toast under the toggle — `components/ViewHint.tsx`, drawn from the state in
+  `lib/use-view-hint.ts` — naming the view you landed in and what the next Escape does ("List view ·
+  hit Esc again to switch to board view"). It closes itself after a moment (4 s, `HINT_MS`), on its ✕,
+  or on the next Escape (which puts the toast away rather than flipping again, since the toast says
+  what Escape does).
+  It hangs off the toggle rather than taking a row, so it costs no vertical space on a small
+  screen. The Escape layer itself decides the flip and hands the new view to the hint, so the two
+  can never disagree about what happened.
+  The toast is deliberately loud — big type, an accent icon tile, a bright accent border and a wide
+  glow, and a short entrance (`.view-hint-pop` in `app/globals.css`) so it pops in rather than
+  merely appearing. It is one row and never wraps: an absolutely-positioned box with no width
+  shrinks to its content and then wraps its text into a narrow column, which left the icon adrift
+  from the words and stranded the ✕ between them, so it carries `w-max` and `whitespace-nowrap`.
 - `components/BoardBrowserPane.tsx` — the standalone browser pane, drawn while no card is open (an open
   card's pane lives in its workspace's `pane` column, `components/OpenCard.tsx`).
 - `components/OpenCard.tsx` — `CardFrame` (the backdrop and the framed window over the board, a
@@ -110,6 +135,23 @@ lives in its own component under `components/`.
   it, the terminal drawer.
 - `components/BoardDialogs.tsx` — every dialog, sheet and overlay the board stacks over its columns, each
   still loaded through `guarded()`.
+- `components/Modal.tsx` — the shell every dialog sits in, and where it draws. The shell portals into a
+  `div[data-weft-modal]` it creates on `document.body` (and removes on unmount), not into wherever it was
+  asked for. A dialog opened from the header — the leagues, from `components/LeagueBadge.tsx` — sits inside
+  `<header class="app-drag">`, and on macOS that header is the window's drag region
+  (`-webkit-app-region: drag`, `app/globals.css`), which is a stacking context: the header's whole subtree
+  is stacked as one unit, so the dialog's `fixed z-50` backdrop could only paint *inside* it, under the
+  board sheet and the rail drawer beside it. No z-index lifts a child out of an ancestor's stacking
+  context; only leaving it does. The portal's host is a div of its own rather than `document.body` itself:
+  React removes a portal's nodes when the tree that made them unmounts, and a body shared by several roots
+  makes that bookkeeping ambiguous — one dialog's unmount could take another's nodes with it.
+  The host is made in a lazy `useState` initializer, and React 19's StrictMode runs such an initializer
+  **twice** on the same mount while its double-mount also runs the effect cleanup between the two mounts.
+  Two hosts meant React portaled into one the cleanup had taken off the body, and a portal into a detached
+  node draws nothing: the dialog rendered but never painted, which is why Settings (a dialog) stayed shut.
+  The second call therefore claims the first call's host instead of making another (a `data-weft-modal-waiting`
+  marker, cleared in a microtask so a host nobody claimed is forgotten rather than adopted later), and the
+  mount effect puts the host back on the body if StrictMode's cleanup took it away.
 - `components/DeleteCardDialog.tsx` — the delete-card confirmation, Weft's own modal because a native
   confirm can't show a checkbox. It names the card, says a running turn stops and that the CLI
   transcript stays on disk, and carries a "Don't ask again" tick. Both delete paths use it: the trash
@@ -139,7 +181,8 @@ lives in its own component under `components/`.
   overlay their loads and redraw on `onOptimistic`), so its Stop, answers, rename and mode draw at once too. The
   web board is not covered.
   A permission prompt's answers are intents too: Allow and Deny (`answerNow`, from the card row and a thread's
-  plain Allow/Deny), Me first and You first (`firstNow`) and Wait (`waitNow`, through `localTransport`) draw
+  plain Allow/Deny), This first and You first (`firstNow`), Others first (`otherFirstNow`) and Wait (`waitNow`,
+  through `localTransport`) draw
   the card as the runner will leave it (prompt gone and Running, or waiting on the holder) until the server's
   card shows another request or none. A question or form with answers still waits, so a refused form stays filled.
   Card fields go through `patchNow`: star, tags (Tags… and a drop on the 🏷 drawer), archive and unarchive
@@ -165,8 +208,23 @@ lives in its own component under `components/`.
 - `lib/use-board-dialogs.ts` — the dialog flags (`useBoardDialogs`, `DialogFlags`) and what they cover:
   `dialogLayers` returns `overlay` (something is over the board, so the native pane hides) and `boardKeys`
   (the shortcuts that act on the board stand down).
+- `lib/use-escape-view.ts` — `useEscapeTogglesView` and `bareBoard`: the bottom Escape layer, the one
+  that flips between the column view and the list view when nothing else is up. Its extra inputs are
+  one `ViewFlipOptions` object (`onFlip`, `hintUp`, `onDismiss`) rather than a long parameter list, so
+  the call site reads as what it means. `onFlip` is told the view it switched to; while the toast is
+  up (`hintUp`), Escape calls `onDismiss` instead of flipping again, because the toast is what tells
+  the user what Escape does.
+- `lib/use-view-hint.ts` — `useViewHint` and the toast's words: the last flip (`mode` and an `id` that
+  counts the flips, so the toast can key itself on it and restart its timer), `show` and `clear`, and
+  the text — `viewLabel`, `hintTitle` ("List view"), `hintOther` (the other view's name) and
+  `hintOtherText` ("hit Esc again to switch to board view"). The name and the trailing clause are
+  separate so the toast can set the name in accent and weight and the eye lands on the answer before
+  the sentence around it. The toast closes itself after `HINT_MS` (4 s).
 - `lib/use-open-card.ts` — `useOpenCard`: which card is open, its thread and streaming text, the last one
-  opened, Rename…, and the unseen moves.
+  opened, Rename…, and the unseen moves. Opening a card always brings the browser pane back: `select`
+  asks the shell to show it and opens the workspace's `pane` column, so a thread never opens beside an
+  empty slot — not even one the user closed earlier. Closing the card hides the pane again; the pane
+  column itself stays open, so the next card comes back with it.
 - `lib/use-new-thread-pane.ts` — `useNewThreadPane`: the New thread splash page in the pane while the
   dialog is up. It returns the pane's visibility from before the dialog while the restore on close lands, which
   `BoardBrowserPane` reads (`held`) so the pane doesn't remount open and slide shut.
@@ -225,6 +283,10 @@ components/Board.tsx  ── state + actions ──▶  components/BoardHeader.t
 - **One owner per piece of state.** The board's flags live in `lib/use-board-dialogs.ts`, the open card's in
   `lib/use-open-card.ts`, the live stream's effects in `lib/board-live.ts`. A component draws; a hook
   decides; `Board.tsx` wires.
+- **A toast that says what the key does has to be what the key does.** The view toast names the view you
+  landed in and what the next Escape will do, so the Escape layer has to honour that: while the toast is
+  up, the next Escape dismisses it instead of flipping the view again. The layer decides the flip and
+  hands the new view to the toast, so the two can never disagree about what happened.
 - **A card's own signal, on the card.** A state that belongs to one card is drawn by that card, not by the
   board: a cron run's violet stub (`components/CronMark.tsx`), a card that broke Weft's red ring
   (`lib/crash-blame.ts`), a card that asked Weft to restart (`components/RestartMark.tsx`). Each mark is a

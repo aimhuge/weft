@@ -3,36 +3,43 @@
 // copied. It answers the board window only; pane pages are agent-driven and can be any site.
 const fs = require("node:fs");
 const path = require("node:path");
-const { shortLived } = require("./dotenv.cjs");
-const { createLocated, freeFrom, locateFile, openEnvDialog, readEnvFiles, valuedIn } = require("./env-sources.cjs");
-const { loadDeviceKey } = require("./device-key.cjs");
-const { createVaultStore, tailOf } = require("./vault-store.cjs");
-const { MANAGED_FILE, createEnvWatcher, ignoreLocalEnv, isManaged, planWrite, readOrNull, renderEnv, writeFileAtomic } = require("./env-writeback.cjs");
+const { createLocated, locateFile, openEnvDialog } = require("./env-sources.cjs");
+const { readFiles, nudge, scanRows } = require("./vault-env-scan.cjs");
+const { loadDeviceKey, registeredDevice } = require("./device-key.cjs");
+const { createVaultStore } = require("./vault-store.cjs");
+const { MANAGED_FILE, createEnvWatcher, ignoreLocalEnv, planWrite, readOrNull } = require("./env-writeback.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { git, parseRemote, vaultIdFor } = require("./vault-id.cjs");
 const { createGrants, grantMethods } = require("./vault-grants.cjs");
 const { audit, configureAudit, keychainFor } = require("./keychain-audit.cjs");
 const { createUnlock, UNLOCK_MS } = require("./vault-unlock.cjs");
+const { createThreadTools } = require("./vault-thread-tools.cjs");
 const { registerVault } = require("./vault-ipc.cjs");
+const { createVaultSync } = require("./vault-sync.cjs");
+const { writeValue } = require("./vault-conflict.cjs");
+const { createManagedEnv } = require("./vault-managed-env.cjs");
+const { createSharedApi, sharedHandlers } = require("./vault-shared-api.cjs");
+const { readLocalVault } = require("./vault-local.cjs");
+const { show: showRecovery, recoveryStatus } = require("./vault-recovery.cjs");
+const { listOrgs, sharedBlock } = require("./vault-shared-meta.cjs");
+const { teamVaults } = require("./vault-team.cjs");
+const { accessToken } = require("./vault-rotate.cjs");
 
 // A copied value leaves the clipboard after this, if it's still what's there.
 const CLIPBOARD_MS = 60_000;
 // What a .env file (and Vercel) takes as a variable's name.
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-// Files whose values the rail nudges you to import.
-const NUDGE_FILES = new Set([".env.local", ".env.development.local"]);
 
 // audit records one line per use of a value or write (electron/keychain-audit.cjs); grants are threads' standing
 // access (electron/vault-grants.cjs).
-function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = git, now = Date.now, setTimer = setTimeout, onChange = (folder) => void folder, watch = fs.watch, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), grants = createGrants({ now }), pickFile = /** @type {import("./env-sources.cjs").PickFile} */ (async () => null) }) {
+function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = git, now = Date.now, setTimer = setTimeout, onChange = (folder) => void folder, watch = fs.watch, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), grants = createGrants({ now }), sync = null, accountClient = null, pickFile = /** @type {import("./env-sources.cjs").PickFile} */ (async () => null) }) {
   // .env.local files Weft writes from the vault; a hand edit tells the board to look again (onChange).
   const watcher = createEnvWatcher({ onEdit: onChange, watch });
+  // Where the vault's files live: <hash>.json, <hash>.shared.json, <hash>.sync.json.
+  const vaultDir = path.join(dataDir, "vault");
   let store;
   const ids = new Map(); // folder -> { id, label }
   const unlock = createUnlock({ prompt, now });
-  // Threads get their own approvals, one per card, site and vault: the drawer being unlocked never lets a
-  // thread in, and a yes for one site never covers another.
-  const threadUnlocks = new Map();
   // Env files you located by hand, per vault; nearby copies are found fresh each time (electron/env-sources.cjs).
   const located = createLocated({ file: path.join(dataDir, "env-sources.json") });
 
@@ -40,80 +47,111 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
     if (!store) {
       await sodium.ready();
       const device = loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium });
-      store = createVaultStore({ dir: path.join(dataDir, "vault"), device, sodium, now });
+      // A teammate's change to a shared vault (electron/vault-sync.cjs) reaches the board like a hand edit.
+      const onRemote = (id) => [...ids].filter(([, known]) => known.id === id).forEach(([folder]) => onChange(folder));
+      store = createVaultStore({ dir: vaultDir, device, sodium, now, sync, onRemote });
     }
     return store;
   }
 
+  // The shared vault's side (docs/architecture/teams-vault.md): sealing this vault's key to a teammate's
+  // device, and sharing a local vault for the first time. The key is read from the local file and handed
+  // straight to the wrap; it never leaves main.
+  async function sharedApi() {
+    // Sharing and grants name this device by its server id, which the keypair file doesn't hold.
+    const device = accountClient
+      ? await registeredDevice({ accountClient, dir: dataDir, safeStorage, crypto: sodium })
+      : loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium });
+    // A folder is what the drawer knows; the local id is what the file is named with. A grant's pending
+    // row names the server's vault, so a local id that isn't known here means the vault isn't ours.
+    const readVault = async (folder) => {
+      const { id, label } = await idOf(folder);
+      return readLocalVault({ dir: vaultDir, id, label, device, sodium });
+    };
+    // The local vault behind a server vault id (a pending grant names only the server's).
+    const readServerVault = async (vaultId) => {
+      const found = sync?.byVaultId?.(vaultId);
+      if (!found) throw new Error("That vault isn't on this Mac.");
+      return readLocalVault({ dir: vaultDir, id: found.id, device, sodium });
+    };
+    const adopt = async (folder, grant, shared) => {
+      const { id, label } = await idOf(folder);
+      return (await storeReady()).adopt(id, label, grant, shared);
+    };
+    return createSharedApi({ readVault, readServerVault, adopt, device, sodium, sync, prompt });
+  }
+
+  // A shared vault's recovery key (electron/vault-recovery.cjs). The vault's key is read from this
+  // device's file and unwrapped here, in main; the words are made here too. A re-show is a fresh key:
+  // the old recovery row is revoked by the same write, so the old words stop working.
+  async function recoveryApi() {
+    const device = loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium });
+    // The local vault behind a server vault id. The recovery page knows only the server's id (it
+    // comes from the team's page), and the local vault's key is what makes the words — so this is
+    // the lookup that joins the two. A vault that isn't here was never shared from this machine.
+    const serverVault = async (vaultId) => {
+      const found = sync?.byVaultId?.(String(vaultId));
+      if (!found) throw new Error("That vault isn't shared from this machine. Open it in Weft and share it with the workspace first.");
+      const local = await readLocalVault({ dir: vaultDir, id: found.id, device, sodium });
+      return { id: String(vaultId), key: local.key, keyVersion: local.keyVersion, label: local.label };
+    };
+    return {
+      /** Show the recovery key. Touch ID first, then the words. */
+      async show({ vaultId, passphrase = "", reason } = {}) {
+        const vault = await serverVault(String(vaultId));
+        // The Touch ID gate, in main, where the key is: every path to the words goes through it.
+        const ok = await prompt(reason ?? `show the recovery key for ${vault.label}`);
+        if (!ok) return { denied: true };
+        const result = await showRecovery({
+          vault,
+          accountClient,
+          passphrase: typeof passphrase === "string" ? passphrase : "",
+          sodium,
+          reason: reason ?? `show the recovery key for ${vault.label}`,
+        });
+        // The words, and nothing else: no key, no private half, no passphrase.
+        return { words: result.words, deviceId: result.deviceId, keyVersion: result.keyVersion, reshown: result.reshown, shownAt: result.shownAt };
+      },
+      /** Whether the vault has a recovery key yet. */
+      async status({ vaultId } = {}) {
+        const status = await recoveryStatus({ vaultId: String(vaultId), accountClient });
+        return { ...status, shared: true };
+      },
+    };
+  }
+
   // The store, or null before the first import (no vault, so no key to make yet).
-  const existing = async () => (store || fs.existsSync(path.join(dataDir, "vault")) ? storeReady() : null);
+  const existing = async () => (store || fs.existsSync(vaultDir) ? storeReady() : null);
 
   async function idOf(folder) {
     if (!ids.has(folder)) ids.set(folder, await vaultIdFor(folder, run));
     return ids.get(folder);
   }
 
+  // A shared vault reads the server's changes into its shadow first; offline, the shadow answers as it is.
+  const fresh = async (s, id) => (s?.isShared(id) ? s.pull(id).catch(() => null) : null);
+
   // A vault's label from its id, for the audit line of a call that only has the id.
   const labelOf = (id) => [...ids.values()].find((known) => known.id === id)?.label ?? id;
+
   // Always true, so a refusal can log and answer in one line.
   const log = (entry) => {
     audit({ kind: "vault", outcome: "ok", ...entry });
     return true;
   };
 
-  // The project's .env files, then the ones found or located elsewhere, parsed. Only files main found itself, so a
-  // request can't name another path. Weft's own worktree pool is never looked in.
-  const readFiles = (folder, id) => readEnvFiles(folder, located.get(id), { skip: [path.join(dataDir, "worktrees")] });
+  // The project's env files, then the ones found or located elsewhere, parsed (electron/vault-env-scan.cjs).
+  // Weft's own worktree pool is never looked in.
+  const filesOf = (folder, id) => readFiles(folder, located.get(id), { skip: [path.join(dataDir, "worktrees")] });
 
-  function status(have, value) {
-    if (have === undefined) return "new";
-    return have === value ? "same" : "differs";
-  }
+  // Whether the folder's .env.local is Weft's, watching it if so (a restart picks the watch up again here),
+  // and the file Weft rewrites from the vault's development values (electron/vault-managed-env.cjs).
+  const { watchManaged, managedText, writeManaged, refreshManaged } = createManagedEnv({ store: () => store, watcher, ids });
 
-  // Values in the nudge files that the vault doesn't hold yet, or holds differently; from a file elsewhere, only the
-  // ones it doesn't hold at all (a stale copy shouldn't nag). s is null with no vault yet.
-  function nudge(folder, id, s) {
-    const pending = new Set();
-    let file;
-    for (const f of readFiles(folder, id)) {
-      if (!f.elsewhere && !NUDGE_FILES.has(path.basename(f.file))) continue;
-      for (const e of f.entries) {
-        if ((f.vercel && shortLived(e.name)) || pending.has(e.name)) continue;
-        const have = s?.exists(id) ? s.get(id, e.name, f.kind.environment) : undefined;
-        if (have === e.value || (f.elsewhere && have !== undefined)) continue;
-        pending.add(e.name);
-        file ??= f.file;
-      }
-    }
-    return pending.size ? { count: pending.size, file, managed: isManaged(readOrNull(path.join(folder, file))) } : null;
-  }
-
-  // Whether the folder's .env.local is Weft's, watching it if so (a restart picks the watch up again here).
-  function watchManaged(folder) {
-    const text = readOrNull(path.join(folder, MANAGED_FILE));
-    if (!isManaged(text)) return false;
-    if (!watcher.watching(folder)) watcher.wrote(folder, text);
-    return true;
-  }
-
-  // The development values as .env.local's text. Only called with the store open.
-  function managedText(id) {
-    const entries = store.exists(id) ? store.list(id).filter((e) => e.environment === "development") : [];
-    return renderEnv(entries.map((e) => ({ name: e.name, value: e.missing ? null : store.get(id, e.name, "development") })));
-  }
-
-  function writeManaged(folder, id) {
-    const text = managedText(id);
-    writeFileAtomic(path.join(folder, MANAGED_FILE), text);
-    watcher.wrote(folder, text);
-  }
-
-  // After the vault changes, rewrites every managed .env.local of that vault's folders.
-  function refreshManaged(id) {
-    for (const [folder, known] of ids) {
-      if (known.id === id && isManaged(readOrNull(path.join(folder, MANAGED_FILE)))) writeManaged(folder, id);
-    }
-  }
+  // What a thread may do with a vault: fill a value into a site, hand one to a write elsewhere, ask for
+  // a confirmation, and read names for a command main runs (electron/vault-thread-tools.cjs).
+  const threadTools = createThreadTools({ idOf, storeReady, existing, store: () => store, log, grants, prompt, now, onChange });
+  const { useFor, sendValue, sendValues, confirm, valuesFor, valuesForVault, notify, threadUnlocks } = threadTools;
 
   return {
     unlock,
@@ -136,12 +174,20 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       return { written: true, file: MANAGED_FILE, gitignoreAdded: !ignored };
     },
 
-    close: () => watcher.close(),
+    close() {
+      watcher.close();
+      sync?.close();
+    },
 
     // One vault per project folder (folders of the same repo share one), with the rail's nudge.
     /** @returns {Promise<import("../lib/vault-view").VaultOverview>} */
     async overview(folders) {
       const seen = new Map();
+      // The workspaces the user is in, for the drawer's "Share this vault" offer and for a shared
+      // vault's header. Signed out, or a shell that doesn't know teams: an empty list.
+      const orgs = await listOrgs({ accountClient });
+      await sodium.ready();
+      const team = orgs.length ? await teamVaults({ accountClient, publicKey: loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium }).publicKey }) : null;
       for (const folder of folders) {
         const { id, label } = await idOf(folder);
         const found = seen.get(id);
@@ -150,10 +196,17 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
           continue;
         }
         const s = await existing();
+        await fresh(s, id);
         const secrets = s?.exists(id) ? s.list(id) : [];
-        seen.set(id, { id, label, folder, folders: [folder], secrets, nudge: nudge(folder, id, s), managed: watchManaged(folder) });
+        // shared: the vault is shared with a workspace (the drawer's badge and the Share offer).
+        const shared = sharedBlock({ dir: vaultDir, id, orgs });
+        // queued: writes to a shared vault made offline, waiting in <hash>.queue.jsonl (the drawer's chip).
+        // join: the workspace already shares this repo and this Mac isn't in it. requests: Macs waiting to be.
+        const join = !shared && team?.joins.get(id.replace(/^github:/, ""));
+        const requests = shared && team?.requests.get(shared.vaultId);
+        seen.set(id, { id, label, folder, folders: [folder], secrets, nudge: nudge(folder, id, s, filesOf(folder, id)), managed: watchManaged(folder), ...(shared && { shared }), ...(join && { join }), ...(requests && { requests }), ...(s?.isShared(id) && { queued: s.queued(id) }) });
       }
-      return { vaults: [...seen.values()], unlocked: unlock.unlocked() };
+      return { vaults: [...seen.values()], unlocked: unlock.unlocked(), orgs };
     },
 
     // The import preview: every name in the project's .env files against the vault. Tails only.
@@ -162,28 +215,12 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const { id, label } = await idOf(folder);
       const s = await storeReady();
       const has = s.exists(id);
-      const files = readFiles(folder, id);
+      const files = filesOf(folder, id);
       const own = files.filter((f) => !f.elsewhere).map((f) => f.file);
       // git ls-files with no paths lists every file, so only ask when there are some (and only for the project's own).
       const listed = own.length ? await run(folder, ["ls-files", "--", ...own]) : null;
       const tracked = new Set((listed ?? "").split("\n").filter(Boolean));
-      const valued = valuedIn(files);
-      const rows = [];
-      // A file elsewhere ticks only names nothing nearer holds: never over the vault's value or the project's own.
-      const taken = valuedIn(files.filter((f) => !f.elsewhere));
-      for (const f of files) {
-        for (const e of f.entries) {
-          const environment = f.kind.environment;
-          if (f.kind.namesOnly) {
-            if (!(has && s.has(id, e.name, environment)) && !valued.has(`${environment}\n${e.name}`)) rows.push({ file: f.file, name: e.name, environment, status: "missing", tail: "", public: e.name.startsWith("NEXT_PUBLIC_"), ticked: true, skipped: false });
-            continue;
-          }
-          const st = status(has ? s.get(id, e.name, environment) : undefined, e.value);
-          const skipped = f.vercel && shortLived(e.name);
-          const free = freeFrom(f, st, `${environment}\n${e.name}`, taken);
-          rows.push({ file: f.file, name: e.name, environment, status: st, tail: tailOf(e.value), public: e.name.startsWith("NEXT_PUBLIC_"), ticked: f.kind.ticked && st !== "same" && !skipped && free, skipped });
-        }
-      }
+      const rows = scanRows(files, { has: (name, env) => has && s.has(id, name, env), get: (name, env) => (has ? s.get(id, name, env) : undefined) });
       return {
         id,
         label,
@@ -200,13 +237,13 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const s = await storeReady();
       const wanted = new Set(picks.map((p) => `${p.file}\n${p.name}`));
       const entries = [];
-      for (const f of readFiles(folder, id)) {
+      for (const f of filesOf(folder, id)) {
         for (const e of f.entries) {
           if (!wanted.has(`${f.file}\n${e.name}`)) continue;
           entries.push({ name: e.name, environment: f.kind.environment, value: f.kind.namesOnly ? null : e.value, source: f.file });
         }
       }
-      if (entries.length) s.set(id, label, entries);
+      if (entries.length) await s.set(id, label, entries);
       refreshManaged(id);
       if (entries.length) log({ action: "import", by, vault: label, names: [...new Set(entries.map((e) => e.name))], detail: [...new Set(entries.map((e) => e.source))].join(", ") });
       return { imported: entries.length };
@@ -220,7 +257,9 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
     async reveal(id, name, environment) {
       const line = { action: "reveal", by: "you", vault: labelOf(id), names: [name], environment };
       if (!(await unlock.ensure(`reveal ${name}`))) return log({ ...line, outcome: "denied" }) && { denied: true };
-      const value = (await storeReady()).get(id, name, environment);
+      const s = await storeReady();
+      await fresh(s, id);
+      const value = s.get(id, name, environment);
       log({ ...line, outcome: value === undefined ? "missing" : "ok" });
       return value === undefined ? { missing: true } : { value };
     },
@@ -246,11 +285,15 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       if (!NAME.test(name)) throw new Error(`${name || "A blank name"} isn't a variable name: use letters, digits and _, not starting with a digit.`);
       if (!value) throw new Error(`Type a value for ${name}.`);
       const { id, label } = await idOf(folder);
-      (await storeReady()).set(id, label, [{ name, environment, value, source }]);
+      const s = await storeReady();
+      // A shared vault answers { conflicts, queued }: a conflict isn't saved, the server's row is
+      // kept, and the drawer shows the banner (card 12).
+      const result = await writeValue({ store: s, id, label, entry: { name, environment, value, source }, db: accountClient?.supabase, vaultId: sync?.shared?.(id)?.vaultId });
+      if (!result.saved) return result;
       log({ action: "set", by, vault: label, names: [name], environment, detail: source });
       refreshManaged(id);
       if (source) onChange(folder);
-      return { saved: true };
+      return result;
     },
 
     // Puts names in the vault with no value yet (blanks), for the user to fill in later: a thread's
@@ -265,7 +308,7 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const s = await storeReady();
       // Names that already have a value in one of those environments.
       const filled = names.filter((name) => s.exists(id) && environments.some((env) => s.get(id, name, env) !== undefined));
-      s.set(id, label, names.flatMap((name) => environments.map((environment) => ({ name, environment, value: null, source, hint }))));
+      await s.set(id, label, names.flatMap((name) => environments.map((environment) => ({ name, environment, value: null, source, hint }))));
       log({ action: "add blank", by, vault: label, names, environment: environments.join(", "), detail: source });
       refreshManaged(id);
       onChange(folder);
@@ -281,14 +324,14 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       if (target.id === id) throw new Error(`${name} is already in ${target.label}.`);
       const value = s.get(id, name, environment) ?? null;
       const replaced = value !== null && s.exists(target.id) && s.get(target.id, name, environment) !== undefined;
-      s.set(target.id, target.label, [{ name, environment, value }]);
+      await s.set(target.id, target.label, [{ name, environment, value }]);
       log({ action: "copy to", by: "you", vault: labelOf(id), names: [name], environment, detail: `into ${target.label}` });
       refreshManaged(target.id);
       return { copied: true, label: target.label, replaced };
     },
 
     async remove(id, name, environment) {
-      const removed = (await storeReady()).remove(id, name, environment);
+      const removed = await (await storeReady()).remove(id, name, environment);
       log({ action: "remove", by: "you", vault: labelOf(id), names: [name], environment });
       refreshManaged(id);
       return { removed };
@@ -307,69 +350,29 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
     // what happened. Touch ID names the secret, the vault and the site, then that card may use this vault on
     // that site for UNLOCK_MS from its last use.
     // A card with a grant (electron/vault-grants.cjs) isn't asked at all.
-    /** @param {{ card: string, site: string, thread?: string }} who */
-    async useFor(folder, name, environment, who) {
-      const { card, site, thread } = who;
-      const { id, label } = await idOf(folder);
-      const s = await storeReady();
-      const value = s.exists(id) ? s.get(id, name, environment) : undefined;
-      const line = { action: "fill", by: "thread", card, thread, vault: label, names: [name], environment, site };
-      if (value === undefined) return log({ ...line, outcome: "missing" }) && { missing: true, label };
-      if (grants.allows(card, id)) return log({ ...line, via: "grant" }) && { value, label };
-      const key = `${card}\n${site}\n${id}`;
-      if (!threadUnlocks.has(key)) threadUnlocks.set(key, createUnlock({ prompt, now }));
-      const via = threadUnlocks.get(key).unlocked() ? "unlocked" : "touch-id";
-      if (!(await threadUnlocks.get(key).ensure(`let a thread type ${name} (${label}) into ${site}`))) return log({ ...line, via, outcome: "denied" }) && { denied: true, label };
-      log({ ...line, via });
-      return { value, label };
-    },
+    // @param {{ card: string, site: string, thread?: string }} who
+    useFor,
 
     // Hands one value to send() in main after a Touch ID every time, even while unlocked: a push to a service
     // (electron/vercel-env.cjs) is a write somewhere else. What send returns comes back; the value doesn't.
-    async sendValue(folder, name, environment, reason, send) {
-      const { label, values } = await this.valuesFor(folder, [name], environment, false);
-      const line = { action: "send", by: "weft", vault: label, names: [name], environment, detail: reason(label) };
-      if (!(name in values)) return log({ ...line, outcome: "missing" }) && { missing: true, label };
-      if (!(await prompt(reason(label)))) return log({ ...line, outcome: "denied" }) && { denied: true, label };
-      log(line);
-      return { ...(await send(values[name])), label };
-    },
+    sendValue,
 
     // sendValue for several names under ONE Touch ID (several webhooks' relay secrets, electron/relay-seal.cjs).
     // Every name needs a value, or nothing is asked or sent. send gets { NAME: value }; what it returns comes back.
-    async sendValues(folder, names, environment, reason, send) {
-      const { label, values, missing } = await this.valuesFor(folder, names, environment, false);
-      const line = { action: "send", by: "weft", vault: label, names, environment, detail: reason(label) };
-      if (missing.length) return log({ ...line, outcome: "missing" }) && { missing, label };
-      if (!(await prompt(reason(label)))) return log({ ...line, outcome: "denied" }) && { denied: true, label };
-      log(line);
-      return { ...(await send(values)), label };
-    },
+    sendValues,
 
     // A Touch ID with no unlock cache, for a write a thread asks for (electron/vault-routes.cjs).
     // A no is a line in the audit log; a yes is the write's own line.
-    async confirm(reason) {
-      const ok = await prompt(reason);
-      if (!ok) log({ action: "ask", by: "weft", detail: reason, outcome: "denied" });
-      return ok;
-    },
+    confirm,
 
     // Tells the board a folder's vault changed, for a write that doesn't itself (the intake's import).
-    notify: (folder) => onChange(folder),
+    notify,
 
     // Values for a command main runs (electron/secret-run.cjs), never sent over IPC. names null means every
     // name with a value in that environment, for a dev server. The caller asks the user first. use says who read
     // them for the audit line (default: Weft itself), or is false when the caller writes its own line.
-    async valuesFor(folder, names, environment, use = {}) {
-      const { id, label } = await idOf(folder);
-      // s is null when there's no vault for this project yet.
-      const s = (await existing())?.exists(id) ? store : null;
-      const all = s ? s.list(id).filter((e) => e.environment === environment && !e.missing).map((e) => e.name) : [];
-      const found = (names ?? all).map((name) => [name, s?.get(id, name, environment)]);
-      const read = found.filter(([, v]) => v !== undefined).map(([n]) => n);
-      if (use && read.length) log({ action: "read", by: "weft", ...use, vault: label, names: read, environment });
-      return { id, label, values: Object.fromEntries(found.filter(([, v]) => v !== undefined)), missing: found.filter(([, v]) => v === undefined).map(([n]) => n) };
-    },
+    valuesFor,
+    valuesForVault,
 
     // Grants (vault-grants.cjs) outlive a lock: the drawer locks itself when idle, and a grant is a separate yes.
     lock() {
@@ -378,22 +381,48 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       return { unlocked: false };
     },
 
+    // The shared vault's calls (electron/vault-shared-api.cjs), for the drawer's "Share this vault" and
+    // the team page's "Accept" on a device.
+    shared: sharedApi,
+
+    // A shared vault's recovery key (electron/vault-recovery.cjs): the 24 words the user writes down.
+    // The key is unwrapped here, in main, and the words are made here; neither ever leaves.
+    recovery: recoveryApi,
+
     ...grantMethods({ grants, prompt, idOf, log }),
   };
 }
 
 // Wires the vault into Electron main for the board window (board() is its webContents).
-function setupVault({ ipcMain, dataDir, window, board }) {
+// accountClient (electron/account-client.cjs) syncs shared vaults through Supabase; without it every vault is local.
+function setupVault({ ipcMain, dataDir, window, board, accountClient = null }) {
   const { clipboard, dialog, systemPreferences } = require("electron");
   // Every Keychain open and vault use is a line in ~/.weft/vault/audit.jsonl from here on.
   configureAudit({ dataDir });
+  // The board window, and the only one the vault answers.
+  const isBoard = (sender) => Boolean(sender) && sender === board();
   // A hand edit to a managed .env.local: the board loads the vaults again and its nudge offers the import.
   const onChange = (folder) => {
     const contents = board();
     if (contents && !contents.isDestroyed()) contents.send("vault:changed", folder);
   };
-  const vault = createVault({ dataDir, safeStorage: keychainFor("vault key"), sodium: require("./vault-crypto.cjs"), clipboard, prompt: touchIdPrompt({ systemPreferences, dialog, window }), onChange, audit, pickFile: openEnvDialog(dialog, window) });
-  registerVault(ipcMain, { vault, isBoard: (sender) => Boolean(sender) && sender === board() });
+  const vault = createVault({ dataDir, safeStorage: keychainFor("vault key"), sodium: require("./vault-crypto.cjs"), clipboard, prompt: touchIdPrompt({ systemPreferences, dialog, window }), onChange, audit, accountClient, sync: accountClient && createVaultSync({ accountClient, dir: path.join(dataDir, "vault") }), pickFile: openEnvDialog(dialog, window) });
+  // The shared vault's calls need the account client (they talk to Supabase as the signed-in user)
+  // and the device keypair (the wrap and the unwrap). Without a signed-in desktop there is no shared
+  // vault, so those handlers aren't registered at all.
+  //
+  // The rotate needs one more thing: the account's access token, because the plan it makes is
+  // written by weft.zip (the deployed Weft, which holds the service key). The token comes out of the
+  // sealed account file, the same way electron/app-secrets-push.cjs gets it.
+  const token = () => accessToken(accountClient?.read?.() ?? null);
+  registerVault(ipcMain, {
+    vault,
+    isBoard,
+    board,
+    dataDir,
+    accountClient: accountClient ? () => accountClient : null,
+    shared: accountClient ? sharedHandlers(vault.shared, token) : null,
+  });
   return vault;
 }
 

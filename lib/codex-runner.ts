@@ -10,9 +10,12 @@ import { CODEX_INPUT_CODE, codexInput, writeImages } from "./codex-input";
 // Re-exports for tests and existing callers of codex-runner.ts. The prompt/argv code moved to
 // lib/codex-runner-prompt.ts; lib/codex-runner.ts drives the process and converts the events.
 export { argsFor, promptFor };
+import { codexGuardArgs } from "./guards/codex";
+import { openGuards } from "./guards/turn";
 import { BRIDGE_TOKEN_ENV, codexMcpArgs, openBridge } from "./mcp-bridge";
 import { weftMcpServers } from "./weft-mcp";
 import { CODEX_DEFAULT_MODEL } from "./new-thread";
+import { withConnectorEnv } from "./connector-env";
 import { cliEnv } from "./env";
 import { handle } from "./runner-turn";
 import { getCard, getThread, replaceThreadItem, updateCard } from "./store";
@@ -229,18 +232,21 @@ export async function driveCodex(session: Session, executable: string) {
   for await (const message of session.inbox) {
     if (session.abort.signal.aborted) break;
     const input = codexInput(message);
+    // Weft's guards, through Codex's own hooks (lib/guards/codex.ts). Without them the turn doesn't start.
+    const guards = openGuards(session, "codex");
     const attachments = writeImages(input.images);
-    const env = cliEnv();
+    const env = withConnectorEnv(cliEnv(), () => session.cardId ?? undefined) as NodeJS.ProcessEnv;
     delete env.CLAUDE_CODE_ENTRYPOINT;
     // Weft's tools for this turn, over HTTP; the server's own port says where (PORT is stripped from the CLI's env).
     const servers = () => weftMcpServers(session.spec, () => session.cardId ?? undefined);
     const bridge = process.env.PORT ? openBridge(servers) : undefined;
     if (bridge) env[BRIDGE_TOKEN_ENV] = bridge.token;
     const mcp = bridge ? codexMcpArgs(`http://127.0.0.1:${process.env.PORT}`, Object.keys(servers())) : [];
+    Object.assign(env, guards.env);
     const stderr = (data: string) => console.error(`[thread ${(session.cardId ?? "spare").slice(0, 8)}] ${data.trimEnd()}`);
     session.toolIndex.clear();
     try {
-      const process = spawnCli({ command: executable, args: argsFor(session, attachments.paths, mcp), cwd: session.spec.cwd, env, signal: session.abort.signal }, stderr);
+      const process = spawnCli({ command: executable, args: argsFor(session, attachments.paths, [...codexGuardArgs(), ...mcp]), cwd: session.spec.cwd, env, signal: session.abort.signal }, stderr);
       session.process = process;
       process.stdin.on("error", () => {});
       process.stdin.end(promptFor(session, input.text));
@@ -255,6 +261,7 @@ export async function driveCodex(session: Session, executable: string) {
       if (spawnError) throw spawnError;
       assertTurnCompleted(completed, session.abort.signal.aborted, () => process.stderrTail(), exit);
     } finally {
+      guards.close();
       bridge?.close();
       if (attachments.directory) fs.rmSync(attachments.directory, { recursive: true, force: true });
     }
@@ -263,5 +270,5 @@ export async function driveCodex(session: Session, executable: string) {
 
 export const CODEX_CODE = [
   driveCodex, assistant, toolStart, toolFinish, noteFileChanges, result, ...CODEX_PROMPT_CODE, ...CODEX_INPUT_CODE,
-  handleItemEvent, handleEvent, readEvents, assertTurnCompleted,
+  handleItemEvent, handleEvent, readEvents, assertTurnCompleted, codexGuardArgs,
 ];

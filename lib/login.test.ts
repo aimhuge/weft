@@ -92,7 +92,8 @@ afterEach(() => {
 });
 
 describe("isNotLoggedInError", () => {
-  it.each(["Not logged in", "Please run /login", "Invalid API key", "OAuth token has expired", "authentication_error"])(
+  it.each(["Not logged in", "Please run /login", "Invalid API key", "OAuth token has expired", "authentication_error",
+    "Failed to authenticate: OAuth session expired and could not be refreshed"])(
     "spots %j",
     (text) => {
       expect(login.isNotLoggedInError(`Error: ${text} · try again`)).toBe(true);
@@ -155,6 +156,31 @@ describe("startLogin", () => {
     await flush();
     expect(first).toHaveBeenCalledTimes(1);
     expect(second).toHaveBeenCalledTimes(1);
+  });
+
+  // GitHub issue #13: a card that hit an auth wall started its own login while the user was in
+  // the middle of one. The second start retired the first and killed its `auth login` process,
+  // so the credential never landed and the two logins fought each other.
+  it("never kills a login that is still running", async () => {
+    const user = vi.fn();
+    const card = vi.fn();
+    login.startLogin("claude", user);
+    const running = child();
+
+    // The card hits an auth wall and asks for a login of its own.
+    const view = login.startLogin("claude", card);
+
+    expect(view.state).toBe("running");
+    expect(cp.spawn).toHaveBeenCalledTimes(1);
+    expect(running.kill).not.toHaveBeenCalled();
+
+    // The one login that was already under way still finishes, and both waiters are let go.
+    statusSays('{"loggedIn":true}');
+    running.emit("close", 0, null);
+    await flush();
+    expect(user).toHaveBeenCalledTimes(1);
+    expect(card).toHaveBeenCalledTimes(1);
+    expect(running.kill).not.toHaveBeenCalled();
   });
 
   it("publishes output at most every 200ms, cleaned of terminal codes", async () => {

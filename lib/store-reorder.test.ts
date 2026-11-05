@@ -110,8 +110,10 @@ describe("store reorder", () => {
 
   it("publishes the full column after a collapsed gap is renumbered", async () => {
     const store = await load();
+    // createCard stamps order with the time, so set the orders after: a gap of 1 between a and b, whatever the clock.
     for (const [id, order] of [["a", 100], ["b", 101], ["c", 300], ["d", 400]] as const) {
-      store.createCard(input({ title: id, order }), id);
+      store.createCard(input({ title: id }), id);
+      store.updateCard(id, { order });
     }
     const { subscribe } = await import("./bus");
     const events: string[] = [];

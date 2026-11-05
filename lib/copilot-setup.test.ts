@@ -22,7 +22,7 @@ vi.mock("node:child_process", () => ({ execFile: h.execFile }));
 vi.mock("./store", () => ({ get DATA_DIR() { return h.dir; } }));
 vi.mock("./account", () => ({ accountView: h.accountView }));
 vi.mock("./browser-tools", () => ({ shell: h.shell }));
-vi.mock("./project-seed-run", () => ({ seedChipLines: vi.fn(async (p: readonly string[]) => p.map((x) => `- ${x}: starter`)) }));
+vi.mock("./project-seed-run", () => ({ seedChipLines: vi.fn((p: readonly string[]) => Promise.resolve(p.map((x) => `- ${x}: starter`))) }));
 vi.mock("./copilot-sources", async (orig) => ({ ...(await orig<typeof import("./copilot-sources")>()), statusOf: h.statusOf }));
 
 const signedOut = { configured: true, user: null };

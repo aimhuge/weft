@@ -17,6 +17,7 @@
 import { acceptInvite, lookupInviteByToken, setCurrentOrg } from "@aimhuge/teams";
 import { redirect } from "next/navigation";
 import { serviceClient, webUser } from "@/lib/web-session";
+import { syncTeamSeatsQuietly } from "@/lib/billing/seats";
 
 // Read a single FormData field as a string (file entries would otherwise stringify to "[object Object]").
 function formText(formData: FormData, name: string): string {
@@ -46,6 +47,8 @@ export async function joinWorkspace(
     const result = await acceptInvite(service, lookup, user.id, user.email ?? "");
     if (!result) return { ok: false, message: "This invite link has expired or was revoked." };
     await setCurrentOrg(service, user.id, lookup.org.id);
+    // On Team the person who just joined is a seat: the Stripe quantity follows (lib/billing/seats.ts).
+    await syncTeamSeatsQuietly(service, lookup.org, user.email ?? null);
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : "Could not accept this invite." };
   }

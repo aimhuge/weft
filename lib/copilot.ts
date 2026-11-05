@@ -21,8 +21,10 @@ import { endSession, ensureSpare, retryPukuWithTrial, sendUserMessage, warmUp } 
 import { resumeInterrupted } from "./resume";
 import { startScheduler } from "./scheduler";
 import { chipCardId, startSuggestRefresh } from "./copilot-suggest";
+import { startCheckIns } from "./copilot-initiative-run";
+import { isBusy } from "./runner-state";
 import type { CopilotPersona } from "./copilot-personas";
-import { backendFor, modelFor } from "./new-thread";
+import { backendFor, cardModel, modelFor } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { copilotModel, defaultPermissionMode, listProjects } from "./settings";
 import { clearThread, createCard, getCard, listCards, updateCard } from "./store";
@@ -33,10 +35,12 @@ import { COPILOT_ID } from "./types";
 // changes the model again by editing the pick and starting a new chat.
 // A model that has hit its limit is replaced by the backup model, so the copilot starts on one
 // that can actually answer.
+// The card's model is the id the CLI takes, so a Goose pick loses its "goose:" prefix here; the
+// card's backend says it runs on Goose.
 function copilotInitialModel() {
   const picked = copilotModel();
   const wanted = picked || modelFor("claude");
-  return fallbackFor(wanted)?.model ?? (wanted || undefined);
+  return cardModel(fallbackFor(wanted)?.model ?? (wanted || undefined));
 }
 
 // The CLI the copilot starts on: the one that serves its model. Every model is offered in the
@@ -126,6 +130,8 @@ export function prewarm() {
   startScheduler();
   // Run the crons whose time has come (lib/cron-run.ts), one new card per run. Loaded after the board's own start.
   void import("./cron-run").then((m) => m.startCronClock(), (err: unknown) => console.error("[weft] cron clock failed to start:", err));
+  // And publish a summary of them for the threads on your Weft Workers to list (lib/mac-crons.ts).
+  void import("./mac-crons").then((m) => m.startMacCronsPublish(), (err: unknown) => console.error("[weft] Mac crons publish failed to start:", err));
   // Sync the GitHub issues of the folders that opted in, every 5 minutes (lib/github-issues.ts).
   startIssueSync();
   // Park a few starter cards in a project's Backlog the first time it lands on the board (lib/project-seed-run.ts).
@@ -150,6 +156,8 @@ export function prewarm() {
   startPukuTrial(() => void retryPukuWithTrial());
   // Keep the copilot's board-made chips fresh as cards move (lib/copilot-suggest.ts).
   startSuggestRefresh();
+  // Let the copilot speak first: a morning idea, and a refactor look after work lands (lib/copilot-initiative.ts).
+  startCheckIns(() => isBusy(COPILOT_ID));
   // Post commits, pushes, deploys and card status to the Slack drawer's channel (lib/slack.ts).
   startSlack();
   // Build every app folder on save (lib/app-build-watch.ts). Loaded lazily and never awaited: esbuild must stay off every

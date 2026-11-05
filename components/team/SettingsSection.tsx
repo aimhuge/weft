@@ -11,7 +11,7 @@ export const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12
 
 export function Section({ title, aside, children }: { title?: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className={CARD} onMouseDown={(e) => e.stopPropagation()}>
+    <section data-settings-card className={CARD} onMouseDown={(e) => e.stopPropagation()}>
       {title || aside ? (
         <div className="mb-3 flex items-center justify-between gap-3">
           {title ? <h4 className={SECTION_TITLE}>{title}</h4> : <span />}

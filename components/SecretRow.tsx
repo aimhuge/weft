@@ -6,7 +6,7 @@ import { hintParts, linkLabel } from "@/lib/hint-links";
 import { openInPane } from "@/lib/open-in-pane";
 import { useCountdown } from "@/lib/use-countdown";
 import { useModHeld } from "@/lib/use-mod-held";
-import { blankTitle, masked, type VaultSecret } from "@/lib/vault-view";
+import { blankTitle, conflictLine, masked, type VaultConflict, type VaultSecret } from "@/lib/vault-view";
 import type { RowAction } from "@/lib/vault-row-types";
 import CountdownButton, { CONFIRM_WAIT_MS } from "./CountdownButton";
 import Icon from "./Icon";
@@ -19,18 +19,29 @@ export type { RowAction };
 // One secret: its name and masked tail, with change, reveal, copy and remove on hover and its value once
 // revealed. 🗑 turns into the countdown's red button (components/CountdownButton.tsx); leaving the row
 // calls it off. When the name is in other environments too (spread), 🗑 asks which to remove it from.
+//
+// A conflict on this secret (someone else wrote it between your last read and your write) puts the
+// banner under the name: who wrote it, and the two ways out.
 export function SecretRow({
   secret: s,
   value,
   spread,
   onAct,
   onMenu,
+  conflict,
+  onKeepMine,
+  onKeepTheirs,
 }: {
   secret: VaultSecret;
   value: string | undefined;
   spread: boolean;
   onAct: (action: RowAction) => void;
   onMenu: (e: React.MouseEvent) => void;
+  // The conflict on this secret, if the user's last write lost against a teammate's.
+  conflict?: VaultConflict | null;
+  // The two ways out: re-apply the user's own edit, or take the server's row.
+  onKeepMine?: () => void;
+  onKeepTheirs?: () => void;
 }) {
   const { left, arm, disarm } = useCountdown(CONFIRM_WAIT_MS);
   return (
@@ -93,6 +104,7 @@ export function SecretRow({
           </span>
         )}
       </div>
+      {conflict && <ConflictBanner conflict={conflict} onKeepMine={onKeepMine} onKeepTheirs={onKeepTheirs} />}
       {s.missing && s.hint && <HintText hint={s.hint} />}
       {/* data-secret: the board view (electron/board-view.cjs) reads this as ‹secret› and blanks it in screenshots. */}
       {value !== undefined && (
@@ -100,6 +112,40 @@ export function SecretRow({
           {value}
         </div>
       )}
+    </div>
+  );
+}
+
+// The conflict banner on a secret's row: someone else wrote it between your last read and your
+// write (docs/architecture/teams-vault.md, "Push on change"). "Sam changed API_KEY in development
+// — keep your edit?" with the two ways out.
+//
+// A row the server still holds as a blank holds no value, so there is nothing to resolve: the
+// drawer keeps the new value silently and shows no banner.
+//
+// The banner never shows a value, not even a preview of either side: the buttons act on the edit
+// the user made, which the drawer holds, and not on anything the banner puts in the page.
+export function ConflictBanner({
+  conflict,
+  onKeepMine,
+  onKeepTheirs,
+}: {
+  conflict: VaultConflict;
+  onKeepMine?: () => void;
+  onKeepTheirs?: () => void;
+}) {
+  if (conflict.blank) return null;
+  return (
+    <div role="alert" className="mt-1 rounded border border-warn/40 bg-warn-soft px-1.5 py-1 text-[10.5px] leading-snug text-warn">
+      <p className="break-words">{conflictLine(conflict)}</p>
+      <div className="mt-1 flex gap-1.5">
+        <button onClick={onKeepMine} className="rounded bg-warn/20 px-1.5 py-0.5 font-medium hover:bg-warn/30">
+          Keep your edit
+        </button>
+        <button onClick={onKeepTheirs} className="rounded px-1.5 py-0.5 hover:bg-warn/20">
+          Keep theirs
+        </button>
+      </div>
     </div>
   );
 }

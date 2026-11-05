@@ -21,6 +21,17 @@ const group = (over: Partial<SheetGroup> = {}): SheetGroup => ({
 });
 
 describe("SheetBand", () => {
+  it("toggles archived cards from the Done band, and only when there are some", () => {
+    const onToggle = vi.fn();
+    const { rerender } = render(<SheetBand group={group({ column: "done", label: "Done" })} onFold={vi.fn()} archive={{ count: 4, shown: false, onToggle }} />);
+    fireEvent.click(screen.getByRole("button", { name: "Show 4 archived" }));
+    expect(onToggle).toHaveBeenCalledOnce();
+    rerender(<SheetBand group={group({ column: "done", label: "Done" })} onFold={vi.fn()} archive={{ count: 4, shown: true, onToggle }} />);
+    expect(screen.getByRole("button", { name: "Hide archived" })).toHaveAttribute("aria-pressed", "true");
+    rerender(<SheetBand group={group({ column: "done", label: "Done" })} onFold={vi.fn()} archive={{ count: 0, shown: false, onToggle }} />);
+    expect(screen.queryByRole("button", { name: /archived/ })).toBeNull();
+  });
+
   it("shows the column's name and count", () => {
     render(<SheetBand group={group()} onFold={vi.fn()} />);
     expect(screen.getByText("Review")).toBeInTheDocument();

@@ -59,7 +59,8 @@ function registerAboutBridge({ tagline, dataDir, getServer }) {
   ipcMain.handle("weft-about:info", (event) => {
     if (!fromAbout(event)) throw new Error("not available here");
     return {
-      version: app.getVersion(),
+      // With its server patch when one runs, "0.6.7+abc123" (server-patch.cjs).
+      version: require("./server-patch.cjs").versionLabel(app),
       tagline: options.tagline,
       arch: process.arch,
       platform: process.platform,

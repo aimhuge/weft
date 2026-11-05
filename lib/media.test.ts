@@ -31,6 +31,9 @@ describe("mediaKind", () => {
   it("takes a signed link to a synced blob, which has no extension, for an image", () => {
     const sha = "a".repeat(64);
     expect(mediaKind(`https://x.supabase.co/storage/v1/object/sign/weft-blobs/org/${sha}?token=t`)).toBe("image");
+    const r2 = `https://${"0".repeat(32)}.r2.cloudflarestorage.com/weft-blobs/11111111-2222-3333-4444-555555555555/${"a".repeat(64)}?X-Amz-Algorithm=AWS4-HMAC-SHA256`;
+    expect(mediaKind(r2)).toBe("image");
+    expect(mediaKind(r2.replace("?", "/x?"))).toBe("file");
     // Any other extensionless link stays a file.
     expect(mediaKind("https://x.com/download")).toBe("file");
   });

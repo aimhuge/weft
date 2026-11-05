@@ -29,15 +29,26 @@ This is a custom URL scheme Weft registers with the OS. The dev server's HTTP po
 Weft restart, so a `http://127.0.0.1:PORT/...` redirect would break after each launch; the `weft://`
 scheme doesn't carry a port, so the URL is permanent.
 
-In the packaged app, `app.setAsDefaultProtocolClient("weft")` (in `electron/main.cjs`) registers
-the installed Weft.app as the OS handler. In `pnpm desktop` the dev Electron (`com.github.Electron`)
+Supabase doesn't redirect to `weft://` directly, though: its `redirectTo` is
+`https://weft.zip/auth/desktop` (`desktopReturnUrl` in `lib/account-callback.ts`), a page
+(`app/auth/desktop/route.ts`, `lib/desktop-return.ts`) that forwards `code` / `error*` to
+`weft://account-callback` at once and shows an **Open Weft** button. When GitHub approves an app it
+already knows, the whole redirect chain runs without a click in the browser, and Chrome and Edge drop an
+external-app launch with no user gesture behind it, leaving the tab on Supabase's `/callback` (seen on
+Windows: `auth.flow_state` had the code issued, the app never got it). The button is that click.
+
+In the packaged app, `app.setAsDefaultProtocolClient("weft")` (`registerProtocolClient` in
+`electron/protocol-client.cjs`) registers the installed Weft.app as the OS handler. Unpackaged on
+Windows and Linux (`pnpm desktop` / `electron .`) it registers the dev Electron with the project
+folder as its argument, so the sign-in redirect reaches the running app through `second-instance`;
+a link that launched Weft is read from its own argv (`launchLinks`). In `pnpm desktop` the dev Electron (`com.github.Electron`)
 has no `CFBundleURLTypes` declared in its Info.plist, so macOS silently drops `weft://` clicks.
 `scripts/dev-protocol.cjs` builds a thin wrapper app at `~/Applications/Weft Dev.app` with
 `weft://` declared, registers it with LaunchServices, and forwards the link to the running dev
 Electron (the wrapper's launcher execs the real Electron with the project as its folder and the
 URL as a `--weft-link=weft://…` arg; `argvLink` in `electron/argv-link.cjs` parses it back out
 for the `second-instance` handler). `pnpm desktop` runs the script before launching Electron,
-and `pnpm dev:protocol` runs it standalone.
+and `pnpm dev:protocol` runs it standalone; off macOS the script does nothing.
 
 `lib/auth/desktop.ts:authRedirectTo()` returns the `weft://account-callback?next=…` URL when the
 Electron shell is running (`process.env.WEFT_SHELL_URL` is set) and falls back to the

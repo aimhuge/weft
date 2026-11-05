@@ -28,6 +28,8 @@ const queueFolder = vi.fn();
 
 vi.mock("@/lib/settings", () => ({ syncFolders, setSyncFolder }));
 vi.mock("@/lib/cloud-sync", () => ({ cloudSyncStatus, syncNow, queueFolder }));
+const rememberSyncRepo = vi.fn<(folder: string, on: boolean) => Promise<void>>(() => Promise.resolve());
+vi.mock("@/lib/cloud-sync-repos", () => ({ rememberSyncRepo }));
 
 const route = await import("./cloud-sync/route");
 
@@ -115,6 +117,17 @@ describe("POST /api/cloud-sync", () => {
     expect(setSyncFolder).toHaveBeenCalledWith(tmp, false);
     expect(queueFolder).not.toHaveBeenCalled();
     expect(await body(res)).toMatchObject({ folders: [] });
+    expect(rememberSyncRepo).toHaveBeenCalledWith(tmp, false);
+  });
+
+  it("records the switch for the folder's repo, and a failure there doesn't fail the answer", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    rememberSyncRepo.mockRejectedValueOnce(new Error("no table"));
+    const res = await route.POST(req("/cloud-sync", { method: "POST", body: { folder: tmp, on: true } }));
+    expect(res.status).toBe(200);
+    expect(rememberSyncRepo).toHaveBeenCalledWith(tmp, true);
+    await vi.waitFor(() => expect(warn).toHaveBeenCalledWith("[weft] project sync across Macs:", expect.any(Error)));
+    warn.mockRestore();
   });
 
   it("on missing defaults to true", async () => {

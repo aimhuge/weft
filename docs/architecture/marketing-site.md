@@ -51,12 +51,23 @@ catalog**, not typed:
 - Free's Puku bullet quotes the free tier cap through `freeTierCapLabel()` ("1M tokens a day", `FREE_TIER`).
 - Under the three cards, `components/home/AccessPlans.tsx` (`#wz-access`, `.wz-access*`) draws a quieter dashed row:
   Startups, Open source, Education and Regional pricing, two by two, each marked **Coming soon** until weft.zip can
-  grant or sell it. Its numbers come from the catalog too (`STARTUP_TEAM`, `freeTierCapLabel()`, `BLASTCP_CREATOR.name`,
-  `REGIONAL_PRO_CENTS`); drop the Coming soon chip per card as each plan lands
+  grant or sell it. Its numbers come from the catalog too (`STARTUP_TEAM`, `freeTierCapLabel()`, `REGIONAL_PRO_CENTS`); drop the Coming soon chip per card as each plan lands
   ([billing.md](billing.md#startups-open-source-education-and-regional-pricing)).
-- `blastcpLines(plan.blastcp)` turns each plan's BlastCP tier into two bullets ("BlastCP Creator: 1 brand, every channel,
-  unlimited posts", "$3 a month of BlastCP AI generation"). `cardFor` puts them after the plan's own bullets and before a
-  closing "Everything in …" ([billing.md](billing.md#blastcp-usage)).
+- Under the access row, `components/home/CloudWorkers.tsx` (`#wz-cloud`, `.wz-cloud*` in `components/home/cloud.css`)
+  asks for **Weft Cloud Workers**: a Weft Worker we host ([weft-worker.md](weft-worker.md)), so cards run with the laptop
+  shut and no server of your own. It isn't built or priced yet, so the card has no price: a plain form asks *what would
+  you use a cloud worker for?* and an email, and posts to `/api/cloud-workers/request`. `lib/cloud-worker-request.ts`
+  checks it and sends it the feedback dot's way (`collectFeedback` in `lib/feedback-send.ts`: the `feedback` table and
+  the team's Slack, titled "☁️ Cloud worker request", rate-limited per address), then 303s back to the same-origin page
+  at `#wz-cloudSent` or `#wz-cloudFailed`, where CSS `:target` shows the matching line. No client JS.
+- Each card ends in its way in (`.wz-planCta`, clay on the featured card, `data-track="plan_clicked"`): Free's is the
+  hero's download link, which `Home.tsx` passes in as `download`; Pro and Team link to `/billing?plan=pro|team`
+  (`lib/billing/plan-link.ts`), which signs the visitor in, lands on `/<slug>/billing` and opens the upgrade dialog, whose
+  button starts Stripe Checkout ([billing.md](billing.md#the-pieces)).
+- `blastcpLines(id, plan.blastcp)` turns each plan's BlastCP tier into two bullets, naming who gets it as BlastCP
+  applies it ("BlastCP Creator for the owner: 1 brand, every channel, unlimited posts" on Pro, "… for every seat" on
+  Team, "$3 a month of BlastCP AI generation"), placed before the closing "Everything in …"
+  ([billing.md](billing.md#blastcp-usage)). The access row names Creator for Open Source and Education too.
 
 So a price change in `lib/billing/plans.ts` moves the marketing page with it, and the page cannot drift from what
 the app actually charges. `Plans.test.tsx` (jsdom) asserts exactly that: the card names equal `catalog.order`'s
@@ -70,7 +81,7 @@ the gate's rule line up, so the page can't quietly start selling teams that the 
 
 The classes live under a `─── Plans ───` banner in `home.css`: `.wz-plans`, `.wz-planGrid`, `.wz-plan`,
 `.wz-planFeatured`, `.wz-planName`, `.wz-planPrice`, `.wz-planAmount`, `.wz-planCadence`, `.wz-planBlurb`,
-`.wz-planFeatures`, `.wz-planNote`. The grid is three across, and drops to one column under the breakpoints.
+`.wz-planFeatures`, `.wz-planCta`, `.wz-planCtaFeatured`, `.wz-planNote`. The grid is three across, and drops to one column under the breakpoints.
 
 ## Patterns
 
@@ -84,8 +95,6 @@ The classes live under a `─── Plans ───` banner in `home.css`: `.wz-
 
 ## Known gaps
 
-- The pricing section is a price list, not a funnel: the cards don't link to Checkout or to `/<slug>/billing`. The
-  Buy path is the desktop's **Upgrade to Pro** button in Settings → Accounts.
 - weft.zip isn't on the domain in Vercel yet, so the canonical URL, the OG image and the Stripe return URLs all
   still point somewhere else.
 - The board screenshot is a point-in-time capture; refresh `public/brand/board.png` after big board changes.

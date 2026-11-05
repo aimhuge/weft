@@ -9,7 +9,8 @@ import { isBusy, sendMessage } from "./runner";
 import { scheduleMessage } from "./scheduler";
 import { startGate } from "./start-gate";
 import { createCard, DATA_DIR, getCard } from "./store";
-import type { Card } from "./types";
+import { startClock } from "./tick-clock";
+import type { Card, PermissionMode } from "./types";
 
 // A cron's runs (docs/architecture/crons.md): each one a new card, forked from the source thread or fresh, that
 // opens on the source's page and ends with a run page of its own. lib/scheduler.ts calls runDueCrons every tick.
@@ -34,7 +35,7 @@ function stackHolder(cron: Cron): string | undefined {
   return live(cron.sourceId) ?? cron.runs.map((r) => live(r.cardId)).find(Boolean);
 }
 
-function runCard(cron: Cron, n: number, now: number): Card {
+function runCard(cron: Cron, n: number, now: number, mode?: PermissionMode): Card {
   const fork = cron.mode === "fork" && cron.sessionId;
   return createCard({
     title: `${cron.name} · ${dayLabel(now)}`,
@@ -42,7 +43,7 @@ function runCard(cron: Cron, n: number, now: number): Card {
     prompt: `${cron.prompt}\n\n${runNote(cron, n)}`,
     cwd: cron.cwd,
     backend: cron.backend,
-    permissionMode: cron.permissionMode,
+    permissionMode: mode ?? cron.permissionMode,
     model: cron.model,
     effort: cron.effort,
     ...(cron.agent ? { agent: cron.agent } : {}),
@@ -62,12 +63,13 @@ async function openSourcePage(cron: Cron, cardId: string) {
   await openInPane(url, cardId).catch(() => {});
 }
 
-// One run, now: the card is made and its first turn sent (or held for the model's reset, like a new thread).
-export async function runCron(id: string, now = Date.now()): Promise<Card> {
+// One run, now: the card is made and its first turn sent (or held for the model's reset, like a new thread). `mode`
+// overrides the cron's own: a run asked for from the network starts in the mode its host allows (lib/worker-kinds.ts).
+export async function runCron(id: string, now = Date.now(), mode?: PermissionMode): Promise<Card> {
   const cron = getCron(id);
   if (!cron) throw new Error("No such cron.");
   const n = cron.count + 1;
-  const card = runCard(cron, n, now);
+  const card = runCard(cron, n, now, mode);
   recordRun(cron, { cardId: card.id, n, at: now }, now);
   await openSourcePage(cron, card.id);
   const gate = startGate(card.backend, card.model);
@@ -98,14 +100,8 @@ export async function runDueCrons(now = Date.now()) {
   }
 }
 
-// How often the server looks for crons whose time has come; the same as the scheduled messages' check.
-const CHECK_EVERY_MS = 15_000;
-const g = globalThis as unknown as { __weftCronTimer?: ReturnType<typeof setInterval> };
-
-// Once per server process. A run that came due while the Mac slept or Weft was closed goes on the first check.
+// Once per server process, on the same 15-second beat as the scheduled messages' check. A run that
+// came due while the Mac slept or Weft was closed goes on the first check.
 export function startCronClock() {
-  if (g.__weftCronTimer) return;
-  const tick = () => void runDueCrons().catch((err: unknown) => console.error("[weft] cron check failed:", err));
-  g.__weftCronTimer = setInterval(tick, CHECK_EVERY_MS);
-  tick();
+  startClock("cron", () => void runDueCrons().catch((err: unknown) => console.error("[weft] cron check failed:", err)));
 }

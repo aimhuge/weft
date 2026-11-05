@@ -1,0 +1,210 @@
+"use client";
+
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { apiFetch } from "./api-client";
+import type { ProjectWorker } from "./board-view";
+import type { Card, PermissionMode, QuestionReply } from "./types";
+import { EMPTY_WORKER_BOARD, type WorkerBoard } from "./worker-project";
+import { readWorkerMarks, subscribeWorkerMarks, workerMarksSnapshot, type WorkerMarks } from "./worker-project-marks";
+import type { GrantScope } from "./cloud-commands";
+import { applyIntents, onOptimistic, overlayAll, patchNow } from "./optimistic-cards";
+import { hostOf } from "./project-host";
+import { removeOnHost } from "./card-handlers-host";
+import { signedAnswer } from "./answer-signer";
+import { mergeBoard, FULL_READ_EVERY_MS } from "./worker-board-merge";
+import { clearActiveCards, markWholeRead, setActiveCards } from "./worker-poll";
+import { sendWorkerAction } from "./worker-transport";
+import { onLineEvents, onLineFlips } from "./session-lines";
+import type { LineEvent } from "./host-line-protocol";
+import { allOnLines, lineUp, readSnapshot, withSnapshot } from "./worker-board-line";
+import { pendingSnapshot, settlePending, subscribePending, withPending } from "./worker-pending-cards";
+import { useTeamBoard } from "./use-team-board";
+import { teamMacLabel } from "./team-board-types";
+
+// A card change off a worker's session line, laid over the cards read last: the card keeps the board's worker:// path,
+// and one the board hasn't read yet waits for the next read, which knows its project.
+export function withLineEvent(cards: Card[], event: LineEvent): Card[] {
+  if (event.t === "card_deleted") return cards.filter((c) => c.id !== event.id);
+  if (event.t !== "card") return cards;
+  return cards.map((c) => (c.id === event.card.id ? { ...event.card, cwd: c.cwd } : c));
+}
+
+// Your workers' projects and cards on the desktop board, read through the local server every few seconds (only the cards changed since the last read, a whole read every
+// FULL_READ_EVERY_MS). They stay
+// in this hook's state, never in the board's cards or the local store. With no worker of yours it looks once a
+// minute, so a signed-out or worker-less Mac does next to nothing. While every worker shown has a live session line,
+// its events carry the changes and the read slows to once a minute too; a line coming up brings a whole snapshot of
+// that worker's cards over it (card.list, lib/worker-board-line.ts), and one going down reads at once.
+export const BOARD_POLL_MS = 5_000;
+export const IDLE_POLL_MS = 60_000;
+
+// With `since`, only the cards changed after it (lib/worker-board-merge.ts).
+async function load(since?: string): Promise<WorkerBoard | null> {
+  try {
+    const res = await apiFetch(since ? `/api/worker-board?${new URLSearchParams({ since }).toString()}` : "/api/worker-board");
+    return res.ok ? ((await res.json()) as WorkerBoard) : null;
+  } catch {
+    return null;
+  }
+}
+
+// The cards are drawn through lib/optimistic-cards.ts as this Mac's are (lib/board-live.ts): a star, a move or a stop on
+// a worker's card shows at once, a read that already shows it settles it, and a refusal reloads.
+export function useWorkerBoard(): WorkerBoard {
+  const [board, setBoard] = useState<WorkerBoard>(EMPTY_WORKER_BOARD);
+
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let projects = 0;
+    // The last read before the cards were drawn, what a changed-cards read lays over; null forces a whole read.
+    let raw: WorkerBoard | null = null;
+    let wholeAt = 0;
+    // A reload while a read is out starts a newer read: only the newest one draws and sets the next timer, so two
+    // polling loops never run side by side.
+    let latest = 0;
+    const draw = (next: WorkerBoard) => {
+      raw = next;
+      settlePending(next.cards);
+      setActiveCards(next.cards);
+      setBoard({ ...next, cards: overlayAll(next.cards) });
+    };
+    const tick = async () => {
+      const mine = ++latest;
+      clearTimeout(timer);
+      const since = raw?.asOf && Date.now() - wholeAt < FULL_READ_EVERY_MS ? raw.asOf : undefined;
+      const next = await load(since);
+      if (!alive || mine !== latest) return;
+      // A failed read keeps what's drawn, so a blip doesn't empty the projects.
+      if (next) {
+        if (!next.delta) {
+          wholeAt = Date.now();
+          markWholeRead();
+        }
+        const merged = mergeBoard(raw ?? EMPTY_WORKER_BOARD, next);
+        projects = merged.projects.length;
+        draw(merged);
+      }
+      timer = setTimeout(() => void tick(), projects && !allOnLines(raw?.projects ?? [], lineUp) ? BOARD_POLL_MS : IDLE_POLL_MS);
+    };
+    // A line up: that worker's cards whole, over it (one ask at a time per worker). Down: read now, and every few
+    // seconds again.
+    const asking = new Set<string>();
+    const snapshot = async (workerId: string) => {
+      if (asking.has(workerId)) return;
+      asking.add(workerId);
+      const got = await readSnapshot(workerId).finally(() => asking.delete(workerId));
+      if (alive && got && raw) draw(withSnapshot(raw, workerId, got));
+    };
+    const offFlips = onLineFlips((workerId, direct) => void (direct ? snapshot(workerId) : tick()));
+    // A refused change reads the cards again; any other redraws them with what's still open.
+    const off = onOptimistic((update) => {
+      if (update.kind === "reload") {
+        raw = null;
+        void tick();
+      }
+      else setBoard((b) => ({ ...b, cards: applyIntents(b.cards) }));
+    });
+    // A line's card change goes into the last read too, so a slow read or a snapshot lays over it rather than undo it.
+    const offLine = onLineEvents((workerId, event) => {
+      if (event.t !== "card" && event.t !== "card_deleted") return;
+      // A card the board hasn't read yet: the snapshot knows its project, where the event only has the worker's path.
+      if (event.t === "card" && raw && !raw.cards.some((c) => c.id === event.card.id)) void snapshot(workerId);
+      if (raw) {
+        raw = { ...raw, cards: withLineEvent(raw.cards, event) };
+        settlePending(raw.cards);
+      }
+      setBoard((b) => ({ ...b, cards: overlayAll(withLineEvent(b.cards, event)) }));
+    });
+    void tick();
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+      clearActiveCards();
+      off();
+      offLine();
+      offFlips();
+    };
+  }, []);
+
+  return board;
+}
+
+// The board's cards with your workers' beside them: `cards` stays this Mac's own, and what's drawn reads boardCards.
+// Each worker project carries this board's pin and hide for it (lib/worker-project-marks.ts), and a new thread on its way
+// to a worker is drawn among them (lib/worker-pending-cards.ts).
+const NO_PENDING: Card[] = [];
+// Your teammates' cards for your projects (lib/use-team-board.ts) are drawn here too, filed under your own folders, and
+// ride along in `workers.team` so the open one finds its thread (openWorkerThread).
+export function useBoardWorkers(cards: Card[]) {
+  const read = useWorkerBoard();
+  const team = useTeamBoard().cards;
+  const marks = useSyncExternalStore(subscribeWorkerMarks, workerMarksSnapshot, () => "{}");
+  const pending = useSyncExternalStore(subscribePending, pendingSnapshot, () => NO_PENDING);
+  const workers = useMemo(() => {
+    const marked = withMarks(read, readWorkerMarks(marks));
+    return pending.length ? { ...marked, cards: withPending(marked.cards, pending) } : marked;
+  }, [read, marks, pending]);
+  const boardCards = useMemo(() => [...cards, ...workers.cards, ...team], [cards, workers.cards, team]);
+  return { workers: { ...workers, team }, boardCards };
+}
+
+export function withMarks(board: WorkerBoard, marks: Record<string, WorkerMarks>): WorkerBoard {
+  if (!board.projects.some((p) => marks[p.path])) return board;
+  return { ...board, projects: board.projects.map((p) => (marks[p.path] ? { ...p, ...marks[p.path] } : p)) };
+}
+
+interface ThreadCtx {
+  select: (id: string | null) => void;
+  notify: (err: unknown) => void;
+}
+
+// The open worker card, the worker it runs on and what its thread can do. Null when the open card isn't a worker's.
+// A teammate's card opens read-only (lib/team-host.ts): it can only be closed.
+export function openWorkerThread(board: Pick<WorkerBoard, "cards" | "projects"> & { team?: Card[] }, selectedId: string | null, ctx: ThreadCtx) {
+  const mate = board.team?.find((c) => c.id === selectedId);
+  if (mate?.team) return { card: mate, worker: { name: teamMacLabel(mate.team), status: "online" as const }, handlers: teamThreadHandlers(ctx) };
+  const card = board.cards.find((c) => c.id === selectedId);
+  if (!card) return null;
+  const project = board.projects.find((p) => p.path === card.cwd);
+  const worker: ProjectWorker = { name: project?.worker ?? "Your worker", status: project?.status ?? "offline" };
+  return { card, worker, handlers: workerThreadHandlers(card, ctx) };
+}
+
+export type WorkerThread = NonNullable<ReturnType<typeof openWorkerThread>>;
+
+// A teammate's card's thread: nothing to send or answer (ThreadPanel is readOnly for it), only closing.
+export function teamThreadHandlers(ctx: ThreadCtx) {
+  const none = () => Promise.resolve();
+  return { onSend: none, onAnswer: none, onDeleted: () => ctx.select(null), onClose: () => ctx.select(null) };
+}
+
+// A worker card's thread actions, in the shape ThreadPanel takes: send and answer go out as commands, a rename as a
+// host verb (lib/project-host.ts), drawn at once and taken back if the worker refuses. What only the machine running the
+// card can do has no handler, so the panel doesn't offer it.
+export function workerThreadHandlers(card: Card, ctx: ThreadCtx) {
+  return {
+    onSend: (text: string) => sendWorkerAction({ action: "reply", cardId: card.id, text }).then(() => {}),
+    onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply, grant?: GrantScope) => {
+      const pendingId = card.pending?.id;
+      if (!pendingId) return Promise.resolve();
+      // An Allow carries this Mac's signature, after Touch ID (lib/answer-signer.ts); a refusal sends nothing.
+      return signedAnswer(card, allow, { answers, grant })
+        .then((auth) => sendWorkerAction({ action: "answer", cardId: card.id, pendingId, allow, answers, reply, grant, ...(auth ? { auth } : {}) }))
+        .then(() => {}, (err: unknown) => {
+        ctx.notify(err);
+        throw err;
+      });
+    },
+    // The same card.update the tile's menu sends (lib/use-board-menus.ts); a worker refuses YOLO from the network.
+    onMode: (mode: PermissionMode) => void patchNow(card.id, { permissionMode: mode }, () => hostOf(card).act("card.update", { id: card.id, body: { permissionMode: mode } })).catch(ctx.notify),
+    onRename: (title: string) => void patchNow(card.id, { title }, () => hostOf(card).act("card.update", { id: card.id, body: { title } })).catch(ctx.notify),
+    // Delete (the header's, and the first-message banner's): card.delete, the card gone from the board at once.
+    onDelete: () => {
+      ctx.select(null);
+      removeOnHost(card).catch(ctx.notify);
+    },
+    onDeleted: () => ctx.select(null),
+    onClose: () => ctx.select(null),
+  };
+}

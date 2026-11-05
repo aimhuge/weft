@@ -4,17 +4,14 @@
 // (settings `syncFolders`) and off by default; the Mac running a card owns it, other devices only read.
 import type { Card, ThreadItem } from "./types";
 
-// A tool result longer than this is left out of the thread item (it gets `resultBytes` instead) and fetched
-// when the row is opened: locally from /api/cards/[id]/thread/tool/[toolId], remotely from cloud_tool_outputs.
-export const TOOL_RESULT_INLINE_MAX = 2048;
-
-// How many items the thread route sends per page, newest first.
-export const THREAD_PAGE_SIZE = 50;
+// The inline cap on a tool result and the thread route's page size live with the paging, in @weft/client.
+export { TOOL_RESULT_INLINE_MAX, THREAD_PAGE_SIZE } from "@weft/client";
 
 // Images, attachments and ~/.weft/show pages, stored once each by content.
 export const BLOB_BUCKET = "weft-blobs";
-export const BLOB_REF_PREFIX = "blob:sha256:";
-export type BlobRef = `blob:sha256:${string}`;
+// The ref's shape is @weft/client's, so a pane or thread item on the phone reads it the same.
+import { BLOB_REF_PREFIX, type BlobRef } from "@weft/client";
+export { BLOB_REF_PREFIX, type BlobRef };
 
 export function isBlobRef(value: string): value is BlobRef {
   return /^blob:sha256:[0-9a-f]{64}$/.test(value);
@@ -30,9 +27,16 @@ export interface CloudCardRow {
   // reads it to offer only the folders of the Macs you own as places to start a card.
   owner_user?: string;
   folder: string;
+  // The folder's GitHub repo (owner/name), null without one: what a teammate's board files the card by (lib/team-board.ts).
+  repo?: string | null;
   card: Card;
   deleted: boolean;
   updated_at: string;
+  // The card's current pane page, so a feed draws it without its thread (docs/architecture/cloud-sync.md#the-cards-page):
+  // a blob ref with its #anchor, an https URL, or a URL only the owner's Mac reaches, with page_thumb (the pane capture) for that.
+  page?: string | null;
+  page_thumb?: string | null;
+  pages?: number;
 }
 
 // public.cloud_thread_items: one row per thread item, keyed by its index in the thread.
@@ -63,13 +67,19 @@ export type OutboxEntry =
   // Items from seq on were dropped (a rewind or an edit with ↑).
   | { op: "truncate"; cardId: string; seq: number; at: number };
 
-// The blob store's face to the outbox.
+// Seals a blob's bytes for its org and sha just before the put (lib/blob-seal.ts).
+export type BlobSeal = (orgId: string, sha: string, bytes: Uint8Array) => Uint8Array;
+
+// The blob store's face to the outbox. `seal`, when given, puts the bytes up sealed (lib/blob-seal.ts withBlobSeal).
 export interface BlobStore {
   // sha256 of a local file as a ref, or null if it doesn't exist.
   refFor(localPath: string): Promise<BlobRef | null>;
   // Uploads the file to weft-blobs/<orgId>/<sha> unless it's already there; returns its ref.
-  upload(localPath: string, orgId: string): Promise<BlobRef | null>;
+  upload(localPath: string, orgId: string, seal?: BlobSeal): Promise<BlobRef | null>;
+  // Uploads a page the pane showed: an HTML file with the local images it names uploaded too and swapped for refs
+  // (lib/blob-page-assets.ts). A store without it (a test fake) uploads the page as it is.
+  uploadPage?(localPath: string, orgId: string, seal?: BlobSeal): Promise<BlobRef | null>;
   // The item with each local path it names (attachments, images, ~/.weft/show pages) swapped for a blob ref,
   // uploading as it goes. Returns the item unchanged when nothing in it points at a local file.
-  rewriteItem(item: ThreadItem, orgId: string): Promise<ThreadItem>;
+  rewriteItem(item: ThreadItem, orgId: string, seal?: BlobSeal): Promise<ThreadItem>;
 }

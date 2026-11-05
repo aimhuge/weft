@@ -1,7 +1,7 @@
 // The runner's side of Settings' "Use … for subagents" (lib/subagents.ts): the prompt and env a thread's
 // CLI starts with, and idle sessions replaced when the setting changes. Same harness as lib/runner.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { PUKU_IDLE_ENV } from "./puku-idle";
+import { backendEnv } from "./puku-idle";
 import { flush, makeCard, nth, resetHarness, success } from "./runner.harness";
 import type { Card } from "./types";
 
@@ -58,7 +58,7 @@ describe("subagents", () => {
     expect(q.options.env).toEqual({ PATH: "/usr/bin", CLAUDE_CODE_SUBAGENT_MODEL: "claude-haiku-5-5", CLAUDE_CODE_SUBAGENT_MODEL_FORCE: "1" });
     expect((q.options.systemPrompt as { append: string }).append).toContain("Subagents run on Haiku 5.5 (Claude)");
     const pk = await send("pk");
-    expect(pk.options.env).toEqual({ PATH: "/usr/bin", ...PUKU_IDLE_ENV });
+    expect(pk.options.env).toEqual({ PATH: "/usr/bin", ...backendEnv("puku", {}) });
     expect((pk.options.systemPrompt as { append: string }).append).toContain("claude -p");
     expect((await send("cp")).options.env).toEqual({ PATH: "/usr/bin" });
   });
@@ -66,7 +66,7 @@ describe("subagents", () => {
   it("gives a puku thread a Puku subagent model through puku-cli's env", async () => {
     h.subagentModel = "puku-ai-2.7";
     addCard({ id: "pk", backend: "puku" });
-    expect((await send("pk")).options.env).toEqual({ PATH: "/usr/bin", ...PUKU_IDLE_ENV, PUKU_CLI_SUBAGENT_MODEL: "puku-ai-2.7" });
+    expect((await send("pk")).options.env).toEqual({ PATH: "/usr/bin", ...backendEnv("puku", {}), PUKU_CLI_SUBAGENT_MODEL: "puku-ai-2.7" });
   });
 
   it("an idle session is replaced when the subagent model changes in Settings", async () => {

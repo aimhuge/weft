@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cardMenu, columnMenu, resumeCommand, type MenuItem } from "./card-menu";
+import { cardMenu, columnMenu, humanOnlyItem, resumeCommand, type MenuItem } from "./card-menu";
+import { BUILT_IN_AGENTS } from "./agents";
 import type { Card } from "./types";
 
 function card(over: Partial<Card> = {}): Card {
@@ -84,6 +85,15 @@ describe("cardMenu", () => {
     expect(item(live, "agent:copywriter")?.enabled).toBe(true);
   });
 
+  it("lists the agents you made after the built-ins, keyed ⌥1 on", () => {
+    const agents = [...BUILT_IN_AGENTS, { id: "a-1", name: "Reviewer", emoji: "🔍", tagline: "", soul: "s" }];
+    const menu = cardMenu(card({ agent: "a-1" }), null, undefined, agents);
+    expect(item(menu, "agent:a-1")).toMatchObject({ label: "Agent: 🔍 Reviewer", checked: true, accelerator: "Alt+1" });
+    expect(item(menu, "agent:builder")?.checked).toBe(false);
+    const many = Array.from({ length: 12 }, (_, i) => ({ id: `a-${i}`, name: `A${i}`, emoji: "🤖", tagline: "", soul: "s" }));
+    expect(item(cardMenu(card(), null, undefined, [...BUILT_IN_AGENTS, ...many]), "agent:a-11")?.accelerator).toBeUndefined();
+  });
+
   it("labels archive by state", () => {
     expect(item(cardMenu(card({ archived: true })), "archive")?.label).toBe("Unarchive");
   });
@@ -136,5 +146,19 @@ describe("columnMenu archived toggle", () => {
   it("reads Hide Archived while archived cards are shown", () => {
     expect(item(columnMenu("done", { count: 0, archived: 2, showArchived: true }), "toggle-archived")?.label).toBe("Hide Archived");
     expect(item(columnMenu("done", { count: 0, archived: 2, showArchived: false }), "toggle-archived")?.label).toBe("Show 2 Archived");
+  });
+});
+
+describe("humanOnlyItem", () => {
+  it("names the items that widen what a card can do", () => {
+    for (const id of ["mode:bypassPermissions", "mode:default", "agent:builder", "switch:codex", "vault:grant", "new-here", "reveal"]) {
+      expect(humanOnlyItem(id), id).toBe(true);
+    }
+  });
+
+  it("leaves the rest to board_view", () => {
+    for (const id of ["open", "rename", "move:review", "stop", "vault:revoke", "copy-path", "archive", "star"]) {
+      expect(humanOnlyItem(id), id).toBe(false);
+    }
   });
 });

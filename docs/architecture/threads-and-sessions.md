@@ -139,6 +139,16 @@ every API route shares it), and returns the running `Session`. `drive()` (`lib/r
   over); omitted for the puku backend because puku-cli's CLI rejects the flag,
   and omitted for the copilot card
 
+### Crash-safe board.json
+
+`board.json` holds every card, and a crash or power cut in the middle of a plain `writeFileSync` used to leave it
+half-written, which loses the board on the next load. `saveBoard()` (and the library migration's one-off save) now go
+through `writeFileAtomic()` in `lib/atomic-write.ts`: write `.board.json.<pid>.tmp` beside it, `fsync` it, rename it
+over `board.json`, then `fsync` the folder (best effort) so the rename itself survives. A failed write removes the temp
+file and leaves the old board whole. The fsync costs ~7–10 ms on a 3.8 MB board, paid at turn boundaries (a turn
+starting or ending, a move, a session id), not per streamed message. Thread files (`threads/<id>.json`) are still
+written in place, since they're rewritten on every item; append-only JSONL is the ROADMAP's fix for those.
+
 ### Resume after a restart
 
 A CLI process doesn't outlive the app, so `loadState()` (`lib/store.ts`) moves a card that was `running` or had a
@@ -218,7 +228,8 @@ flipping it. See `docs/bug-fixes/012-fable-xhigh-effort-crashes-puku.md`.
 A card whose **very first turn** came back with an error gets a different escape
 (`components/FirstMessageErrorBanner.tsx`): rerun the first message on the user's configured
 backup model (Settings → Models → Backup model, `components/BackupModelPicker.tsx`), or delete
-the card. The predicate is `firstMessageFailed(card, items)` (`lib/first-message-failed.ts`):
+the card. A worker's card reruns on the same backup model (an account setting that syncs to workers), sent with
+`card.rerunModel`; on weft.zip, with no Settings to read, it reruns on its CLI's default (`hostRerunModel`). The predicate is `firstMessageFailed(card, items)` (`lib/first-message-failed.ts`):
 exactly one user message, no assistant text after it, the card isn't live, and `card.error` is
 set. The handler is `rerunOnModel(cardId, model)` next to `switchBackend`: it ends the session,
 sets the new model (and clears `sessionId` and `error`/`rateLimitHit` either way), then
@@ -567,7 +578,17 @@ copilot: `list_cards`, `read_thread`, `create_card`, `move_card`, `stop_card` ar
 through `canUseTool` -> `askUser`; `describeBoardTool()` makes the prompt readable
 ("Start "Weft desktop app"", "Reply to "…": …", "Allow Bash on "…""). The
 `start`, `stop`, `answer`, `isBusy` actions are passed in as `BoardActions` to
-`boardMcpServer()` to avoid a circular import.
+`boardMcpServer()` to avoid a circular import (`BoardActions` lives in `lib/board-tools-copilot.ts`, with the tools on one
+card).
+
+The copilot's tools see the user's Weft Workers' cards too. `lib/board-tools-hosts.ts` merges the workers' board into
+`list_cards` and finds a card on either host (this Mac's store first, with no network); a worker card's `read_thread`
+walks its synced pages back, and `set_tags`, `start_card`, `send_message`, `move_card`, `stop_card` and
+`answer_permission` send it the verb the board's `hostOf(card).act` sends (`card.update` with only `tags` or `column`,
+`card.message`, `card.stop`, `card.permission.answer`), through `lib/worker-board-reach.ts` (the account's
+`sendWorkerAction` host row, waited on up to 8 s for a claim). A worker that hasn't taken it yet reads as queued; its
+refusal is the tool's error. `create_card` into a `worker://` project starts it there through `startWorkerThread`,
+always in `default` mode and never with an agent (only Weft's own window signs one). On a worker the reach is none.
 
 The copilot's CLI also gets `browserMcpServer()`, so it shares the same `mcp__browser__*`
 tools as every other thread.
@@ -653,6 +674,7 @@ don't appear in the Claude app's session list.
 `components/StatusStrip.tsx` shows a thread's numbers under the reply box (`ReplyBox`): project folder and branch, model, context left, prompt cache warmth, tokens, changed lines, and the plan's 5-hour and weekly quota with reset times. The data is `card.stats` (`CardStats` in `lib/types.ts`), written by `lib/runner-turn.ts`:
 
 - After each turn, `turnStats()` fills the model, tokens and context fill from the result's `modelUsage` and the last main-agent request's usage, and `changedLines()` / `gitBranch()` read `git diff HEAD --numstat` and the branch from the folder.
+- **Context stack.** `modelStats()` (`lib/turn.ts`) keeps the stack itself, not only how full it is: `contextTokens` (the tokens the last request carried) and `contextWindow` (the model's window, from `modelUsage[m].contextWindow`). The strip reads both to show `ctx:<left>% <stack>/<window>` — `ctx:44% 112.0k/200.0k` — the tokens the last request carried out of the window. Without a window (Codex and Goose report `contextWindow: 0`) the percentage stays and the size is left out. Switching CLI drops the reading with the rest of the old session's stats (`lib/backend-switch.ts`).
 - **Prompt cache.** `handleAssistant()` runs each main-agent request's usage through `cacheAfter()` (`lib/turn.ts`) into `session.cache` (`CacheState`: request time, lifetime, cache-hit share, size in tokens); `turnStats()` saves it as `stats.cache`. The lifetime is read from what the request wrote (`ephemeral_1h_input_tokens` means an hour, `ephemeral_5m_input_tokens` five minutes). The strip's `Cache` chip counts the minutes left (`cacheMinutesLeft()` in `lib/format.ts`, ticking on `useNow`) and turns to `cache:cold <size>` once it lapses: the next message resends that many tokens at full price instead of about a tenth. The size is also the context fill, so it replaces the old `contextTokens`.
 - `refreshLimits()` calls the SDK's experimental `usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET` at CLI init and after each result to get the 5hr/7d windows (null on API-key logins). `rate_limit_event` messages update the same fields when they carry a utilization. A failure leaves the limits blank.
 - Quota is account-wide, so the bottom bar takes it from the most recently updated card via `latestLimits(cards)` in `lib/board-view.ts`, which returns the latest card's full `CardStats` plus its `cwd` and `backend` (`(CardStats & { cwd: string; backend: Card["backend"] }) | undefined`) so the bar can show "last thread: <folder> [model] 5hr/7d" when no card is open. `components/Board.tsx` derives `footerStats`, `footerCwd` and `footerBackend` from that result and passes them down.
@@ -665,7 +687,7 @@ A thread that finishes work for review ends its reply with a fenced `weft-review
 
 While the card is in Review, `components/ReviewPanel.tsx` sits at the bottom of the thread, in place of the reply box (`footer` and `replaceReply` on `ThreadView`). A card with no plan keeps its reply box with a "Build review tour" strip above it. The tour (`components/ReviewPanelTour.tsx`) shows one step at a time with what to look for, "Looks good, next" and previous/next buttons, an **Open browser** button, and a feedback box that sends the note to the thread. Its header (`components/ReviewPanelHeader.tsx`) says which step you're on and how many you approved. **Send feedback** sends every step's unsent note in one message, so it stays on from any step while one is waiting; a screenshot still uploading or a failed send says so under the box instead of greying the button out (`components/ReviewPanelTourNav.tsx`). A new plan restarts the tour.
 
-- **A step's page** (`stepUrl` in `lib/review.ts`): its `path` as a full URL, an absolute media/file path (opened as `file://`), or a path on the plan's `url`. A step with no `path` uses the first URL or file path in its `look` text, then the plan's `url`. A plan with no `url` falls back to the local app the thread mentioned most.
+- **A step's page** (`stepUrl` in `lib/review.ts`): its `path` as a full URL, an absolute media/file path (opened as `file://`), or a path on the plan's `url`. A step with no `path` uses the first URL or file path in its `look` text, then the plan's `url`. A plan with no `url` falls back to the local app the thread mentioned most. A host's file is useless on another board, so a card's row carries each local step page as its uploaded blob instead (`blob:sha256:<hex>?query#anchor`, `lib/review-blobs.ts`), which `stepUrl` returns as it is: a worker card's tour opens on the desktop and weft.zip ([weft-worker.md](weft-worker.md#pages-from-a-worker)).
 - **Each step's feedback is its own draft** (`lib/review-feedback.ts`, kept in localStorage under `weft.review.<cardId>.<step>`). Writing on a step and stepping away keeps what you wrote: it comes back when you return to that step, and a step that holds nothing but spaces counts as empty. The helpers over those drafts are pure: `feedbackKey(cardId, step)` builds the slot's key, `unsentSteps` / `unsentCount` say which steps still hold something, `feedbackMessage` formats one step's note (`Review feedback on step 2 of 3, “Home”:\n…`) and is the one place that wording lives, `collectFeedback` joins every step's note into one message, `writeFeedback` / `clearFeedback` / `clearAllFeedback` save and forget them, `sendStepFeedback(cardId, step, title, total, send)` sends one step's note and clears that same step's slot, and `flushFeedback(cardId, steps, send)` sends every waiting note in one message and then clears the slots — if a send fails it throws and the drafts stay, so a note is never lost to a failed send.
 - **Unsent feedback is never invisible.** The panel keeps the unsent count in state, refreshed on every keystroke, every send and every step change, and the header shows it: "· 1 step with unsent feedback" (warn-coloured, and only when there is something). A note written on a step you stepped away from is still there, and the header says so.
 - **Approving sends what is waiting.** "Looks good, next" and "Done" both call `flushFeedback` first, so every step's unsent note goes to the thread in one message before the tour moves on; "Done" sends `/weft:done` only after that message is away. The notes are labelled with the step they were written on. Feedback written for the thread to act on goes out with the approval rather than staying behind on a step.

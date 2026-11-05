@@ -36,6 +36,14 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
     c.setZoomLevel(action === "reset" ? 0 : c.getZoomLevel() + (action === "in" ? 0.5 : -0.5));
   }
 
+  // ⌘F and ⌘G act where the keyboard is. Read the focus before showMain, which moves it. A page in the browser
+  // pane is told apart here because only main can see it: "pane" sends the key to its find (components/PaneFind.tsx).
+  function sendFind(action) {
+    const inPane = pane.owns(focusedContents());
+    showMain();
+    sendMenu(action, inPane ? "pane" : undefined);
+  }
+
   function buildMenu() {
     // Not `role: "about"`: the native panel shows text and nothing else; ours is a window (about.cjs).
     const aboutItem = { label: `About ${APP_NAME}`, click: showAboutWindow };
@@ -93,6 +101,8 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
               sendMenu("new-thread");
             },
           },
+          // The app menu's update item again, where people look for it (and the only one off a Mac).
+          updater.menuItem(),
           { type: "separator" },
           { label: "Close Window", accelerator: "CmdOrCtrl+W", click: () => BaseWindow.getFocusedWindow()?.close() },
         ],
@@ -109,15 +119,13 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
           { role: "selectAll" },
           { type: "separator" },
           {
-            // Finds cards on the board, or words in the browser pane's page when the page has focus.
+            // The page with focus in the browser pane, else the open thread, else the board's filter.
             label: "Find",
             accelerator: "CmdOrCtrl+F",
-            click: () => {
-              if (pane.owns(focusedContents())) return pane.openFind();
-              showMain();
-              sendMenu("find");
-            },
+            click: () => sendFind("find"),
           },
+          { label: "Find Next", accelerator: "CmdOrCtrl+G", click: () => sendFind("find-next") },
+          { label: "Find Previous", accelerator: "CmdOrCtrl+Shift+G", click: () => sendFind("find-previous") },
         ],
       },
       {

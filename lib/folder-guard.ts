@@ -3,8 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { editedPath } from "./overlap";
+import { projectFolders } from "./project-folders";
+import { proseOf } from "./shell-text";
 import { allowedFolders } from "./settings";
+import { scratchDirs } from "./show-dir";
 import { DATA_DIR, getCard } from "./store";
+import { ownProjectDirs } from "./secret-guard-own-project";
 import { worktreesRoot } from "./worktrees";
 import type { PromptReason } from "./types";
 
@@ -28,10 +32,13 @@ export interface Ground {
 
 const ground = (): Ground => {
   const home = os.homedir();
-  return { home, free: [DATA_DIR, path.join(home, ".claude"), os.tmpdir(), ...SYSTEM], fenced: [worktreesRoot()] };
+  // ~/.claude is not free: the CLI's own transcripts hold every secret value a thread ever saw, in
+  // plaintext, and the secret guard turns them away (2026-10-28).
+  return { home, free: [DATA_DIR, os.tmpdir(), ...SYSTEM], fenced: [worktreesRoot()] };
 };
 
 const READ_TOOLS = new Set(["Read", "Glob", "Grep", "LS"]);
+const FILE_TOOLS = new Set(["Read", "Edit", "MultiEdit", "Write", "NotebookEdit"]);
 const GATED = "Read|Edit|MultiEdit|Write|NotebookEdit|Glob|Grep|LS|Bash";
 // A path in a Bash command. Quoted, it runs to its closing quote, spaces and all ("/Users/me/My Drive/app": a
 // project in Google Drive used to read as /Users/me/My, outside, so every command asked); bare, it ends at a
@@ -42,8 +49,34 @@ const BASH_PATH = new RegExp(
   String.raw`(?:^|[\s=(<>|;&])"((?:${HEAD})[^"]*)"|(?:^|[\s=(<>|;&])'((?:${HEAD})[^']*)'|(?:^|[\s"'=(<>|;&])((?:~|\$HOME|\$\{HOME\})(?:\/${BARE}*)?|\.{1,2}\/${BARE}*|\/${BARE}+)`,
   "g",
 );
-const bashPaths = (command: string) =>
+const matchPaths = (command: string) =>
   [...command.matchAll(BASH_PATH)].map((m) => m[1] ?? m[2] ?? (m[3] as string).replace(/\\(.)/g, "$1"));
+
+// The paths one piece of prose adds to the line's matches. A quoted word that starts like a path matched whole; a
+// `$(…)` folded into it brings the paths in its text, which the line matched inside the substitution.
+const STARTS_AS_PATH = new RegExp(`^(?:${HEAD})`);
+function prosePaths(text: string, substituted: Set<string>): string[] {
+  const bare = matchPaths(` ${text}`);
+  return STARTS_AS_PATH.test(text) ? [text, ...bare.filter((p) => p !== text && substituted.has(p))] : bare;
+}
+
+// The paths a command reaches, less those only named in its prose: a commit message, a PR body, a heredoc written to a
+// page (lib/shell-text.ts). A nested `$(cat ~/x)` folded into a message still reaches ~/x, so its own paths stay.
+function bashPaths(command: string, depth = 0): string[] {
+  const all = matchPaths(command);
+  if (depth > 5) return all;
+  const { prose, nested } = proseOf(command);
+  if (!prose.length) return all;
+  const drop = new Map<string, number>();
+  const substituted = new Set(nested.flatMap((n) => matchPaths(n)));
+  for (const p of prose.flatMap((t) => prosePaths(t, substituted))) drop.set(p, (drop.get(p) ?? 0) + 1);
+  for (const p of nested.flatMap((n) => bashPaths(n, depth + 1))) drop.set(p, (drop.get(p) ?? 0) - 1);
+  return all.filter((p) => {
+    const n = drop.get(p) ?? 0;
+    if (n > 0) drop.set(p, n - 1);
+    return n <= 0;
+  });
+}
 const MARKERS = [".git", "package.json", "pyproject.toml", "Cargo.toml", "go.mod", "pom.xml", "build.gradle"];
 
 // The real path of a path that may not exist yet: its nearest existing ancestor, resolved, plus the rest.
@@ -137,9 +170,14 @@ export interface Outside {
 
 const verbOf = (toolName: string) => (READ_TOOLS.has(toolName) ? "read" : toolName === "Bash" ? "use" : "change");
 
+// The CLI's memory folder for a card's project, which the system prompt tells the thread to keep: the folder path with
+// every other character a dash (/Users/me/app is -Users-me-app). The secret guard opens memory folders and nothing
+// else in ~/.claude (lib/secret-guard-files.ts).
+export const memoryDir = (cwd: string, home = os.homedir()) => path.join(home, ".claude", "projects", cwd.replace(/[^a-zA-Z0-9]/g, "-"), "memory");
+
 // The first folder a tool call reaches that's neither the project, one the user granted, nor a system path.
 export function outsideFolder(toolName: string, input: Record<string, unknown>, cwd: string, granted: string[], at: Ground = ground()): Outside | undefined {
-  const mine = [cwd, ...granted].map(realish);
+  const mine = [cwd, ...granted, memoryDir(cwd, at.home)].map(realish);
   const free = at.free.map(realish);
   const fenced = (at.fenced ?? []).map(realish);
   // A Bash command's paths only count under the user's own files; /\d+/ in a script isn't a folder.
@@ -155,8 +193,11 @@ export function outsideFolder(toolName: string, input: Record<string, unknown>, 
   return undefined;
 }
 
-// What the user has granted a card: its read scope and the folders allowed for every card.
-const grantedFor = (cardId: string | undefined) => [...(getCard(cardId ?? "")?.readScope ?? []), ...allowedFolders()];
+// What the user has granted a card: its read scope, the folders added to its project and the folders allowed for every card.
+const grantedFor = (cardId: string | undefined) => {
+  const card = getCard(cardId ?? "");
+  return [...(card?.readScope ?? []), ...(card ? projectFolders(card.cwd) : []), ...allowedFolders()];
+};
 
 // A read-only tool call whose every path lies in a folder the user granted: allowed with no CLI prompt.
 export function grantedRead(toolName: string, input: Record<string, unknown>, cwd: string, cardId: string | undefined): boolean {
@@ -165,6 +206,24 @@ export function grantedRead(toolName: string, input: Record<string, unknown>, cw
   const home = os.homedir();
   const paths = pathsOf(toolName, input).flatMap((t) => reached(t, cwd, home));
   return paths.length > 0 && paths.every((p) => granted.some((g) => inside(p, g)) || inside(p, realish(cwd)));
+}
+
+// A file tool call (not Bash) whose every path lies in a scratch folder: a thread's own pane page in SHOW_DIR, which
+// the system prompt tells it to write (2026-10-31), or a temp dir (2026-11-02), so neither the CLI's working-directory
+// gate nor the permission mode asks about it. Bash there is left to the CLI, which trusts it like the project.
+export function showPageCall(toolName: string, input: Record<string, unknown>, cwd: string, dirs = scratchDirs()): boolean {
+  if (toolName === "Bash") return false;
+  const free = dirs.map(realish);
+  const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, os.homedir())));
+  return paths.length > 0 && paths.every((p) => free.some((d) => inside(p, d)));
+}
+
+// Whether a call is a file tool whose target really is inside dir: a link out of it counts as where it lands, and
+// Bash never counts, since its paths are a heuristic.
+export function fileCallInside(toolName: string, input: Record<string, unknown>, cwd: string, dir: string): boolean {
+  if (!FILE_TOOLS.has(toolName)) return false;
+  const paths = pathsOf(toolName, input).map((t) => realish(expand(t, cwd, os.homedir())));
+  return paths.length > 0 && paths.every((p) => inside(p, realish(dir)));
 }
 
 // What each pending call asked, by tool use id, from PreToolUse to canUseTool, which words the prompt with it.
@@ -181,7 +240,9 @@ export function folderGuard(cardId: () => string | undefined): HookCallback {
     if (input.hook_event_name !== "PreToolUse" || !toolUseId) return Promise.resolve({});
     const card = getCard(cardId() ?? "");
     if (!card || card.role === "copilot") return Promise.resolve({});
-    const out = outsideFolder(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, input.cwd, grantedFor(card.id));
+    // The session's own project folder in the CLI's home, which the secret guard opens to read (lib/secret-guard-own-project.ts).
+    const granted = [...grantedFor(card.id), ...ownProjectDirs(input.session_id)];
+    const out = outsideFolder(input.tool_name, (input.tool_input ?? {}) as Record<string, unknown>, input.cwd, granted);
     if (!out) return Promise.resolve({});
     const where = tilde(out.directory);
     const question = `Outside the project: ${out.verb} ${where}`;

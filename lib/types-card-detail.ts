@@ -2,7 +2,7 @@
 // to keep types-card.ts under the line limit; re-exported by it so the public shape
 // of ./types is unchanged.
 
-import type { Backend, CardStats, Column, PendingPermission, ReviewPlan, ScheduledMessage } from "./types-card";
+import type { Backend, CardStats, CardYield, Column, PendingPermission, ReviewPlan, ScheduledMessage } from "./types-card";
 import type { Effort } from "./types-settings";
 import type { CardTask } from "./tasks";
 import type { ThreadAgent } from "./agents";
@@ -10,11 +10,23 @@ import type { CopilotPersona } from "./copilot-personas";
 import type { CardShareMode } from "./share-types";
 export type { CardStats, Column };
 
+// A teammate's card drawn on your board under your checkout of its repo (lib/team-board.ts): whose it is, which
+// workspace its rows live in, and the Mac that runs it. Only the board's read sets it; this Mac never stores one.
+export interface TeamMark {
+  org: string;
+  owner: string;
+  name: string;
+  avatar?: string | null;
+  device: string;
+}
+
 export interface Card {
   id: string;
   title: string;
   prompt: string;
   cwd: string;
+  // Set on a teammate's card only: it opens read-only, on the host lib/team-host.ts gives it.
+  team?: TeamMark;
   backend: Backend;
   permissionMode: import("./types-card").PermissionMode;
   // Chosen when the thread was made; left out, the CLI's own default.
@@ -64,6 +76,9 @@ export interface Card {
   // the limit reset (5-hour or weekly). Drives the "Auto-resumed" chip on the card; cleared the
   // next time the user-driven turn starts.
   autoResumedAt?: number;
+  // Why the thread auto-resumed: the plan's window reset, or the plan itself changed (the user
+  // upgraded, so the models that were capped have room again). The chip says which.
+  autoResumedReason?: "reset" | "upgrade";
   pending?: PendingPermission | null;
   // The copilot is a thread too, but it lives in its own window instead of on the board.
   role?: "copilot";
@@ -71,6 +86,9 @@ export interface Card {
   persona?: CopilotPersona;
   // Who the thread is (lib/agents.ts): its soul opens the system prompt. None means Builder, Weft's own soul.
   agent?: ThreadAgent;
+  // The agent this thread authored (lib/agent-tools.ts): it saved one with create_agent. The link goes the other
+  // way from `agent` (who the thread is), so Settings can say which thread built which agent.
+  agentId?: string;
   // A CLI process is open for this thread, so a reply starts right away.
   warm?: boolean;
   // From the thread's own BOARD STATUS line (see lib/status.ts).
@@ -87,9 +105,9 @@ export interface Card {
   // Top-level symbols (or whole files) the thread edited and hasn't committed, most recent first, capped:
   // "/abs/Board.tsx#CommandPalette", "/abs/a.css#*" (lib/claims.ts). Dropped at Done, archive and commit.
   claims?: string[];
-  // Files this card leaves to another card for now: the user put that card first ("Me first", lib/precedence.ts).
+  // Files this card leaves to another card for now: the user put that card first ("This first", lib/precedence.ts).
   // While it holds a claim on the file, its edits there don't ask this card, and this card's edits there wait on it.
-  yields?: { to: string; file: string }[];
+  yields?: CardYield[];
   // Weft crashed, failed to build or reloaded right after this thread did something that does that (lib/crash-blame.ts):
   // the card has a red ring and a "Broke Weft" chip until you dismiss it, and the thread hears why with its next message.
   broke?: CardBreak;
@@ -107,6 +125,17 @@ export interface Card {
   // The card's thumbnail (lib/card-pictures.ts): its latest picture, and how many images its thread holds.
   thumb?: string;
   pictures?: number;
+  // The page its browser pane shows now (an open_url's URL, or Weft's own starter or update page as a file:// URL) and
+  // how many pages the pane has opened on it (lib/card-page.ts). The synced row carries both (docs/architecture/cloud-sync.md).
+  page?: string;
+  pages?: number;
+  // Local Simulator mode on a worker's card: the Mac (its sync device id) this card's simulator tools go to (lib/worker-device.ts).
+  qaDevice?: string | null;
+  // A worker's card on a React Native or Expo app (lib/mobile-app.ts): its pane offers Start simulator.
+  mobileApp?: boolean;
+  // Run on Worker sent this card's first message to a worker (lib/worker-handoff.ts): the run lives on the worker's own
+  // card, so this local record of it counts for nothing in streaks, XP and "made" totals (lib/activity.ts).
+  handedOff?: { workerId: string; commandId: string };
   // Haiku's emoji for the card, shown in place of a thumbnail until it has one.
   emoji?: string;
   // Who last named the card: you (typed or renamed it) or Weft's retitle after its first turn (lib/retitle.ts).
@@ -127,6 +156,9 @@ export interface Card {
   // cwd stays the project; code runs in workDir(card) (lib/work-dir.ts).
   isolated?: boolean;
   worktree?: CardWorktree;
+  // The branch its worktree works on, when you picked one in the New thread dialog: an existing branch is checked
+  // out there, a new name is made from HEAD. Left out, its own weft/<slug> (lib/worktrees.ts branchFor).
+  worktreeBranch?: string;
   // Short labels (lib/tags.ts), the same rules as GitHub labels so they sync with an issue's. Weft's
   // retitle picks them after a turn (tagsBy "auto") until you edit them (tagsBy "user").
   tags?: string[];
@@ -147,9 +179,10 @@ export interface Card {
   updatedAt: number;
 }
 
-// An isolated card's worktree (lib/worktrees.ts): ~/.weft/worktrees/<repo>/<id> on branch weft/<slug>, made from the
-// main tree's HEAD at `base`, landing back on `repo` (the main tree's root). `sub` is the card's folder inside the repo
-// when it isn't the root ("packages/web"), so the thread starts in the same place in its worktree.
+// An isolated card's worktree (lib/worktrees.ts): ~/.weft/worktrees/<repo>/<id> on branch weft/<slug> (or the card's
+// worktreeBranch), made from the main tree's HEAD at `base`, landing back on `repo` (the main tree's root). `sub` is the
+// card's folder inside the repo when it isn't the root ("packages/web"), so the thread starts in the same place in its
+// worktree.
 export interface CardWorktree {
   path: string;
   branch: string;
@@ -162,6 +195,10 @@ export interface CardShareMemo {
   id: string | null;
   mode: CardShareMode;
   hasPassword: boolean;
+  // The address to copy (weft.zip/@<user>/threads/<slug> once it has one), its slug, and whether the chat shows.
+  url?: string | null;
+  slug?: string | null;
+  showChat?: boolean;
 }
 
 export interface CardIssue {

@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./client";
 import { upsertWebhook, type WebhookAsk } from "./webhooks-view";
-import type { Webhook, WebhookInput, WebhookPatch } from "./webhooks";
+import { isWorkerItem, WORKER_LIST_SETTLE_MS } from "./worker-item-id";
+import type { Webhook, WebhookInput, WebhookPatch } from "./webhook-types";
 
 // How often the open drawer asks again, so deliveries show up while a provider is being tested.
 export const POLL_MS = 5000;
@@ -48,6 +49,10 @@ export function useWebhooks(folders: string[], active = false) {
   }, [reload, active]);
 
   const put = (hook: Webhook) => setHooks((list) => upsertWebhook(list, hook));
+  // A Weft Worker's webhook changes on the worker (lib/worker-list-acts.ts): read again once it has republished.
+  const settle = (id: string) => {
+    if (isWorkerItem(id)) setTimeout(() => void reload(), WORKER_LIST_SETTLE_MS);
+  };
   const add = async (input: WebhookInput) => {
     const answer = await api.addWebhook(input);
     put(answer.hook);
@@ -57,7 +62,9 @@ export function useWebhooks(folders: string[], active = false) {
   const update = async (id: string, patch: WebhookPatch) => {
     setHooks((list) => list.map((h) => (h.id === id ? { ...h, ...patch } : h)));
     try {
-      put((await api.updateWebhook(id, patch)).hook);
+      const { hook } = await api.updateWebhook(id, patch);
+      if (hook) put(hook);
+      else settle(id);
     } catch (err) {
       void reload();
       throw err;
@@ -66,6 +73,7 @@ export function useWebhooks(folders: string[], active = false) {
   const remove = async (id: string) => {
     await api.removeWebhook(id);
     setHooks((list) => list.filter((h) => h.id !== id));
+    settle(id);
   };
   const relay = async (id: string) => put((await api.relayWebhook(id)).hook);
   const unrelay = async (id: string) => put((await api.unrelayWebhook(id)).hook);

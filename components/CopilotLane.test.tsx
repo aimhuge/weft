@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { copilotPanel } from "@/lib/copilot-float";
 import type { ThreadItem } from "@/lib/types";
 import CopilotLane from "./CopilotLane";
 import { makeCard } from "./test-utils";
@@ -21,6 +22,7 @@ vi.mock("./ThreadView", () => ({
 }));
 
 beforeEach(() => {
+  document.cookie = "weft-copilot-read=0; path=/";
   thread.card = makeCard({ id: "copilot", role: "copilot", column: "review", warm: true });
   thread.items = [
     { kind: "user", text: "status?", at: 10 },
@@ -33,33 +35,44 @@ beforeEach(() => {
 function lane(state: "hidden" | "peek" | "open", over: Partial<Parameters<typeof CopilotLane>[0]> = {}) {
   const props = {
     state,
-    cards: [] as Parameters<typeof CopilotLane>[0]["cards"],
-    onOpenCard: vi.fn(),
     onHide: vi.fn(),
     onPeek: vi.fn(),
     onOpen: vi.fn(),
     toggleTip: "Copilot (⌘J)",
     ...over,
   };
-  render(<CopilotLane {...props} />);
-  return props;
+  const view = render(<CopilotLane {...props} />);
+  return Object.assign(props, { unmount: view.unmount });
 }
 
 describe("CopilotLane hidden", () => {
-  it("renders a 36px pill with the avatar and a vertical label", () => {
+  it("is only the round launcher, pinned to the bottom-right corner above every dialog", () => {
     lane("hidden");
-    const aside = document.querySelector('aside[data-copilot-lane="hidden"]');
-    expect(aside).not.toBeNull();
-    expect(aside).toHaveStyle({ width: "36px" });
+    const launcher = screen.getByLabelText(/Open the copilot/);
+    expect(launcher).toHaveStyle({ right: "16px", bottom: "44px", width: "52px", height: "52px" });
+    expect(launcher.className).toContain("fixed");
+    expect(launcher.className).toContain("z-[96]");
+    expect(launcher).toHaveAttribute("data-drop-target", "copilot");
+    expect(document.querySelector("aside")).toBeNull();
+    expect(copilotPanel()).toBeNull();
   });
 
-  it("shows a needs-you dot and the count when there's news", () => {
-    const waiting = makeCard({ id: "w", title: "Pick a domain", column: "needs_you", updatedAt: 20 });
-    lane("hidden", { cards: [waiting, makeCard({ id: "d", column: "done", updatedAt: 30 })] });
-    // 1 waiting + 1 finished = 2 news
-    expect(screen.getByText("2")).toBeInTheDocument();
-    // The label names the news count for assistive tech.
-    expect(screen.getByLabelText(/Open the copilot \(2 new\)/)).toBeInTheDocument();
+  it("lights a dot for a reply you haven't seen, and never counts cards", () => {
+    lane("hidden");
+    expect(screen.getByLabelText("Open the copilot (new message)")).toBeInTheDocument();
+    expect(document.querySelector("button > span.bg-accent")).not.toBeNull();
+    expect(screen.queryByText(/^\d+$/)).toBeNull();
+  });
+
+  it("leaves the dot off once you've seen the latest reply", () => {
+    document.cookie = "weft-copilot-read=11; path=/";
+    lane("hidden");
+    expect(screen.getByLabelText("Open the copilot")).toBeInTheDocument();
+  });
+
+  it("marks the reply read when the peek shows it", () => {
+    lane("peek");
+    expect(document.cookie).toContain("weft-copilot-read=11");
   });
 
   it("opens the chat when the pill is clicked", () => {
@@ -86,43 +99,56 @@ describe("CopilotLane hidden", () => {
     }
   });
 
-  it("opens the chat on Enter or Space", () => {
-    const props = lane("hidden");
-    const pill = screen.getByLabelText(/Open the copilot/);
-    fireEvent.keyDown(pill, { key: "Enter" });
-    fireEvent.keyDown(pill, { key: " " });
-    expect(props.onOpen).toHaveBeenCalledTimes(2);
+  it("is a real button, so Enter and Space open it too", () => {
+    lane("hidden");
+    const launcher = screen.getByLabelText(/Open the copilot/);
+    expect(launcher.tagName).toBe("BUTTON");
+    expect(launcher).toHaveAttribute("aria-expanded", "false");
   });
 });
 
 describe("CopilotLane peek", () => {
-  it("shows the digest, the ask box, and a header that hides the lane", () => {
-    const waiting = makeCard({ id: "w", title: "Pick a domain", column: "needs_you", updatedAt: 20 });
-    const props = lane("peek", { cards: [waiting, makeCard({ id: "d", column: "done", updatedAt: 30 })] });
-    expect(screen.getByText(/1 finished, 1 needs you/)).toBeInTheDocument();
+  it("shows its latest reply, the ask box, and a header that hides the lane, with no card counts", () => {
+    const props = lane("peek");
     expect(screen.getByText("All quiet on the board.")).toBeInTheDocument();
+    expect(screen.queryByText(/needs you|finished/)).toBeNull();
     expect(screen.getByPlaceholderText("Ask the copilot…")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Hide the copilot"));
     expect(props.onHide).toHaveBeenCalled();
   });
 
-  it("says when nothing waits on you", () => {
+  it("invites a question before the copilot has said anything", () => {
+    thread.items = [];
     lane("peek");
-    expect(screen.getByText(/0 finished, nothing waiting on you/)).toBeInTheDocument();
+    expect(screen.getByText(/Ask me what to build next/)).toBeInTheDocument();
   });
 
-  it("opens the cockpit from the peek and the latest-reply card", () => {
+  it("opens the chat from the header's maximize and the latest-reply card", () => {
     const props = lane("peek");
-    fireEvent.click(screen.getByText("Open the cockpit"));
+    fireEvent.click(screen.getByLabelText("Open the chat"));
     fireEvent.click(screen.getByText(/All quiet on the board\./));
     expect(props.onOpen).toHaveBeenCalledTimes(2);
   });
 
-  it("opens the card that needs you", () => {
-    const waiting = makeCard({ id: "w", title: "Pick a domain", column: "needs_you", updatedAt: 20 });
-    const props = lane("peek", { cards: [waiting] });
-    fireEvent.click(screen.getByText("Pick a domain"));
-    expect(props.onOpenCard).toHaveBeenCalledWith(waiting);
+  it("floats above the launcher and publishes its box until it closes", () => {
+    const props = lane("peek");
+    const panel = document.querySelector('aside[data-copilot-lane="peek"]');
+    expect(panel).toHaveStyle({ right: "16px", bottom: "108px", width: "280px" });
+    expect(copilotPanel()).toMatchObject({ width: 280 });
+    props.unmount();
+    expect(copilotPanel()).toBeNull();
+  });
+
+  it("doesn't peek again from the launcher while the peek is up", () => {
+    vi.useFakeTimers();
+    try {
+      const props = lane("peek");
+      fireEvent.mouseEnter(screen.getByLabelText(/Open the copilot/));
+      vi.advanceTimersByTime(1000);
+      expect(props.onPeek).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("sends a question from the ask box and opens the chat", () => {
@@ -144,6 +170,14 @@ describe("CopilotLane open", () => {
     expect(screen.getByText("Ready")).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText("Hide the copilot"));
     expect(props.onHide).toHaveBeenCalled();
+  });
+
+  it("closes from the launcher, which shows an ×", () => {
+    const props = lane("open");
+    fireEvent.click(screen.getByLabelText("Close the copilot"));
+    expect(props.onHide).toHaveBeenCalled();
+    expect(props.onOpen).not.toHaveBeenCalled();
+    expect(document.querySelector('aside[data-copilot-lane="open"]')).toHaveAttribute("data-drop-target", "copilot");
   });
 
   it("starts a new chat", () => {

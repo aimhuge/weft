@@ -109,7 +109,7 @@ describe("createPaneInput", () => {
       });
       await input.waitFor(wc, { selector: "#done" });
       const evaluate = cdp.send.mock.calls.find((c) => c[1] === "Runtime.evaluate")!;
-      expect(evaluate[2].expression).toContain('document.querySelector("#done")');
+      expect(evaluate[2].expression).toContain('document.querySelectorAll("#done")');
     });
 
     it("wants something to wait for", async () => {

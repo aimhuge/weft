@@ -1,0 +1,13 @@
+diff --git a/package.json b/package.json
+index 02627332f8acd83a2bacaed9e73526c51e4a6d52..2d125d30787028471cab8826bb75877ed372ef07 100644
+--- a/package.json
++++ b/package.json
+@@ -7,7 +7,7 @@
+   "types": "dist/modules/libsodium-wrappers.d.ts",
+   "exports": {
+     ".": {
+-      "import": "./dist/modules-esm/libsodium-wrappers.mjs",
++      "import": "./dist/modules/libsodium-wrappers.js",
+       "require": "./dist/modules/libsodium-wrappers.js",
+       "default": "./dist/modules/libsodium-wrappers.js"
+     }

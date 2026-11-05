@@ -4,8 +4,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { listDevices } from "./simulator-devices";
-import { androidSdk, bins, runText } from "./simulator-exec";
-import { STUDIO_APP, XCODE_APP } from "./simulator-install-steps";
+import { androidSdk, bins, runText, STUDIO_APP, XCODE_APP } from "./simulator-exec";
 import type { SimulatorCheck, SimulatorStatus } from "./simulator-view";
 
 export { STUDIO_APP, XCODE_APP };

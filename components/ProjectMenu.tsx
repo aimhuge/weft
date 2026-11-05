@@ -5,22 +5,35 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { openChangelog } from "@/lib/changelog-open";
 import { filterProjects, folderName, plural, shortPath } from "@/lib/project-bar";
+import { isWorkerProject, workerLabel } from "@/lib/worker-project";
 import type { ProjectSummary } from "@/lib/board-view";
 import Icon from "./Icon";
+import ProjectCloneForm from "./ProjectCloneForm";
+import { FIELD, SUBMIT } from "./project-menu-styles";
 import ReseedButton from "./ReseedButton";
 import SearchField from "./SearchField";
 
-const FIELD =
-  "w-full min-w-0 rounded-md border border-line-strong bg-canvas px-2.5 py-1.5 text-[12px] text-ink outline-none placeholder:text-faint focus:border-accent";
 const MENU_ACTION =
   "flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
-const SUBMIT =
-  "shrink-0 rounded-md bg-accent px-3 py-1.5 text-[12px] font-medium text-on-accent hover:opacity-90 disabled:opacity-50";
 
 type Form = "none" | "open" | "new" | "clone";
 
 function errorText(err: unknown) {
   return err instanceof Error ? err.message : String(err);
+}
+
+// The selected project's Changelog and Re-seed Backlog. Both read and write files in its folder, which on a worker
+// project is on the worker, not here, so there the menu says so instead.
+function ProjectFileActions({ path, onSelect }: { path: string; onSelect: (path: string | null) => void }) {
+  if (isWorkerProject(path)) return <p className="px-2.5 py-1.5 text-[11px] text-faint">Changelog and Re-seed Backlog run on this Mac&apos;s projects only for now.</p>;
+  return (
+    <>
+      <button onClick={() => { onSelect(path); openChangelog(path); }} className={MENU_ACTION}>
+        <Icon name="list" size={14} className="text-muted" /> Changelog of {folderName(path)}
+      </button>
+      <ReseedButton path={path} className={MENU_ACTION} />
+    </>
+  );
 }
 
 export default function ProjectMenu({
@@ -29,6 +42,8 @@ export default function ProjectMenu({
   onSelect,
   home,
   menuId,
+  onProjectMenu,
+  onNotice,
   variant = "desktop",
 }: {
   projects: ProjectSummary[];
@@ -36,6 +51,10 @@ export default function ProjectMenu({
   onSelect: (path: string | null) => void;
   home: string;
   menuId: string;
+  // Right-clicking a project in the list opens its menu, as on its chip.
+  onProjectMenu?: (path: string, e: React.MouseEvent) => void;
+  // The board's toast, for a clone on a worker that finishes after this menu has closed.
+  onNotice?: (message: string) => void;
   // "desktop" adds the Mac-only actions under the list (open a folder, clone a repo, make a
   // project, read a changelog). "web" is the picker on its own: weft.zip can't reach the Mac's
   // filesystem, so the list and its filter are all there is.
@@ -106,17 +125,6 @@ export default function ProjectMenu({
     void run(async () => (await api.addProject(path)).path);
   }
 
-  // Accepts owner/name or a github.com URL; the clone lands in ~/dev and becomes a project.
-  function cloneFromGithub(e: React.SubmitEvent) {
-    e.preventDefault();
-    const slug = folder.trim().replace(/^(https?:\/\/)?(www\.)?github\.com\//, "").replace(/\.git$/, "").replace(/\/+$/, "");
-    if (!/^[\w.-]+\/[\w.-]+$/.test(slug)) {
-      setError("Use owner/name, like aimhuge/weft.");
-      return;
-    }
-    void run(async () => (await api.cloneRepo(slug)).path);
-  }
-
   function createProject(e: React.SubmitEvent) {
     e.preventDefault();
     const projectName = name.trim();
@@ -162,12 +170,13 @@ export default function ProjectMenu({
             <button
               key={project.path}
               onClick={() => choose(project.path)}
+              onContextMenu={onProjectMenu && ((e) => onProjectMenu(project.path, e))}
               aria-current={on ? "true" : undefined}
               className={`flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left ${on ? "bg-accent-soft" : "hover:bg-sunken"}`}
             >
               <span className="min-w-0 flex-1">
                 <span className={`block truncate text-[12.5px] ${on ? "text-accent" : "text-ink"}`}>{folderName(project.path)}</span>
-                <span className="block truncate font-mono text-[11px] text-muted">{shortPath(project.path, home)}</span>
+                <span className="block truncate font-mono text-[11px] text-muted">{project.worker ? workerLabel(project.worker) : shortPath(project.path, home)}</span>
               </span>
               <span className="flex shrink-0 items-center gap-2 text-[11px] tabular-nums">
                 {project.needsYou > 0 && (
@@ -185,12 +194,7 @@ export default function ProjectMenu({
 
       {variant === "desktop" && (
       <div className="shrink-0 border-t border-line p-1">
-        {selected && (
-          <button onClick={() => { onSelect(selected); openChangelog(selected); }} className={MENU_ACTION}>
-            <Icon name="list" size={14} className="text-muted" /> Changelog of {folderName(selected)}
-          </button>
-        )}
-        {selected && <ReseedButton path={selected} className={MENU_ACTION} />}
+        {selected && <ProjectFileActions path={selected} onSelect={onSelect} />}
         <button onClick={openFolder} disabled={busy} className={MENU_ACTION}>
           <Icon name="folder" size={14} className="text-muted" /> Open folder…
         </button>
@@ -217,22 +221,17 @@ export default function ProjectMenu({
           <Icon name="download" size={14} className="text-muted" /> Clone from GitHub…
         </button>
         {form === "clone" && (
-          <form onSubmit={cloneFromGithub} className="flex gap-1.5 px-2.5 pb-2 pt-1">
-            <input
-              autoFocus
-              value={folder}
-              onChange={(e) => {
-                setFolder(e.target.value);
-                setError(null);
-              }}
-              placeholder="owner/name or github.com URL"
-              aria-label="GitHub repo"
-              className={`${FIELD} font-mono`}
-            />
-            <button type="submit" disabled={busy} className={SUBMIT}>
-              {busy ? "Cloning…" : "Clone"}
-            </button>
-          </form>
+          <ProjectCloneForm
+            value={folder}
+            onChange={(next) => {
+              setFolder(next);
+              setError(null);
+            }}
+            busy={busy}
+            onError={setError}
+            onNotice={onNotice}
+            run={run}
+          />
         )}
 
         <button onClick={() => showForm("new")} disabled={busy} className={MENU_ACTION}>

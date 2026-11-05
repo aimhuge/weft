@@ -1,8 +1,8 @@
 import { useEffect, useRef, type Dispatch, type RefObject, type SetStateAction } from "react";
 import { api } from "./client";
-import { cardChangeEffects } from "./board-view";
-import { announce, without } from "./board-helpers";
-import { playChime } from "./chimes";
+import { without } from "./board-helpers";
+import { noticeCard } from "./card-notice";
+import { leaveAway } from "./away-open";
 import { announceAccountChange } from "./use-account";
 import { applyIntents, forget, onOptimistic, overlay, overlayAll } from "./optimistic-cards";
 import { useBoardEvents } from "./use-events";
@@ -39,6 +39,8 @@ export interface BoardLive {
   loadFromPrefs: () => void;
   loadThread: (id: string) => void;
   notify: (err: unknown) => void;
+  // Away open (lib/use-away-open.ts): a card moved; heard is false for the board's own drags.
+  awayMove: (id: string, column: Column, heard: boolean) => void;
 }
 
 // A card changed: chime and highlight it if it moved or newly failed, then put it on the board.
@@ -53,24 +55,9 @@ function onCard(serverCard: Card, live: BoardLive) {
   const card = overlay(serverCard);
   if (!card) return;
   const { id, column, error } = card;
-  const effects = cardChangeEffects({
-    previous: live.columns.current.get(id),
-    column,
-    previousError: live.errors.current.get(id),
-    error,
-    own: live.ownMoves.current.get(id),
-    now: Date.now(),
-    open: live.selectedRef.current === id,
-  });
+  noticeCard(card, { column: live.columns.current.get(id), error: live.errors.current.get(id) }, live);
   live.columns.current.set(id, column);
   live.errors.current.set(id, error);
-  if (effects.moved) {
-    announce(card, () => live.select(id));
-    live.ownMoves.current.delete(id);
-  }
-  if (effects.chime) playChime(effects.chime);
-  if (effects.markUnseen) live.setUnseen((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-  if (effects.errorChime) playChime("error");
   live.resolveFolders([card.cwd]);
   live.setCards((prev) => {
     const at = prev.findIndex((c) => c.id === id);
@@ -98,6 +85,7 @@ export function onBoardEvent(event: BoardEvent, live: BoardLive) {
       break;
     case "card_deleted":
       forget(event.id);
+      leaveAway(event.id);
       live.setCards((prev) => prev.filter((c) => c.id !== event.id));
       live.setUnseen((prev) => (prev.has(event.id) ? without(prev, event.id) : prev));
       if (live.selectedRef.current === event.id) live.setSelectedId(null);

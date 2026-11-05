@@ -99,6 +99,17 @@ describe("useWorkspaceLayout", () => {
     expect(result.current.layout.width.thread).toBe(before + 60);
   });
 
+  it("a fit bound before the pane reopened doesn't close it again", async () => {
+    // A resize report can still hold the fitToContainer from before the card opened.
+    const { useWorkspaceLayout: use } = await import("./use-workspace-layout");
+    const { result } = renderHook(() => use());
+    act(() => result.current.setOpen("pane", false));
+    const fit = result.current.fitToContainer;
+    act(() => result.current.setOpen("pane", true));
+    act(() => fit(1500));
+    expect(result.current.layout.open.pane).toBe(true);
+  });
+
   it("fitToContainer shrinks the layout to the container", async () => {
     // editor is closed in the default layout, so the fixed columns are thread + show. With pane
     // as the fill, the target is containerWidth - MIN_WIDTH.pane.

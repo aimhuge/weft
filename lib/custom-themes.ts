@@ -5,7 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { PICTURES, parseCustomTheme, themeIdFrom, type CustomTheme, type PictureName } from "./custom-theme";
-import { createCardFromBody, startCard } from "./new-card";
+import { startFeatureCard } from "./card-starter";
 import { defaultBackend } from "./settings";
 import { DATA_DIR } from "./store";
 import type { Card } from "./types";
@@ -115,7 +115,7 @@ const nameWords = (text: string, picture?: UploadedPicture) =>
 // Starts the thread that paints a theme. Its folder is ~/.weft/themes, so every theme thread sits
 // under one project on the board. With a picture you uploaded, the words are optional: the picture is
 // saved into the folder first and the thread writes the theme around it.
-export function startThemeCard(description: string, upload?: UploadedPicture): { id: string; card: Card } {
+export async function startThemeCard(description: string, upload?: UploadedPicture): Promise<{ id: string; card: Card }> {
   const text = description.trim().slice(0, 500);
   if (!text && !upload) throw new Error("Describe the theme you want.");
   const saved = upload && { file: checkedPicture(upload), bytes: upload.bytes };
@@ -125,14 +125,13 @@ export function startThemeCard(description: string, upload?: UploadedPicture): {
   const dir = path.join(root, id);
   fs.mkdirSync(dir);
   if (saved) fs.writeFileSync(path.join(dir, saved.file), saved.bytes);
-  const card = createCardFromBody({
+  const card = await startFeatureCard({
     title: `Theme: ${(text || "from your picture").slice(0, 60)}`,
     prompt: themeCardPrompt(text, id, dir, saved?.file),
     cwd: root,
     backend: defaultBackend(),
     tags: ["theme"],
   });
-  startCard(card);
   return { id, card };
 }
 

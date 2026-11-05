@@ -21,6 +21,7 @@ function makeLive(over: Partial<ShareLive> = {}): ShareLive {
     hasOlder: false,
     pane: null,
     blobUrls: {},
+    showChat: true,
     ...over,
   };
 }
@@ -38,6 +39,26 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+});
+
+describe("SharedCard's chat", () => {
+  it("shows the pane alone when the sharer hid the chat", () => {
+    render(<SharedCard id="sh1" initial={makeLive({ showChat: false })} />);
+    expect(screen.queryByRole("region", { name: "Thread" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide chat" })).toBeNull();
+    expect(screen.queryByRole("tablist", { name: "View" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Browser pane" })).toHaveAttribute("data-hidden", "false");
+  });
+
+  it("lets the viewer hide and show the chat", async () => {
+    render(<SharedCard id="sh1" initial={makeLive()} />);
+    const main = document.querySelector(".wz-shareMain");
+    expect(main).toHaveAttribute("data-chat", "open");
+    await userEvent.click(screen.getByRole("button", { name: "Hide chat" }));
+    expect(main).toHaveAttribute("data-chat", "closed");
+    await userEvent.click(screen.getByRole("button", { name: "Show chat" }));
+    expect(main).toHaveAttribute("data-chat", "open");
+  });
 });
 
 describe("SharedCard", () => {

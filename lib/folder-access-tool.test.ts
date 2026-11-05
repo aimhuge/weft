@@ -33,6 +33,8 @@ describe("request_folder_access", () => {
     expect((folderAccessTool() as unknown as CapturedTool).name).toBe("request_folder_access");
     expect(SAFE_BOARD_TOOLS.has("request_folder_access")).toBe(true);
     expect(isTrustedTool("mcp__board__request_folder_access", "sdk")).toBe(true);
+    expect(isTrustedTool("mcp__simulator__launch", "sdk")).toBe(true);
+    expect(isTrustedTool("mcp__simulator__launch", "stdio")).toBe(false);
   });
 
   it("asks the control server for the folder", async () => {

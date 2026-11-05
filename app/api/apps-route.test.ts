@@ -27,6 +27,9 @@ const cloudMock = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/app-cloud", () => cloudMock);
 
+const fromWorker = vi.hoisted(() => ({ saveWorkerPageApp: vi.fn(() => Promise.resolve({ id: "w", name: "Report", url: "file:///x/index.html", addedAt: 0 })) }));
+vi.mock("@/lib/mini-app-worker", () => fromWorker);
+
 const route = await import("./apps/route");
 const WRITE = { host: "localhost:3457", "x-weft-token": "1", "content-type": "application/json" };
 const make = (method: "GET" | "POST" | "PATCH" | "DELETE", body?: unknown, headers: Record<string, string> = WRITE) =>
@@ -73,6 +76,14 @@ describe("POST /apps", () => {
     expect(store.saveApp).toHaveBeenCalledWith("https://example.com", undefined);
     expect(cloudMock.pushApp).toHaveBeenCalledWith({ id: "saved", name: "Saved", url: "https://saved.test", addedAt: 0 });
     expect(await res.json()).toEqual({ app: { id: "saved", name: "Saved", url: "https://saved.test", addedAt: 0 } });
+  });
+
+  it("brings a worker card's page home before saving it", async () => {
+    const page = `blob:sha256:${"b".repeat(64)}`;
+    const res = await route.POST(make("POST", { url: page, name: "Report" }));
+    expect(fromWorker.saveWorkerPageApp).toHaveBeenCalledWith(page, "Report");
+    expect(store.saveApp).not.toHaveBeenCalled();
+    expect(((await res.json()) as { app: MiniApp }).app.id).toBe("w");
   });
 
   it("passes a name through to the store", async () => {

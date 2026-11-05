@@ -198,6 +198,27 @@ describe("settings", () => {
     expect("gooseBaseUrl" in saved).toBe(false);
   });
 
+  it("the named models read as none until one is saved, and a malformed list reads as none", async () => {
+    let s = await load();
+    expect(s.gooseNamedModels()).toEqual([]);
+    expect(s.settingsView().gooseNamedModels).toEqual([]);
+    fs.writeFileSync(
+      path.join(settingsDir.path, "settings.json"),
+      JSON.stringify({ gooseNamedModels: [{ id: "gpt-5", name: "The one I like" }] }),
+    );
+    s = await load();
+    expect(s.gooseNamedModels()).toEqual([{ id: "gpt-5", name: "The one I like" }]);
+    expect(s.settingsView().gooseNamedModels).toEqual([{ id: "gpt-5", name: "The one I like" }]);
+
+    // A list that isn't pairs of strings is not a list of named models: it reads as none.
+    fs.writeFileSync(
+      path.join(settingsDir.path, "settings.json"),
+      JSON.stringify({ gooseNamedModels: [{ id: "gpt-5" }] }),
+    );
+    s = await load();
+    expect(s.gooseNamedModels()).toEqual([]);
+  });
+
   it("an empty automations list is kept, not replaced by the defaults", async () => {
     const s = await load();
     s.setAutomations([]);
@@ -239,6 +260,36 @@ describe("settings", () => {
     expect(s.dismissedSessions()).toEqual([]);
     s.dismissSession("a");
     expect(s.dismissedSessions()).toEqual(["a"]);
+  });
+
+  it("pins and hides projects; using one again unhides it and keeps its pin", async () => {
+    const s = await load();
+    s.touchProject("/a");
+    s.markProject("/a", { pinned: true, hidden: true });
+    expect(s.listProjects().find((p) => p.path === "/a")).toMatchObject({ pinned: true, hidden: true });
+    s.touchProject("/a");
+    const used = s.listProjects().find((p) => p.path === "/a");
+    expect(used).toMatchObject({ pinned: true });
+    expect(used?.hidden).toBeUndefined();
+    s.markProject("/a", { pinned: false });
+    expect(Object.keys(s.listProjects().find((p) => p.path === "/a") ?? {})).toEqual(["path", "lastUsedAt"]);
+  });
+
+  it("marking a folder only cards use saves it with no use of its own", async () => {
+    const s = await load();
+    s.markProject("/cards-only", { hidden: true });
+    expect(s.listProjects().find((p) => p.path === "/cards-only")).toEqual({ path: "/cards-only", lastUsedAt: 0, hidden: true });
+  });
+
+  it("a full list drops the oldest unpinned project, never a pinned one", async () => {
+    const s = await load();
+    s.touchProject("/old");
+    s.markProject("/old", { pinned: true });
+    for (let i = 0; i < 45; i++) s.touchProject(`/p${i}`);
+    const paths = s.listProjects().map((p) => p.path);
+    expect(paths).toContain("/old");
+    expect(paths).not.toContain("/p0");
+    expect(paths).toHaveLength(41);
   });
 
   it("settings survive a reload and settingsView bundles them", async () => {

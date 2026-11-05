@@ -11,6 +11,8 @@ vi.mock("@/lib/puku-trial-token", () => ({
 vi.mock("@/lib/puku-proxy", () => ({
   DAILY_REQUESTS: 150,
   DAILY_TOKENS: 1_000_000,
+  GLOBAL_DAILY_REQUESTS: 15_000,
+  GLOBAL_DAILY_TOKENS: 100_000_000,
   apiError: (status: number, type: string, message: string) => Response.json({ type: "error", error: { type, message } }, { status }),
   proxy: vi.fn(() => Promise.resolve(new Response("proxied"))),
   restUsageStore: vi.fn(() => ({ add: vi.fn() })),
@@ -21,7 +23,7 @@ const proxyLib = await import("@/lib/puku-proxy");
 const tokenRoute = await import("./puku/trial-token/route");
 const proxyRoute = await import("./puku/v1/[...path]/route");
 
-const NAMES = ["PUKU_TRIAL_SIGNING_SECRET", "PUKU_TRIAL_API_KEY", "SUPABASE_SECRET_KEY", "PUKU_TRIAL_DAILY_REQUESTS", "PUKU_TRIAL_DAILY_TOKENS"];
+const NAMES = ["PUKU_TRIAL_SIGNING_SECRET", "PUKU_TRIAL_API_KEY", "SUPABASE_SECRET_KEY", "PUKU_TRIAL_DAILY_REQUESTS", "PUKU_TRIAL_DAILY_TOKENS", "PUKU_TRIAL_GLOBAL_DAILY_REQUESTS", "PUKU_TRIAL_GLOBAL_DAILY_TOKENS"];
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -86,7 +88,7 @@ describe("/api/puku/v1/[...path]", () => {
     expect(await res.text()).toBe("proxied");
     const [, path, config] = vi.mocked(proxyLib.proxy).mock.calls[0]!;
     expect(path).toBe("messages/count_tokens");
-    expect(config).toMatchObject({ apiKey: "key", secret: "sig", dailyRequests: 150, dailyTokens: 1_000_000, deadlineMs: 285_000 });
+    expect(config).toMatchObject({ apiKey: "key", secret: "sig", dailyRequests: 150, dailyTokens: 1_000_000, globalDailyRequests: 15_000, globalDailyTokens: 100_000_000, deadlineMs: 285_000 });
     expect(typeof config.background).toBe("function");
     expect(proxyLib.restUsageStore).toHaveBeenCalledWith("https://x.supabase.co", "sb_secret_x");
     // Billing is configured (SUPABASE_SECRET_KEY is set), so the plan meter rides on the config.
@@ -105,6 +107,14 @@ describe("/api/puku/v1/[...path]", () => {
     vi.stubEnv("PUKU_TRIAL_DAILY_TOKENS", "1000");
     await call(["models"], "GET");
     expect(vi.mocked(proxyLib.proxy).mock.calls[1]![2]).toMatchObject({ dailyRequests: 150, dailyTokens: 1000 });
+  });
+
+  it("takes the whole trial's daily cap from the env too", async () => {
+    configured();
+    vi.stubEnv("PUKU_TRIAL_GLOBAL_DAILY_REQUESTS", "500");
+    vi.stubEnv("PUKU_TRIAL_GLOBAL_DAILY_TOKENS", "0");
+    await call(["models"], "GET");
+    expect(vi.mocked(proxyLib.proxy).mock.calls[0]![2]).toMatchObject({ globalDailyRequests: 500, globalDailyTokens: 100_000_000 });
   });
 
   it("is 502 when the proxy throws", async () => {

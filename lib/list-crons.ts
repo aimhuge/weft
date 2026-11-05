@@ -2,9 +2,11 @@
 // is; the card its runs fold under (the forked thread, or a fresh cron's first run) says when the next run is, or
 // that the cron is off. Runs already nest under that card (lib/list-tree.ts), and "⏰ cron" is a value in the Tags
 // filter (lib/list-sheet.ts), so the sheet can be cut down to the crons and the threads they come from. Pure.
+import { isSelfHolder } from "./cron-fold";
+import { untilNext } from "./cron-form";
 import { describeCron } from "./cron-schedule";
 import type { Cron } from "./cron-types";
-import { sortCrons } from "./crons-view";
+import { sortCrons, isLiveCron } from "./crons-view";
 import { matches } from "@aimhuge/sheet";
 import type { Card } from "./types";
 
@@ -15,24 +17,19 @@ export interface CronBadge {
   off?: boolean;
 }
 
-// "in 5m", "in 3h", "in 2d": how long until the next run.
-export function untilNext(at: number, now: number): string {
-  const m = Math.max(1, Math.round((at - now) / 60_000));
-  if (m < 60) return `in ${m}m`;
-  const h = Math.round(m / 60);
-  return h < 48 ? `in ${h}h` : `in ${Math.round(h / 24)}d`;
-}
-
 // The crons whose runs fold under this card: the ones forked from it, or a fresh cron whose first run it is.
+// A fresh cron's first run points at itself, so it is its own holder; a later run points at the first,
+// which is the card that holds it (lib/cron-fold.ts says which card a run folds under).
 export function cronsHeldBy(card: Card, crons: readonly Cron[]): Cron[] {
-  return crons.filter((c) => (c.sourceId ? c.sourceId === card.id : card.cronId === c.id && card.cronOf === card.id));
+  const holder = isSelfHolder(card);
+  return crons.filter((c) => (c.sourceId ? c.sourceId === card.id : card.cronId === c.id && holder));
 }
 
 export function cronBadge(card: Card, crons: readonly Cron[], now: number): CronBadge | null {
   const held = cronsHeldBy(card, crons);
   if (held.length) {
     // The one that runs soonest speaks for the card; the tip lists them all.
-    const soonest = held.flatMap((c) => (c.enabled && c.nextAt !== undefined ? [c.nextAt] : [])).sort((a, b) => a - b);
+    const soonest = held.flatMap((c) => (isLiveCron(c) ? [c.nextAt as number] : [])).sort((a, b) => a - b);
     const tip = held.map((c) => `${c.name}: ${describeCron(c.expr)}, ${c.count} ${c.count === 1 ? "run" : "runs"}${c.enabled ? "" : " (off)"}`).join("\n");
     const next = soonest.at(0);
     return next !== undefined ? { text: `next ${untilNext(next, now)}`, tip } : { text: "off", tip, off: true };

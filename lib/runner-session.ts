@@ -7,9 +7,9 @@ import { runsOn } from "./cli-defaults";
 import { executableFor } from "./cli-path";
 import { onElicitation } from "./elicitation";
 import { spawnCli, withStderr } from "./cli-process";
-import { takeGrant, withRetryGrant } from "./classifier-denial";
-import { claimQuestion, claimSymbols, claimWhy } from "./claim-guard";
-import { folderAsk, grantedRead } from "./folder-guard";
+import { withRetryGrant } from "./classifier-denial";
+import { askAboutCall } from "./guards/ask";
+import { withConnectorEnv } from "./connector-env";
 import { guardedCli } from "./env";
 import { isNotLoggedInError, isRateLimitError } from "./login";
 import { isLostSessionError, resumeLostSession } from "./lost-session";
@@ -27,6 +27,7 @@ import { switchSpare } from "./spare-switch";
 import { backendEnv, refillsSpare } from "./puku-idle";
 import { subagentEnv, subagentModelFor, subagentPrompt, type SubagentModel } from "./subagents";
 import { weftMcpServers } from "./weft-mcp";
+import { sessionDirs } from "./show-dir";
 import { promptsBuild, weftSystemPrompt } from "./weft-prompts";
 import { CODEX_CODE, driveCodex } from "./codex-runner";
 import { GOOSE_RUNNER_CODE, driveGoose } from "./goose-runner";
@@ -47,7 +48,7 @@ const MAX_SPARES = 3;
 // the code (not random) because each API route can load its own copy of these modules. The pure turn
 // rules in turn.ts count too: a session started before they changed would still run the old ones.
 const BUILD = createHash("sha1")
-  .update([drive, driveCodex, driveGoose, queryOptions, threadEnv, weftMcpServers, weftSystemPrompt, subagentPrompt, ...CODEX_CODE, ...GOOSE_RUNNER_CODE, ...TURN_CODE, askUser, settle, onElicitation, ...Object.values(turnRules)].map(String).join("\n"))
+  .update([drive, driveCodex, driveGoose, queryOptions, threadEnv, weftMcpServers, weftSystemPrompt, subagentPrompt, ...CODEX_CODE, ...GOOSE_RUNNER_CODE, ...TURN_CODE, askUser, askAboutCall, settle, onElicitation, ...Object.values(turnRules)].map(String).join("\n"))
   .digest("hex");
 
 // The code fingerprint plus what a CLI only reads when it starts: the content of Weft's pinned prompts
@@ -190,14 +191,15 @@ function queryOptions(session: Session, executable: string | undefined): Options
     cwd: spec.cwd,
     // Directories the user approved reading from beyond cwd (Card.readScope, Spec.readScope).
     // Forwarded to the SDK as additionalDirectories so the CLI's working-directory gate lets the
-    // thread read there without an extra prompt.
-    additionalDirectories: spec.readScope,
+    // thread read there without an extra prompt. SHOW_DIR rides along for every thread (lib/show-dir.ts).
+    additionalDirectories: sessionDirs(spec.readScope),
     resume: spec.sessionId,
     sessionId: spec.sessionId ? undefined : session.sessionId,
     forkSession: spec.sessionId ? spec.forkSession : undefined,
     resumeSessionAt: spec.sessionId ? spec.resumeAt : undefined,
     ...withRetryGrant(guarded, session),
-    env: { ...threadEnv(spec, guarded.env, subagents), ...backendEnv(spec.backend), ...trial?.env },
+    // On a worker, the connector socket and this session's capability for its git and gh (lib/connector-env.ts).
+    env: withConnectorEnv({ ...threadEnv(spec, guarded.env, subagents), ...backendEnv(spec.backend), ...trial?.env }, cardId),
     settings: withSkillSettings(trial?.settings, spec.skillsOff),
     abortController: session.abort,
     includePartialMessages: true,
@@ -222,18 +224,8 @@ function queryOptions(session: Session, executable: string | undefined): Options
       if (isTrustedTool(toolName, opts.mcpServer?.source)) {
         return Promise.resolve({ behavior: "allow", updatedInput: input });
       }
-      if (!session.cardId) return Promise.resolve({ behavior: "deny", message: "No card is attached yet." });
-      // A call auto mode blocked that you allowed once (lib/classifier-denial.ts), in case the retry asks instead.
-      if (takeGrant(session, toolName, input)) return Promise.resolve({ behavior: "allow", updatedInput: input });
-      // A folder the user granted (lib/folder-guard.ts) is read without the CLI's own working-directory prompt.
-      if (grantedRead(toolName, input, session.spec.cwd, session.cardId)) return Promise.resolve({ behavior: "allow", updatedInput: input });
-      // A folder outside the project (lib/folder-guard.ts) or a symbol-claim clash (lib/claim-guard.ts) asks in its own words.
-      const folder = folderAsk(opts.toolUseID);
-      return askUser(session.cardId, session, toolName, input, opts.signal, folder?.question ?? claimQuestion(opts.toolUseID) ?? opts.title, {
-        symbols: claimSymbols(opts.toolUseID),
-        why: folder?.why ?? claimWhy(opts.toolUseID),
-        folder: folder?.folder,
-      });
+      // Everything past Weft's own tools is the guards' shared ask (lib/guards/ask.ts), which Codex and Goose use too.
+      return askAboutCall(session, toolName, input, opts.toolUseID, opts.signal, opts.title);
     },
     // An MCP server asking you something (the Supabase MCP confirming destructive SQL) becomes a prompt on the
     // card instead of the SDK's silent decline (lib/elicitation.ts).

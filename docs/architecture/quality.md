@@ -13,7 +13,7 @@ that fixes the checklist, weakest area first.
 - `lib/quality.ts`: `measureQuality(cwd)` scores the project at the folder's git root. It reads files
   only and never runs the project's tools. Five sections, averaged over the ones that apply:
   - **Tests**: line coverage from `coverage/coverage-summary.json`, through `lib/coverage.ts`. Only a whole-suite `pnpm coverage`
-    writes there: a run of named files with `--coverage` goes to the temp folder `SCOPED_COVERAGE_DIR` (`scripts/run-tests.mjs`),
+    writes there: a run of named files with `--coverage` goes to a temp folder of its own under `SCOPED_COVERAGE_ROOT` (`scripts/run-tests.mjs`, removed when the run ends, so parallel runs don't delete each other's),
     since Vitest empties its reports folder first and one file's numbers used to replace the repo's.
   - **File size**: the share of source within `MAX_LINES` (300) of the top of its file, so one
     1,200-line file costs more than a few that run a little long. Test files don't count.

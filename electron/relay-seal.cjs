@@ -32,9 +32,14 @@ function cleanHooks(hooks) {
   });
 }
 
-function relaySealRoutes(vault) {
+/**
+ * @param {() => any} vault
+ * @param {(worker: unknown, workerName: unknown) => string} [onWorker] " on <worker>" for a Weft Worker's ask
+ *   (lib/device-call-approvals.ts), nothing for this Mac's own.
+ */
+function relaySealRoutes(vault, onWorker = () => "") {
   return {
-    "POST /webhooks/relay-seal": ({ folder, name, environment, provider }) => {
+    "POST /webhooks/relay-seal": ({ folder, name, environment, provider, worker, workerName }) => {
       const env = String(environment || "development");
       checkProvider(provider);
       const key = relayKey();
@@ -42,13 +47,13 @@ function relaySealRoutes(vault) {
         String(folder),
         String(name),
         env,
-        (label) => `seal the ${provider} signing secret ${name} (${label}, ${env}) and store it on the relay`,
+        (label) => `seal the ${provider} signing secret ${name} (${label}, ${env}) and store it on the relay${onWorker(worker, workerName)}`,
         (value) => sealedToHex(sealSecret(value, key)),
       );
     },
     // Several webhooks of one folder at once: one Touch ID naming every secret. Every name needs a value, or nothing
     // is asked or sealed (missing lists them). The answer is { sealed: { NAME: trio } }, one trio per secret name.
-    "POST /webhooks/relay-seal-many": ({ folder, environment, hooks }) => {
+    "POST /webhooks/relay-seal-many": ({ folder, environment, hooks, worker, workerName }) => {
       const env = String(environment || "development");
       const list = cleanHooks(hooks);
       const key = relayKey();
@@ -58,7 +63,7 @@ function relaySealRoutes(vault) {
         String(folder),
         names,
         env,
-        (label) => `seal ${list.length} webhook signing secrets (${label}, ${env}) and store them on the relay: ${what}`,
+        (label) => `seal ${list.length} webhook signing secrets (${label}, ${env}) and store them on the relay${onWorker(worker, workerName)}: ${what}`,
         (values) => ({ sealed: Object.fromEntries(names.map((n) => [n, sealedToHex(sealSecret(values[n], key))])) }),
       );
     },

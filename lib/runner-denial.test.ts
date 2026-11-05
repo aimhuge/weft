@@ -75,12 +75,25 @@ describe("a classifier denial", () => {
     await flush();
     expect(card("c1").column).toBe("running");
     expect(q.received.at(-1)).toMatch(/Retry exactly that call now/);
-    const hooks: HookCallbackMatcher[] = (q.options as unknown as Options).hooks?.PreToolUse ?? [];
-    const grant = nth(nth(hooks, -1).hooks, 0);
-    const call = { hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input } as HookInput;
+    // Clicking Allow leaves the session in auto mode: its other calls, background subagents' too, aren't asked about.
+    expect(q.setPermissionMode).not.toHaveBeenCalled();
+    const opts = (q.options as unknown as Options).hooks ?? {};
+    const pre: HookCallbackMatcher[] = opts.PreToolUse ?? [];
+    const post: HookCallbackMatcher[] = opts.PostToolUse ?? [];
+    const grant = nth(nth(pre, -1).hooks, 0);
+    const ran = nth(nth(post, -1).hooks, 0);
+    const call = (tool_use_id: string) => ({ hook_event_name: "PreToolUse", tool_name: MIGRATE, tool_input: input, tool_use_id }) as HookInput;
     const signal = new AbortController().signal;
-    expect(await grant(call, "tu2", { signal })).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
-    expect(await grant(call, "tu3", { signal })).toEqual({});
+    // The retry's own hook steps the CLI out of auto mode for just that call, so its allow counts.
+    expect(await grant(call("tu2"), "tu2", { signal })).toMatchObject({ hookSpecificOutput: { permissionDecision: "allow" } });
+    expect(q.setPermissionMode).toHaveBeenLastCalledWith("default");
+    // Another call waits until the CLI is back in auto mode, which it is once the retry has run.
+    const other = grant({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "ls /tmp/x" }, tool_use_id: "o1" } as HookInput, "o1", { signal });
+    await ran({ hook_event_name: "PostToolUse", tool_use_id: "tu2" } as HookInput, "tu2", { signal });
+    expect(await other).toEqual({});
+    expect(q.setPermissionMode).toHaveBeenLastCalledWith("auto");
+    // Spent: the same call isn't let through again.
+    expect(await grant(call("tu3"), "tu3", { signal })).toEqual({});
   });
 
   it("Keep denied puts the card back in the column the turn ended in", async () => {

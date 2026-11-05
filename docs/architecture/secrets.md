@@ -162,9 +162,13 @@ what it offered, so a secret or blank you remove never comes back.
 - **Webhook routes** become 🪝 blanks (docs/architecture/webhooks.md#found-by-the-intake).
 - **The intake screen** (`components/IntakeDialog.tsx`, opened through `lib/intake-open.ts`) lists what happened by
   name, never a value: what moved and from which file, each blank with its provider link, each webhook's route, and any
-  committed file to rotate. **Open 🔐** and **Open 🪝** go to the drawers (the board's commands hook registers the
-  opener, so Board passes nothing). **Set it up in a thread** starts a card in the project with the list as its prompt
-  (`lib/intake-view.ts`) and opens it. It only comes up when the intake took something in, and a hint's link closes it
+  committed file to rotate. **Later** and **▶ Get it running** are its only buttons. The second
+  starts a card (`lib/intake-run.ts`) whose prompt carries everything the intake left: install the dependencies, get
+  each blank's value through `mcp__secrets__ask_add` with the provider page in the pane, start the dev server with
+  `mcp__devservers__start`, and walk through rotating any committed file. It asks for Touch ID at most once: one
+  `request_access` grant covers the dev server, runs and fills, and the prompt rules out `set_value`, Vercel pushes and
+  the webhook relay, which each ask again, so webhooks are listed for later. Earlier
+  versions had Open 🔐 / 🪝 and "Set it up in a thread"; one card that ends with the app running replaced them. It only comes up when the intake took something in, and a hint's link closes it
   first, since the native pane hides under any dialog.
 
 ### After import: the file stays, managed by Weft
@@ -186,7 +190,8 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   - `useFor` asks for Touch ID ("let a thread type NAME (owner/repo) into site"). Approvals are their own, one per card,
     site and vault, open for `UNLOCK_MS` from the last use: the drawer being unlocked never lets a thread in, and a yes for
     one site never covers another. Lock clears them.
-  - The pane types the value (`electron/pane-actions.cjs`), masks the field with `-webkit-text-security` so screenshots
+  - The pane types the value (`electron/pane-actions.cjs`, finding the field the one way the agent tools do, `electron/pane-element.cjs`),
+    masks the field with `-webkit-text-security` so screenshots
     don't show it, and `read_page` swaps the value for `‹NAME›` in the page's text and title.
   - The tools are trusted (`isTrustedTool`): Touch ID is the one yes, with no permission prompt before it.
   - Limits: a page's own script can still read a field it was given (that's what the field is for), so the https rule
@@ -197,6 +202,10 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   already reading (a drawer would open behind the thread panel). **Add to vault** hands the value to main through the
   board's own `vault.set` IPC, then sends the thread "I added NAME (env) to the 🔐 vault." as the user's message; once
   the vault holds it the input folds to a ✓. The thread is told to end its turn after the call and wait for that message.
+  Several asks in one thread fill in together (`components/SecretAskBatch.tsx`, `lib/secret-ask-batch.ts`): every input
+  stays open, Add (or Enter in any of them) takes every filled one, a repeated ask for the same key and environment folds
+  with it, and the thread gets one message naming every key only once none is left open, so its next turn doesn't wake
+  while the user is still pasting. **Tell Claude now** sends it early, for a key the user means to skip.
   `lib/runner-turn.ts` marks the tool item with `ask` (`secretAskOf` in `lib/vault-view.ts`), `groupThread` keeps it out
   of the folded tool run, and `ThreadEntries` draws it. `fill_field` and `run` put every missing name in as a blank and
   point the thread at `ask_add`. `lib/secret-ask.ts` posts `POST /secrets/ask-add` (`askAdd` in `electron/vault-routes.cjs`), which only adds the blank.
@@ -252,9 +261,9 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     with `preX` and `postX`.
   - Electron main (`electron/secret-run.cjs`) gets the values (`vault.valuesFor`, main only, never over IPC) and asks:
     a dialog (`electron/approval-window.cjs`) naming the asking card by its title, the thread's own one-line `why`, the
-    command, the folder, the script and the names (Cancel / Allow once / Always allow), and Touch ID. The window starts
-    Touch ID as it opens (`settle()` in `approval-window.cjs`), so a touch on the sensor alone is Allow once; a click on
-    Always allow or Allow once waits for that same touch, and a cancelled prompt leaves the buttons, which ask again.
+    command, the folder, the script and the names (Cancel / Allow for 1 hour / Always allow), and Touch ID. The window starts
+    Touch ID as it opens (`settle()` in `approval-window.cjs`), so a touch on the sensor alone is Allow for 1 hour; a click on
+    Always allow or Allow for 1 hour waits for that same touch, and a cancelled prompt leaves the buttons, which ask again.
     Nothing is allowed without Touch ID passing where the Mac has it. The title and
     `why` are only shown, never part of a remembered rule; a dev server's approval names its card too.
     *Always allow* is a rule in the data folder's `vault/run-rules.json` (`electron/run-rules.cjs`), sealed with
@@ -268,7 +277,10 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     (`electron/secret-redact.cjs`), then cut to the last 20,000 characters, and comes back with the exit code.
 - Redaction (`electron/secret-redact.cjs`, built): each value and the forms programs print it in, swapped for
   `‹NAME›`: as written, JSON-escaped, URL-encoded (`%20` or `+`, either hex case), base64 and base64url, including
-  base64 of the value inside a longer string (the three byte alignments). Values under 4 characters are left alone.
+  base64 of the value inside a longer string (the three byte alignments); and, since the vault pentest of
+  2026-10-28, hex (plain, `0x`-prefixed, as a hex dump shows it), gzip+base64, reversed, rot13 and `\uXXXX`
+  escapes. Values under 4 characters are left alone, and a derived form shorter than 8 characters is not
+  matched, so ordinary text doesn't get garbled.
 - Dev servers (built): `lib/devserver.ts` asks main for a one-time grant of the folder's development values
   (`POST /secrets/dev-grant`, approved like a run, *Always allow* as a `dev` rule). It starts `electron/secret-env.cjs`
   with Electron as node and writes the control-server token, the grant and argv to its **stdin**, so neither sits in a
@@ -284,8 +296,9 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
 - A PreToolUse hook (`lib/secret-guard.ts`, on every thread and the refactor scout) denies reading `.env*`
   (except templates like `.env.example`), `~/.weft/account.json`, the device key and the vault files. It's a
   hook, not `canUseTool`, because reads never ask, and `bypassPermissions` skips `canUseTool` entirely.
-  - Files: `Read`, `Edit`, `NotebookRead`, `Grep` (by path or glob, so `*.local` counts too), and the browser
-    pane opening a `file://` URL to one.
+  - Files: `Read`, `Edit`, `Write`, `MultiEdit`, `NotebookRead`, `NotebookEdit`, `Glob`, `LS`, `Grep` (by path or
+    glob, so `*.local` counts too), and the browser pane opening a `file://` URL to one. A write is turned away
+    like a read: a thread that may not read a `.env` may not overwrite one either.
   - Bash: commands go through a shell parser (`lib/shell-parse.ts`) that follows quotes, escapes, heredocs,
     redirects, `$(…)`, `sh -c`, `eval`, `xargs` and `find -exec`. A command is turned away only when it is the
     one reading the file: `cat .gitignore | grep .env` runs, while `cp .env.local x` and `cat .e*` don't.
@@ -294,6 +307,76 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     `subprocess.run(…)`, Ruby/Perl backticks, or a variable set to the path when the code opens something).
   - Dumps: `printenv`, bare `env`/`export`/`set`, `ps e`, `console.log(process.env)`, `print(os.environ)`,
     `echo $SOME_KEY`, and `vercel env pull` to stdout.
+  - **The whole data folder is secret, not the files in it.** `~/.weft` holds the control server's
+    bearer token, so anything that reaches into that folder reaches the master key: `find ~/.weft -exec cat
+    {} \;`, `find ~/.weft | xargs cat` and `rsync -a ~/.weft/ /tmp/b/` are all turned away, even though they
+    name no file at all (`lib/secret-guard-files.ts`: `reachesDataDir`).
+  - **`~/.weft/show/` is the one folder inside it that is open.** It holds the pages a thread renders
+    in the pane (plans, commits, how-tos, answers), and it is the one place the browser prompt tells a
+    thread to write — so sealing it made the pane's own pages unreadable and unwritable
+    (`lib/secret-guard-files.ts`: `DATA_OPEN`).
+  - **`~/.weft/apps/` is open too (2026-10-29).** It holds the data mini apps (`apps/<slug>/index.html`
+    and `weft-app.json`), and sealing the data dir had stopped threads building or editing one such as
+    📈 Growth. App folders hold pages and manifests that name vault secrets by name only, never values.
+    `~/.weft/scout/`, the refactor scout's cache (findings about code), is open as well (2026-10-31).
+  - **An attachment opens to the card its user pasted it into (2026-10-31).** A thread couldn't Read the
+    screenshot its user had just pasted. A board thread's guard knows its card (`secretGuardMatcher(cardId)`
+    in `lib/guards/hooks.ts`), and `pastedInto` (`lib/secret-guard-pasted.ts`) lets a Read through when the
+    file sits straight in an attachments folder and a user message on that card names it. Only Read, one file
+    at a time: the folder can't be listed (it holds every card's uploads), another card's attachment stays
+    sealed, and a link in the folder is never followed. The scout and the skill reviewer have no card and get none.
+    Every other folder and file in the data dir stays sealed: `vault/`, `threads/`, `attachments/`,
+    `apps.json` (which pages are saved apps), `app-grants.json`, the tokens, and the control token. So does
+    any path that climbs out of an open folder (`~/.weft/apps/../vault`, `~/.weft/show/../threads/x`: `..`
+    is folded before the check, including on the `~/.weft/…` path the guard can't resolve) and any path
+    whose real place is sealed: a symlink in `apps/` or `show/` is followed (dangling or not, and a path
+    that doesn't exist yet through its nearest existing folder), so `apps/x -> ../vault` or a link to a
+    project's `.env` is checked as the file it lands on (`realPlace` in `lib/secret-guard-files.ts`).
+  - **Why a thread may edit a manifest: the grant covers every name it hands out.** A manifest decides
+    which secrets a page's calls use, so an open `apps/` is safe only if any change there that would
+    reach a new value asks the user again. Named reads always needed the env grant, and the grant's hash
+    (`manifestHash` in `electron/app-data-grants.cjs`) voids it when the env, folder, `supabaseUrl` or a
+    read changes. But `weft.env()` and a secret-filled `weft.fetch` used to run with no grant at all, the
+    manifest's policy being their only gate: a thread could have added `"public": ["SUPABASE_SECRET_KEY"]`
+    to Growth's manifest, opened the page in the pane and read the value off it with `read_page`, or
+    added a `secrets` rule sending a key to a host of its choosing. Now the grant covers every name a
+    manifest may hand out (`manifestNeeds`: the reads' names, the `secrets` keys and the `public` names),
+    the hash covers `secrets` and `public` too (they join the hash only when present, so an app without
+    them keeps its grant), and `weft.env()` and any `weft.fetch` that fills a placeholder run only under a
+    live grant (`ensureGrant` in `electron/app-data-fetch.cjs`). With none, main asks Touch ID itself,
+    naming every name, so a fetch-only page needs no grant bar; calls that arrive while it asks share the
+    one prompt. A fetch that fills no secret still runs without asking: it can only reach the hosts the
+    policy allows, with nothing from the vault. `requestSecret` stays ungated: it only answers whether the
+    viewer's own value is set and adds a blank.
+  - **Why editing a granted app's `index.html` alone needs nothing more.** The grant is over data, not the
+    page's code: `index.html` isn't in the hash, and a page can only call the reads and the fetch policy
+    its manifest declares, through main, which never hands it a value it isn't granted (a filled fetch's
+    echo comes back masked). So an edited page gets no key it couldn't get before. What it can do is what
+    any granted page can: show the granted rows, or send them where it likes. Those rows are the data the
+    user agreed to show that page, and the thread could already see them by opening the page in the pane.
+    The keys never leave main.
+  - **A substituted path is still a path.** `cat $(echo .env)`, ``cat `echo .env` `` and `cat $'\x2eenv'`
+    read the file, so the parser hands the guard the words a substitution stands for
+    (`lib/shell-parse.ts`: `substituted`, `ansiC`).
+  - **A runner's child is a command of its own.** `pnpm exec cat .env` and `npx cat .env` are parsed again
+    as the command they run (`lib/secret-guard-bash.ts`: `execRunnerChild`).
+  - **The CLI's own transcripts are secret.** `~/.claude` and `~/.claude.json` hold every secret value a
+    thread ever saw, in plaintext, outside Weft's redaction path — so the secret guard turns them away
+    (`inTranscriptDir`) and the folder guard no longer lists `~/.claude` as free to enter.
+    **Save its memory folders (2026-11-02):** the system prompt tells a thread to keep memory in
+    `~/.claude/projects/<project>/memory/`, and Write and an append to `MEMORY.md` were refused. `inMemoryDir` opens that
+    folder alone, after folding `..` and following links (the folder must really be a `projects/<p>/memory`, and the
+    file really in it), so `settings*.json`, hooks, skills and the `*.jsonl` transcripts beside it stay sealed: a thread
+    that could write those could grant itself permissions. The folder gate takes the card's own memory folder as its own.
+  - **Text isn't a path (2026-11-02).** `gh pr create --body "…~/.weft/vault/…"` was refused because the guard read
+    every word on the line. Words a command takes as text (`textWords`, `lib/shell-text.ts`) are skipped; a `$(…)`
+    inside them still runs, and is checked as the command it is. `--body-file`, `-F` and anything a shell or an
+    interpreter runs are still read as paths.
+  - **A refusal says what the place is** (`lib/secret-guard-why.ts`, 2026-11-02). Everything used to read "Weft keeps
+    secret values out of threads", so threads went looking for a secret in a memory file or a log. Now a `.env`, the
+    vault and the tokens still say that; `~/.claude` says it's the CLI's folder and that memory is open; an attachment
+    says it belongs to the card it was pasted into; the rest of the data dir and a worker's home say which of their
+    folders are open. A paste that never arrived says so (`pastedElsewhere`).
 - Paste guard in the Composer (`components/SecretPaste.tsx`): a paste that looks like a key (`lib/secret-detect.ts`)
   waits in a strip until you paste it anyway or drop it. A key that arrives any other way (typed, dictated,
   dropped in) shows the same strip as the message changes, with Remove it and Keep it.
@@ -302,11 +385,131 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
 
 Limit: an agent with unrestricted Bash can still print the env of a process it can reach, or write a script
 that opens the file itself (`~/.weft/shell-token` included). This is a strong default, not a sandbox. Known gaps
-(rechecked 2026-10-12):
+(rechecked 2026-10-12, and again after the vault pentest of 2026-10-28):
 - The env strip goes by names and known key shapes; a secret under a plain name (`MY_APP_CONFIG`) with an
-  unusual shape still reaches threads.
+  unusual shape still reaches threads. What it does now also strip by name alone are the loader hooks
+  (`NODE_OPTIONS`, `LD_PRELOAD`, the `DYLD_*` family), because they run code in a thread's process whatever
+  they hold; `NODE_EXTRA_CA_CERTS` stays, since it names a certificate rather than running one.
 - Without gitleaks the commit scan knows only the key shapes in `lib/secret-detect.ts`. CI pins gitleaks but
   hasn't run yet.
+- **The real answer is an OS-level sandbox**, not a longer classifier: a seatbelt belt of shell parsing
+  can always be unbuckled by a shell feature the parser doesn't know (a new quoting form, an interpreter's
+  inline code, a tool that walks a tree). Running each thread's process in a sandbox that cannot read
+  `~/.weft` or `~/.claude` — macOS's `sandbox-exec`, or a container per thread — would make the file rules
+  a second line of defence instead of the only one. The guard is what Weft can do today; the sandbox is
+  what Weft should do next.
+
+## On a Weft Worker
+
+A worker card's `mcp__secrets__run` asks the owner's Mac instead of a main of its own: a `secret_run` device call with
+names only, which Electron main re-reads with its own session, holds to the worker key it pinned on first use
+(`electron/worker-pins.cjs`), approves with Touch ID in a window that shows the command first and names the worker
+(Allow once, no Always), and answers with a `secret_use` command sealed to that worker for that card, ask nonce and exact
+command. The worker runs it with `electron/secret-exec.cjs`, the same spawn and redaction as here, and keeps the values
+in memory only. The design, guarantees and limits are in
+[project-hosts.md](project-hosts.md#secrets-on-a-worker-h8-the-per-use-seal-as-built).
+
+Since T2 the rest of the tools work there too, each a device call signed by the worker's pairing key that main re-reads
+and answers from the vault the card's own repo names, through this Mac's clone of it (`electron/worker-vault.cjs`):
+`list` (names), `add_blank` and `ask_add` (blanks made here; `ask_add`'s in-thread input on the desktop board fills this
+Mac's checkout of the repo, `lib/use-ask-folder.ts`, so the value never passes through the worker), `set_value` (the value
+sealed to this Mac's device key, stored after the usual Touch ID, which names the worker) and `push_to_vercel` (Touch ID,
+from this Mac's linked clone). A worker card's dev server gets the development set after a Touch ID at every start and
+restart, with no standing grant on a worker (`electron/worker-dev-env.cjs`), sealed to the worker and handed to
+`electron/secret-env.cjs` on its stdin. `fill_field` and `request_access` stay the Mac's: the pane and the grants are
+here ([why fill_field isn't planned on a worker](#fill_field-on-a-weft-worker-not-planned)). Lending the Mac's gog and gh sign-ins to a worker is not built: it needs a process boundary on the worker. The design, guarantees and limits are in
+[project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built).
+
+A worker card's **Goose provider key** (built 2026-11-03, `supabase/migrations/20261103160000_goose_key_ask.sql`, not
+applied) isn't a vault value: it's the key in this Mac's Keychain (`electron/goose-token.cjs`). Each Goose turn on a
+paired worker whose provider takes one sends a signed `goose_key` ask (provider, endpoint, card, nonce) through the same
+`worker_mac_ask` path as a dev server's env. Main (`electron/worker-goose-key.cjs`) refuses unless the provider and
+endpoint are exactly what this Mac last set for that worker with Touch ID (`electron/worker-goose-set.cjs`, recorded when
+`electron/widen-sign.cjs` signs the `settings.put`), asks Touch ID naming the worker, card, provider and endpoint, and
+answers with a `secret_use` marked `use: "goose"`, sealed to the pinned box key for that card, ask, provider and endpoint
+and signed by this Mac. The worker puts it in that one Goose process's env and redacts it from the turn
+([weft-worker.md](weft-worker.md#goose-on-a-worker)). It is never kept on a worker.
+
+### Kept on a worker
+
+Built 2026-11-03 (H8's last step), with `supabase/migrations/20261103130000_worker_vault_keep.sql` (not applied). Off unless
+the user turns it on, per worker, project and environment: Settings → Devices → a paired worker → **Secrets**.
+
+```
+Mac   Settings → Devices → Secrets (components/WorkerKeep.tsx, lib/use-worker-keep.ts) ─ tick the warning ─ Keep
+main  electron/worker-keep.cjs keep: the worker row with its own session (yours, not revoked) ─ the box key it PINNED
+      (refused if the row's key differs) ─ vault.valuesFor(this Mac's checkout, development|preview), no NODE_OPTIONS/DYLD_*
+      ─ Touch ID ("keep N development secrets of o/r on the worker m1mini. Any code a thread runs there can read them")
+      ─ each value seal(box key, keptPurpose(worker, repo, env, name, version)) ─ sign keepMessage with the device key
+      ─ cloud_commands kind vault_keep ─ record name → {version, sha256} in ~/.weft/vault/worker-kept.json (safeStorage)
+worker lib/worker-kept-vault.ts apply: the Mac key from the pairing code ─ signature ─ its own worker id ─ seq above the
+      last one ─ a put no more than 10 min off ─ stores the sealed bytes as they came in kept-vault.json (600, its home)
+use   a run or dev server ask carries kept: {NAME: version} (outside the signature: it can only narrow) ─ main asks
+      Touch ID exactly as before ─ splitKept: a name whose claimed version and sha256 match its record is named, not
+      carried ─ the sealed, Mac-signed secret_use says kept: {NAME: version} ─ the worker opens its own copy at exactly
+      that version (lib/worker-secret-asks.ts); anything else travels sealed per use, as before
+```
+
+- **Each use still needs this Mac.** Keeping saves the value's trip, not the approval: every run and every dev-server
+  start still asks Touch ID here, and the worker opens a kept value only for a `secret_use` this Mac sealed and signed
+  after that Touch ID, naming that name and version. A passkey can't approve a use (vault asks stay on the phone or the
+  Mac, [mobile-security.md](mobile-security.md)). A name the worker doesn't keep, keeps at another version, or that changed
+  here since (its sha256 differs), travels per use: the fallback is today's per-use seal.
+- **Taking back.** Stop (one project and environment), Wipe all, and a value set or removed here (`watchVault` wraps
+  `vault.setValue` and `vault.remove`) are signed and sent without Touch ID, since they only narrow. A changed value is
+  deleted from the worker at once and goes again on the next Keep, after Touch ID: no value reaches a worker without a
+  Touch ID naming it. Revoking a worker in Settings → Devices sends Wipe first; the worker also deletes the file itself
+  when its heartbeat gets "unknown worker key" (a revoke replaces its key hash), pairing to another Mac deletes it
+  (`trustPairingMac`), and so does `weft-worker forget-macs`. A file another Mac wrote reads as empty.
+- **Never production.** Development and preview only, refused on both sides; production values travel per use.
+- **The threat, honestly.** Every card on a worker runs as the same OS user as the daemon, and `seal-key.json` sits beside
+  `kept-vault.json` in its home. The path guards (`lib/secret-guard-files.ts`) stop a thread's tools, not code a thread
+  runs (`node -e`, a script, a dependency's postinstall): that code can read both files and open every kept value,
+  without any Touch ID ([project-hosts.md](project-hosts.md#connectors-on-a-worker-not-built-needs-a-process-boundary)
+  lists the same ways in for tokens). So a kept value is as safe as the least trusted code any card on that worker runs,
+  for as long as it's kept. Sealing at rest buys only this: a copy of `kept-vault.json` alone (a backup, a synced folder,
+  a disk image without the home's key) opens nothing, and the Supabase row is blanked once taken. Revocation can't reach
+  a box that never comes back online; a stolen box keeps what was kept on it. That is why it's off by default, behind a
+  warning the user ticks, and never offered for production.
+
+### fill_field on a Weft Worker: not planned
+
+Weighed 2026-11-03 and left out. A worker card's browser is the worker's headless Chromium, and a worker card's
+`fill_field` is refused with why (`FILL_ON_WORKER` in `lib/secret-tools.ts`, `FILL_REFUSAL` in
+`lib/worker-browser-routes.ts`). The shape that was considered: the thread asks the Mac (a signed `worker_mac_ask` naming
+the card, the page's https origin and the selector), main asks Touch ID naming the worker, site and secret, seals the
+value to the worker's pinned box key for that one use, and the daemon types it over its CDP pipe and masks it in
+`read_page`, as `secret_use` does for `run`. Every step of that can be built; what it promises can't be kept:
+
+- **The thread would see it anyway.** `fill_field`'s promise is that the thread never has the value. On a worker the
+  daemon, its Chromium and every card run as one OS user, so code a thread runs (a script, `node -e`, a dependency's
+  postinstall) can read `seal-key.json` and the worker key, fetch the sealed row and open it, or read the value back out
+  of the renderer's memory or the profile under the browser's `--user-data-dir`. The Mac's pane is in Electron main's
+  process, which a thread's code can't attach to; the worker's has no such boundary.
+- **`run` is different on purpose.** `mcp__secrets__run` hands the value to a command the user reads and approves, which
+  could print it anyway, so the worker sharing a user with the thread adds nothing. A fill's approval names a site, not
+  code, so a leak to the thread's code would be one the Touch ID prompt never mentioned.
+- **What would make it safe** is the process boundary the dropped split would have given (cards as another OS user than
+  the daemon and its Chromium, [project-hosts.md](project-hosts.md#connectors-on-a-worker-not-planned)). Until then a
+  worker card fills a page by asking the user to, on their Mac, or uses `run` for a command that needs the value.
+
+## Which card a vault request is for
+
+A thread's grant, its unlocks and its audit line all hang off one card id, so that id has to be the
+card's own — not whatever a request says. Electron main used to take the card id from the request body,
+which meant a body that named another card's id acted as that card: another card's grant, another card's
+Touch ID unlock, another card's line in the audit log. Now the server signs the card id and main checks
+the signature before it believes it (2026-10-28).
+
+- **The signature.** `lib/card-token.ts` signs the card id with the launch token (the same secret both
+  sides already share, `electron/shell-token.cjs`), and the route is part of what is signed, so a signature
+  for a fill can't be replayed on a run. `electron/card-token.cjs` verifies it in constant time.
+- **The routes.** `/secrets/fill`, `/secrets/run`, `/secrets/dev-grant`, `/secrets/redact` and
+  `/secrets/request-access` all take the card from the signature. A request that proves nothing has no
+  card, so it acts for nobody: the pane's active card is no longer a fallback.
+- **The grant is scoped to a site too.** A grant that names a page covers that page and no other, and the
+  Touch ID prompt says which page; a grant with no site covers only the site-less powers (a command run, a
+  dev server) and never a fill (`electron/vault-grants.cjs`).
 
 ## Audit log
 
@@ -322,7 +525,8 @@ for it. Built 2026-10-26.
   grant, revoke). A line names who (`you`, `thread` with card and title, `weft`) and, read back from your account,
   whose it is (the account's name, so a thread's line reads "Alex Miller's thread “…”"), the names, the site or command,
   `via` (`grant`, `touch-id`, `unlocked`, `rule`, `once`, `always`) and the outcome (`ok`, `denied`, `missing`,
-  `error`). Never a value, not even a tail.
+  `error`). Never a value, not even a tail. The `via` words are decided in one place (`electron/vault-access.cjs`),
+  so the fill, a command run with secrets and a grant all say the same thing.
 - **Kept in the database, not on the Mac.** A file on your own disk is one you can edit, so the record is the
   `keychain_events` table in your Weft account and `~/.weft/vault/audit.jsonl` (0600; `lib/secret-guard-files.ts`
   keeps every thread out of `vault/`) is only the outbox: one JSON line per event not uploaded yet, with an id and a
@@ -339,7 +543,7 @@ for it. Built 2026-10-26.
   per account and Mac. So what's held back shows how late it came, and what's taken out of the outbox shows as a gap.
   A user can't edit the record, only add to it or stop Weft adding.
 - **Where you see it.** Settings → Security → **Keychain access** (`components/KeychainAccess.tsx`,
-  `lib/use-keychain-access.ts`, `lib/keychain-audit-view.ts`): the threads with standing access, each with Revoke,
+  `lib/use-keychain-access.ts`, `lib/keychain-audit-view.ts`, the shapes in `lib/keychain-audit-types.ts`): the threads with standing access, each with Revoke,
   then the log as sentences ("Alex Miller's thread “Fix login” typed STRIPE_KEY (o/r) into dashboard.stripe.com ·
   standing access"), newest first. The lines come from your account (`GET /api/account/keychain-events`,
   `lib/keychain-audit-record.ts`) merged with the ones still waiting on the Mac (IPC `vault:activity`, board window
@@ -354,8 +558,37 @@ One Touch ID lets one card use one project's vault for an hour without being ask
 
 - **Covers** `mcp__secrets__fill_field` on any https site, `mcp__secrets__run` and the card's dev server secrets
   (`vault.useFor` and `secret-run.cjs`'s `approve` check `granted(card, vault id)` first). **Doesn't cover** writes
-  (`set_value`), pushes to Vercel or a relay, or anything that would show the thread a value: the one rule holds.
-- **Two ways in.** The card's right-click menu: **Give 🔐 Vault Access for 1 Hour** / **Revoke 🔐 Vault Access**
+  (`set_value`) or pushes to Vercel unless the grant names them (below), nor a relay or anything that would show the
+  thread a value: the one rule holds.
+- **One approval for a whole setup** (2026-10-29). A thread setting up a service (the R2 move, say) used to ask for
+  Touch ID five or six separate times: a run, a fill, a `set_value`, a `push_to_vercel`, a dev server. `request_access`
+  now takes two more options, and the prompt tells threads to call it once, up front, before a multi-step setup:
+  - `writes: true` also covers `set_value` (adding a name or filling a blank) and `push_to_vercel`. The Touch ID prompt
+    says so in words ("and store secrets it makes in the vault and push them to Vercel"), so the yes is no wider than
+    what it read. An **overwrite** (`replace: true`) still asks every time: it destroys the value that was there.
+    `fillBlank` in `vault-routes.cjs` checks `vault.writeGranted(card, folder)`; `sendValue` in
+    `vault-thread-tools.cjs` checks `grants.allowsWrite(card, id)`. Both take the card main proves from the signed
+    body (`set_value` and `push_to_vercel` now send `cardProof`), never one the body names.
+  - `span: "thread"` lasts until the card is Done, archived or deleted instead of an hour. The server watches the
+    board bus for that (`lib/vault-grant-done.ts`) and calls `POST /secrets/revoke-card`; main caps it at 12 hours
+    (`THREAD_MS`) anyway, so a server restart that drops the watch, or a card left in Review overnight, can't hold a
+    grant open for good. Quitting Weft still ends it.
+  - A later, narrower grant never shrinks a wider one: the hour after an approved command doesn't end a thread-long
+    grant or drop its writes (`add()` keeps the wider `until`, span and writes).
+- **Why not batch prompts, or hold them till the turn ends?** Each tool call waits on its answer: a thread can't go on
+  to its next step until `set_value` says whether it stored the value, so there's nothing to hold until the end of a
+  turn, and calls that really arrive together are rare (a thread runs its secret calls one after another). The data
+  apps' shared prompt (`ensureGrant` in `app-data-fetch.cjs`) works because a page fires its calls in parallel. Asking
+  once up front, naming everything, gets the same one Touch ID without a queue that would hide which call a prompt
+  belonged to.
+- **Why not a thread grant from the card menu or the approval window?** The menu is the user deciding on their own, and
+  an hour is the safe default there; a thread that knows its work runs long asks for `span: "thread"` and says why,
+  and the prompt quotes it.
+- **Approving a run or a dev server is a way in too** (2026-10-29). A card used to ask on every command and every
+  dev server restart (8 approvals in a day for one card). Now a yes there (Allow for 1 hour, or Always allow) also opens a
+  site-less grant for that card and vault (`grantAfterApproval`, called from `approve()` in `secret-run.cjs`), so the card
+  asks once. Site-less, it never covers a fill: typing a value into a page still asks for that page.
+- **Two more ways in.** The card's right-click menu: **Give 🔐 Vault Access for 1 Hour** / **Revoke 🔐 Vault Access**
   (`lib/card-menu.ts`, `components/use-board-menus.ts`, IPC `vault:grant` / `vault:revoke`). Or the thread asks with
   `mcp__secrets__request_access` and a `why` (`POST /secrets/request-access`), which the Touch ID prompt quotes.
 - **Always a fresh Touch ID**, never the drawer's unlock or a fill's per-site unlock. Kept in memory only: quitting Weft
@@ -370,6 +603,24 @@ One Touch ID lets one card use one project's vault for an hour without being ask
   `account.json` moves in on first read and is deleted. Outside the desktop app (`pnpm dev` in a browser) there's
   no main, so it's still the plain file there.
 - Fixed in step 1: the secret guard turns away a thread's `cat .env.local`.
+- Fixed 2026-10-28, by the vault pentest (`lib/pentest-repro.test.ts` keeps each finding as a
+  regression, with a control beside it that was always denied):
+  - A command substitution erased the path the guard read, so `cat $(echo .env)` and `cat $'\x2eenv'`
+    read the file. The parser now hands the guard the words a substitution stands for.
+  - `find ~/.weft -exec cat {} \;`, `find ~/.weft | xargs cat` and `rsync -a ~/.weft/ /tmp/b/` reached
+    the control server's token without naming a file. The whole data folder is secret now.
+  - `~/.claude` (the CLI's own transcripts, where every secret a thread saw is written in plaintext) was
+    neither guarded nor even asked about. It is turned away now, and no longer free to enter.
+  - A thread could `Write` a `.env` even though it could not read one, and `Glob`/`LS` weren't guarded.
+  - `pnpm exec cat .env` and `npx cat .env` read the file past the guard. The runner's child is parsed now.
+  - A card's one-hour grant was scoped to the card but not to a page, so it could type a secret into any
+    https page it opened, including one it controls. The grant names its site, and the Touch ID prompt
+    says which page.
+  - The control server believed the card id in the request body, so a body that named another card acted
+    as that card. The card id is signed now and checked in main (see "Which card a vault request is for").
+  - Redaction missed hex, gzip+base64, reversed, rot13 and `\uXXXX` forms of a value.
+  - `NODE_OPTIONS`, `LD_PRELOAD` and the `DYLD_*` family reached a thread's process, where they load code
+    before it runs its own. They go by name now.
 
 ## How step 2 is built
 
@@ -410,8 +661,12 @@ One Touch ID lets one card use one project's vault for an hour without being ask
    edits (`electron/env-writeback.cjs`), and the refresh token moved behind `safeStorage`.
 3. **Agent tools, dev-server injection, redaction.** Built 2026-10-12: `list`, `fill_field`, `run`, dev-server injection,
    redaction of stored tool results. Still open: `request`, values for HTTP requests, the approvals list in the drawer.
-4. **Supabase sync**: the tables above with ciphertext only, multi-device grants, recovery key.
+4. **Supabase sync** (built 2026-10-27): the tables above with ciphertext only, multi-device grants, recovery
+   key. The schema is `supabase/migrations/20261027163113_team_vault.sql` (applied to live Supabase), and the
+   desktop half is `electron/vault-sync.cjs` (pull, push, the offline queue, Realtime),
+   `electron/vault-grant.cjs` (the TOFU wrap), `electron/vault-rotate.cjs` (rotate on removal) and
+   `electron/vault-recovery.cjs` (the 24 words). See [teams-vault.md](./teams-vault.md).
 5. **Vercel push** (built 2026-10-12): names diff per environment, push per name with Touch ID, from the drawer or a
    thread. Pull built 2026-10-13: plain Vercel variables the vault has no value for come down, by hand or live through a
    team webhook (docs/architecture/vercel.md). Still open: "changed" (needs Vercel's values).
-6. **Teams**: invites, fingerprint check, roles, rotate-on-remove, the event log in the panel.
+6. **Teams** (built 2026-10-27): invites, fingerprint check, roles, rotate-on-remove, the event log in the panel.

@@ -22,7 +22,8 @@ const log: ActivityEvent[] = [];
 const board: { cards: Card[] } = { cards: [] };
 const gitName = { value: "Ada Lovelace" as string | Error };
 
-vi.mock("./activity", () => ({
+vi.mock("./activity", async (orig) => ({
+  withoutHandedOff: (await orig<typeof import("./activity")>()).withoutHandedOff,
   trackActivity: vi.fn(),
   readActivity: () => log,
   record: vi.fn((e: Omit<ActivityEvent, "id">) => log.push({ ...e, id: `r${log.length}` })),
@@ -112,6 +113,36 @@ describe("gameState", () => {
     expect(game.skills).toEqual([{ tech: "Next.js", xp: 10, level: 1 }]);
     expect(game.badges.find((b) => b.id === "refactor-5")?.have).toBe(1);
     expect(game.leagues[0]).toBe("Cotton");
+  });
+
+  it("counts your workers' cards too, never a card this Mac's log already has", () => {
+    const worker: ActivityEvent[] = [
+      { id: "created:w1", kind: "created", at: NOW - 2 * 60_000, card: "w1", cwd: "worker://w/app" },
+      { id: "done:w1", kind: "done", at: NOW - 60_000, card: "w1", cwd: "worker://w/app", title: "Ship" },
+      // Already in the log, by id and by card: neither counts twice.
+      { id: "c1", kind: "created", at: NOW - DAY, card: "1", cwd: A },
+      { id: "turns:2", kind: "turn", at: NOW, card: "2", cwd: A, turns: 5 },
+    ];
+    const alone = gameState({ cwd: A, now: NOW });
+    const both = gameState({ cwd: A, now: NOW, worker });
+    expect(both.xp - alone.xp).toBe(2 + 10);
+    expect(both.today).toEqual({ cards: 1, turns: 1, done: 1, xp: 1 + 2 + 10 });
+    expect(both.totals.shipped).toBe(alone.totals.shipped + 1);
+  });
+
+  it("counts a card handed to a worker once, as the worker's card", () => {
+    const alone = gameState({ cwd: A, now: NOW });
+    const handedOff = { workerId: "w", commandId: "cmd" };
+    board.cards.push({ id: "h1", title: "Sent", prompt: "", cwd: A, backend: "claude", permissionMode: "default", column: "review", createdAt: NOW, updatedAt: NOW, handedOff });
+    log.push({ id: "created:h1", kind: "created", at: NOW, card: "h1", cwd: A });
+    try {
+      const game = gameState({ cwd: A, now: NOW });
+      expect(game.totals.started).toBe(alone.totals.started);
+      expect(game.xp).toBe(alone.xp);
+    } finally {
+      board.cards.pop();
+      log.pop();
+    }
   });
 
   it("measures projects once per TTL and logs one quality snapshot a day", () => {

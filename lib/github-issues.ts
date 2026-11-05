@@ -4,10 +4,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import { globalSingleton } from "./global-singleton";
-import { defaultPermissionMode, issueFolders, setIssueSync } from "./settings";
-import { addCards, DATA_DIR, listCards, updateCard } from "./store";
+import { landingColumn, landingRuns } from "./issue-landing";
+import { startIssueCard } from "./issue-run";
+import { defaultPermissionMode, issueFolders, issueWorkflow, setIssueSync } from "./settings";
+import { importedIssues, saveImportedIssues } from "./issue-record";
+import { syncWorkerIssues, workerIssueDeps } from "./issue-worker";
+import { addCards, listCards, updateCard } from "./store";
 import { createTag } from "./tag-store";
 import { normalizeTags } from "./tags";
+import { parseWorkerProject } from "./worker-project";
 import type { Card, CardIssue } from "./types";
 
 // GitHub issues feed the board: a project folder's open issues become Backlog cards, through the gh
@@ -58,22 +63,6 @@ const g = globalSingleton("__weftIssueSync", () => ({
   inflight: new Map<string, Promise<SyncCounts>>(),
   status: new Map<string, SyncStatus>(),
 }));
-
-// The issues each repo has had a card made for, so a card you deleted doesn't come back.
-const IMPORTED_FILE = path.join(DATA_DIR, "github-issues.json");
-
-function imported(): Record<string, number[]> {
-  try {
-    return (JSON.parse(fs.readFileSync(IMPORTED_FILE, "utf8")) as { imported?: Record<string, number[]> }).imported ?? {};
-  } catch {
-    return {};
-  }
-}
-
-function saveImported(map: Record<string, number[]>) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(IMPORTED_FILE, JSON.stringify({ imported: map }, null, 2));
-}
 
 // What went wrong with gh, in words the user can act on.
 export function ghError(err: unknown, folder: string): string {
@@ -152,9 +141,12 @@ export function issuePrompt(repo: string, issue: GhIssue) {
 function newCard(folder: string, repo: string, issue: GhIssue, now: number): Card {
   const tags = labelTags(issue);
   catalogLabels(issue);
+  // Where the card lands is the project's choice (lib/issue-landing.ts): a cold Backlog card, one in
+  // Needs you so it stands out, or one whose thread starts at once under the project's agent.
+  const workflow = issueWorkflow(folder);
   return {
     id: randomUUID(),
-    column: "backlog",
+    column: landingColumn(workflow.landing),
     title: issue.title.trim() || `${repo}#${issue.number}`,
     titleBy: "user",
     prompt: issuePrompt(repo, issue),
@@ -162,6 +154,7 @@ function newCard(folder: string, repo: string, issue: GhIssue, now: number): Car
     backend: "claude",
     permissionMode: defaultPermissionMode(),
     ...(tags.length ? { tags, tagsBy: "user" as const } : {}),
+    ...(workflow.agent ? { agent: workflow.agent } : {}),
     issue: issueMeta(repo, issue),
     createdAt: now,
     updatedAt: now,
@@ -169,8 +162,15 @@ function newCard(folder: string, repo: string, issue: GhIssue, now: number): Car
 }
 
 // A card the user (or an automation) has run: sync never touches it.
+//
+// A card parked in Needs you without ever running (the "needs_you" landing, lib/issue-landing.ts)
+// hasn't started: it just sits where you can see it. It still follows its issue — a new label
+// reaches it, and closing the issue archives it. Once it has a session or a turn, it is yours.
 function started(card: Card) {
-  return card.column !== "backlog" || Boolean(card.sessionId) || (card.turns ?? 0) > 0;
+  if (card.column !== "backlog" && !(card.column === "needs_you" && !card.sessionId && !(card.turns ?? 0))) {
+    return true;
+  }
+  return Boolean(card.sessionId) || (card.turns ?? 0) > 0;
 }
 
 const sameTags = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((t, i) => t === b[i]);
@@ -191,6 +191,10 @@ function cardPatch(card: Card & { issue: CardIssue }, meta: CardIssue, issue: Gh
 }
 
 // Makes or updates the cards for these issues (also how lib/project-seed-run.ts parks a few on a new project).
+//
+// When the project's landing is "run" (lib/issue-landing.ts), each new card's thread starts right
+// away: the agent works the issue and parks in Needs you when it asks something. A card that can't
+// start yet (its CLI's model is at its limit) waits in Backlog for its turn (lib/start-gate.ts).
 export function applyIssues(folder: string, repo: string, issues: GhIssue[]): SyncCounts {
   const counts: SyncCounts = { added: 0, updated: 0, archived: 0 };
   const key = repo.toLowerCase();
@@ -198,7 +202,7 @@ export function applyIssues(folder: string, repo: string, issues: GhIssue[]): Sy
   for (const card of listCards()) {
     if (card.issue && card.issue.repo.toLowerCase() === key) byNumber.set(card.issue.number, card as Card & { issue: CardIssue });
   }
-  const record = imported();
+  const record = importedIssues();
   const known = new Set(record[key] ?? []);
   const fresh: Card[] = [];
   const now = Date.now();
@@ -222,17 +226,42 @@ export function applyIssues(folder: string, repo: string, issues: GhIssue[]): Sy
     addCards(fresh);
     counts.added = fresh.length;
     record[key] = [...known, ...fresh.flatMap((c) => (c.issue ? [c.issue.number] : []))];
-    saveImported(record);
+    saveImportedIssues(record);
+    const workflow = issueWorkflow(folder);
+    if (landingRuns(workflow.landing)) startIssueCards(fresh, workflow.skill);
   }
   return counts;
+}
+
+// Starts each new card's first turn: the validation skill when the project named one, so the card
+// is checked before any work happens. A card whose CLI can't take the turn yet (its model is at its
+// limit) waits for the window to open instead of failing, and stays in Backlog until then.
+function startIssueCards(cards: Card[], skill?: string) {
+  for (const card of cards) {
+    // The runner is imported inside lib/issue-run.ts, not here: lib/github-issues.ts is imported by
+    // modules that only need a type or an error message from it (lib/project-seed-find.ts).
+    void startIssueCard(card, skill).catch((err: unknown) => {
+      // One card that won't start shouldn't stop the others; it waits in Backlog for you to run.
+      console.warn(`[weft] issue card ${card.id} didn't start: ${(err as Error).message}`);
+    });
+  }
+}
+
+// A worker project's issues become cards on the worker, through this Mac's gh (lib/issue-worker.ts).
+async function syncOnWorker(project: string) {
+  return syncWorkerIssues(project, { ...workerIssueDeps(), repoOf, fetchIssues, issuePrompt });
 }
 
 async function runSync(folder: string): Promise<SyncCounts> {
   let repo: string | undefined;
   try {
-    if (!fs.existsSync(folder)) throw new Error(`${folder} isn't there anymore.`);
-    repo = await repoOf(folder);
-    const counts = applyIssues(folder, repo, await fetchIssues(repo, folder));
+    let counts: SyncCounts;
+    if (parseWorkerProject(folder)) ({ repo, counts } = await syncOnWorker(folder));
+    else {
+      if (!fs.existsSync(folder)) throw new Error(`${folder} isn't there anymore.`);
+      repo = await repoOf(folder);
+      counts = applyIssues(folder, repo, await fetchIssues(repo, folder));
+    }
     g.status.set(folder, { at: Date.now(), repo, counts });
     return counts;
   } catch (err) {

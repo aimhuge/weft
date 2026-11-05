@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { api } from "@/lib/client";
 import { patchNow, stopNow } from "@/lib/optimistic-cards";
-import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction } from "@/lib/card-menu";
+import { hostOf } from "@/lib/project-host";
+import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction, type MenuItem } from "@/lib/card-menu";
 import { toAccelerator, useShortcutList } from "@/lib/hotkeys";
 import { BACKEND_LABELS, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "@/lib/types";
 import { useDeleteDialog } from "@/lib/use-delete-dialog";
-import { AGENTS, type ThreadAgent } from "@/lib/agents";
+import { findAgent } from "@/lib/agents";
+import { useAgents } from "@/lib/use-agents";
 
 // What the board's right-click menus act through: the same functions its buttons, drag and command palette use.
 export interface BoardMenuDeps {
@@ -26,14 +28,21 @@ export interface BoardMenuDeps {
   toggleArchived: () => void;
   toast: (message: string) => void;
   notify: (err: unknown) => void;
+  // Shows a menu and answers the item picked; the native one (electron/main.cjs) by default. weft.zip draws its own
+  // (components/web-board/WebMenu.tsx), so a browser tab gets the same menus.
+  popupMenu?: (items: MenuItem[]) => Promise<string | null>;
 }
 
-// The menus are native (electron/main.cjs). In a plain browser tab there's no shell, so the browser's own menu shows.
+// The menus are native (electron/main.cjs), or the page's own where the board brings one (weft.zip). In a plain
+// browser tab with neither, the browser's own menu shows.
 export function useBoardMenus(deps: BoardMenuDeps) {
   const shell = typeof window === "undefined" ? undefined : window.weft;
+  const popup = deps.popupMenu ?? (shell?.popupMenu ? (items: MenuItem[]) => shell.popupMenu(items) : undefined);
   // Menu items that have a board shortcut use its key, read from the registry: menu item id -> shortcut id.
   // Keys the open menu handles itself (Return, arrows…) are skipped, so card-open shows O, not ↩.
   const shortcuts = useShortcutList();
+  // Every agent, for the "Agent: …" items (lib/use-agents.ts).
+  const agents = useAgents();
   // The card whose tags are being edited (Tags…); the board shows components/TagsDialog.tsx for it.
   const [tagging, setTagging] = useState<Card | null>(null);
   // The card whose share link is open (Share…); the board shows components/ShareCardDialog.tsx for it.
@@ -49,24 +58,27 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     );
 
   async function onCardMenu(card: Card, e: React.MouseEvent) {
-    if (!shell?.popupMenu) return;
+    if (!popup) return;
     e.preventDefault();
     e.stopPropagation();
-    const dev = card.review?.dev ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
-    const access = await hasVaultAccess(card);
-    const picked = (await shell.popupMenu(withAccelerators(cardMenu(card, dev, access), keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
+    // A card on another host gets what its verbs back (lib/project-host.ts): no dev server or vault of this Mac's.
+    const host = hostOf(card);
+    const dev = card.review?.dev && host.can("dev") ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
+    const access = host.can("vault") ? await hasVaultAccess(card) : undefined;
+    const menu = host.menu(cardMenu(card, dev, access, agents));
+    const picked = (await popup(withAccelerators(menu, keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
     if (picked) runCardAction(card, picked).catch(deps.notify);
   }
 
   // ★ on or off, from the menu or the ☆ on a card or thread. A starred card is never auto-archived.
   function toggleStar(card: Card) {
     const starred = !card.starred;
-    patchNow(card.id, { starred }, () => api.mark(card.id, { starred })).catch(deps.notify);
+    patchNow(card.id, { starred }, () => hostOf(card).act("card.update", { id: card.id, body: { starred } }, () => api.mark(card.id, { starred }))).catch(deps.notify);
   }
 
   // Every change in the Tags… dialog saves right away.
   function saveTags(tags: string[]) {
-    if (tagging) patchNow(tagging.id, { tags }, () => api.mark(tagging.id, { tags })).catch(deps.notify);
+    if (tagging) patchNow(tagging.id, { tags }, () => hostOf(tagging).act("card.update", { id: tagging.id, body: { tags } }, () => api.mark(tagging.id, { tags }))).catch(deps.notify);
   }
 
   // Star, Tags… and Share…: true when the action was one of these.
@@ -84,7 +96,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     if (!action.startsWith("switch:")) return false;
     const backend = action.slice(7) as Backend;
     const replay = Boolean(card.rateLimitHit);
-    await api.switchBackend(card.id, backend, replay);
+    await hostOf(card).act("card.switchBackend", { id: card.id, backend, replay });
     deps.toast(`Switched to ${BACKEND_LABELS[backend]}${replay ? " · replaying last message" : ""}.`);
     return true;
   }
@@ -92,16 +104,19 @@ export function useBoardMenus(deps: BoardMenuDeps) {
   // "Agent: <name>" — a new soul for the thread; its next message resumes the conversation under it.
   async function runAgentAction(card: Card, action: CardAction) {
     if (!action.startsWith("agent:")) return false;
-    const agent = AGENTS[action.slice(6) as ThreadAgent];
-    await api.setAgent(card.id, agent.id);
+    const agent = findAgent(action.slice(6), agents);
+    if (!agent) return true;
+    // A worker's card takes it only with a signed approval, which its host asks Touch ID for (lib/widen-signer.ts).
+    await hostOf(card).act("card.update", { id: card.id, body: { agent: agent.id } }, () => api.setAgent(card.id, agent.id));
     deps.toast(`“${card.title}” is now the ${agent.name}: its next message starts under the new soul.`);
     return true;
   }
 
-  // "Run /<skill>" — sends a slash command to the card's CLI.
+  // "Run /<skill>" — sends a slash command to the card's CLI, on whichever host runs it (a message, card.message).
   async function runSkillAction(card: Card, action: CardAction) {
     if (!action.startsWith("skill:")) return false;
-    await api.send(card.id, `/${action.slice(6)}`);
+    const text = `/${action.slice(6)}`;
+    await hostOf(card).act("card.message", { id: card.id, text }, () => api.send(card.id, text));
     return true;
   }
 
@@ -138,7 +153,8 @@ export function useBoardMenus(deps: BoardMenuDeps) {
   // "Permissions: …" — flip the card's mode. Extracted to keep runCardAction's complexity in check.
   async function runModeAction(card: Card, action: CardAction) {
     if (!action.startsWith("mode:")) return false;
-    await api.setMode(card.id, action.slice(5) as PermissionMode);
+    const permissionMode = action.slice(5) as PermissionMode;
+    await hostOf(card).act("card.update", { id: card.id, body: { permissionMode } }, () => api.setMode(card.id, permissionMode));
     return true;
   }
 
@@ -176,7 +192,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
         deps.move(card.id, "running");
         return;
       case "stop":
-        await stopNow(card.id);
+        await stopNow(card.id, () => hostOf(card).act("card.stop", { id: card.id }));
         return;
       case "new-here":
         deps.openNew(card.cwd);
@@ -203,11 +219,11 @@ export function useBoardMenus(deps: BoardMenuDeps) {
 
   // Right-clicking a column's empty space; a card's own menu stops the event before it gets here.
   async function onColumnMenu(column: Column, e: React.MouseEvent) {
-    if (!shell?.popupMenu) return;
+    if (!popup) return;
     e.preventDefault();
     const done = deps.doneShown.filter((c) => !c.archived);
     const menu = columnMenu(column, { count: done.length, archived: deps.archivedCount, showArchived: deps.showArchived });
-    const picked = (await shell.popupMenu(withAccelerators(menu, keys({ new: "new-thread", "archive-done": "archive-done" })))) as ColumnAction | null;
+    const picked = (await popup(withAccelerators(menu, keys({ new: "new-thread", "archive-done": "archive-done" })))) as ColumnAction | null;
     if (picked === "new") deps.openNew();
     if (picked === "toggle-archived") deps.toggleArchived();
     if (picked === "archive-done") deps.archive(done);

@@ -9,7 +9,7 @@ function make(over: Record<string, unknown> = {}) {
   const addBlanks = vi.fn(() => Promise.resolve());
   const vercel = { status: vi.fn((folders: string[]) => ({ folders, from: "vercel" })) };
   const deps = {
-    dataDir: "/tmp/weft-data", app: {}, dialog: {}, shell: {}, window: () => null, board: () => null,
+    dataDir: "/tmp/weft-data", app: {}, dialog: {}, systemPreferences: {} as never, shell: {}, window: () => null, board: () => null,
     sendMenu, updater: () => ({}), vault: () => ({ addBlanks }), vercelEnv: () => null,
     vercelApi: () => vercel, supabaseApi: () => undefined, ...over,
   };
@@ -21,7 +21,36 @@ describe("paneRoutes", () => {
   it("serves every route main used to declare inline", () => {
     const keys = Object.keys(make().routes);
     for (const key of ["POST /secrets/ask-add", "POST /folder-access/ask", "POST /app/restart", "POST /webhooks/ask-add", "POST /webhooks/relay-seal",
-      "POST /vercel/status", "POST /supabase/status", "POST /vercel/env-push"]) expect(keys).toContain(key);
+      "POST /vercel/status", "POST /supabase/status", "POST /vercel/env-push", "POST /account-settings/sign", "POST /lan-line/keys", "POST /lan-line/sign"]) expect(keys).toContain(key);
+  });
+
+  it("hands a thread's BlastCP request to main's forward, and says unavailable before BlastCP is set up", async () => {
+    const forward = vi.fn(() => Promise.resolve({ state: "ok", result: {} }));
+    const { routes } = make({ blastcpApi: () => ({ forward }) });
+    await expect(routes["POST /blastcp/mcp"]!({ method: "tools/call", params: { name: "whoami" } })).resolves.toEqual({ state: "ok", result: {} });
+    await routes["POST /blastcp/mcp"]!({});
+    expect(forward).toHaveBeenLastCalledWith("", {});
+    expect(make().routes["POST /blastcp/mcp"]!({ method: "tools/list" })).toEqual({ state: "unavailable" });
+  });
+
+  it("asks a person before a tunnel opens, and passes on their answer", async () => {
+    for (const allowed of [true, false]) {
+      const promptTouchID = vi.fn(() => (allowed ? Promise.resolve() : Promise.reject(new Error("no"))));
+      const { routes } = make({ systemPreferences: { canPromptTouchID: () => true, promptTouchID } });
+      await expect(routes["POST /tunnels/approve"]!({ folder: "/p", target: "http://localhost:4000/", hours: 4 })).resolves.toEqual({ approved: allowed });
+      expect(promptTouchID).toHaveBeenCalledWith("open a private tunnel to http://localhost:4000/ from /p for 4 hours");
+    }
+  });
+
+  it("names a worker's ask by the name main pinned, or marks the row's name unverified", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "pane-pins-"));
+    const promptTouchID = vi.fn(() => Promise.resolve());
+    const { routes } = make({ dataDir, systemPreferences: { canPromptTouchID: () => true, promptTouchID } });
+    await routes["POST /tunnels/approve"]!({ folder: "weft", target: "http://localhost:4000/", hours: 4, worker: "w9", workerName: "your bank" });
+    expect(promptTouchID).toHaveBeenLastCalledWith("open a private tunnel to http://localhost:4000/ from weft on your bank (name not verified) for 4 hours");
   });
 
   it("puts an asked-for key in as a development blank by default", async () => {

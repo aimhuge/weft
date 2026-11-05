@@ -4,6 +4,7 @@
 // with no load turns into the failure message, and Try again re-mounts the frame.
 import "@/components/test-utils";
 import { createRef } from "react";
+import { renderToString } from "react-dom/server";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PANE_FRAME_LOAD_TIMEOUT_MS, PaneFrame } from "./PaneFrame";
@@ -27,6 +28,14 @@ afterEach(() => {
 });
 
 describe("PaneFrame", () => {
+  // Server-rendered with its src, a cached frame loaded before hydration attached onLoad, and the
+  // timer then showed "didn't load" over a page that was there (the hosted Growth app, logged out).
+  it("leaves the src off the server render, and puts it on after mount", () => {
+    expect(renderToString(<PaneFrame src={SRC} title="Shared page" />)).not.toContain("src=");
+    render(<PaneFrame src={SRC} title="Shared page" />);
+    expect(frame().getAttribute("src")).toBe(SRC);
+  });
+
   it("shows the loading overlay over the frame, and hides it on load", () => {
     render(<PaneFrame src={SRC} title="Shared page" />);
     expect(screen.getByText("Loading the page…")).toBeInTheDocument();

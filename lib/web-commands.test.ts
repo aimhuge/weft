@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { commandText, type CloudCommandRow } from "./cloud-commands";
 import { cardRow, commandRow } from "../components/web-board/web-board-harness";
 import { applyCommandChange, boardCommands, canReply, cardReplies, commandLine, replyNote, webTargets } from "./web-commands";
 
@@ -93,6 +94,32 @@ describe("replies", () => {
     const stop = reply({ id: "s1", kind: "stop", payload: { cardId: "c1" } });
     expect(boardCommands([commandRow(), reply(), answer, stop]).map((c) => c.id)).toEqual(["cmd-1"]);
     expect(cardReplies([answer, stop], "c1").map((c) => c.id)).toEqual(["a1", "s1"]);
+  });
+
+  it("leave a worker's sign-ins and clones off the board's strip", () => {
+    const admin = (["login", "github_login", "clone"] as const).map((kind) => commandRow({ id: kind, kind }));
+    expect(boardCommands([commandRow(), ...admin]).map((c) => c.id)).toEqual(["cmd-1"]);
+  });
+
+  it("leave a session line's sealed offer off the board's strip", () => {
+    expect(boardCommands([commandRow(), commandRow({ id: "l1", kind: "line", folder: "", payload: {} as never })]).map((c) => c.id)).toEqual(["cmd-1"]);
+  });
+
+  it("show a host verb's typed text above its card's box only once it failed", () => {
+    const host = (over: Partial<CloudCommandRow>, args: Record<string, unknown>) => commandRow({ kind: "host", payload: { verb: "card.schedule", args: { id: "c1", ...args } }, ...over });
+    const failed = host({ id: "h1", status: "failed", error: "That time has already passed." }, { text: "run it" });
+    const fresh = host({ id: "h2", status: "failed" }, { message: "again" });
+    const waiting = host({ id: "h3", status: "pending" }, { text: "x" });
+    const star = host({ id: "h4", status: "failed" }, {});
+    const other = host({ id: "h5", status: "failed" }, { id: "c2", text: "y" });
+    expect(cardReplies([failed, fresh, waiting, star, other], "c1").map((c) => c.id)).toEqual(["h1", "h2"]);
+    expect(commandText(failed)).toBe("run it");
+    expect(commandText(fresh)).toBe("again");
+    expect(commandText(star)).toBe("");
+  });
+
+  it("leave a host verb (an edit, Send later, a star) off the board's strip", () => {
+    expect(boardCommands([commandRow(), commandRow({ id: "h1", kind: "host" })]).map((c) => c.id)).toEqual(["cmd-1"]);
   });
 
   it("show under their own card while open or failed, not once done", () => {

@@ -29,6 +29,7 @@ const EXEMPT: Record<string, string> = {
   "components/share-view/SharedCard.tsx": "weft.zip's share routes, authenticated by the visitor's session cookie, not the desktop's launch token.",
   "components/share-view/use-app-bridge.ts": "weft.zip's share routes, authenticated by the visitor's session cookie, not the desktop's launch token.",
   "components/share-view/AppSecretForm.tsx": "weft.zip's share routes, authenticated by the visitor's session cookie, not the desktop's launch token.",
+  "components/web-board/useWebBoard.ts": "weft.zip's web board asks /api/web-board/[orgId]/blob-urls with the visitor's session cookie; a failure falls back to the browser's own Supabase signing.",
 };
 
 // A fetch whose first argument is a string or template that starts with /api: a local route we serve.

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const teamsMock = vi.hoisted(() => ({
-  isReservedSlug: vi.fn(),
+  RESERVED_SLUGS: new Set(["team"]),
   setCurrentOrg: vi.fn(),
   slugify: vi.fn(),
 }));
@@ -44,7 +44,6 @@ function service({ taken = [], orgError, memberError }: Opts = {}) {
 beforeEach(() => {
   vi.clearAllMocks();
   teamsMock.slugify.mockImplementation((s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
-  teamsMock.isReservedSlug.mockImplementation((s: string) => s === "team");
 });
 
 describe("runCreateTeam", () => {
@@ -75,6 +74,13 @@ describe("runCreateTeam", () => {
     expect((await runCreateTeam(USER, "Team")).slug).toBe("team-2");
     expect((await runCreateTeam(USER, "A")).slug).toBe("a-2");
     expect((await runCreateTeam(USER, "!!!")).slug).toBe("workspace");
+  });
+
+  it("skips Weft's own root routes, so /<slug>/board never lands on a static page", async () => {
+    sessionMock.serviceClient.mockReturnValue(service().client);
+    for (const root of ["Privacy", "Terms", "FAQ", "Billing", "Checkout", "Download"]) {
+      expect((await runCreateTeam(USER, root)).slug).toBe(`${root.toLowerCase()}-2`);
+    }
   });
 
   it("reports an org insert error", async () => {

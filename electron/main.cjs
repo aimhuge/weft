@@ -1,6 +1,6 @@
 // Weft's desktop shell: starts and supervises the Next.js server, shows the board in a native
 // window with a side browser pane, keeps the copilot in its own window, and adds the macOS
-// pieces: menus, a menu bar icon, a dock menu and badge, a global copilot shortcut, and weft:// links.
+// pieces: menus, a menu bar icon, a dock menu and badge, global copilot and dictation shortcuts, and weft:// links.
 const {
   BaseWindow,
   BrowserWindow,
@@ -15,11 +15,12 @@ const {
   shell,
 } = require("electron");
 const crypto = require("node:crypto");
-const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const { registerAboutBridge } = require("./about.cjs");
 const { createBrowserPane } = require("./browser-pane.cjs");
+const { registerPaneIpc } = require("./pane-ipc.cjs");
+const { cardFinder } = require("./card-token.cjs");
 const { createMenus } = require("./menus.cjs");
 const { createPageLinks } = require("./page-links.cjs");
 const { createPanePages } = require("./pane-pages.cjs");
@@ -34,9 +35,11 @@ const { registerTerminal } = require("./terminal.cjs");
 const { followThemeChoice } = require("./theme-source.cjs");
 const { loadWindowState, trackWindowState } = require("./window-state.cjs");
 const { createAccountLink } = require("./account-link.cjs");
-const { argvLink } = require("./argv-link.cjs");
+const { launchLinks, listenForLinks, registerProtocolClient } = require("./protocol-client.cjs");
 const { createMenuPopup } = require("./main-menu-popup.cjs");
 const { createNewThreadLink } = require("./new-thread-link.cjs");
+const { createAccountClient } = require("./account-client.cjs");
+const { bootDeps } = require("./boot-deps.cjs");
 
 const APP_NAME = "Weft";
 const TAGLINE = "Engineering the future, one thread at a time";
@@ -57,8 +60,9 @@ let appView;
 let copilotWin;
 let server;
 let quitting = false;
-// weft:// links that arrive before the board is ready.
-const pendingLinks = [];
+// weft:// links that arrive before the board is ready; on Windows and Linux a link that launched
+// Weft comes in its own argv.
+const pendingLinks = launchLinks(process.argv, PROTOCOL);
 const timer = createStartupTimer({
   version: app.getVersion(),
   mode: app.isPackaged ? "packaged" : process.env.WEFT_PROD ? "prod" : "dev",
@@ -66,7 +70,7 @@ const timer = createStartupTimer({
 
 // The secrets vault, set up further down; the pane types its values in for threads (fillSecret).
 // With it, commands and dev servers run with vault values (secret-run.cjs) and the push to Vercel (vercel-env.cjs).
-let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi, gooseApi, slackApi;
+let vault, secretRun, vercelEnv, vercelApi, supabaseApi, blastcpApi, gooseApi, slackApi, accountClient, pairing;
 // Small native warning dialog; shared by pageLinks (walk-through buttons) and accountLink (OAuth callback).
 const warnUser = (message, detail) => dialog.showMessageBox(win, { type: "warning", message, detail });
 const pane = createBrowserPane({
@@ -80,7 +84,9 @@ const pane = createBrowserPane({
   routes: paneRoutes({
     dataDir: dataDir(), app, dialog, shell, sendMenu,
     window: () => win, board: () => appView?.webContents, updater: () => menus.updater,
-    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi, gooseApi: () => gooseApi, slackApi: () => slackApi,
+    vault: () => vault, vercelEnv: () => vercelEnv, vercelApi: () => vercelApi, supabaseApi: () => supabaseApi, blastcpApi: () => blastcpApi, gooseApi: () => gooseApi, slackApi: () => slackApi, pairing: () => pairing,
+    // Which card a vault request is for, proven by the server's signature (electron/card-token.cjs).
+    cardFor: cardFinder(TOKEN),
   }),
 });
 // A walk-through page's buttons: replies, and commits that run with no turn.
@@ -98,20 +104,8 @@ const accountLink = createAccountLink({ getServer: () => server, showMain, warn:
 const primary = app.requestSingleInstanceLock();
 if (!primary) app.quit();
 
-app.on("second-instance", (_event, argv) => {
-  showMain();
-  // weft:// links may arrive as a raw arg (the wrapper passes them through) or as `--weft-link=…`
-  // when the wrapper wants to be explicit. macOS's open-url event covers the running case; this
-  // handler covers the second-instance path on every platform.
-  const link = argvLink(argv, PROTOCOL);
-  if (link) handleLink(link);
-});
-
-// macOS delivers weft:// links here, possibly before the app is ready.
-app.on("open-url", (event, url) => {
-  event.preventDefault();
-  handleLink(url);
-});
+// weft:// links from a second launch (Windows, Linux) or macOS open-url (electron/protocol-client.cjs).
+listenForLinks({ app, protocol: PROTOCOL, showMain, handleLink });
 
 function background() {
   return nativeTheme.shouldUseDarkColors ? "#131312" : "#f4f3ef";
@@ -143,6 +137,11 @@ async function boot() {
   await fixPath();
   if (app.isPackaged) appendToolchain(path.join(process.resourcesPath, "toolchain", "bin"));
   timer.mark("path");
+  // The app checks its own bundle, and installs the toolchain's trees after an update
+  // (electron/boot-deps.cjs): a bundle missing a package says so here, instead of dying on a
+  // require with a native dialog nothing can act on (docs/bug-fixes/047).
+  const deps = await bootDeps({ dataDir: dataDir(), log: console.log, warn: console.warn });
+  if (!deps.ok) return startup.fail(deps.error);
   await startup.show("Starting the board…");
   controlUrl ??= await pane.startControlServer();
   writeShellToken(dataDir(), TOKEN);
@@ -174,6 +173,7 @@ async function boot() {
   attachTokens(session, server.url, TOKEN);
   await startup.loadBoard(server.url);
   timer.mark("page");
+  dictation.start();
   for (const link of pendingLinks.splice(0)) handleLink(link);
 }
 
@@ -345,57 +345,55 @@ const menus = createMenus({
 
 // ---- IPC from the board and copilot ----
 
-require("./browser-ipc.cjs")({ ipcMain, pane, getBoardContents: () => appView?.webContents });
+// The browser pane's IPC from the board (electron/pane-ipc.cjs).
+registerPaneIpc(ipcMain, { pane, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 ipcMain.on("copilot:toggle", () => toggleCopilot());
+const dictation = require("./dictation-setup.cjs").setupDictation({ ipcMain, getServer: () => server, listeners: () => [appView?.webContents, copilotWin?.webContents] });
 const killTerminals = registerTerminal(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
-ipcMain.handle("dialog:openFolder", async () => {
-  const result = await dialog.showOpenDialog(win, { properties: ["openDirectory", "createDirectory"] });
-  return result.canceled ? null : result.filePaths[0];
-});
-ipcMain.on("shell:openExternal", (_e, url) => /^https?:\/\//i.test(String(url)) && shell.openExternal(String(url)));
+require("./claude-sign-in.cjs").setupClaudeSignIn(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
+require("./folder-dialog.cjs").registerFolderDialog(ipcMain, { dialog, window: () => win });
 createMenuPopup({ ipcMain, Menu, BrowserWindow });
-ipcMain.on("shell:reveal", (_e, folder) => path.isAbsolute(String(folder)) && fs.existsSync(String(folder)) && shell.openPath(String(folder)));
+require("./open-in.cjs").registerOpenIn(ipcMain, { shell });
+require("./print.cjs").setupPrint({ ipcMain, BrowserWindow, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
+// The account's Supabase client in main, reading and writing the shared vault's tables as the signed-in
+// user (docs/architecture/teams-vault.md). The session stays in the Keychain; the Keychain is asked for on
+// first use, because safeStorage only works once the app is ready.
+accountClient = createAccountClient({ dataDir: dataDir(), safeStorage: () => require("./keychain-audit.cjs").keychainFor("Weft sign-in") });
 // The secrets vault answers the board window only; threads reach values only through the pane typing them in, behind Touch ID.
-vault = require("./vault.cjs").setupVault({ ipcMain, dataDir: dataDir(), window: () => win, board: () => appView?.webContents });
-secretRun = require("./secret-run.cjs").setupSecretRun({ vault, dataDir: dataDir(), window: () => win });
+// A shared vault syncs through the account client (electron/vault-sync.cjs).
+vault = require("./vault.cjs").setupVault({ ipcMain, dataDir: dataDir(), window: () => win, board: () => appView?.webContents, accountClient });
+// This machine's registration in the shared vault (docs/architecture/teams-vault.md, "Device
+// registration"): the board reads its own devices and its own fingerprint, so it can show the TOFU
+// string the user compares with the other machine. The board window only; the private key never
+// leaves main.
+require("./device-key.cjs").registerDeviceHandlers({ ipcMain, accountClient: () => accountClient, dataDir: dataDir(), isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
+// Phones and browsers paired from Settings → Sync, and the workspace key synced rows are sealed with (docs/architecture/mobile-security.md).
+pairing = require("./pairing-ipc.cjs").setupPairing({ ipcMain, dataDir: dataDir(), accountClient: () => accountClient, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents, confirm: (reason) => vault.confirm(reason), vault, getServer: () => server, devOrigin: require("./passkey-verify.cjs").passkeyDevOrigin({ packaged: app.isPackaged, env: process.env, warn: console.warn }) });
+secretRun = require("./secret-run.cjs").setupSecretRun({ vault, dataDir: dataDir(), window: () => win, accountClient: () => accountClient, vercelEnv: () => vercelEnv });
 // So does Vercel: its token is in the Keychain and its links are .vercel/project.json.
 ({ vercel: vercelApi, env: vercelEnv } = require("./vercel.cjs").setupVercel({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents, vault }));
 // And Supabase: its token is in the Keychain and its links are supabase/.temp/project-ref.
 supabaseApi = require("./supabase.cjs").setupSupabase({ ipcMain, dataDir: dataDir(), board: () => appView?.webContents, vault });
 // Mini apps: data reads + the hosted fetch/env/requestSecret + the Share dialog's "Upload
-// secrets" push, plus the sealed account store the push reads from (electron/app-setup.cjs).
-require("./app-setup.cjs").setupApps({
+// secrets" push + the live-data bridge, plus the sealed account store the push reads from
+// (electron/mini-apps-setup.cjs).
+require("./mini-apps-setup.cjs").setupMiniApps({
   ipcMain, vault, dataDir: dataDir(),
   ownsPane: (wc) => pane.owns(wc) || require("./page-snapshot.cjs").ownsSnapshot(wc),
   isBoard: (sender) => Boolean(sender) && sender === appView?.webContents,
   supabaseReadLink: require("./supabase.cjs").readLink,
   getSafeStorage: () => require("./keychain-audit.cjs").keychainFor("Weft sign-in"),
+  getServer: () => server, token: TOKEN,
 });
-// And BlastCP, Cloudflare, Slack and Goose, each with its secret in the Keychain (electron/providers.cjs).
-({ blastcpApi, slackApi, gooseApi } = require("./providers.cjs").setupProviders({
-  ipcMain, dataDir: dataDir(), board: () => appView?.webContents, server: () => (server ? { url: server.url, token: TOKEN } : null),
+
+// And the modules that need the running server and the board window: the provider drawers, the
+// server supervisor's IPC, the splash screen's IPC and Keep Working (electron/server-wiring.cjs).
+({ blastcpApi, slackApi, gooseApi } = require("./server-wiring.cjs").setupServerWiring({
+  ipcMain, dataDir: dataDir(), shell, app, timer, boot, startup,
+  getServer: () => server, getBoardContents: () => appView?.webContents,
+  getMenus: () => menus, keepWorking: menus.keepWorking, getHandleLink: () => handleLink,
+  token: TOKEN,
 }));
-// Keep Working (electron/keep-working.cjs): the board's Settings → General → Laptop mode card; the
-// wiring lives in electron/keep-working-ipc.cjs to keep main.cjs under the size budget.
-require("./keep-working-ipc.cjs")({ ipcMain, keepWorking: menus.keepWorking, getBoardContents: () => appView?.webContents });
-// Server supervisor IPC (electron/server-ipc.cjs): the board's ServerErrorBar calls server:retry
-// to relaunch, server:open-logs to reveal the log, and weft:create-fix-card to queue a New
-// thread dialog with the fatal + log tail pre-filled (lib/server-status.ts).
-require("./server-ipc.cjs")({
-  ipcMain,
-  shell,
-  getServer: () => server,
-  getBoardContents: () => appView?.webContents,
-  getHandleLink: () => handleLink,
-  logPath: () => server?.logPath,
-});
-// Splash IPC: the start screen's button row, the launch timing handshake and the dock badge count
-// (electron/startup-ipc.cjs). server and menus are getters: they're set later, at boot.
-require("./startup-ipc.cjs")({
-  ipcMain, app, shell, timer, boot, startup,
-  getServer: () => server,
-  getMenus: () => menus,
-});
 
 // ---- Lifecycle ----
 
@@ -404,7 +402,7 @@ app.whenReady().then(async () => {
   timer.mark("ready");
   await followThemeChoice(session.defaultSession.cookies, nativeTheme);
   registerAboutBridge({ tagline: TAGLINE, dataDir, getServer: () => server });
-  if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL);
+  registerProtocolClient({ app, protocol: PROTOCOL });
   menus.buildMenu();
   menus.setupDock();
   createMainWindow();

@@ -5,9 +5,10 @@ import { messagesForMove } from "./automations";
 import { head, stampAfterCommit } from "./changelog-stamp";
 import { writeChangelog } from "./changelog-write";
 import { releaseClaims } from "./claim-guard";
+import { holdBack } from "./commit-held";
 import { readPile, repoRoot } from "./commit-pile";
 import { archiveWhenIdle, isBusy, queueMessages, sendUserMessage } from "./runner";
-import { appendThread, getCard, updateCard } from "./store";
+import { appendThread, getCard, listCards, updateCard } from "./store";
 
 // The commit walk-through's buttons (lib/commit-pile.ts), run without a turn. A page button links to
 // weft://commit?…; electron/main.cjs checks it came from the card's own local page and posts it to
@@ -147,13 +148,16 @@ async function attempt(cardId: string, req: CommitRequest, script: string): Prom
   }
   // Commit what's still uncommitted; a path a recent commit already took needs nothing more.
   const paths = req.paths.filter((p) => pile.has(p));
+  // The change's own card is the one committing, whichever card's page the button is on.
+  const committer = (req.done && getCard(req.done)) || card;
+  const held = await holdBack(root, paths, committer, listCards());
   try {
     await run("bash", [script, req.message, ...paths], { cwd: root, timeout: 300_000, maxBuffer: 8 << 20 });
   } catch (err) {
     return { ...result, failed: "commit", error: output(err) };
   }
   // Those files' changes are in, so no card's claim on them stands (lib/claims.ts).
-  releaseClaims(req.paths.map((p) => path.join(root, p)));
+  releaseClaims(req.paths.map((p) => path.join(root, p)), held.map((p) => path.join(root, p)), committer.id);
   result.hash = (await run("git", ["-C", root, "rev-parse", "--short", "HEAD"])).stdout.trim();
   // The change's card shipped: its changelog drafts are committed now (lib/changelog-stamp.ts).
   stampAfterCommit(req.done, root, head(root));

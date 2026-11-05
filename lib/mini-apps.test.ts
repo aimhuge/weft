@@ -5,6 +5,7 @@ import {
   appGlyph,
   appMenu,
   appNameFrom,
+  blobPageSha,
   cleanAppName,
   cleanAppUrl,
   moveApp,
@@ -131,6 +132,13 @@ describe("appFor", () => {
     expect(appFor(apps, "https://example.com/dashboard/sub")?.id).toBe("2");
   });
 
+  it("matches a worker page by the blob it was saved from", () => {
+    const sha = "a".repeat(64);
+    const saved = [...apps, app({ id: "4", url: "file:///Users/me/.weft/apps/worker-aaaa/index.html", source: `blob:sha256:${sha}` })];
+    expect(appFor(saved, `blob:sha256:${sha}#top`)?.id).toBe("4");
+    expect(appFor(apps, `blob:sha256:${sha}`)).toBeUndefined();
+  });
+
   it("returns undefined when nothing is close", () => {
     expect(appFor(apps, "https://nowhere.test")?.id).toBeUndefined();
   });
@@ -195,5 +203,30 @@ describe("appMenu", () => {
   it("lists rename, share, copy, remove and two separators", () => {
     const menu = appMenu(three, "1");
     expect(menu.map((i) => ("id" in i ? i.id : "sep"))).toEqual(["open", "rename", "share", "sep", "up", "down", "copy", "sep", "remove"]);
+  });
+});
+
+describe("blobPageSha", () => {
+  it("reads the sha of a worker card's page, hash or not", () => {
+    const sha = "0123456789abcdef".repeat(4);
+    expect(blobPageSha(`blob:sha256:${sha}`)).toBe(sha);
+    expect(blobPageSha(` blob:sha256:${sha}#step-2 `)).toBe(sha);
+  });
+
+  it("is null for any other address", () => {
+    expect(blobPageSha("https://example.com")).toBeNull();
+    expect(blobPageSha("blob:sha256:xyz")).toBeNull();
+    expect(blobPageSha(42)).toBeNull();
+  });
+});
+
+describe("worker apps", () => {
+  it("names a worker page's app by its sha and knows its folder", async () => {
+    const { isWorkerAppFolder, workerAppId } = await import("./mini-apps");
+    expect(workerAppId("0123456789abcdef".repeat(4))).toBe("worker-0123456789abcdef");
+    expect(isWorkerAppFolder("/Users/me/.weft/apps/Worker-0123/")).toBe(true);
+    expect(isWorkerAppFolder("worker-1")).toBe(true);
+    expect(isWorkerAppFolder("/Users/me/.weft/apps/growth")).toBe(false);
+    expect(isWorkerAppFolder("")).toBe(false);
   });
 });

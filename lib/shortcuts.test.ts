@@ -1,6 +1,18 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { bindingFromEvent, bindingSpec, currentBinding, formatBinding, matches, setBinding, SHORTCUTS, type Binding } from "./shortcuts";
+import type { ShellBridge } from "./client";
+import {
+  bindingAccelerator,
+  bindingFromEvent,
+  bindingSpec,
+  currentBinding,
+  formatBinding,
+  matches,
+  setBinding,
+  SHORTCUTS,
+  syncDictationShortcut,
+  type Binding,
+} from "./shortcuts";
 
 const STORAGE_KEY = "threadboard.shortcuts";
 
@@ -79,13 +91,26 @@ describe("matches", () => {
     expect(matches({ code: "KeyD", altKey: true, ctrlKey: false, metaKey: false, shiftKey: true }, b)).toBe(true);
   });
 
-  it("fails on a different key or any modifier difference", () => {
+  it("fails on a different key, a missing modifier, or a different shift", () => {
     const base = { code: "KeyD", altKey: true, ctrlKey: false, metaKey: false, shiftKey: true };
     expect(matches({ ...base, code: "KeyE" }, b)).toBe(false);
     expect(matches({ ...base, altKey: false }, b)).toBe(false);
-    expect(matches({ ...base, ctrlKey: true }, b)).toBe(false);
-    expect(matches({ ...base, metaKey: true }, b)).toBe(false);
     expect(matches({ ...base, shiftKey: false }, b)).toBe(false);
+  });
+
+  it("also matches when the press holds a modifier the binding leaves out", () => {
+    // Command+Option+' is what people reach for when the bare combination is taken, so the
+    // Option+' binding has to fire on it too.
+    const optionQuote = bind("Quote", { alt: true });
+    expect(matches({ code: "Quote", altKey: true, ctrlKey: false, metaKey: true, shiftKey: false }, optionQuote)).toBe(true);
+    expect(matches({ code: "Quote", altKey: true, ctrlKey: true, metaKey: false, shiftKey: false }, optionQuote)).toBe(true);
+    // A modifier the binding names still has to be held.
+    expect(matches({ code: "Quote", altKey: false, ctrlKey: false, metaKey: true, shiftKey: false }, optionQuote)).toBe(false);
+  });
+
+  it("does not let a bare key match a binding that names a modifier", () => {
+    const commandD = bind("KeyD", { meta: true });
+    expect(matches({ code: "KeyD", altKey: false, ctrlKey: false, metaKey: false, shiftKey: false }, commandD)).toBe(false);
   });
 });
 
@@ -126,5 +151,70 @@ describe("formatBinding", () => {
   it("treats a missing navigator as not macOS", () => {
     vi.stubGlobal("navigator", undefined);
     expect(formatBinding(bind("KeyA", { alt: true }))).toBe("Alt+A");
+  });
+});
+
+describe("bindingAccelerator", () => {
+  it("writes the default Option+' as Alt+'", () => {
+    expect(bindingAccelerator(currentBinding("dictation"))).toBe("Alt+'");
+  });
+
+  it("orders modifiers Control, Alt, Shift, Command and drops Key/Digit", () => {
+    expect(bindingAccelerator(bind("KeyD", { meta: true, shift: true }))).toBe("Shift+Command+D");
+    expect(bindingAccelerator(bind("KeyK", { ctrl: true, alt: true, shift: true, meta: true }))).toBe("Control+Alt+Shift+Command+K");
+    expect(bindingAccelerator(bind("Digit5", { alt: true }))).toBe("Alt+5");
+  });
+
+  it("uses Electron's names for named keys and the symbol for punctuation", () => {
+    expect(bindingAccelerator(bind("Space", { ctrl: true }))).toBe("Control+Space");
+    expect(bindingAccelerator(bind("ArrowUp", { alt: true }))).toBe("Alt+Up");
+    expect(bindingAccelerator(bind("Enter", { meta: true }))).toBe("Command+Return");
+    expect(bindingAccelerator(bind("Slash", { alt: true }))).toBe("Alt+/");
+    expect(bindingAccelerator(bind("F5", { alt: true }))).toBe("Alt+F5");
+  });
+});
+
+describe("syncDictationShortcut", () => {
+  function installDictation() {
+    const setShortcut = vi.fn();
+    window.weft = { dictation: { setShortcut } } as unknown as ShellBridge;
+    return setShortcut;
+  }
+
+  afterEach(() => {
+    delete window.weft;
+  });
+
+  it("sends the current binding's accelerator to the desktop app", () => {
+    const setShortcut = installDictation();
+    syncDictationShortcut();
+    expect(setShortcut).toHaveBeenCalledExactlyOnceWith("Alt+'");
+  });
+
+  it("does nothing in a browser tab or a bridge without dictation", () => {
+    expect(() => syncDictationShortcut()).not.toThrow();
+    window.weft = {} as unknown as ShellBridge;
+    expect(() => syncDictationShortcut()).not.toThrow();
+  });
+
+  it("does nothing without a window (server render)", () => {
+    vi.stubGlobal("window", undefined);
+    expect(() => syncDictationShortcut()).not.toThrow();
+    vi.unstubAllGlobals();
+  });
+
+  it("sends the new key when dictation is rebound, and the default when it's reset", () => {
+    const setShortcut = installDictation();
+    setBinding("dictation", bind("KeyD", { meta: true, shift: true }));
+    expect(setShortcut).toHaveBeenLastCalledWith("Shift+Command+D");
+    setBinding("dictation", null);
+    expect(setShortcut).toHaveBeenLastCalledWith("Alt+'");
+    expect(setShortcut).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays quiet when another shortcut is rebound", () => {
+    const setShortcut = installDictation();
+    setBinding("other", bind("KeyX", { alt: true }));
+    expect(setShortcut).not.toHaveBeenCalled();
   });
 });
