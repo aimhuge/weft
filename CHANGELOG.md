@@ -15,6 +15,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ### Changed
 
+- **⚡ Settings → Teams opens instantly.** Weft used to warm only your default team, so the team you'd last picked (say Exiting.com) waited a second or two on weft.zip every time. Now Weft warms that team too when you sign in. It keeps the last answers on disk so a restart opens on them, and once the list is up it loads your other teams in the background, so switching teams is instant as well. Every open still checks weft.zip quietly behind what it shows. `lib/team-cache.ts`, `lib/use-team.ts`, `components/TeamSettings.tsx`, `lib/use-board-repos.ts`.
 - **weft.zip offers Mac, Windows and iPhone side by side.** The home page hero now has three download buttons: Download for Mac (the dmg), Download for Windows (with an ARM link beside it) and Get it on iPhone (the phone app's TestFlight beta, shown as "coming soon" until its public link is set). On a phone they stack full width. `components/home/Downloads.tsx`, `lib/home.ts`.
 
 ## [0.7.6] - 2026-11-05
