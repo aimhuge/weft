@@ -4,6 +4,7 @@
 // Add-to-backlog button, and the Start button. Extracted from NewCardDialog.tsx so the dialog
 // body can stay focused on its own state.
 
+import { useUiText } from "@/lib/ui-language";
 import { startButton } from "@/lib/new-thread";
 import type { Card } from "@/lib/types";
 import { formatAt } from "@/lib/schedule";
@@ -31,8 +32,9 @@ export function NewCardDialogFooter({
   waitsFor?: string;
   onSubmit: (start: boolean) => void;
 }) {
+  const t = useUiText();
   // The button names what it does: start now, or start when the window opens.
-  const label = waitsUntil ? `Start at ${formatAt(waitsUntil)}` : startBtn.label;
+  const label = waitsUntil ? `${t("Start at")} ${formatAt(waitsUntil)}` : t(startBtn.label);
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-x-3 gap-y-2 px-5 pb-4 pt-3">
       <p className="min-w-0 flex-1 basis-24 truncate text-[12px]">
@@ -67,7 +69,7 @@ export function NewCardDialogFooter({
         className="flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink hover:bg-sunken disabled:cursor-wait disabled:opacity-40 disabled:hover:bg-transparent"
       >
         {busy === "backlog" && <Spinner size={12} />}
-        {busy === "backlog" ? "Adding…" : "Add to backlog"}
+        {busy === "backlog" ? t("Adding…") : t("Add to backlog")}
         {busy !== "backlog" && (
           <kbd aria-hidden="true" className="font-sans opacity-60">
             ⌘B
@@ -82,7 +84,7 @@ export function NewCardDialogFooter({
         {busy === "start" ? (
           <>
             <Spinner size={12} />
-            Starting…
+            {t("Starting…")}
           </>
         ) : (
           <>

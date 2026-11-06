@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useLayoutEffect, useRef, useState } from "react";
 import { folderName } from "@/lib/format";
 import { currentArea, fitWidth } from "@/lib/float-place";
@@ -29,6 +30,7 @@ export default function FilterBox({
   onOpen: (card: Card) => void;
   onSearchAll: () => void; // opens the command palette with this query
 }) {
+  const t = useUiText();
   const [focused, setFocused] = useState(false);
   const [active, setActive] = useState(0);
   const [spot, setSpot] = useState<{ left: number; top: number; width: number } | null>(null);
@@ -96,8 +98,8 @@ export default function FilterBox({
         onFocus={() => setFocused(true)}
         onBlur={() => setFocused(false)}
         onKeyDown={onKeyDown}
-        placeholder="Filter cards"
-        aria-label="Filter cards"
+        placeholder={t("Filter cards")}
+        aria-label={t("Filter cards")}
         aria-expanded={open}
         aria-controls="filter-matches"
         aria-activedescendant={open ? `filter-row-${current}` : undefined}
@@ -112,7 +114,7 @@ export default function FilterBox({
       {query && (
         <button
           onClick={() => onQuery("")}
-          aria-label="Clear filter"
+          aria-label={t("Clear filter")}
           className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-sunken hover:text-ink"
         >
           <Icon name="x" size={12} />
@@ -123,7 +125,7 @@ export default function FilterBox({
         <ul
           id="filter-matches"
           role="listbox"
-          aria-label="Matching cards"
+          aria-label={t("Matching cards")}
           // A click on a row would blur the input and close the list before the click lands.
           onMouseDown={(e) => e.preventDefault()}
           className="fixed z-40 rounded-lg border border-line bg-panel p-1 shadow-lg"
@@ -146,7 +148,7 @@ export default function FilterBox({
                 {matchedTag && <TagPill tag={matchedTag} className="max-w-[80px] shrink-0" />}
                 <span className="max-w-[80px] shrink-0 truncate text-[11px] text-faint">{folderName(card.cwd)}</span>
                 <span className={`shrink-0 rounded px-1.5 py-px text-[10px] font-semibold ${COLUMN_PILL[card.column]}`}>
-                  {COLUMN_LABEL[card.column]}
+                  {t(COLUMN_LABEL[card.column])}
                 </span>
               </li>
             );
@@ -163,7 +165,7 @@ export default function FilterBox({
           >
             <Icon name="search" size={12} />
             <span className="min-w-0 flex-1 truncate">
-              Search prompts, projects and commands for <span className="text-ink">“{query.trim()}”</span>
+              {t("Search prompts, projects and commands for")}{" "}<span className="text-ink">“{query.trim()}”</span>
             </span>
             {paletteKey && <KeyCaps spec={paletteKey} small />}
           </li>

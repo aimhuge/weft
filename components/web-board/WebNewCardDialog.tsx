@@ -6,6 +6,7 @@
 // dialog is a Composer over a local folder picker; a browser tab has neither, so this is a prompt box with the
 // desktop's own pickers: the model menu that picks the CLI too (ModelSelect), the effort, the mode picker (ModePicker,
 // never skip-permissions) and, on a worker, Plan first; tags; and Backlog, which makes the card there without starting it.
+import { useUiText } from "@/lib/ui-language";
 import { useState } from "react";
 import type { NewCardForm, NewCardMode } from "@/lib/cloud-commands";
 import { EFFORTS, NO_MODEL, resolveModel } from "@/lib/new-thread";
@@ -73,6 +74,7 @@ export function WebNewCardDialog({
   onSend: Send;
   onClose: () => void;
 }) {
+  const t = useUiText();
   const [index, setIndex] = useState(() => Math.max(0, targets.findIndex((t) => t.folder === defaultFolder)));
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
@@ -96,9 +98,9 @@ export function WebNewCardDialog({
     }
   }
 
-  const where = worker ? "Runs on your worker, in" : "Runs on your Mac, in";
+  const where = t(worker ? "Runs on your worker, in" : "Runs on your Mac, in");
   return (
-    <Modal title="New thread" onClose={onClose} className="w-full max-w-[560px]">
+    <Modal title={t("New thread")} onClose={onClose} className="w-full max-w-[560px]">
       <div className="flex flex-col gap-3 p-4">
         {!target ? (
           <p className="text-[13px] leading-relaxed text-muted">
@@ -108,7 +110,7 @@ export function WebNewCardDialog({
           <>
             <label className="flex flex-col gap-1 text-[12px] text-muted">
               {where}
-              <select value={index} onChange={(e) => setIndex(Number(e.target.value))} className={SELECT_CLASS} aria-label="Project">
+              <select value={index} onChange={(e) => setIndex(Number(e.target.value))} className={SELECT_CLASS} aria-label={t("Project")}>
                 {targets.map((t, i) => (
                   <option key={`${t.device}:${t.folder}`} value={i}>
                     {t.label}
@@ -124,8 +126,8 @@ export function WebNewCardDialog({
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send();
               }}
               rows={7}
-              placeholder="What should it do?"
-              aria-label="Prompt"
+              placeholder={t("What should it do?")}
+              aria-label={t("Prompt")}
               className="resize-y rounded-md border border-line-strong bg-canvas p-3 text-[13.5px] leading-relaxed text-ink outline-none focus:border-accent"
             />
             <Pickers picks={picks} worker={worker} />
@@ -133,20 +135,20 @@ export function WebNewCardDialog({
               <input
                 value={picks.tags}
                 onChange={(e) => picks.setTags(e.target.value)}
-                placeholder="Tags, comma separated"
-                aria-label="Tags"
+                placeholder={t("Tags, comma separated")}
+                aria-label={t("Tags")}
                 className="min-w-0 flex-1 rounded-md border border-line-strong bg-canvas px-2.5 py-[6px] text-[12.5px] text-ink outline-none focus:border-accent"
               />
-              <label className="flex items-center gap-1.5 text-[12.5px] text-muted" title={worker ? "A worker has no Backlog yet: its threads start when they're made." : "Make the card in Backlog and start it later"}>
+              <label className="flex items-center gap-1.5 text-[12.5px] text-muted" title={worker ? "A worker has no Backlog yet: its threads start when they're made." : t("Make the card in Backlog and start it later")}>
                 <input type="checkbox" checked={backlog} disabled={worker} onChange={(e) => picks.setBacklog(e.target.checked)} />
-                Backlog
+                {t("Backlog")}
               </label>
               <button
                 onClick={() => void send()}
                 disabled={busy || !prompt.trim()}
                 className="rounded-md bg-accent px-3.5 py-[7px] text-[12.5px] font-medium text-on-accent disabled:opacity-50"
               >
-                {busy ? "Sending…" : backlog ? "Add to Backlog" : worker ? "Start on my worker" : "Start on my Mac"}
+                {busy ? t("Sending…") : backlog ? t("Add to Backlog") : worker ? t("Start on my worker") : t("Start on my Mac")}
               </button>
             </div>
             {error && (
@@ -167,11 +169,12 @@ export function WebNewCardDialog({
 // The model (which picks the CLI too), the effort and the mode.
 // On a worker, Plan first starts the thread in plan mode (lib/worker-commands.ts RUN_MODES); a Mac has no plan mode.
 function Pickers({ picks, worker }: { picks: ReturnType<typeof useNewCardForm>; worker: boolean }) {
+  const t = useUiText();
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <ModelSelect value={picks.model} label="Model" leading={[{ value: NO_MODEL, label: "Default model" }]} onChange={picks.setModel} cli={{ backend: picks.backend, onPick: picks.pickCli }} />
+      <ModelSelect value={picks.model} label={t("Model")} leading={[{ value: NO_MODEL, label: t("Default model") }]} onChange={picks.setModel} cli={{ backend: picks.backend, onPick: picks.pickCli }} />
       {picks.backend !== "puku" && (
-        <select value={picks.effort} onChange={(e) => picks.setEffort(e.target.value as Effort | "")} className={SELECT_CLASS} aria-label="Effort">
+        <select value={picks.effort} onChange={(e) => picks.setEffort(e.target.value as Effort | "")} className={SELECT_CLASS} aria-label={t("Effort")}>
           {EFFORTS.map((e) => (
             <option key={e.id} value={e.id}>
               {e.label}
@@ -183,7 +186,7 @@ function Pickers({ picks, worker }: { picks: ReturnType<typeof useNewCardForm>; 
       {worker && (
         <label className="flex items-center gap-1.5 text-[12.5px] text-muted" title="Starts in plan mode: it reads and plans, and asks before it changes anything">
           <input type="checkbox" checked={picks.plan} onChange={(e) => picks.setPlan(e.target.checked)} />
-          Plan first
+          {t("Plan first")}
         </label>
       )}
     </div>

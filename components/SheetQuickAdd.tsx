@@ -5,6 +5,7 @@
 // starts; the box clears and keeps the cursor, so a list of ideas goes in one line after another. In
 // Running, Enter starts a thread on what you typed. The folder chip says where it goes (the most recently
 // busy folder on the sheet, so it follows the project filter) and changes it; More… opens New thread.
+import { useUiText } from "@/lib/ui-language";
 import { useState } from "react";
 import { api } from "@/lib/client";
 import { folderName } from "@/lib/format";
@@ -30,6 +31,7 @@ export interface SheetQuickAddProps {
 }
 
 export default function SheetQuickAdd({ column, folders, focus, onMore, notify }: SheetQuickAddProps) {
+  const t = useUiText();
   const [text, setText] = useState("");
   const [cwd, setCwd] = useState<string | null>(null);
   const [picking, setPicking] = useState<DOMRect | null>(null);
@@ -65,8 +67,8 @@ export default function SheetQuickAdd({ column, folders, focus, onMore, notify }
             if (e.key === "Enter") void add();
             if (e.key === "Escape") e.currentTarget.blur();
           }}
-          aria-label={backlog ? "New Backlog card title" : "Start a thread"}
-          placeholder={backlog ? "Add to the Backlog: type a title, Enter  (Space B from anywhere)" : "Start a thread: say what to do, Enter  (Space R)"}
+          aria-label={backlog ? t("New Backlog card title") : t("Start a thread")}
+          placeholder={backlog ? t("Add to the Backlog: type a title, Enter  (Space B from anywhere)") : t("Start a thread: say what to do, Enter  (Space R)")}
           className="sheet-add-input min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-faint"
         />
         {added > 0 && !text && <span className="shrink-0 text-[11px] text-ok">✓ {added} added</span>}
@@ -79,7 +81,7 @@ export default function SheetQuickAdd({ column, folders, focus, onMore, notify }
             {folderName(folder)}
           </button>
         )}
-        <button onClick={onMore} title="New thread, with every option" className="shrink-0 text-[11px] text-faint hover:text-accent">
+        <button onClick={onMore} title={t("New thread, with every option")} className="shrink-0 text-[11px] text-faint hover:text-accent">
           More…
         </button>
       </div>

@@ -4,10 +4,10 @@ import type { SettingsPage } from "./settings-nav";
 // The DOM half of Settings' section nav: finding a section's heading on the open page, which of the page's
 // sections are drawn right now, and which one the scroll has reached.
 
-// The section's heading on the page: an h3 (or Sync's h4) whose text is the section's title.
+// Translated headings carry their original title. Older headings still match by their text.
 export function findHeading(root: ParentNode, title: string): HTMLElement | null {
   for (const el of root.querySelectorAll<HTMLElement>("h3, h4")) {
-    if (el.textContent.trim() === title) return el;
+    if ((el.dataset.settingsSection ?? el.textContent.trim()) === title) return el;
   }
   return null;
 }

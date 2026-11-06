@@ -69,6 +69,25 @@ const pages = () => screen.getByRole("navigation", { name: "Settings pages" });
 const go = (name: string) => userEvent.click(within(pages()).getByRole("button", { name }));
 
 describe("SettingsDialog", () => {
+  it("switches to Simplified Chinese, searches it and restores English", async () => {
+    render(<SettingsDialog onClose={() => {}} />);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Interface language" }), "zh-CN");
+    try {
+      expect(screen.getByRole("heading", { name: "设置" })).toBeInTheDocument();
+      expect(screen.getByRole("switch", { name: "显示待办" })).toBeInTheDocument();
+      const search = screen.getByRole("combobox", { name: "搜索设置" });
+      fireEvent.change(search, { target: { value: "界面语言" } });
+      fireEvent.focus(search);
+      fireEvent.mouseDown(screen.getByRole("option", { name: /界面语言/ }));
+      const sections = screen.getByRole("navigation", { name: "本页设置项" });
+      expect(await within(sections).findByRole("button", { name: "界面语言" })).toHaveAttribute("aria-current", "location");
+      expect(within(sections).getByRole("button", { name: "离开时自动打开需要处理的卡片" })).toBeInTheDocument();
+    } finally {
+      await userEvent.selectOptions(screen.getByRole("combobox", { name: "界面语言" }), "en");
+    }
+    expect(screen.getByRole("heading", { name: "Settings" })).toBeInTheDocument();
+  });
+
   it("draws Agents and Sync before the settings load, then hands them the recent folders", async () => {
     let load: (s: SettingsView) => void = () => {};
     api.settings.mockReturnValue(new Promise<SettingsView>((resolve) => (load = resolve)));

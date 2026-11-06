@@ -9,6 +9,7 @@ import { formatAt } from "@/lib/schedule";
 import { pickModel } from "./model-picker-test-utils";
 import { makeCard } from "./test-utils";
 import { forgetAgentList } from "@/lib/use-agents";
+import { setUiLanguage } from "@/lib/ui-language";
 import NewCardDialog from "./NewCardDialog";
 
 const api = vi.hoisted(() => ({
@@ -49,6 +50,20 @@ beforeEach(() => {
 });
 
 describe("NewCardDialog", () => {
+  it("starts a thread from the Simplified Chinese form without changing its prompt", async () => {
+    setUiLanguage("zh-CN");
+    try {
+      const { onCreate, box } = setup();
+      expect(screen.getByRole("heading", { name: /^新建线程/ })).toBeInTheDocument();
+      await userEvent.type(box, "检查构建");
+      await userEvent.click(screen.getByRole("button", { name: "立即启动" }));
+      expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({ prompt: "检查构建", cwd: "/repo/web", start: true }));
+    } finally {
+      cleanup();
+      setUiLanguage("en");
+    }
+  });
+
   it("says Restart requested in its header while a restart waits", () => {
     setup();
     expect(screen.queryByText("Restart requested")).toBeNull();

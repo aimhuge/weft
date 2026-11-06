@@ -31,6 +31,15 @@ lives in its own component under `components/`.
   (`components/board-shortcuts.ts`), the command palette (`components/board-palette.ts`) and the desktop
   menu bridge (`lib/board-menu-bridge.ts`).
 
+## Interface language
+
+`lib/ui-language.ts` reads the interface language from a cookie, or uses the browser's language until the user
+makes a choice. The desktop picker is in Settings → General, and the web board's picker is in its header.
+Mounted components update when the choice changes. `lib/ui-language-zh.ts` contains the Simplified Chinese copy
+for the board, the main Settings controls and new-thread forms. Settings search accepts translated titles and
+still uses the original section names for navigation. Card titles, prompts and saved settings values keep their
+original content.
+
 ## Key files
 
 ### The board itself

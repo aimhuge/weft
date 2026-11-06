@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import "./test-utils";
 import type { ReactNode } from "react";
 import { setBoardMode } from "@/lib/board-prefs";
+import { setUiLanguage } from "@/lib/ui-language";
 import BoardHeader from "./BoardHeader";
 
 // The workers that haven't taken this Mac's passkey change (lib/use-passkey-sync.ts), per test.
@@ -71,6 +72,19 @@ function renderHeader(handlers: Partial<FlatProps> = {}) {
 }
 
 describe("BoardHeader", () => {
+  it("updates the live board when the language changes and keeps its actions wired", async () => {
+    const { props } = renderHeader({ running: 2 });
+    act(() => setUiLanguage("zh-CN"));
+    try {
+      expect(screen.getByText("2 个线程正在运行")).toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: "新建线程" }));
+      expect(props.onOpenNew).toHaveBeenCalledOnce();
+    } finally {
+      act(() => setUiLanguage("en"));
+    }
+    expect(screen.getByRole("button", { name: "New thread" })).toBeInTheDocument();
+  });
+
   it("shows the running count, and the need-you count only when there is one", () => {
     const { unmount } = renderHeader({ running: 2, waiting: 0 });
     expect(screen.getByText("2 running")).toBeInTheDocument();

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { boardMode, showBacklog, showProgress } from "@/lib/board-prefs";
 import { api } from "@/lib/client";
@@ -47,6 +48,7 @@ function message(err: unknown) {
 // Settings fills the window over one of Weft's scenes: pages down the left, the open page's cards on the right.
 // Appearance, board, sound, shortcut, account and most model changes apply right away; the rest wait for Save.
 export default function SettingsDialog({ onClose }: { onClose: () => void }) {
+  const t = useUiText();
   const [settings, setSettings] = useState<SettingsView | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [form, setForm] = useState<SettingsForm | null>(null);
@@ -200,10 +202,10 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           className="flex flex-col gap-5 rounded-xl border border-line-strong bg-panel/85 p-5 shadow-lg backdrop-blur-xl"
         >
           {loadError !== null ? (
-            <p className="text-[12.5px] text-danger">Couldn&apos;t load settings: {loadError}</p>
+            <p className="text-[12.5px] text-danger">{t("Couldn't load settings:")}{" "}{loadError}</p>
           ) : (
             <div className="flex items-center justify-center gap-2 py-10 text-[13px] text-muted">
-              <Spinner /> Loading settings
+              <Spinner />{" "}{t("Loading settings")}
             </div>
           )}
         </div>
@@ -217,7 +219,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
 
   return (
     <Modal
-      label="Settings"
+      label={t("Settings")}
       onClose={onClose}
       layer="top"
       className="h-full w-full overflow-hidden"
@@ -234,7 +236,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           onMouseDown={(e) => e.stopPropagation()}
           className="flex shrink-0 items-center justify-between border-b border-line bg-panel/80 px-5 py-3 backdrop-blur-xl"
         >
-          <h2 className="text-[15px] font-medium text-ink">Settings</h2>
+          <h2 className="text-[15px] font-medium text-ink">{t("Settings")}</h2>
           <div className="ml-auto mr-3">
             <SettingsSearch
               onPick={(hit) => {
@@ -245,7 +247,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           </div>
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
             className="rounded-md p-1 text-muted hover:bg-sunken hover:text-ink"
           >
             <Icon name="x" size={16} />
@@ -254,7 +256,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
 
         <div className="flex min-h-0 flex-1 gap-4 p-4">
           <nav
-            aria-label="Settings pages"
+            aria-label={t("Settings pages")}
             onMouseDown={(e) => e.stopPropagation()}
             className="flex w-[200px] shrink-0 flex-col gap-0.5 self-start rounded-xl border border-line-strong bg-panel/80 p-2 shadow-lg backdrop-blur-xl"
           >
@@ -270,7 +272,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
                     active ? "bg-accent-soft font-medium text-ink" : "text-muted hover:bg-sunken hover:text-ink"
                   }`}
                 >
-                  {p.label}
+                  {t(p.label)}
                   {dirtyPages.has(p.id) && <SettingsUnsavedDot />}
                 </button>
               );
@@ -279,8 +281,8 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
 
           <div ref={scroller} className="flex h-full min-h-0 min-w-0 max-w-[760px] flex-1 flex-col gap-4 overflow-y-auto pb-4 pr-2">
             <div className="px-1 pt-1 [text-shadow:0_1px_8px_rgb(0_0_0/0.35)]">
-              <h2 className="text-[22px] font-semibold text-ink">{open.label}</h2>
-              <p className="text-[13px] text-ink/80">{open.hint}</p>
+              <h2 className="text-[22px] font-semibold text-ink">{t(open.label)}</h2>
+              <p className="text-[13px] text-ink/80">{t(open.hint)}</p>
             </div>
             <SettingsSectionNav sections={sections} active={active} onJump={jump} navRef={sectionNav} />
             {content()}
@@ -296,7 +298,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             onClick={onClose}
             className={BUTTON_SECONDARY}
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             onClick={() => void save()}
@@ -304,7 +306,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             className={BUTTON_PRIMARY}
           >
             {saving && <Spinner size={12} />}
-            Save
+            {t("Save")}
           </button>
         </div>
       </div>

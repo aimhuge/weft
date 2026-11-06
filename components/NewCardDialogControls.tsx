@@ -4,6 +4,7 @@
 // (which also picks the CLI), effort picker, and the permission mode picker. Extracted from NewCardDialog.tsx so the dialog body and the controls can change on
 // their own schedule.
 
+import { useUiText } from "@/lib/ui-language";
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import { EFFORTS } from "@/lib/new-thread";
 import { agentOf, type ThreadAgent } from "@/lib/agents";
@@ -48,6 +49,7 @@ export function NewCardDialogControls({
   // The agent picker; left out where the thread's agent isn't picked here.
   agent?: AgentPick;
 }) {
+  const t = useUiText();
   // The folder, agent and mode decide what the thread may touch: a thread driving the board (board_view) can't set them.
   return (
     <div data-human-only className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3">
@@ -56,10 +58,10 @@ export function NewCardDialogControls({
       {agent && <AgentSelect {...agent} />}
 
       <label className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink">
-        <span className="sr-only">Model</span>
+        <span className="sr-only">{t("Model")}</span>
         <ModelSelect
           value={model}
-          label="Model"
+          label={t("Model")}
           onChange={onPickModel}
           cli={{ backend, onPick: onPickCli }}
           className={BARE_SELECT}
@@ -75,9 +77,9 @@ export function NewCardDialogControls({
       {backend !== "puku" && (
         <label
           className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink"
-          title="How hard the model thinks before answering"
+          title={t("How hard the model thinks before answering")}
         >
-          <span className="sr-only">Effort</span>
+          <span className="sr-only">{t("Effort")}</span>
           <select
             value={effort}
             onChange={(e) => onPickEffort(e.target.value as Effort | "")}
@@ -85,7 +87,7 @@ export function NewCardDialogControls({
           >
             {EFFORTS.map((e) => (
               <option key={e.id} value={e.id}>
-                {e.label}
+                {t(e.label)}
               </option>
             ))}
           </select>
@@ -115,20 +117,21 @@ const MANAGE = "__manage";
 // Who the thread is: its soul opens its system prompt (lib/agents.ts). Builder is Weft's own, Copywriter writes in Weft's
 // voice, and the ones you made in Settings → Agents follow.
 function AgentSelect({ value, onPick, onManage }: AgentPick) {
+  const t = useUiText();
   const agents = useAgents();
   return (
     <label
       className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink"
       title={`Agent: ${agentOf(value, agents).tagline}`}
     >
-      <span className="sr-only">Agent</span>
+      <span className="sr-only">{t("Agent")}</span>
       <select value={value} onChange={(e) => (e.target.value === MANAGE ? onManage?.() : onPick(e.target.value))} className={BARE_SELECT}>
         {agents.map((a) => (
           <option key={a.id} value={a.id}>
             {a.emoji} {a.name}
           </option>
         ))}
-        {onManage && <option value={MANAGE}>Manage agents…</option>}
+        {onManage && <option value={MANAGE}>{t("Manage agents…")}</option>}
       </select>
       <Icon name="chevronDown" size={12} className="pointer-events-none absolute right-1.5" />
     </label>

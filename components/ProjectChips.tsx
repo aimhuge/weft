@@ -1,6 +1,7 @@
 // The horizontal row of project chips in the project bar — "All", the pinned ones, the recent ones up to
 // six, and the selected project if it isn't one of them. Scrolls horizontally and keeps the selected chip
 // in view. Right-clicking a chip opens its menu (components/project-menu-handler.ts).
+import { useUiText } from "@/lib/ui-language";
 import { type RefObject } from "react";
 import { chipProjects, folderName, shortPath, statusLabel } from "@/lib/project-bar";
 import { parseWorkerProject, workerLabel } from "@/lib/worker-project";
@@ -36,6 +37,7 @@ export default function ProjectChips({
   stepHint: string; // appended to chip titles, e.g. "← → step through projects"
   onProjectMenu?: (path: string, e: React.MouseEvent) => void;
 }) {
+  const t = useUiText();
   const chips = chipProjects(projects, selected, RECENT_CHIPS);
   // "relay · 600 ms" in a worker chip's tooltip, per worker; H6 sets "direct · 4 ms" (lib/worker-route.ts).
   const routes = useWorkerRoutes();
@@ -51,7 +53,7 @@ export default function ProjectChips({
         title={`All projects${stepHint}`}
         className={`${CHIP} ${selected === null ? CHIP_ON : CHIP_OFF}`}
       >
-        All
+        {t("All")}
         <span className={`tabular-nums ${selected === null ? "text-accent/70" : "text-faint"}`}>{total}</span>
       </button>
       {chips.map((project) => {
