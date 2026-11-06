@@ -59,7 +59,16 @@ describe("workerListCards", () => {
     rows.push(macRow());
     const text = await workerListCards({});
     expect(text.split("\n").map((l) => l.split(" | ")[0])).toEqual(["p1", "m1"]);
-    expect(text).toContain("~/app");
+    expect(text).toContain("mac://mac-1/Users/me/app");
+  });
+
+  it("names each Mac's cards by the Mac, so two Macs with the same path tell apart", async () => {
+    rows.push(macRow(), macRow({ card_id: "m2", owner_device: "mac-2" }));
+    const macs = () => Promise.resolve([{ device: "mac-1", name: "MacBook-Air-3" }, { device: "mac-2", name: "mini" }]);
+    setBoardLink({ workerId: "w1", root, cards: () => Promise.resolve(rows), newCard, setLists: () => Promise.resolve(null), macs });
+    const text = await workerListCards({});
+    expect(text).toContain("mac://MacBook-Air-3/Users/me/app");
+    expect(text).toContain("mac://mini/Users/me/app");
   });
 });
 
@@ -84,8 +93,27 @@ describe("workerCreateCard", () => {
     rows.push(macRow());
     const text = await workerCreateCard({ prompt: "Fix the Mac app", folder: "app", title: "Fix", tags: ["bug"], start: false }, deps());
     expect(newCard).toHaveBeenCalledWith("mac-1", "/Users/me/app", { prompt: "Fix the Mac app", title: "Fix", tags: ["bug"], start: false });
-    expect(text).toMatch(/^Sent to your Mac for \/Users\/me\/app \(command cmd-1\)\. It lands in Backlog there, tagged from-worker, for the user to start/);
+    expect(text).toMatch(/^Sent to your Mac for mac:\/\/mac-1\/Users\/me\/app \(command cmd-1\)\. It lands in Backlog there, tagged from-worker, for the user to start/);
     expect(text).toMatch(/It gets that project's default agent there\.$/);
+  });
+
+  it("sends to the one Mac a mac:// path names when two Macs hold the same path, and lists both when it's ambiguous", async () => {
+    rows.push(macRow(), macRow({ card_id: "m2", owner_device: "mac-2" }));
+    const macs = () => Promise.resolve([{ device: "mac-1", name: "MacBook-Air-3" }, { device: "mac-2", name: "mini" }]);
+    setBoardLink({ workerId: "w1", root, cards: () => Promise.resolve(rows), newCard, setLists: () => Promise.resolve(null), macs });
+    await expect(workerCreateCard({ prompt: "Fix", folder: "/Users/me/app" }, deps())).rejects.toThrow(
+      "“/Users/me/app” is more than one project on your board. Pass one of these as the folder: mac://MacBook-Air-3/Users/me/app, mac://mini/Users/me/app.",
+    );
+    const text = await workerCreateCard({ prompt: "Fix", folder: "mac://Mini/Users/me/app" }, deps());
+    expect(newCard).toHaveBeenCalledWith("mac-2", "/Users/me/app", { prompt: "Fix" });
+    expect(text).toMatch(/^Sent to your Mac for mac:\/\/mini\/Users\/me\/app \(command cmd-1\)/);
+  });
+
+  it("names Macs by id until the worker can read their names", async () => {
+    rows.push(macRow());
+    setBoardLink({ workerId: "w1", root, cards: () => Promise.resolve(rows), newCard, setLists: () => Promise.resolve(null), macs: () => Promise.reject(new Error("no function")) });
+    await workerCreateCard({ prompt: "Fix", folder: "mac://mac-1/app" }, deps());
+    expect(newCard).toHaveBeenCalledWith("mac-1", "/Users/me/app", { prompt: "Fix" });
   });
 
   it("refuses a named agent for a Mac project before sending: the Mac's default isn't known here", async () => {

@@ -6,6 +6,7 @@ import type { HostResult } from "./host-command";
 import type { PackedLimits } from "./limits-wire";
 import type { WorkerConfig } from "./worker-config";
 import type { GithubState } from "./worker-github";
+import type { MacRow } from "./worker-board-macs";
 import type { SyncedRow } from "./worker-settings-sync";
 
 // supabase-js's rpc, narrowed to what the worker needs, so tests hand in a fake.
@@ -113,6 +114,9 @@ export function registry(rpc: Rpc, key: string) {
     setLists: (crons: unknown[], webhooks: unknown[]) => call<unknown>(rpc, "worker_set_lists", { p_key: key, p_crons: crons, p_webhooks: webhooks }),
     // The owner's Macs' crons, read-only, for list_crons (lib/worker-mac-crons.ts, supabase/migrations/*_mac_crons_for_workers.sql).
     macCrons: async () => (await call<MacCronsRow[] | null>(rpc, "worker_mac_crons", { p_key: key })) ?? [],
+    // The owner's Macs by device id and name, for create_card's mac:// paths (lib/worker-board-macs.ts,
+    // supabase/migrations/*_worker_board_macs.sql).
+    macs: async () => (await call<MacRow[] | null>(rpc, "worker_board_macs", { p_key: key })) ?? [],
     // Whether the Mac this worker was paired with has been revoked (lib/worker-mac-revocation.ts), and every passkey head
     // its Mac published (lib/passkey-head.ts): supabase/migrations/*_worker_pairing_mac.sql, *_worker_passkey_heads.sql.
     macState: () => call<unknown>(rpc, "worker_mac_state", { p_key: key }),
