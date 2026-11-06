@@ -6,6 +6,7 @@ import {
   SITE,
   _resetLoadHomeCacheForTests,
   downloadLink,
+  platformLinks,
   homeMetadata,
   isDeployed,
   isWebEnabled,
@@ -106,6 +107,31 @@ describe("downloadLink", () => {
     expect(link.href).toBe(REPO);
     expect(link.label).toBe("Get Weft on GitHub");
     expect(link.note).toMatch(/npm run desktop/);
+  });
+});
+
+describe("platformLinks", () => {
+  const release = { version: "0.7.6", dmg: "https://x/Weft.dmg", page: "https://x/tag" };
+  const tf = "https://testflight.apple.com/join/AbC123";
+
+  it("offers Mac, Windows (with ARM) and iPhone once there is a release and a TestFlight link", () => {
+    const [mac, win, ios] = platformLinks(release, tf);
+    expect(mac).toMatchObject({ platform: "mac", label: "Download for Mac", href: "https://x/Weft.dmg", track: "0.7.6" });
+    expect(mac?.sub).toMatch(/0\.7\.6/);
+    expect(win).toMatchObject({ platform: "windows", href: "/download/windows", track: "0.7.6-windows" });
+    expect(win?.alt).toEqual({ label: "ARM", href: "/download/windows?arch=arm64", track: "0.7.6-windows-arm64" });
+    expect(ios).toMatchObject({ platform: "ios", href: tf, sub: "TestFlight beta" });
+  });
+
+  it("shows iPhone as coming soon without a TestFlight link", () => {
+    const ios = platformLinks(release, null).at(-1);
+    expect(ios).toMatchObject({ platform: "ios", href: null, sub: "Coming soon" });
+  });
+
+  it("leaves Windows off and sends Mac to GitHub before the first release", () => {
+    const links = platformLinks(null, null);
+    expect(links.map((l) => l.platform)).toEqual(["mac", "ios"]);
+    expect(links[0]).toMatchObject({ href: REPO, label: "Get Weft on GitHub", track: "github" });
   });
 });
 

@@ -357,7 +357,7 @@ When a new doc lands in this folder, add it here on the same change.
   import in `lib/home.ts`) so a parse error in it can't 500 the board route — the parse-error companion to
   `lib/route-import-guard.ts`; `home.css` is plain prefixed CSS because `next.config.ts` sends every `.css` through the Tailwind loader,
   which drops CSS-module exports. `HomeErrorFallback` (the dark plain page both routes render when `loadHome()` returns an error) is a server component.
-  Its sections: `components/home/Pillars.tsx` (the five things Weft stands on, `PILLARS` in `lib/home.ts`), `components/home/Plans.tsx`
+  Its sections: `components/home/Downloads.tsx` (the hero's Mac, Windows (+ ARM) and iPhone buttons from `platformLinks` in `lib/home.ts`; iPhone is the `TESTFLIGHT_PUBLIC_URL` link, a "coming soon" chip until it is set), `components/home/Pillars.tsx` (the five things Weft stands on, `PILLARS` in `lib/home.ts`), `components/home/Plans.tsx`
   (Free, Pro and Team priced off the billing catalog in `lib/billing/plans.ts` — a price change moves the page, nothing is retyped —
   each card ending in its way in: the download, or **Get Pro** / **Get Team** through `/billing` to Checkout —
   and `components/home/FaqTeaser.tsx` for the six questions).
