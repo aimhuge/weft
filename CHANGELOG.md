@@ -8,6 +8,14 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **Teammates' cards on your desktop board.** When a team links a GitHub repo, your teammates' cards for it now show up on your own board, inside your project for that repo. Each tile shows their picture and "Zulker's Mac", and opens to the thread and its pages, read-only. Only the person whose Mac runs a card can reply to it, stop it or move it. Synced cards now record their repo (`cloud_cards.repo`), so each card lands under your folder whatever path it has on their Mac. Built in `lib/team-board.ts`, `app/api/team-board`, `lib/use-team-board.ts` and `lib/team-host.ts`.
+
+### Changed
+
+- **weft.zip offers Mac, Windows and iPhone side by side.** The home page hero now has three download buttons: Download for Mac (the dmg), Download for Windows (with an ARM link beside it) and Get it on iPhone (the phone app's TestFlight beta, shown as "coming soon" until its public link is set). On a phone they stack full width. `components/home/Downloads.tsx`, `lib/home.ts`.
+
 ## [0.7.6] - 2026-11-05
 
 ### Added
