@@ -478,7 +478,9 @@ When a new doc lands in this folder, add it here on the same change.
   (`vendor/*.tgz`) for its helpers only; workspace slugs skip `lib/reserved-slugs.ts` (the package's words plus every `app/` root folder, kept in step with `private.org_slug_for` by its test): its `requireOrg` and actions pass a client into `"use cache"`, which Next 16 refuses, so the
   gate is Weft's own. Never pass the gate's `service` client to a client component (docs/architecture/teams.md, teams-vault.md).
   Project access: `lib/team-project-access.ts` (who sees each linked project, `org_project_members`) + `components/team/ProjectAccess.tsx`
-  (the **Access** checklist on a project row, for owners and admins).
+  (the **Access** checklist on a project row, for owners and admins). The desktop's Settings → Teams (`components/TeamSettings.tsx`,
+  `lib/use-team.ts`) opens instantly on `lib/team-cache.ts`: the last snapshots in memory and localStorage, warmed at sign-in
+  for the default and last-picked team, the rest once the list shows (docs/architecture/teams.md).
   The same routes run on a local server with `WEFT_WEB=1`: `proxy.ts` refreshes the cookie session on
   `isWebEnabled()` (not the deployed-only check), and the OAuth round trip is pinned to one canonical
   origin (`http://127.0.0.1:1024`, `webLocalOrigin()` in `lib/web-auth.ts`) — `webCanonicalRedirect()`
@@ -721,6 +723,10 @@ When a new doc lands in this folder, add it here on the same change.
   menu reads it fresh when it opens (`readSync`, `read()` in the hook), so the line says how it stands now; a failed
   read keeps the last known state and opens the menu anyway. **Sync** is greyed out when there's no account or no
   workspace yet (a project that already syncs can still be turned off).
+- `lib/features.ts` + `electron/features.cjs`: feature flags, env vars baked in by `next.config.ts` (as `NEXT_PUBLIC_*`)
+  and read by Electron main. `WEFT_COPILOT=1` hooks the copilot up; off (the default) `CopilotLane` and `CopilotButton`
+  render nothing, `laneStateFromPrefs` stays hidden, the `c` key, palette command, Electron's copilot menu items,
+  ⌃⌥Space and `weft://copilot` are gone, and `lib/copilot.ts` starts no check-ins or chip refresh.
 - `lib/copilot.ts` + `lib/board-tools.ts`: the copilot thread and its `mcp__board__*` tools (the ones on one card in `lib/board-tools-copilot.ts`; on this Mac they reach a Weft Worker's cards too: list, read, create in a `worker://` project in default mode as that project's default agent, and the copilot's acts as host verbs, through `lib/board-tools-hosts.ts` and `lib/worker-board-reach.ts`; `lib/host-agent.ts` says which agent a card sent to another host runs as and refuses any other, on a Mac and on a worker). `lib/copilot-suggest.ts` + `lib/copilot-context.ts` + `lib/copilot-sources.ts` + `lib/copilot-setup.ts` (what isn't linked yet, for onboarding chips and the copilot's `setup_status`) + `app/api/copilot/suggestions`: the empty chat's chips Haiku writes from the cards and every source Weft can read (pile, scout, blanks, Vercel and Supabase via the control server's `/vercel/status` and `/supabase/status`, `gh`), refreshed in the background after a move; one run labels every chip with its project and `chipsFor` (`lib/copilot-starters.ts`) filters to the board's selected project (docs/architecture/copilot-suggestions.md). `components/CopilotLane.tsx` +
   `lib/copilot-lane.ts` + `lib/use-copilot-thread.ts` + `lib/copilot-float.ts`: it floats in the window's bottom-right
   corner like Intercom's messenger, at `COPILOT_LAYER` (z-[96]) over the board, the card window, every `Modal` layer and

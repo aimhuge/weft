@@ -123,9 +123,16 @@ board ── useTeam() ──▶ /api/account/team (local, guarded) ──Bearer
 - `app/api/account/team` + `lib/team-remote.ts`: the desktop's forwarder (`WEFT_TEAMS_URL`, default weft.zip).
 - `lib/use-team.ts`: the board hook; `lib/team-types.ts`: the shapes the board may import. A refresh keeps showing
   the loaded team until the new answer lands (only a workspace switch reads "loading"), so a burst of refreshes
-  can't keep a slow load from finishing. It keeps the last answer per workspace in a module cache, and
-  `useTeamPrefetch` (called by the top bar's `AccountButton`) fills it as soon as you're signed in and clears it on
-  sign-out, so the page opens already loaded and refreshes quietly behind it.
+  can't keep a slow load from finishing.
+- `lib/team-cache.ts`: **opening instantly**. A load is a round trip to weft.zip (~0.2 s for the bare request from
+  Bangkok, a second or two with the token check and the Supabase reads), so the page never waits on one. The last
+  answer per workspace lives in memory and the good ones in localStorage (`weft-team-cache`, each snapshot carrying
+  its user id, so only the signed-in account's come back; another account's are dropped, a signed-out answer drops
+  them all). `useTeamPrefetch` (the top bar's `AccountButton`) calls `warmTeams`: the disk copies back into memory,
+  then a fresh load of the default workspace *and* the one you last picked (`weft-team-org`), since that is the one
+  the page opens on. Once the list is on screen, `TeamSettings` warms the rest (`prefetchTeams`, up to six), hovering
+  a row warms that one, and every open still reloads behind what it shows. `lib/use-board-repos.ts` keeps the board's
+  repos for the Add project picker the same way.
 - `components/team/team-board.css`: the shared components' `wz-*` classes in the board's tokens, scoped under
   `.wz-board` (weft.zip's `team.css` never loads on the board), so the page follows Light, Dark and every scene.
 - `vercel.json` pins weft.zip's functions to `sin1`, next to the Supabase project (ap-southeast-1). From Vercel's

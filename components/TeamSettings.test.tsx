@@ -8,8 +8,9 @@ import "./test-utils";
 import TeamSettings from "./TeamSettings";
 
 const useTeamMock = vi.hoisted(() => vi.fn<(_org?: string) => TeamHook>());
+const prefetchTeamsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/use-team", () => ({ useTeam: useTeamMock, prefetchTeam: vi.fn() }));
+vi.mock("@/lib/use-team", () => ({ useTeam: useTeamMock, prefetchTeam: vi.fn(), prefetchTeams: prefetchTeamsMock }));
 vi.mock("@/lib/use-board-repos", () => ({ useBoardRepos: () => ["aimhuge/weft", "aimhuge/other"] }));
 vi.mock("./team/ProjectPeople", () => ({ ProjectPeople: () => null }));
 
@@ -186,6 +187,12 @@ describe("TeamSettings", () => {
     expect(useTeamMock).toHaveBeenCalledWith("gone");
     await waitFor(() => expect(useTeamMock).toHaveBeenLastCalledWith(undefined));
     expect(window.localStorage.getItem("weft-team-org")).toBeNull();
+  });
+
+  it("warms every team in the list once it's loaded, so a switch opens instantly", () => {
+    setHook({ kind: "ok", team });
+    render(<TeamSettings />);
+    expect(prefetchTeamsMock).toHaveBeenCalledWith(team.orgs.map((o) => o.slug));
   });
 
   it("falls back to the default when the remembered team is not found", async () => {

@@ -28,6 +28,18 @@ describe("useBoardRepos", () => {
     apiMock.settings.mockRejectedValue(new Error("down"));
     const { result } = renderHook(() => useBoardRepos(true));
     await waitFor(() => expect(apiMock.settings).toHaveBeenCalled());
-    expect(result.current).toEqual([]);
+    await waitFor(() => expect(result.current).toEqual([]));
+  });
+
+  it("opens on the last list it found, then checks again", async () => {
+    apiMock.settings.mockResolvedValue({ projects: [{ path: "/a" }] });
+    apiMock.github.mockResolvedValue({ folders: [{ repo: "o/a" }] });
+    const first = renderHook(() => useBoardRepos(true));
+    await waitFor(() => expect(first.result.current).toEqual(["o/a"]));
+    first.unmount();
+    apiMock.github.mockResolvedValue({ folders: [{ repo: "o/b" }] });
+    const { result } = renderHook(() => useBoardRepos(true));
+    expect(result.current).toEqual(["o/a"]);
+    await waitFor(() => expect(result.current).toEqual(["o/b"]));
   });
 });
