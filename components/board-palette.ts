@@ -3,6 +3,7 @@ import { openChangelog } from "@/lib/changelog-open";
 import { openInPane } from "@/lib/open-in-pane";
 import { activeAt, recentMoves, SORTERS, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import { timeAgo } from "@/lib/format";
+import { copilotEnabled } from "@/lib/features";
 import { SCENES, setTheme, THEMES } from "@/lib/theme";
 import { replayWelcome } from "@/lib/welcome-client";
 import { replayLastAchievement } from "@/lib/achievement-replay";
@@ -102,7 +103,7 @@ function commandItems(s: PaletteState, a: PaletteActions): PaletteItem[] {
   const commands: PaletteItem[] = [
     command("new", "New thread", "plus", a.openNew, "n"),
     command("filter", "Filter cards", "search", a.focusFilter, "/"),
-    command("copilot", "Open or close the copilot", "sparkles", a.toggleCopilot, "c"),
+    ...(copilotEnabled() ? [command("copilot", "Open or close the copilot", "sparkles", a.toggleCopilot, "c")] : []),
     command("browser", "Toggle the browser", "globe", a.toggleBrowser, "b"),
     command("terminal", "Toggle the terminal", "terminal", a.toggleTerminal, "t", "shell console command line"),
     command("settings", "Open settings", "sliders", a.openSettings, ","),

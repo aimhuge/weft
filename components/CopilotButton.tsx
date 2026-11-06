@@ -1,7 +1,10 @@
+import { copilotEnabled } from "@/lib/features";
 import Icon from "./Icon";
 
 // The top bar's Copilot toggle, lit while the copilot's lane is open, with a dot when the copilot needs you.
+// Hidden while the copilot is flagged off (lib/features.ts).
 export default function CopilotButton(props: { open: boolean; needsYou: boolean; title: string; onClick: () => void }) {
+  if (!copilotEnabled()) return null;
   return (
     <button
       onClick={props.onClick}

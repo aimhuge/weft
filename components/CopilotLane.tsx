@@ -16,6 +16,7 @@ import CopilotEmpty from "./CopilotEmpty";
 import CopilotHider, { Avatar } from "./CopilotHider";
 import CopilotPeek from "./CopilotPeek";
 import CopilotPersonaMenu from "./CopilotPersonaMenu";
+import { copilotEnabled } from "@/lib/features";
 import CrashGuard from "./CrashGuard";
 import Icon, { Spinner } from "./Icon";
 import ThreadView from "./ThreadView";
@@ -38,7 +39,7 @@ function Status({ card }: { card: Card | null }) {
 // the round launcher alone; peek adds its latest reply or idea above it; open adds the chat. Resting
 // on the launcher peeks; the copilot needing you auto-expands into peek; a click on the launcher opens
 // or closes the chat; ⌘J cycles hidden → peek → open → hidden.
-export default function CopilotLane(props: {
+type LaneProps = {
   state: LaneState;
   // The board's selected project (null: All), so the empty chat's chips match it.
   project?: string | null;
@@ -46,7 +47,14 @@ export default function CopilotLane(props: {
   onPeek: () => void;
   onOpen: () => void;
   toggleTip: string;
-}) {
+};
+
+// Nothing at all while the copilot is flagged off (lib/features.ts); the code stays, unhooked.
+export default function CopilotLane(props: LaneProps) {
+  return copilotEnabled() ? <CopilotLaneView {...props} /> : null;
+}
+
+function CopilotLaneView(props: LaneProps) {
   const { card, items, streaming, error, fail, send, newChat, setPersona, resetting } = useCopilotThread();
   const live = card ? isLive(card) : false;
   const persona = personaOf(card?.persona);

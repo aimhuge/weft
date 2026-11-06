@@ -18,6 +18,8 @@ const crypto = require("node:crypto");
 const os = require("node:os");
 const path = require("node:path");
 const { registerAboutBridge } = require("./about.cjs");
+const { COPILOT_ENABLED } = require("./features.cjs");
+const { createCopilotWindow } = require("./copilot-window.cjs");
 const { createBrowserPane } = require("./browser-pane.cjs");
 const { registerPaneIpc } = require("./pane-ipc.cjs");
 const { cardFinder } = require("./card-token.cjs");
@@ -57,7 +59,6 @@ app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 
 let win;
 let appView;
-let copilotWin;
 let server;
 let quitting = false;
 // weft:// links that arrive before the board is ready; on Windows and Linux a link that launched
@@ -231,72 +232,21 @@ function createMainWindow() {
   startup.watch(appView.webContents);
 }
 
-function sendCopilotState() {
-  const open = Boolean(copilotWin && !copilotWin.isDestroyed() && copilotWin.isVisible());
-  if (appView && !appView.webContents.isDestroyed()) appView.webContents.send("copilot:state", { open });
-}
-
-function createCopilot() {
-  const main = win?.getBounds() ?? { x: 80, y: 80, width: 1400, height: 900 };
-  const state = loadWindowState("copilot", {
-    width: 420,
-    height: 680,
-    x: Math.max(0, main.x + main.width - 444),
-    y: Math.max(0, main.y + main.height - 704),
-  });
-  copilotWin = new BrowserWindow({
-    x: state.x,
-    y: state.y,
-    width: state.width,
-    height: state.height,
-    minWidth: 340,
-    minHeight: 420,
-    title: "Copilot",
-    show: false,
-    backgroundColor: background(),
-    titleBarStyle: "hiddenInset",
-    trafficLightPosition: { x: 14, y: 15 },
-    webPreferences: { preload: PRELOAD, contextIsolation: true, sandbox: true },
-  });
-  trackWindowState("copilot", copilotWin);
-  copilotWin.webContents.setWindowOpenHandler(({ url }) => {
-    pane.open(url, undefined, false, { fromBoard: true }).catch(() => {});
-    return { action: "deny" };
-  });
-  menus.attachContextMenu(copilotWin.webContents);
-  // Closing hides it, so it reopens instantly with the conversation in place.
-  copilotWin.on("close", (event) => {
-    if (!quitting) {
-      event.preventDefault();
-      copilotWin.hide();
-    }
-  });
-  copilotWin.on("show", sendCopilotState);
-  copilotWin.on("hide", sendCopilotState);
-  copilotWin.on("closed", () => {
-    copilotWin = undefined;
-    sendCopilotState();
-  });
-  copilotWin.loadURL(`${server.url}/copilot`);
-}
-
-function showCopilot() {
-  if (!server) return;
-  if (!copilotWin || copilotWin.isDestroyed()) createCopilot();
-  copilotWin.show();
-  copilotWin.focus();
-  if (mac) app.focus({ steal: true });
-  sendCopilotState();
-}
-
-function toggleCopilot() {
-  if (copilotWin && !copilotWin.isDestroyed() && copilotWin.isVisible() && copilotWin.isFocused()) {
-    copilotWin.hide();
-    sendCopilotState();
-  } else {
-    showCopilot();
-  }
-}
+const copilot = createCopilotWindow({
+  app,
+  BrowserWindow,
+  mac,
+  preload: PRELOAD,
+  background,
+  main: () => win,
+  board: () => appView,
+  server: () => server,
+  pane,
+  menus: () => menus,
+  quitting: () => quitting,
+});
+const showCopilot = copilot.show;
+const toggleCopilot = copilot.toggle;
 
 // ---- weft:// links ----
 // weft://new?prompt=…&folder=…&title=…&cli=puku           create a card (L-3: dialog pre-filled, Start required)
@@ -317,7 +267,7 @@ async function handleLink(raw) {
     return;
   }
   const action = url.hostname;
-  if (action === "copilot") return showCopilot();
+  if (action === "copilot") return COPILOT_ENABLED ? showCopilot() : showMain();
   showMain();
   if (action === "card") return sendMenu("open-card", url.pathname.replace(/^\/+/, ""));
   if (action !== "new") return;
@@ -349,8 +299,8 @@ const menus = createMenus({
 
 // The browser pane's IPC from the board (electron/pane-ipc.cjs).
 registerPaneIpc(ipcMain, { pane, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
-ipcMain.on("copilot:toggle", () => toggleCopilot());
-const dictation = require("./dictation-setup.cjs").setupDictation({ ipcMain, getServer: () => server, listeners: () => [appView?.webContents, copilotWin?.webContents] });
+ipcMain.on("copilot:toggle", () => COPILOT_ENABLED && toggleCopilot());
+const dictation = require("./dictation-setup.cjs").setupDictation({ ipcMain, getServer: () => server, listeners: () => [appView?.webContents, copilot.webContents()] });
 const killTerminals = registerTerminal(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 require("./claude-sign-in.cjs").setupClaudeSignIn(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 require("./folder-dialog.cjs").registerFolderDialog(ipcMain, { dialog, window: () => win });
@@ -410,14 +360,14 @@ app.whenReady().then(async () => {
   createMainWindow();
   menus.createTray();
   menus.updater.start();
-  if (!globalShortcut.register(COPILOT_SHORTCUT, toggleCopilot)) {
+  if (COPILOT_ENABLED && !globalShortcut.register(COPILOT_SHORTCUT, toggleCopilot)) {
     console.warn(`Couldn't register ${COPILOT_SHORTCUT}; another app may be using it.`);
   }
   nativeTheme.on("updated", () => {
     const color = background();
     win?.setBackgroundColor(color);
     appView?.setBackgroundColor(color);
-    if (copilotWin && !copilotWin.isDestroyed()) copilotWin.setBackgroundColor(color);
+    copilot.setBackgroundColor(color);
   });
   await boot();
 });

@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { onBoardItself, type ShortcutDef } from "@/lib/hotkeys";
 import type { RailPanel } from "@/lib/rail-view";
 import { addSecret } from "@/lib/use-vault";
+import { copilotEnabled } from "@/lib/features";
 import type { Card, LoginView } from "@/lib/types";
 import type { ColumnId } from "@/lib/workspace-layout";
 
@@ -43,6 +44,11 @@ export interface BoardShortcutContext {
   toggleArchive: (card: Card) => void;
   archiveCards: (list: Card[]) => void;
   unarchive: (ids: string[]) => void;
+}
+
+// "c" opens or closes the copilot, only while its feature flag is on (lib/features.ts).
+function copilotShortcut(c: BoardShortcutContext): ShortcutDef {
+  return { id: "copilot", keys: ["c"], description: "Open or close the copilot", group: "General", enabled: c.boardKeys && copilotEnabled(), handler: c.toggleCopilot };
 }
 
 // Plain "t" only from the board itself with no card open (lib/hotkeys.ts onBoardItself): a stray "t" from a panel, a
@@ -98,7 +104,7 @@ export function boardShortcuts(c: BoardShortcutContext): ShortcutDef[] {
       enabled: c.boardKeys,
       handler: () => c.setShowSettings(true),
     },
-    { id: "copilot", keys: ["c"], description: "Open or close the copilot", group: "General", enabled: c.boardKeys, handler: c.toggleCopilot },
+    copilotShortcut(c),
     { id: "browser", keys: ["b"], description: "Toggle the browser", group: "General", enabled: c.boardKeys, handler: c.toggleBrowser },
     terminalShortcut(c),
     // The four-column workspace for an open card (lib/workspace-layout.ts). ⌥⌘1..4 sit on free

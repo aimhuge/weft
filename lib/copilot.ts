@@ -22,6 +22,7 @@ import { resumeInterrupted } from "./resume";
 import { startScheduler } from "./scheduler";
 import { chipCardId, startSuggestRefresh } from "./copilot-suggest";
 import { startCheckIns } from "./copilot-initiative-run";
+import { copilotEnabled } from "./features";
 import { isBusy } from "./runner-state";
 import type { CopilotPersona } from "./copilot-personas";
 import { backendFor, cardModel, modelFor } from "./new-thread";
@@ -154,10 +155,13 @@ export function prewarm() {
   startLeagueSync();
   // Keep Weft's Puku trial token fresh, and give puku threads waiting on a login the trial when you sign in to Weft.
   startPukuTrial(() => void retryPukuWithTrial());
-  // Keep the copilot's board-made chips fresh as cards move (lib/copilot-suggest.ts).
-  startSuggestRefresh();
-  // Let the copilot speak first: a morning idea, and a refactor look after work lands (lib/copilot-initiative.ts).
-  startCheckIns(() => isBusy(COPILOT_ID));
+  // The copilot's background work, only while it's flagged on (lib/features.ts): its board-made chips kept fresh as
+  // cards move (lib/copilot-suggest.ts), and its check-ins, a morning idea and a refactor look after work lands
+  // (lib/copilot-initiative.ts).
+  if (copilotEnabled()) {
+    startSuggestRefresh();
+    startCheckIns(() => isBusy(COPILOT_ID));
+  }
   // Post commits, pushes, deploys and card status to the Slack drawer's channel (lib/slack.ts).
   startSlack();
   // Build every app folder on save (lib/app-build-watch.ts). Loaded lazily and never awaited: esbuild must stay off every

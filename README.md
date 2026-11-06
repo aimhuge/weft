@@ -1334,6 +1334,10 @@ a card in that channel's project (or your default one), and **@Weft** in a card'
 
 ## Copilot
 
+The copilot is switched off by default: no launcher, no ✨ button, no `c` key or palette command, no copilot window,
+menu items or ⌃⌥Space, and none of its background check-ins or chip refreshes. Its code is all still here, behind a
+feature flag (`lib/features.ts`, `electron/features.cjs`): start Weft with `WEFT_COPILOT=1 pnpm desktop` to bring it back.
+
 Press ⌘J (or the Copilot button) to open the copilot, your product partner: it helps you decide what to build next,
 shapes an idea into cards, answers anything about your projects, and keeps an eye on refactors and your analytics. It
 doesn't report the board back to you (the swim lanes do that), so its launcher shows a dot only when it has said
