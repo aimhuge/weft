@@ -21,7 +21,7 @@ import { keyAction, type KeyAction } from "@/lib/question-keys";
 import type { QuestionFormHandle, QuestionProps } from "@/lib/question-form-types";
 import type { Question } from "@/lib/types";
 import type { ComposerHandle } from "./Composer";
-import { FormFooter, Options, QuestionTabs, ReadFrom, Review } from "./QuestionParts";
+import { FormFooter, Minimized, Options, QuestionTabs, ReadFrom, Review } from "./QuestionParts";
 
 export type { QuestionFormHandle, QuestionProps };
 
@@ -54,6 +54,8 @@ export default function QuestionForm({
   const [sent, setSent] = useState(false);
   const [shownAt] = useState(() => Date.now());
   const [held, setHeld] = useState(false);
+  // Minimized to its title row, so the thread above can be read; a key or a send opens it again.
+  const [collapsed, setCollapsed] = useState(false);
   const submitTab = isSubmitTab(questions, state.tab);
   const q = submitTab ? undefined : questions[state.tab];
   const cursor = state.cursor[state.tab] ?? 0;
@@ -77,6 +79,7 @@ export default function QuestionForm({
 
   // Moves to another tab: the box's text stays with the question it was written for.
   function show(next: AnswerState, from: AnswerState) {
+    setCollapsed(false);
     setError(null);
     setHeld(false);
     setState(next);
@@ -193,40 +196,48 @@ export default function QuestionForm({
       const action = !sent && boxEmpty ? keyAction(e, state, questions) : undefined;
       // Arrows can't do harm; a pick or tick waits until the question has been on screen a moment.
       if (action && !("move" in action) && justShown()) return true;
-      if (action) act(action);
+      if (action) {
+        setCollapsed(false);
+        act(action);
+      }
       return Boolean(action);
     },
-    enter,
+    enter() {
+      setCollapsed(false);
+      enter();
+    },
   }));
 
   const toTab = (tab: number) => show(goTo(withBox(state), questions, tab), state);
   return (
     <div className="mb-2 flex max-h-[50vh] min-h-0 flex-col rounded-md border border-warn/40 bg-warn-soft px-3 py-2.5" data-human-only>
-      <QuestionTabs questions={questions} state={state} onTab={toTab} />
-      <div className="-mr-2 mt-2 min-h-0 overflow-y-auto pr-2">
-        {q ? (
-          <Options
-            q={q}
-            picked={picksOf(state, state.tab)}
-            cursor={cursor}
-            sent={sent}
-            // No browser pane (a plain browser tab): the preview sits under the options instead.
-            inlinePreview={bridge ? undefined : shown?.preview}
-            onHover={(i) => setState((s) => setCursor(s, i))}
-            onChoose={choose}
-            onType={() => composer.current?.focus()}
-          />
-        ) : (
-          <Review questions={questions} state={state} onTab={toTab} />
-        )}
-      </div>
-      <ReadFrom readScope={onReadScope ? readScope : undefined} sent={sent} onClick={readFrom} />
-      <FormFooter
-        error={error}
-        held={held}
-        hint={keyHint(questions, q)}
-        onDecline={onDecline && !sent ? decline : undefined}
-      />
+      <QuestionTabs questions={questions} state={state} onTab={toTab} collapsed={collapsed} onCollapse={setCollapsed} />
+      <Minimized collapsed={collapsed} q={q} onOpen={() => setCollapsed(false)}>
+        <div className="-mr-2 mt-2 min-h-0 overflow-y-auto pr-2">
+          {q ? (
+            <Options
+              q={q}
+              picked={picksOf(state, state.tab)}
+              cursor={cursor}
+              sent={sent}
+              // No browser pane (a plain browser tab): the preview sits under the options instead.
+              inlinePreview={bridge ? undefined : shown?.preview}
+              onHover={(i) => setState((s) => setCursor(s, i))}
+              onChoose={choose}
+              onType={() => composer.current?.focus()}
+            />
+          ) : (
+            <Review questions={questions} state={state} onTab={toTab} />
+          )}
+        </div>
+        <ReadFrom readScope={onReadScope ? readScope : undefined} sent={sent} onClick={readFrom} />
+        <FormFooter
+          error={error}
+          held={held}
+          hint={keyHint(questions, q)}
+          onDecline={onDecline && !sent ? decline : undefined}
+        />
+      </Minimized>
     </div>
   );
 }
