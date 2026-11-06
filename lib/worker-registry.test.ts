@@ -198,6 +198,14 @@ describe("registry: the board tools", () => {
     expect(await registry(fakeRpc().rpc, key).macCrons()).toEqual([]);
   });
 
+  it("reads the owner's Macs by id and name, an empty answer as none", async () => {
+    const rows = [{ device: "d1", name: "MacBook-Air-3" }];
+    const { rpc, calls } = fakeRpc({ data: rows });
+    expect(await registry(rpc, key).macs()).toEqual(rows);
+    expect(calls).toEqual([{ fn: "worker_board_macs", args: { p_key: key } }]);
+    expect(await registry(fakeRpc().rpc, key).macs()).toEqual([]);
+  });
+
   it("reads its pairing Mac's state and its passkey heads, an empty answer as none", async () => {
     const { rpc, calls } = fakeRpc({ data: { mac: "m", revoked: false } });
     expect(await registry(rpc, key).macState()).toEqual({ mac: "m", revoked: false });

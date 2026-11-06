@@ -183,7 +183,7 @@ async function startCommand() {
     () => import("../lib/webhooks"),
     () => import("../lib/cron-run"),
   ] as const);
-  const boardLink = { workerId: config.workerId, root, cards: reg.boardCards, newCard: reg.newCard, setLists: reg.setLists, macCrons: reg.macCrons };
+  const boardLink = { workerId: config.workerId, root, cards: reg.boardCards, newCard: reg.newCard, setLists: reg.setLists, macCrons: reg.macCrons, macs: reg.macs };
   setBoardLink(boardLink);
   const lists = createListsPublisher(boardLink, { crons: listCrons, webhooks: () => listWebhooks() });
   subscribe((event) => {
