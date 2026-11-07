@@ -26,6 +26,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Fixed
 
 - **A Worker thread can send a card to one of two Macs with the same folder.** If two of your Macs both have `/Users/you/dev/weft`, `create_card` on a Weft Worker used to fail with two identical "Mac (/Users/you/dev/weft)" choices and no way to pick one. Now a thread names the Mac as `mac://<Mac name or id>/<path>`, using the name each Mac already shows in Settings → Sync → Workers. `list_cards` files each Mac card under that address, and an ambiguous folder lists every choice as the exact string to pass. A Mac folder with no cards yet works the same way. (`lib/worker-board-macs.ts`, `lib/worker-board-link.ts`, `lib/worker-board-tools.ts`, `supabase/migrations/20261105150000_worker_board_macs.sql`)
+- **Teammates no longer show up as people to invite.** "People on your projects" in Settings → Teams now matches a repo's GitHub collaborators to the team's members by their GitHub login, not just by email. Someone already on the team is no longer offered an invite or asked for their email just because GitHub hides it. (lib/team-people.ts, lib/team-member-logins.ts, lib/team-ops.ts)
 
 ### Security
 
