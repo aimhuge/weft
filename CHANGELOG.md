@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Removed
+
+- **GitHub is the only way to sign in.** Settings → Weft account and weft.zip's sign-in no longer offer Google, and `/auth/sign-in?provider=google` now answers 400 without reaching Supabase. Connecting a Google account for Gmail, Drive and Calendar (Settings → Connectors) still works as before. Files: lib/account.ts, lib/web-auth.ts, app/auth/sign-in/route.ts, lib/auth/login-form.tsx, lib/use-account.ts.
+
 ## [0.7.7] - 2026-11-07
 
 ### Added
