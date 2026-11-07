@@ -107,11 +107,14 @@ describe("teamSnapshot", () => {
       { user_id: "u2", role: "admin", created_at: "2025-01-02T00:00:00Z", email: "two@x.co", display_name: "Two", last_login_at: null },
       { user_id: "u3", role: "member", created_at: "2025-01-03T00:00:00Z", email: null, display_name: null, last_login_at: null },
     ]);
-    const ctx = { ...CTX, service: { from: vi.fn() } as never };
+    const getUserById = vi.fn((id: string) =>
+      Promise.resolve({ data: { user: { user_metadata: id === "u2" ? { user_name: "two-gh" } : {} } }, error: null }),
+    );
+    const ctx = { ...CTX, service: { from: vi.fn(), auth: { admin: { getUserById } } } as never };
     const snap = await teamSnapshot(ctx);
     expect(snap.members).toEqual([
-      { userId: "u2", email: "two@x.co", name: "Two", role: "admin", joinedAt: "2025-01-02T00:00:00Z" },
-      { userId: "u3", email: null, name: null, role: "member", joinedAt: "2025-01-03T00:00:00Z" },
+      { userId: "u2", email: "two@x.co", name: "Two", login: "two-gh", role: "admin", joinedAt: "2025-01-02T00:00:00Z" },
+      { userId: "u3", email: null, name: null, login: null, role: "member", joinedAt: "2025-01-03T00:00:00Z" },
     ]);
   });
 

@@ -12,6 +12,11 @@ describe("suggestPeople", () => {
     );
     expect(out.map((x) => x.login)).toEqual(["cy", "dee"]);
   });
+
+  it("drops members by GitHub login too, even when GitHub hides their email", () => {
+    const out = suggestPeople([p("Zulker-Nien", null), p("eve", null)], [{ email: "z@x.co", login: "zulker-nien" }, { email: null, login: null }], []);
+    expect(out.map((x) => x.login)).toEqual(["eve"]);
+  });
 });
 
 describe("visiblePeople", () => {

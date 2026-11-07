@@ -17,6 +17,7 @@ import { runLinkProject, runUnlinkProject } from "./team-projects";
 import { listVisibleProjects, runSetProjectAccess } from "./team-project-access";
 import { workspaceCanHaveMembers } from "./billing/plan-gate";
 import { revokeMemberDevices } from "./team-vault-rotate";
+import { memberLogins } from "./team-member-logins";
 import { syncTeamSeatsQuietly } from "./billing/seats";
 import { TEAM_GATE_MESSAGE } from "./billing/upgrade";
 import type { TeamActionResult, TeamInvite, TeamMember, TeamOp, TeamOrg, TeamSnapshot, TeamUser } from "./team-types";
@@ -96,10 +97,12 @@ export async function teamSnapshot(ctx: TeamContext): Promise<TeamSnapshot> {
     core.canManage ? listPendingInvites(ctx.service, ctx.org.id) : Promise.resolve([]),
     listVisibleProjects(ctx),
   ]);
+  const logins = await memberLogins(ctx.service, members.map((m) => m.user_id));
   const memberRows: TeamMember[] = members.map((m) => ({
     userId: m.user_id,
     email: m.email,
     name: m.display_name,
+    login: logins.get(m.user_id) ?? null,
     role: m.role,
     joinedAt: m.created_at,
   }));
