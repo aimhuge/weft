@@ -11,6 +11,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Fixed
 
 - **The phone app's TestFlight link works again once Apple approves build 5.** The link said "This beta isn't accepting any new testers" because Beta App Review rejected build 4: the app only offered GitHub sign-in, so the reviewer had no account. The phone app now has a "Sign in with email" link, there's an App Review demo account with seeded cards, and build 5 is in review. Doc: docs/architecture/mobile.md.
+- **Sync no longer gets stuck after you link a big project to a team.** When a project's cards moved to a team, Weft removed their old copies from your personal board in one request, with every card id in its URL. With 1,600 cards that made a 61 KB URL, which Supabase's gateway refused with a 520 page. The sync then showed "Sync failed: The server answered with an HTML page" and sent the same request every 20 seconds. Those copies are now removed 100 ids at a time (`lib/cloud-sync-upload.ts`).
 
 ### Removed
 
