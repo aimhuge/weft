@@ -8,8 +8,11 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-11-07
+
 ### Added
 
+- **A teammate's Mac can join a shared vault from the 🔐 drawer.** Your team sees **Ask to join** on a repo the workspace already shares. An admin sees that Mac and its fingerprint, and approves with Touch ID. Your teammate opens the vault with Touch ID and keeps the values already on that Mac. Sharing the same repo twice is now refused, and the shared vault's event log records writes, which it was silently dropping. (`electron/vault-share.cjs`, `electron/vault-team.cjs`, `electron/vault-store-shared.cjs`, `components/VaultShared.tsx`)
 - **Teammates' cards on your desktop board.** When a team links a GitHub repo, your teammates' cards for it now show up on your own board, inside your project for that repo. Each tile shows their picture and "Zulker's Mac", and opens to the thread and its pages, read-only. Only the person whose Mac runs a card can reply to it, stop it or move it. Synced cards now record their repo (`cloud_cards.repo`), so each card lands under your folder whatever path it has on their Mac. Built in `lib/team-board.ts`, `app/api/team-board`, `lib/use-team-board.ts` and `lib/team-host.ts`.
 - **Minimize an agent's question to read the thread.** A chevron at the top right of the question picker folds it down to its title and the question, so the reply above it has room. Clicking the chevron or the question line opens it again, and so does any picker key (↑↓, a number, ⏎). Files: `components/QuestionParts.tsx`, `components/QuestionForm.tsx`.
 - **🌏 Simplified Chinese for the board, Settings and new-thread forms.** Pick it in Settings → General → Interface language, or let Weft follow a Simplified Chinese browser (Traditional Chinese stays in English for now). Settings search finds sections by their Chinese names and keywords too. Contributed by @dayuechina (`lib/ui-language.ts`, `lib/ui-language-zh.ts`, `components/UiLanguagePicker.tsx`, `lib/settings-search.ts`).
@@ -26,6 +29,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Fixed
 
 - **A Worker thread can send a card to one of two Macs with the same folder.** If two of your Macs both have `/Users/you/dev/weft`, `create_card` on a Weft Worker used to fail with two identical "Mac (/Users/you/dev/weft)" choices and no way to pick one. Now a thread names the Mac as `mac://<Mac name or id>/<path>`, using the name each Mac already shows in Settings → Sync → Workers. `list_cards` files each Mac card under that address, and an ambiguous folder lists every choice as the exact string to pass. A Mac folder with no cards yet works the same way. (`lib/worker-board-macs.ts`, `lib/worker-board-link.ts`, `lib/worker-board-tools.ts`, `supabase/migrations/20261105150000_worker_board_macs.sql`)
+- **Sharing a vault with your team can work, and "Last seen" is real.** The desktop's calls to share a vault and make its recovery key could never reach the database, and sharing or accepting a grant had no device id to send, so no vault could be shared. Public wrappers and `registeredDevice` fix both, and this Mac now reports in every 5 minutes, so the team's Devices page shows when a Mac was actually last around. This is the groundwork for team asks (docs/architecture/team-asks.md).
 - **Teammates no longer show up as people to invite.** "People on your projects" in Settings → Teams now matches a repo's GitHub collaborators to the team's members by their GitHub login, not just by email. Someone already on the team is no longer offered an invite or asked for their email just because GitHub hides it. (lib/team-people.ts, lib/team-member-logins.ts, lib/team-ops.ts)
 
 ### Security
