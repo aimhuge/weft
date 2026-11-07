@@ -12,6 +12,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 - **Teammates' cards on your desktop board.** When a team links a GitHub repo, your teammates' cards for it now show up on your own board, inside your project for that repo. Each tile shows their picture and "Zulker's Mac", and opens to the thread and its pages, read-only. Only the person whose Mac runs a card can reply to it, stop it or move it. Synced cards now record their repo (`cloud_cards.repo`), so each card lands under your folder whatever path it has on their Mac. Built in `lib/team-board.ts`, `app/api/team-board`, `lib/use-team-board.ts` and `lib/team-host.ts`.
 - **Minimize an agent's question to read the thread.** A chevron at the top right of the question picker folds it down to its title and the question, so the reply above it has room. Clicking the chevron or the question line opens it again, and so does any picker key (↑↓, a number, ⏎). Files: `components/QuestionParts.tsx`, `components/QuestionForm.tsx`.
+- **🌏 Simplified Chinese for the board, Settings and new-thread forms.** Pick it in Settings → General → Interface language, or let Weft follow a Simplified Chinese browser (Traditional Chinese stays in English for now). Settings search finds sections by their Chinese names and keywords too. Contributed by @dayuechina (`lib/ui-language.ts`, `lib/ui-language-zh.ts`, `components/UiLanguagePicker.tsx`, `lib/settings-search.ts`).
 
 ### Changed
 
