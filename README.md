@@ -9,6 +9,10 @@ cloth.
 
 ## Run it
 
+Weft offers Simplified Chinese for the board, the main Settings controls, and the new-thread form. It follows a
+Simplified Chinese browser or system language by default. Choose **Settings → General → Interface language**
+on desktop, or use the language picker in the web board's toolbar, to switch between English and 简体中文.
+
 ```bash
 git clone https://github.com/aimhuge/weft.git && cd weft
 pnpm install

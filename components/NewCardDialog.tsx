@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useRef } from "react";
 import { isMac } from "@/lib/hotkeys";
 import { type NewCardInput } from "@/lib/client";
@@ -52,6 +53,7 @@ export default function NewCardDialog({
   // Opens Settings → Agents, from the Agent menu's "Manage agents…".
   onManageAgents?: () => void;
 }) {
+  const t = useUiText();
   const dialog = useNewCardDialog(home, defaultCwd, recentCwd);
   // ⌘ or ⌃ held: the Start button names what ⌘↵ or ⌃↵ will do.
   const startBtn = startButton(useHeldModifiers());
@@ -106,7 +108,7 @@ export default function NewCardDialog({
     >
       <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3.5">
         <h2 className="flex min-w-0 items-center gap-2 truncate text-[15px] font-medium text-ink">
-          New thread
+          {t("New thread")}
           {playInPane ? <PlayIntroButton id="newthread" onPlay={playInPane} /> : <IntroButton intro={intro} />}
           <RestartRequested restart={restart} />
         </h2>
@@ -124,7 +126,7 @@ export default function NewCardDialog({
           onChange={dialog.saveDraft}
           onSubmit={() => void submit(true, false)}
           onSubmitAlt={() => void submit(true, true)}
-          placeholder="What should this thread do? Paste screenshots or videos right where they belong, or hit the mic and talk."
+          placeholder={t("What should this thread do? Paste screenshots or videos right where they belong, or hit the mic and talk.")}
           sizeClass="h-full min-h-[180px]"
           className="flex-1"
         />

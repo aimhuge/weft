@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useState, type ReactNode } from "react";
 import type { Column } from "@/lib/types";
 import BacklogActions, { type BacklogLane } from "./BacklogActions";
@@ -87,6 +88,7 @@ export default function ColumnHeader({
 
 // Review's "Review all": starts the commit walk-through card, held as "Starting…" until it has.
 function ReviewAllButton({ onReviewAll }: { onReviewAll: () => Promise<void> }) {
+  const t = useUiText();
   const [reviewing, setReviewing] = useState(false);
   async function reviewAll() {
     if (reviewing) return;
@@ -102,11 +104,11 @@ function ReviewAllButton({ onReviewAll }: { onReviewAll: () => Promise<void> }) 
       <button
         onClick={() => void reviewAll()}
         disabled={reviewing}
-        aria-label={reviewing ? "Starting…" : "Review all"}
+        aria-label={reviewing ? t("Starting…") : t("Review all")}
         className="flex items-center gap-1 font-medium text-accent hover:opacity-80 disabled:opacity-50"
       >
         <Icon name="check" size={11} />
-        <Label>{reviewing ? "Starting…" : "Review all"}</Label>
+        <Label>{reviewing ? t("Starting…") : t("Review all")}</Label>
       </button>
     </Tip>
   );
@@ -139,6 +141,7 @@ function BacklogEnd({ lane, label, onFold }: { lane: BacklogLane; label: string;
 
 // The column's name; Backlog's is a button that drops its saved sprints.
 function ColumnTitle({ label, needsYou, backlog }: { label: string; needsYou: boolean; backlog?: BacklogLane }) {
-  if (backlog) return <SprintsMenu label={label} lane={backlog} />;
-  return <h2 className={`truncate text-[12.5px] font-medium ${needsYou ? "text-warn" : "text-ink"}`}>{label}</h2>;
+  const t = useUiText();
+  if (backlog) return <SprintsMenu label={t(label)} lane={backlog} />;
+  return <h2 className={`truncate text-[12.5px] font-medium ${needsYou ? "text-warn" : "text-ink"}`}>{t(label)}</h2>;
 }

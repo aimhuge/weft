@@ -4,17 +4,19 @@
 // ↑/↓ move the highlight, Enter or a click opens that page at that section, Escape clears the box before it closes
 // Settings, and ⌘F (or /) focuses it from anywhere on the screen. What it searches is lib/settings-search.ts.
 
+import { useUiText } from "@/lib/ui-language";
 import { useEffect, useId, useRef, useState } from "react";
 import { searchSettings, type SettingsHit } from "@/lib/settings-search";
 import Icon from "./Icon";
 
 export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) => void }) {
+  const t = useUiText();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
   const [focused, setFocused] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const listId = useId();
-  const hits = searchSettings(query);
+  const hits = searchSettings(query, 8, t);
   const open = focused && query.trim() !== "";
 
   useEffect(() => {
@@ -58,8 +60,8 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
           aria-expanded={open}
           aria-controls={listId}
           aria-activedescendant={open && hits[active] ? `${listId}-${active}` : undefined}
-          aria-label="Search settings"
-          placeholder="Search settings"
+          aria-label={t("Search settings")}
+          placeholder={t("Search settings")}
           spellCheck={false}
           value={query}
           onChange={(e) => {
@@ -88,7 +90,7 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
         <ul
           id={listId}
           role="listbox"
-          aria-label="Matching settings"
+          aria-label={t("Matching settings")}
           className="absolute left-0 right-0 top-full z-20 mt-1 max-h-[60vh] overflow-y-auto rounded-lg border border-line-strong bg-panel p-1 shadow-lg"
         >
           {hits.length === 0 && <li className="px-2.5 py-2 text-[12.5px] text-faint">No setting matches “{query.trim()}”</li>}
@@ -108,8 +110,8 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
                 i === active ? "bg-accent-soft text-ink" : "text-muted"
               }`}
             >
-              <span className="min-w-0 truncate text-ink">{hit.title ?? hit.pageLabel}</span>
-              <span className="shrink-0 text-[11px] text-faint">{hit.title ? hit.pageLabel : "Page"}</span>
+              <span className="min-w-0 truncate text-ink">{t(hit.title ?? hit.pageLabel)}</span>
+              <span className="shrink-0 text-[11px] text-faint">{t(hit.title ? hit.pageLabel : "Page")}</span>
             </li>
           ))}
         </ul>

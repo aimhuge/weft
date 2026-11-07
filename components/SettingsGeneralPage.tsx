@@ -9,6 +9,7 @@ import HistorySettings from "./HistorySettings";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 import SoundSettings from "./SoundSettings";
 import SwitchRow from "./SwitchRow";
+import UiLanguagePicker from "./UiLanguagePicker";
 
 export default function SettingsGeneralPage({
   backlog,
@@ -34,6 +35,10 @@ export default function SettingsGeneralPage({
             hint="Changes right away. System follows your computer&apos;s setting; a scene puts its picture behind the board."
           />
           <AppearancePicker />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <SettingsSectionHeader title="Interface language" hint="Applies to the board, Settings and the new-thread form." />
+            <UiLanguagePicker />
+          </div>
         </section>
       </SettingsCard>
       <SettingsCard>

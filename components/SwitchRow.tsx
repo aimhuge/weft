@@ -1,5 +1,7 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
+
 // A Settings row: a title and hint on the left, an on/off switch on the right. The classes default
 // to the Settings dialog's section title and hint.
 export default function SwitchRow({
@@ -17,17 +19,18 @@ export default function SwitchRow({
   titleClass?: string;
   hintClass?: string;
 }) {
+  const t = useUiText();
   return (
     <section className="flex items-center justify-between gap-4">
       <div className="flex flex-col gap-0.5">
-        <h3 className={titleClass}>{title}</h3>
-        <p className={hintClass}>{hint}</p>
+        <h3 className={titleClass} data-settings-section={title}>{t(title)}</h3>
+        <p className={hintClass}>{t(hint)}</p>
       </div>
       <button
         type="button"
         role="switch"
         aria-checked={on}
-        aria-label={title}
+        aria-label={t(title)}
         onClick={() => onChange(!on)}
         className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-accent" : "bg-line-strong"}`}
       >

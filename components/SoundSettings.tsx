@@ -1,10 +1,12 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useState } from "react";
 import { CHIMES, CHIME_KINDS, type ChimePrefs, chimePrefs, previewChime, setChimePrefs } from "@/lib/chimes";
 
 // Chimes when a card changes column. Like Appearance, every change saves right away.
 export default function SoundSettings({ titleClass, hintClass }: { titleClass: string; hintClass: string }) {
+  const t = useUiText();
   // The dialog only mounts in the browser, so the cookie is there to read.
   const [prefs, setPrefs] = useState<ChimePrefs>(chimePrefs);
 
@@ -17,14 +19,14 @@ export default function SoundSettings({ titleClass, hintClass }: { titleClass: s
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-0.5">
-          <h3 className={titleClass}>Sounds</h3>
-          <p className={hintClass}>A short chime when a card changes column. Moves you make yourself stay quiet.</p>
+          <h3 className={titleClass} data-settings-section="Sounds">{t("Sounds")}</h3>
+          <p className={hintClass}>{t("A short chime when a card changes column. Moves you make yourself stay quiet.")}</p>
         </div>
         <button
           type="button"
           role="switch"
           aria-checked={prefs.on}
-          aria-label="Sounds"
+          aria-label={t("Sounds")}
           onClick={() => update({ ...prefs, on: !prefs.on })}
           className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${prefs.on ? "bg-accent" : "bg-line-strong"}`}
         >
@@ -35,7 +37,7 @@ export default function SoundSettings({ titleClass, hintClass }: { titleClass: s
       </div>
       <div className={`flex flex-col gap-2 ${prefs.on ? "" : "opacity-50"}`}>
         <label className="flex items-center gap-3">
-          <span className="w-[200px] shrink-0 text-[13px] text-ink">Volume</span>
+          <span className="w-[200px] shrink-0 text-[13px] text-ink">{t("Volume")}</span>
           <input
             type="range"
             min={0}
@@ -66,7 +68,7 @@ export default function SoundSettings({ titleClass, hintClass }: { titleClass: s
               onClick={() => previewChime(kind)}
               className="shrink-0 rounded-md border border-line-strong px-2.5 py-1 text-[12px] text-ink hover:bg-sunken"
             >
-              Play
+              {t("Play")}
             </button>
           </div>
         ))}
