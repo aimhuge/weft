@@ -2,10 +2,12 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { globalSingleton } from "./global-singleton";
 import { ghError } from "./github-issues";
+import { ORG_PATTERN, githubOrgMembers } from "./github-orgs";
 import { githubAccount } from "./github-status";
 import { REPO_PATTERN } from "./team-types";
 
-// People to suggest for a team: the GitHub collaborators of its linked repos, through the gh CLI (no shell, repo
+// People to suggest for a team: the GitHub collaborators of its linked repos (and the members of its GitHub org, when
+// it was made from one), through the gh CLI (no shell, repo
 // checked against REPO_PATTERN first). A person's public email is looked up once and kept for EMAIL_TTL.
 
 const run = promisify(execFile);
@@ -50,6 +52,12 @@ async function publicEmail(login: string, now: number): Promise<string | null> {
   return email;
 }
 
+// A typed @login's public email, for inviting by GitHub login; null when they hide it or the login isn't one.
+export async function githubEmail(login: string, now = Date.now()): Promise<string | null> {
+  const name = login.trim().replace(/^@/, "");
+  return ORG_PATTERN.test(name) ? publicEmail(name, now) : null;
+}
+
 // Run fn over items, at most `limit` at a time, keeping order.
 async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const out = new Array<R | undefined>(items.length);
@@ -64,9 +72,21 @@ async function mapLimited<T, R>(items: T[], limit: number, fn: (item: T) => Prom
   return out as R[];
 }
 
-export async function githubCollaborators(repos: string[], now = Date.now()): Promise<CollaboratorsResult> {
+// An org member who isn't on any linked repo is suggested too, with no repos.
+async function addOrgMembers(org: string, me: string, byLogin: Map<string, GithubPerson>): Promise<void> {
+  try {
+    for (const { login, avatarUrl } of await githubOrgMembers(org)) {
+      if (login.toLowerCase() === me.toLowerCase() || byLogin.has(login)) continue;
+      byLogin.set(login, { login, avatarUrl, email: null, repos: [] });
+    }
+  } catch {
+    // The repos' collaborators are enough on their own.
+  }
+}
+
+export async function githubCollaborators(repos: string[], now = Date.now(), org?: string): Promise<CollaboratorsResult> {
   const valid = [...new Set(repos.filter((r) => REPO_PATTERN.test(r)))];
-  if (valid.length === 0) return { people: [], error: null };
+  if (valid.length === 0 && !org) return { people: [], error: null };
   const { account, error } = await githubAccount();
   if (!account) return { people: [], error };
 
@@ -88,11 +108,12 @@ export async function githubCollaborators(repos: string[], now = Date.now()): Pr
       }
     }),
   );
+  if (org) await addOrgMembers(org, account.login, byLogin);
   const people = [...byLogin.values()];
   for (const p of people) p.repos.sort();
   people.sort((a, b) => a.login.toLowerCase().localeCompare(b.login.toLowerCase()));
   await mapLimited(people, CONCURRENCY, async (p) => {
     p.email = await publicEmail(p.login, now);
   });
-  return { people, error: failed === valid.length ? failure : null };
+  return { people, error: valid.length > 0 && failed === valid.length ? failure : null };
 }

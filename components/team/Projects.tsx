@@ -1,13 +1,13 @@
 "use client";
 
-// A team's projects (GitHub repos, "owner/name") in Settings → Team: the linked list with Remove for those who
-// manage the team, "Access" to pick which members see each one (./ProjectAccess), and "Add project" (one owner/name
-// field whose typeahead suggests the board's repos not yet linked). Members see only the projects they were granted. The actions come in as a prop like the rest of components/team.
+// A team's projects (GitHub repos, "owner/name") in Settings → Team, first on the page: the linked list, each with
+// how many of this board's cards it has, Remove for those who manage the team, and "Add project" (one owner/name
+// field whose typeahead suggests the board's repos and the team's GitHub org's repos not yet linked). Members see
+// only the projects they were granted; who sees which is under Advanced (./ProjectAccess). The actions come in as a
+// prop like the rest of components/team.
 import { useState, useTransition, type SubmitEvent } from "react";
-import { REPO_PATTERN, type RoleOption, type TeamClientActions, type TeamMember, type TeamProject } from "@/lib/team-types";
+import { REPO_PATTERN, type TeamClientActions, type TeamProject } from "@/lib/team-types";
 import { unlinkedRepos } from "@/lib/team-view";
-import { ProjectAccess } from "./ProjectAccess";
-import { ProjectPeople } from "./ProjectPeople";
 
 const FIELD = "rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12.5px] text-ink outline-none focus:border-accent";
 const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
@@ -66,14 +66,16 @@ function AddProject({ linked, boardRepos, actions }: { linked: string[]; boardRe
   );
 }
 
-type RowProps = { project: TeamProject; canManage: boolean; actions: TeamClientActions; members: TeamMember[] };
+type RowProps = { project: TeamProject; canManage: boolean; actions: TeamClientActions; cards?: number };
 
-function ProjectRow({ project, canManage, actions, members }: RowProps) {
+const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
+
+function ProjectRow({ project, canManage, actions, cards }: RowProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function remove() {
-    if (!window.confirm(`Remove ${project.repo} from this team? The repo itself isn't touched.`)) return;
+    if (!window.confirm(`Remove ${project.repo} from this team? The repo itself isn't touched. No new Mac can join its 🔐 vault after this, but Macs that already have it keep its keys: to cut someone off, remove them with "Rotate shared vaults" and change the values at the providers.`)) return;
     startTransition(async () => {
       const result = await actions.removeProject(project.repo);
       setError(result.ok ? null : (result.message ?? "Couldn't remove the project."));
@@ -91,7 +93,7 @@ function ProjectRow({ project, canManage, actions, members }: RowProps) {
         >
           {project.repo}
         </a>
-        {canManage ? <ProjectAccess project={project} members={members} actions={actions} /> : null}
+        {cards ? <span className="text-[12px] text-muted">{plural(cards, "card")}</span> : null}
         {canManage ? (
           <button type="button" onClick={remove} disabled={pending} className={BUTTON}>
             {pending ? "Removing…" : "Remove"}
@@ -112,17 +114,15 @@ export function Projects({
   canManage,
   actions,
   boardRepos,
-  roleOptions,
-  members,
-  pending,
+  cards = {},
 }: {
   projects: TeamProject[];
   canManage: boolean;
   actions: TeamClientActions;
+  // The repos to suggest: the team's GitHub org's and this board's.
   boardRepos: string[];
-  roleOptions: RoleOption[];
-  members: TeamMember[];
-  pending: { email: string }[];
+  // This board's cards per repo (lib/use-board-repos.ts).
+  cards?: Record<string, number>;
 }) {
   const repos = projects.map((p) => p.repo);
   return (
@@ -132,14 +132,11 @@ export function Projects({
       ) : (
         <ul className="divide-y divide-line">
           {projects.map((p) => (
-            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} members={members} />
+            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} cards={cards[p.repo]} />
           ))}
         </ul>
       )}
       {canManage ? <AddProject linked={repos} boardRepos={boardRepos} actions={actions} /> : null}
-      {canManage && repos.length > 0 ? (
-        <ProjectPeople repos={repos} members={members} pending={pending} actions={actions} roleOptions={roleOptions} />
-      ) : null}
     </>
   );
 }

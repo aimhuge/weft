@@ -16,10 +16,12 @@ export type TeamProject = { repo: string; addedAt: string; addedBy: string | nul
 
 export type TeamUser = { id: string; email: string | null; name: string | null; avatar: string | null };
 
+// `login` is the GitHub login they signed in with, when they did; it matches them to their repos' collaborators.
 export type TeamMember = {
   userId: string;
   email: string | null;
   name: string | null;
+  login?: string | null;
   role: TeamRole;
   joinedAt: string;
 };
@@ -60,7 +62,8 @@ export type TeamOp =
 
 // POST /api/teams with this body makes a new workspace the caller owns (no `org`: it doesn't exist yet).
 // The answer's `slug` is the new workspace, so the page can switch to it.
-export type NewTeamOp = { action: "create"; name: string };
+// `slug` is a hint, the GitHub org the team was made from: the slug follows it, not the (editable) display name.
+export type NewTeamOp = { action: "create"; name: string; slug?: string };
 export type NewTeamResult = TeamActionResult & { slug?: string };
 
 // The longest team name, for a new team and a rename alike.
@@ -82,7 +85,7 @@ export type TeamClientActions = {
   addProject: (repo: string) => Promise<TeamActionResult>;
   removeProject: (repo: string) => Promise<TeamActionResult>;
   setProjectAccess: (repo: string, userId: string, grant: boolean) => Promise<TeamActionResult>;
-  createTeam: (name: string) => Promise<NewTeamResult>;
+  createTeam: (name: string, slug?: string) => Promise<NewTeamResult>;
   // By slug, not the loaded team: Settings → Teams renames any team you own from its list.
   renameTeam: (slug: string, name: string) => Promise<TeamActionResult>;
   deleteTeam: (slug: string, confirm: string) => Promise<TeamActionResult>;

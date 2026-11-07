@@ -75,3 +75,19 @@ export function ProjectAccess({ project, members, actions }: { project: TeamProj
     </>
   );
 }
+
+// Advanced's "Who sees each project": every project with its Access toggle. Nothing when there are no plain members,
+// since owners and admins see every project anyway.
+export function ProjectAccessList({ projects, members, actions }: { projects: TeamProject[]; members: TeamMember[]; actions: TeamClientActions }) {
+  if (projects.length === 0 || !members.some((m) => m.role === "member")) return null;
+  return (
+    <ul className="divide-y divide-line" aria-label="Who sees each project">
+      {projects.map((p) => (
+        <li key={p.repo} className="flex flex-wrap items-center gap-x-2 gap-y-1.5 py-1.5">
+          <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{p.repo}</span>
+          <ProjectAccess project={p} members={members} actions={actions} />
+        </li>
+      ))}
+    </ul>
+  );
+}

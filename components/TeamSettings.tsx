@@ -1,7 +1,8 @@
 "use client";
 
 // The Teams page inside the desktop's Settings: "Your teams", every team
-// you're in, and below it the one you picked (components/team/TeamPanel.tsx).
+// you're in, and below it the one you picked (components/team/TeamPanel.tsx):
+// its projects, then its people, then a closed "Advanced".
 // The desktop can't use weft.zip's cookie session or the service key, so
 // `useTeam(org?)` from lib/use-team.ts posts TeamOp bodies to
 // /api/account/team, which forwards them to weft.zip with the desktop's
@@ -23,7 +24,8 @@ import { Spinner } from "./Icon";
 import { Section, SUBTLE, BUTTON } from "./team/SettingsSection";
 import { TeamList } from "./team/TeamList";
 import { TeamPanel } from "./team/TeamPanel";
-import { useBoardRepos } from "@/lib/use-board-repos";
+import { useBoardProjects } from "@/lib/use-board-repos";
+import { useGithubOrgs } from "@/lib/use-github-orgs";
 import { useManagedTeam } from "@/lib/use-managed-team";
 import { prefetchTeam, prefetchTeams } from "@/lib/use-team";
 import { useEffect } from "react";
@@ -55,7 +57,9 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
 
 export default function TeamSettings() {
   const { state, refresh, actions, setOrg, selected, last } = useManagedTeam();
-  const boardRepos = useBoardRepos(state.kind === "ok");
+  const board = useBoardProjects(state.kind === "ok");
+  // Your GitHub orgs: New team offers them as names, and a team made from one gets its repos suggested.
+  const githubOrgs = useGithubOrgs(state.kind !== "signed-out");
   // Your other teams, loaded behind the one on screen, so a switch opens instantly too.
   const slugs = last?.orgs.map((o) => o.slug).join(" ") ?? "";
   useEffect(() => {
@@ -99,10 +103,11 @@ export default function TeamSettings() {
           actions={actions}
           onSwitch={setOrg}
           onHover={prefetchTeam}
+          githubOrgs={githubOrgs}
         />
       </Section>
 
-      {state.kind === "ok" ? <TeamPanel team={state.team} actions={actions} boardRepos={boardRepos} /> : null}
+      {state.kind === "ok" ? <TeamPanel team={state.team} actions={actions} board={board} githubOrgs={githubOrgs} /> : null}
       {state.kind === "loading" ? <Loading name={switching} /> : null}
       {state.kind === "error" ? <LoadError message={state.message} onRetry={refresh} /> : null}
     </div>

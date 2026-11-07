@@ -32,6 +32,8 @@ export type RosterMember = {
   userId: string;
   email: string | null;
   displayName: string | null;
+  // Their GitHub login, when they signed in with GitHub: the row then shows @login and their GitHub avatar.
+  login?: string | null;
   role: TeamRole;
   roleLabel: string;
   joinedAt: string;
@@ -48,6 +50,7 @@ function RosterMemberProps(member: TeamMember, isYou: boolean, roleLabel: string
     userId: member.userId,
     email: member.email,
     displayName: member.name,
+    login: member.login ?? null,
     role: member.role,
     roleLabel,
     joinedAt: member.joinedAt,
@@ -65,7 +68,13 @@ function formatJoined(iso: string): string {
 }
 
 function displayName(member: RosterMember): string {
-  return member.displayName?.trim() || member.email?.trim() || "—";
+  return member.login ? `@${member.login}` : member.displayName?.trim() || member.email?.trim() || "—";
+}
+
+// Under an @login, their name (or email); under a name, their email.
+function secondName(member: RosterMember): string | null {
+  const second = member.login ? member.displayName?.trim() || member.email : member.email;
+  return second && second !== displayName(member) ? second : null;
 }
 
 function RosterRow({
@@ -125,16 +134,18 @@ function RosterRow({
         <td>
           <div className="wz-rosterWho">
             <span className="wz-rosterAvatar" aria-hidden="true">
-              {(displayName(member)[0] ?? "?").toUpperCase()}
+              {member.login ? (
+                <img src={`https://github.com/${member.login}.png?size=68`} alt="" width={34} height={34} style={{ borderRadius: "50%" }} />
+              ) : (
+                (displayName(member)[0] ?? "?").toUpperCase()
+              )}
             </span>
             <div className="wz-rosterName">
               <span className="wz-rosterNamePrimary">
                 {displayName(member)}
                 {member.isYou ? <span className="wz-rosterYou">You</span> : null}
               </span>
-              {member.email && displayName(member) !== member.email ? (
-                <span className="wz-rosterNameSecondary">{member.email}</span>
-              ) : null}
+              {secondName(member) ? <span className="wz-rosterNameSecondary">{secondName(member)}</span> : null}
             </div>
           </div>
         </td>

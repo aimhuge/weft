@@ -5,6 +5,7 @@
 // another team too, a trash that deletes it (after you type its name), and "+ New team" at the foot opens the
 // name field. Replaced the switcher's <select>, which hid all but the current team.
 import { useState } from "react";
+import type { GithubOrg } from "@/lib/github-orgs";
 import type { TeamClientActions, TeamOrg, TeamRole } from "@/lib/team-types";
 import Icon, { Spinner } from "../Icon";
 import { DeleteTeamForm } from "./DeleteTeamForm";
@@ -95,6 +96,7 @@ export function TeamList({
   actions,
   onSwitch,
   onHover,
+  githubOrgs,
 }: {
   orgs: TeamOrg[];
   current: string | undefined;
@@ -104,6 +106,8 @@ export function TeamList({
   actions: TeamClientActions;
   onSwitch: (slug: string) => void;
   onHover?: (slug: string) => void;
+  // Your GitHub orgs, offered as names for a new team (lib/use-github-orgs.ts).
+  githubOrgs?: GithubOrg[];
 }) {
   const [creating, setCreating] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -162,6 +166,7 @@ export function TeamList({
         <div className="px-2.5 py-2">
           <NewTeamForm
             actions={actions}
+            orgs={githubOrgs}
             onCancel={() => setCreating(false)}
             onCreated={(slug) => {
               setCreating(false);

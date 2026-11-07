@@ -1,6 +1,7 @@
 // Make a new workspace the caller owns (POST /api/teams {action:"create"} and the createTeam server action),
 // or rename one they own ({action:"rename"} through runTeamOp, and the renameTeam server action).
-// The slug mirrors private.org_slug_for: slugify, skip lib/reserved-slugs.ts names, -2, -3... on a clash.
+// The slug comes from the GitHub org it was made from when there is one (the name stays editable), else the name;
+// it mirrors private.org_slug_for: slugify, skip lib/reserved-slugs.ts names, -2, -3... on a clash.
 import "server-only";
 import { setCurrentOrg, slugify } from "@aimhuge/teams";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -22,12 +23,12 @@ async function freeSlug(service: SupabaseClient, name: string): Promise<string> 
 const badName = (name: string) => name.length < 1 || name.length > TEAM_NAME_MAX;
 const NAME_RULE = `Name the team in 1 to ${TEAM_NAME_MAX} characters.`;
 
-export async function runCreateTeam(user: WebUser, nameRaw: string): Promise<NewTeamResult> {
+export async function runCreateTeam(user: WebUser, nameRaw: string, slugHint?: string): Promise<NewTeamResult> {
   const name = nameRaw.trim();
   if (badName(name)) return { ok: false, message: NAME_RULE };
   const service = serviceClient();
   if (!service) return { ok: false, message: "Teams aren't set up on this Weft." };
-  const slug = await freeSlug(service, name);
+  const slug = await freeSlug(service, slugHint?.trim() || name);
   const created: { data: { id: string } | null; error: { message: string } | null } = await service
     .from("orgs")
     .insert({ slug, name })

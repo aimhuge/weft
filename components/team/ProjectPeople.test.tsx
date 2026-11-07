@@ -73,4 +73,25 @@ describe("ProjectPeople", () => {
     view();
     expect(await screen.findByText(/offline/)).toBeInTheDocument();
   });
+
+  it("heads the list Suggested from GitHub and asks for the repos only without an org", async () => {
+    callMock.mockResolvedValue({ people: [person("ada", "ada@x.co")], error: null });
+    view();
+    expect(await screen.findByRole("heading", { name: "Suggested from GitHub" })).toBeInTheDocument();
+    expect(callMock).toHaveBeenCalledWith("GET", "/api/github/collaborators?repos=a%2Fb");
+  });
+
+  it("asks for the org's members too when it has one", async () => {
+    callMock.mockResolvedValue({ people: [person("ada", "ada@x.co")], error: null });
+    view(["a/b"], { org: "acme" });
+    await screen.findByText("ada");
+    expect(callMock).toHaveBeenCalledWith("GET", "/api/github/collaborators?repos=a%2Fb&org=acme");
+  });
+
+  it("fetches with no repos when there is an org, and shows an org member as in <org>", async () => {
+    callMock.mockResolvedValue({ people: [{ login: "ada", avatarUrl: "", email: "ada@x.co", repos: [] }], error: null });
+    view([], { org: "acme" });
+    expect(await screen.findByText("in acme")).toBeInTheDocument();
+    expect(callMock).toHaveBeenCalledWith("GET", "/api/github/collaborators?repos=&org=acme");
+  });
 });

@@ -6,8 +6,6 @@ import type { TeamClientActions } from "@/lib/team-types";
 import "../test-utils";
 import { Projects } from "./Projects";
 
-vi.mock("./ProjectPeople", () => ({ ProjectPeople: () => <div>people</div> }));
-
 const projects = [{ repo: "aimhuge/weft", addedAt: "2026-10-01T00:00:00.000Z", addedBy: null, access: [] }];
 
 function actions(over: Partial<TeamClientActions> = {}): TeamClientActions {
@@ -20,7 +18,7 @@ function actions(over: Partial<TeamClientActions> = {}): TeamClientActions {
 
 function view(a: TeamClientActions, props: Partial<Parameters<typeof Projects>[0]> = {}) {
   return render(
-    <Projects projects={projects} canManage actions={a} boardRepos={["aimhuge/weft", "aimhuge/other"]} roleOptions={[]} members={[]} pending={[]} {...props} />,
+    <Projects projects={projects} canManage actions={a} boardRepos={["aimhuge/weft", "aimhuge/other"]} {...props} />,
   );
 }
 
@@ -70,6 +68,8 @@ describe("Projects", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(a.removeProject).toHaveBeenCalledWith("aimhuge/weft"));
     expect(confirm).toHaveBeenCalledTimes(2);
+    // Unlinking stops new Macs joining the vault but can't take keys back: the confirm says so, and how to.
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/keep its keys.*Rotate shared vaults/));
   });
 
   it("shows a failed remove's message", async () => {
@@ -83,7 +83,6 @@ describe("Projects", () => {
     view(actions(), { canManage: false });
     expect(screen.getByRole("link", { name: "aimhuge/weft" })).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByText("people")).not.toBeInTheDocument();
   });
 
   it("tells a member with no granted projects so", () => {
@@ -91,14 +90,15 @@ describe("Projects", () => {
     expect(screen.getByText("No projects shared with you yet.")).toBeInTheDocument();
   });
 
-  it("empty list for managers invites an add, and has no people suggestions", () => {
+  it("empty list for managers invites an add", () => {
     view(actions(), { projects: [] });
     expect(screen.getByText(/No projects yet/)).toBeInTheDocument();
-    expect(screen.queryByText("people")).not.toBeInTheDocument();
   });
 
-  it("managers with projects get the people suggestions", () => {
-    view(actions());
-    expect(screen.getByText("people")).toBeInTheDocument();
+  it("shows each project's cards on this board, and nothing for none", () => {
+    view(actions(), { projects: [...projects, { ...projects[0]!, repo: "a/b" }, { ...projects[0]!, repo: "a/c" }], cards: { "aimhuge/weft": 12, "a/b": 1 } });
+    expect(screen.getByText("12 cards")).toBeInTheDocument();
+    expect(screen.getByText("1 card")).toBeInTheDocument();
+    expect(screen.getAllByText(/cards?$/)).toHaveLength(2);
   });
 });

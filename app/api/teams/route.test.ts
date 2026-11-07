@@ -216,8 +216,14 @@ describe("POST /api/teams project and create ops", () => {
     runCreateTeam.mockResolvedValue({ ok: true, message: "Created", slug: "new" });
     const res = await route.POST(req({ method: "POST", body: { action: "create", name: "New" } }));
     expect(await res.json()).toEqual({ ok: true, message: "Created", slug: "new" });
-    expect(runCreateTeam).toHaveBeenCalledWith(USER, "New");
+    expect(runCreateTeam).toHaveBeenCalledWith(USER, "New", undefined);
     expect(teamAccessFor).not.toHaveBeenCalled();
+  });
+
+  it("passes a create op's slug hint through", async () => {
+    runCreateTeam.mockResolvedValue({ ok: true, message: "Created", slug: "acme" });
+    await route.POST(req({ method: "POST", body: { action: "create", name: "Acme Inc", slug: "acme" } }));
+    expect(runCreateTeam).toHaveBeenCalledWith(USER, "Acme Inc", "acme");
   });
 
   it("create is 401 when signed out, 503 unconfigured, 400 without a name", async () => {

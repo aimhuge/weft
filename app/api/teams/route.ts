@@ -67,7 +67,7 @@ const TeamOpSchema = z.discriminatedUnion("action", [
   z.object({ org: text, action: z.literal("project-access"), repo: text, userId: text, grant: z.boolean() }),
   z.object({ org: text, action: z.literal("rename"), name: text }),
   z.object({ org: text, action: z.literal("delete"), confirm: text }),
-  z.object({ action: z.literal("create"), name: text }),
+  z.object({ action: z.literal("create"), name: text, slug: text.optional() }),
 ]);
 
 function parseOp(value: unknown): TeamOp | NewTeamOp | null {
@@ -80,7 +80,7 @@ async function createTeam(req: Request, op: NewTeamOp) {
   if (!SUPABASE_KEY) return unconfigured();
   const user = await bearerUser(req);
   if (!user) return Response.json({ error: "signed-out" }, { status: 401 });
-  return Response.json(await runCreateTeam(user, op.name));
+  return Response.json(await runCreateTeam(user, op.name, op.slug));
 }
 
 export async function GET(req: Request) {

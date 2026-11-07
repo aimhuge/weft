@@ -110,6 +110,7 @@ When a new doc lands in this folder, add it here on the same change.
   `lib/host-api/calls.ts`, `lib/types-thread.ts`, `lib/edit-preview-types.ts`, `lib/approval-sig.ts`, `lib/thread-page.ts`,
   `lib/board-view.ts`, `lib/cloud-commands.ts`, `lib/pending-sends.ts`, `lib/thread-find.ts` and the rest) re-export it. Next compiles it (`transpilePackages`); `pnpm typecheck` also checks it alone with no DOM or Node types.
 - `electron/main.cjs`: shell; starts Next, windows, tray, dock, `weft://` links, global hotkey;
+  `electron/copilot-window.cjs` is the copilot's own window (behind `WEFT_COPILOT`, `electron/features.cjs`): placed, hidden on close, its open state sent to the board;
   `electron/protocol-client.cjs` registers `weft://` with the OS (the dev Electron too on Windows and Linux) and listens for links;
   `electron/startup-screen.cjs` runs the start screen and shows why the board didn't load (Retry, Logs, Quit);
   `electron/startup-timer.cjs` times every launch into `~/.weft/startup.jsonl` (`node electron/startup-timer.cjs` lists them).

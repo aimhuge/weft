@@ -21,7 +21,32 @@ describe("NewTeamForm", () => {
     await userEvent.type(screen.getByLabelText("Team name"), "  New Co ");
     await userEvent.click(screen.getByRole("button", { name: "Create" }));
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith("new-co"));
-    expect(actions.createTeam).toHaveBeenCalledWith("New Co");
+    expect(actions.createTeam).toHaveBeenCalledWith("New Co", undefined);
+  });
+
+  it("offers your GitHub orgs: a pick fills the name, keeps it editable and sends the org as the slug", async () => {
+    const actions = { createTeam: vi.fn().mockResolvedValue({ ok: true, slug: "exitingcom" }) } as unknown as TeamClientActions;
+    const onCreated = vi.fn();
+    render(<NewTeamForm actions={actions} orgs={[{ login: "Exitingcom", avatarUrl: "" }, { login: "aimhuge", avatarUrl: "a.png" }]} onCreated={onCreated} onCancel={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Exitingcom" }));
+    expect(screen.getByRole("button", { name: "Exitingcom" })).toHaveAttribute("aria-pressed", "true");
+    const field = screen.getByLabelText("Team name");
+    expect(field).toHaveValue("Exitingcom");
+    await userEvent.clear(field);
+    await userEvent.type(field, "Exiting.com");
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith("exitingcom"));
+    expect(actions.createTeam).toHaveBeenCalledWith("Exiting.com", "Exitingcom");
+  });
+
+  it("creates from an org pick left as it is, and a second click on the pick unpicks it", async () => {
+    const actions = { createTeam: vi.fn().mockResolvedValue({ ok: true, slug: "acme" }) } as unknown as TeamClientActions;
+    render(<NewTeamForm actions={actions} orgs={[{ login: "acme", avatarUrl: "" }]} onCreated={vi.fn()} onCancel={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "acme" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitFor(() => expect(actions.createTeam).toHaveBeenCalledWith("acme", "acme"));
+    await userEvent.click(screen.getByRole("button", { name: "acme" }));
+    expect(screen.getByLabelText("Team name")).toHaveValue("");
   });
 
   it("shows the failure message and stays open", async () => {

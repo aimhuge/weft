@@ -83,6 +83,14 @@ describe("runCreateTeam", () => {
     }
   });
 
+  it("takes the slug from a GitHub org's hint, keeping the typed name", async () => {
+    const s = service({ taken: ["acme-hq"] });
+    sessionMock.serviceClient.mockReturnValue(s.client);
+    expect(await runCreateTeam(USER, "Acme Inc", "Acme-HQ")).toEqual({ ok: true, message: "Created Acme Inc.", slug: "acme-hq-2" });
+    expect(s.inserts.orgs).toEqual([{ slug: "acme-hq-2", name: "Acme Inc" }]);
+    expect((await runCreateTeam(USER, "Acme Inc", "  ")).slug).toBe("acme-inc");
+  });
+
   it("reports an org insert error", async () => {
     sessionMock.serviceClient.mockReturnValue(service({ orgError: "dup" }).client);
     expect(await runCreateTeam(USER, "Acme")).toEqual({ ok: false, message: "Could not create team: dup" });

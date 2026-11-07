@@ -428,6 +428,53 @@ in the next section stops at a pending row: its Add form works, but nothing on e
 Names with lower-case letters stay on the sharer's Mac, because `vault_secrets` takes upper case only, and the
 drawer says which.
 
+## A linked repo shares its vault
+
+**Built 2026-11-07** (Teams step 3). A project is either yours or the team's ([teams.md](teams.md#shared-projects)):
+when a team links a GitHub repo in Settings → Teams → Projects, that repo's vault is the team's, with no Share… in the
+drawer. The trade-off, accepted: everyone on the team can decrypt that project's secrets. Each new Mac still needs an
+admin's approval, but only once for the team, not once per vault. The schema is
+`supabase/migrations/20261107101344_team_link_vault.sql`.
+
+1. **Linking shares it.** After `link-project` succeeds, `addProject` in `lib/use-team.ts` calls
+   `shareLinkedRepo` (`lib/team-vault-link.ts`) → `vault:share-repo` → `shareRepo` in `electron/vault-shared-api.cjs`.
+   Main finds this Mac's vault by the repo alone (`github:owner/name`), asks for one Touch ID naming how many secrets
+   go to which team, and runs the same `shareLocalVault` as Share…. It does nothing when this Mac has no vault for the
+   repo, it is already shared, or the team's vault exists and this Mac isn't in it (it asks to join instead). The
+   Add project form says which happened (`linkNote`).
+2. **Any member may start it, and add keys.** `share_vault` used to take an admin; for a linked repo any member may
+   now create the team's vault, so the first teammate with keys on their Mac starts it (the drawer's Share… offers the
+   linked team first, `shareOfferOrg` in `lib/vault-shared.ts`). Writing secrets into a joined vault was already open
+   to every member (`vault_secrets`' member policies).
+3. **Teammates' Macs ask on their own.** After each overview (window focus, folder change), `createTeamUpkeep` in
+   `electron/vault-team-link.cjs` runs in the background: a Mac on a linked repo whose vault the team shares, and that
+   isn't in it, calls `request_vault_device` by itself, once per vault (`team-asked.json` beside the vault files, so a
+   declined request isn't sent again; "Ask to join" stays in the drawer).
+4. **The admin approves a Mac once.** A notification ("A teammate's Mac wants your team's secrets") tells an admin a
+   Mac is waiting; Approve in the 🔐 drawer is the existing fingerprint check and Touch ID. `grant_vault_device` now
+   also writes `team_trusted_devices (org, device, public_key)`, as does `share_vault` for the Mac that made the vault.
+5. **Trusted Macs get the rest by themselves.** The same upkeep calls `sealTrusted`: `trusted_vault_gaps()` lists,
+   for each open team vault this Mac holds, the team's trusted Macs with no grant at the current key, and main seals
+   the key to each (`grant_trusted_vault_device`), no Touch ID. So approving a Mac on one vault hands it every other
+   team vault, and linking a new project reaches every approved Mac without another approval. It runs right after an
+   approval and right after a share too. The trust is pinned to the public key the admin checked: `devices`' "update
+   own" policy lets an owner change `public_key`, so a stolen session that swapped it would otherwise be sealed every
+   vault; a changed key needs an admin again. Leaving the team deletes that person's trusted Macs (a trigger on
+   `org_memberships`), so someone invited back is approved again.
+6. **The drawer says "Shared with <team>"** on a shared vault's badge (`sharedLabel`), and each vault carries
+   `linked` (the team that linked its repo, from `team_orgs_for_repos`) for the Share… offer.
+
+**Unlinking.** A trigger on `org_projects` sets `vaults.grants_closed_at` when the repo is unlinked and clears it when
+it is linked again. A closed vault takes no new request (`request_vault_device`), no admin grant
+(`grant_vault_device`), no trusted grant, and its requests drop off `pending_vault_devices`. A vault shared with
+Share… on a repo that was never linked stays open, as before.
+
+**What unlinking can't do: take keys back.** A Mac that holds the vault key keeps it, and so can still read what it
+pulled, and members can still read and write the vault's rows while they're in the team. Keys can't be revoked
+from a Mac; the vault can be **rotated** around it: remove the person with "Rotate shared vaults" (see "Removal and
+rotation" below) for a new vault key sealed only to the Macs that stay, or revoke a single Mac on the team's Devices
+page, then change the values at their providers, because whatever a Mac decrypted before is already out.
+
 ## Granting a teammate's devices
 
 The owner (or any `admin`) opens the team's **Devices** page on the deployed weft.zip (a
@@ -497,6 +544,12 @@ triggered from the team page:
 5. **List the secrets they could read.** A rotate doesn't take plaintext back from a device that had it
    before. The team page shows "Rotate the following values at their providers: `<list of names>`" — a
    plain, copied-friendly list, with a "Mark rotated" button per row that writes a `vault_events` row.
+
+**Open gap: Leave doesn't rotate.** `runRemove` (`lib/team-ops.ts`) skips the rotate when a member removes
+themselves (Leave), so a leaver's Macs keep a live vault key, the same as a Remove with the tick off. Nothing
+rotates on its own otherwise either: not on unlinking a project, not on a schedule. For Teams 3 (a team-linked
+repo shares its vault): cut the leaver's devices off on Leave too, and offer the admin the rotate the next time
+they open the team page.
 
 **Q11: what the rotate button does when only one device is online.** Recommend: a rotate is
 **per-vault, not per-org**, and a per-vault rotate can be a no-op if the user being removed had no grants
