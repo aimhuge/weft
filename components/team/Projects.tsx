@@ -1,8 +1,8 @@
 "use client";
 
 // A team's projects (GitHub repos, "owner/name") in Settings → Team: the linked list with Remove for those who
-// manage the team, "Access" to pick which members see each one (./ProjectAccess), and "Add project" (a pick from
-// the board's repos not yet linked, or a typed owner/name). Members see only the projects they were granted. The actions come in as a prop like the rest of components/team.
+// manage the team, "Access" to pick which members see each one (./ProjectAccess), and "Add project" (one owner/name
+// field whose typeahead suggests the board's repos not yet linked). Members see only the projects they were granted. The actions come in as a prop like the rest of components/team.
 import { useState, useTransition, type SubmitEvent } from "react";
 import { REPO_PATTERN, type RoleOption, type TeamClientActions, type TeamMember, type TeamProject } from "@/lib/team-types";
 import { unlinkedRepos } from "@/lib/team-view";
@@ -16,14 +16,13 @@ type Note = { ok: boolean; text: string } | null;
 
 function AddProject({ linked, boardRepos, actions }: { linked: string[]; boardRepos: string[]; actions: TeamClientActions }) {
   const [typed, setTyped] = useState("");
-  const [picked, setPicked] = useState("");
   const [note, setNote] = useState<Note>(null);
   const [pending, startTransition] = useTransition();
   const choices = unlinkedRepos(boardRepos, linked);
 
   function submit(e: SubmitEvent) {
     e.preventDefault();
-    const repo = (typed.trim() || picked).replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "");
+    const repo = typed.trim().replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "");
     if (!repo) return;
     if (!REPO_PATTERN.test(repo)) {
       setNote({ ok: false, text: "Use the owner/name form, like aimhuge/weft." });
@@ -34,7 +33,6 @@ function AddProject({ linked, boardRepos, actions }: { linked: string[]; boardRe
       setNote({ ok: result.ok, text: result.message ?? (result.ok ? `Added ${repo}.` : "Couldn't add the project.") });
       if (result.ok) {
         setTyped("");
-        setPicked("");
       }
     });
   }
@@ -42,29 +40,20 @@ function AddProject({ linked, boardRepos, actions }: { linked: string[]; boardRe
   return (
     <form onSubmit={submit} className="mt-3 flex flex-col gap-2" noValidate>
       <div className="flex flex-wrap items-center gap-2">
-        {choices.length > 0 ? (
-          <select
-            aria-label="Project from your board"
-            value={picked}
-            onChange={(e) => setPicked(e.target.value)}
-            className={FIELD}
-          >
-            <option value="">From your board…</option>
-            {choices.map((r) => (
-              <option key={r} value={r}>
-                {r}
-              </option>
-            ))}
-          </select>
-        ) : null}
         <input
           aria-label="GitHub repo"
+          list="team-project-repos"
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          placeholder="owner/name"
+          placeholder={choices.length > 0 ? `${choices[0]}, or any owner/name` : "owner/name, like aimhuge/weft"}
           className={`${FIELD} min-w-0 flex-1`}
         />
-        <button type="submit" disabled={pending || (!typed.trim() && !picked)} className={BUTTON}>
+        <datalist id="team-project-repos">
+          {choices.map((r) => (
+            <option key={r} value={r} />
+          ))}
+        </datalist>
+        <button type="submit" disabled={pending || !typed.trim()} className={BUTTON}>
           {pending ? "Adding…" : "Add project"}
         </button>
       </div>

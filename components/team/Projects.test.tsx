@@ -27,12 +27,14 @@ function view(a: TeamClientActions, props: Partial<Parameters<typeof Projects>[0
 afterEach(() => vi.restoreAllMocks());
 
 describe("Projects", () => {
-  it("offers only board repos not yet linked and adds the pick", async () => {
+  it("suggests only board repos not yet linked and adds the pick", async () => {
     const a = actions();
-    view(a);
-    const select = screen.getByLabelText("Project from your board");
-    expect(screen.queryByRole("option", { name: "aimhuge/weft" })).not.toBeInTheDocument();
-    await userEvent.selectOptions(select, "aimhuge/other");
+    const { container } = view(a);
+    const suggestions = [...container.querySelectorAll("datalist option")].map((o) => o.getAttribute("value"));
+    expect(suggestions).toEqual(["aimhuge/other"]);
+    const field = screen.getByLabelText("GitHub repo");
+    expect(field).toHaveAttribute("placeholder", "aimhuge/other, or any owner/name");
+    await userEvent.type(field, "aimhuge/other");
     await userEvent.click(screen.getByRole("button", { name: "Add project" }));
     await waitFor(() => expect(a.addProject).toHaveBeenCalledWith("aimhuge/other"));
     expect(await screen.findByRole("status")).toHaveTextContent("Added aimhuge/other.");
@@ -41,7 +43,7 @@ describe("Projects", () => {
   it("validates a typed repo and accepts a GitHub URL", async () => {
     const a = actions();
     view(a, { boardRepos: [] });
-    expect(screen.queryByLabelText("Project from your board")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("GitHub repo")).toHaveAttribute("placeholder", "owner/name, like aimhuge/weft");
     await userEvent.type(screen.getByLabelText("GitHub repo"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Add project" }));
     expect(screen.getByRole("alert")).toHaveTextContent("owner/name");
