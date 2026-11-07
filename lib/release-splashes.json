@@ -1,4 +1,11 @@
 {
+  "0.7.8": {
+    "lines": [
+      "Linking a big project to a team no longer stalls sync, so every card reaches your team.",
+      "Sign in to Weft with GitHub. Your Google account still connects Gmail, Drive and Calendar in Settings.",
+      "The phone app now offers Sign in with email, and its TestFlight link reopens once Apple approves it."
+    ]
+  },
   "0.7.7": {
     "lines": [
       "Link a repo to your team, so your teammates’ cards show up on your board and your vault is shared securely.",
