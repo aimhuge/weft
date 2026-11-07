@@ -4,7 +4,7 @@ import { SETTINGS_PAGES, type SettingsPage } from "./settings-nav";
 // top nav jumps between. `title` is the section's heading text exactly as it renders (an h3, or Sync's h4), so the
 // dialog can find it on the page; `words` are what people might type instead. A section that isn't drawn right now
 // (signed out, nothing set up yet) simply has no chip, and a search for it still opens its page.
-export type SettingsSection = { page: SettingsPage; title: string; words?: string };
+export type SettingsSection = { page: SettingsPage; title: string; words: string };
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { page: "general", title: "Appearance", words: "theme dark mode light mode scene wallpaper colors palette" },
@@ -92,8 +92,8 @@ export function searchSettings(query: string, limit = 8, translate = (text: stri
   });
   SETTINGS_SECTIONS.forEach((sec, i) => {
     const pageIndex = SETTINGS_PAGES.findIndex((p) => p.id === sec.page);
-    const s = score(words, sec.title, `${sec.words ?? ""} ${label(sec.page)}`) ||
-      score(words, translate(sec.title), translate(label(sec.page)));
+    const s = score(words, sec.title, `${sec.words} ${label(sec.page)}`) ||
+      score(words, translate(sec.title), `${translate(sec.words)} ${translate(label(sec.page))}`);
     if (s) scored.push({ hit: { page: sec.page, title: sec.title, pageLabel: label(sec.page) }, score: s, order: pageIndex * 100 + i + 1 });
   });
   return scored

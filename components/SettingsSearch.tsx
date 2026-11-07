@@ -93,7 +93,7 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
           aria-label={t("Matching settings")}
           className="absolute left-0 right-0 top-full z-20 mt-1 max-h-[60vh] overflow-y-auto rounded-lg border border-line-strong bg-panel p-1 shadow-lg"
         >
-          {hits.length === 0 && <li className="px-2.5 py-2 text-[12.5px] text-faint">No setting matches “{query.trim()}”</li>}
+          {hits.length === 0 && <li className="px-2.5 py-2 text-[12.5px] text-faint">{t("No setting matches")} “{query.trim()}”</li>}
           {hits.map((hit, i) => (
             <li
               key={`${hit.page}:${hit.title ?? ""}`}

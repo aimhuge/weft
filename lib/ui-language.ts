@@ -36,7 +36,7 @@ export function useUiLanguage(): UiLanguage {
 }
 
 export function uiText(language: UiLanguage, text: string) {
-  return language === "zh-CN" && Object.hasOwn(simplifiedChinese, text) ? simplifiedChinese[text] ?? text : text;
+  return (language === "zh-CN" && Object.hasOwn(simplifiedChinese, text) && simplifiedChinese[text]) || text;
 }
 
 const translateEnglish = (text: string) => text;

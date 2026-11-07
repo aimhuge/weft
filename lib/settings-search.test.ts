@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { SETTINGS_PAGES } from "./settings-nav";
 import { searchSettings, SETTINGS_SECTIONS, sectionsOf } from "./settings-search";
+import { uiText } from "./ui-language";
 
 describe("SETTINGS_SECTIONS", () => {
   it("only names pages that exist", () => {
@@ -76,5 +77,31 @@ describe("searchSettings", () => {
 
   it("matches the /weft:done row by its slash command", () => {
     expect(searchSettings("/weft:done")[0]).toMatchObject({ title: "Run /weft:done on" });
+  });
+
+  describe("with a translation", () => {
+    const zh = (text: string) => uiText("zh-CN", text);
+
+    it("finds a section and a page by their translated names, keeping the English ids", () => {
+      expect(searchSettings("外观", 8, zh)[0]).toEqual({ page: "general", title: "Appearance", pageLabel: "General" });
+      expect(searchSettings("常规", 8, zh)).toContainEqual({ page: "general", title: null, pageLabel: "General" });
+    });
+
+    it("finds a section by its translated keywords, not only its title", () => {
+      expect(searchSettings("深色", 8, zh)[0]).toMatchObject({ title: "Appearance" });
+      expect(searchSettings("静音", 8, zh)[0]).toMatchObject({ title: "Sounds" });
+    });
+
+    it("still finds English words, and nothing in Chinese without one", () => {
+      expect(searchSettings("theme", 8, zh)[0]).toMatchObject({ title: "Appearance" });
+      expect(searchSettings("外观")).toEqual([]);
+    });
+  });
+});
+
+// Every section's keywords have a Chinese list, so a Chinese search can reach each one by more than its title.
+describe("Chinese settings keywords", () => {
+  it("translates every section's words", () => {
+    for (const s of SETTINGS_SECTIONS) expect(uiText("zh-CN", s.words), s.title).not.toBe(s.words);
   });
 });

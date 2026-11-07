@@ -37,7 +37,8 @@ lives in its own component under `components/`.
 makes a choice. The desktop picker is in Settings → General, and the web board's picker is in its header.
 Mounted components update when the choice changes. `lib/ui-language-zh.ts` contains the Simplified Chinese copy
 for the board, the main Settings controls and new-thread forms. Settings search accepts translated titles and
-still uses the original section names for navigation. Card titles, prompts and saved settings values keep their
+still uses the original section names for navigation; it also matches each section's translated keywords (every
+`words` entry in `lib/settings-search.ts` has a Chinese list in `ui-language-zh.ts`). Card titles, prompts and saved settings values keep their
 original content.
 
 ## Key files
