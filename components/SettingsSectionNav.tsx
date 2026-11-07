@@ -4,6 +4,7 @@
 // the chip of the section in view lit. A click scrolls that section's card up under the nav and flashes it.
 // Pages with one section or none (Shortcuts, Teams) get no row at all, so it never costs space for nothing.
 
+import { useUiText } from "@/lib/ui-language";
 import type { Ref } from "react";
 import type { SettingsSection } from "@/lib/settings-search";
 
@@ -18,10 +19,11 @@ export default function SettingsSectionNav({
   onJump: (title: string) => void;
   navRef: Ref<HTMLElement>;
 }) {
+  const t = useUiText();
   return (
     <nav
       ref={navRef}
-      aria-label="Sections on this page"
+      aria-label={t("Sections on this page")}
       onMouseDown={(e) => e.stopPropagation()}
       // Always mounted (the hook measures its edge), but drawn only with two or more sections.
       hidden={sections.length < 2}
@@ -39,7 +41,7 @@ export default function SettingsSectionNav({
               on ? "bg-accent-soft font-medium text-ink" : "text-muted hover:bg-sunken hover:text-ink"
             }`}
           >
-            {s.title}
+            {t(s.title)}
           </button>
         );
       })}

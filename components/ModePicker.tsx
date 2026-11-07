@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { MODE_OPTIONS, permissionOptions, type Backend, type PermissionMode } from "@/lib/types";
 import { useLocalMenu, useMenuCoverPublisher } from "@/lib/overlay";
@@ -67,11 +68,12 @@ function ModeMenu({
   // The menu's own element, so the page can measure it and step aside around it.
   menuRef: RefObject<HTMLDivElement | null>;
 }) {
+  const t = useUiText();
   return (
     <div
       ref={menuRef}
       role="menu"
-      aria-label="Permissions"
+      aria-label={t("Permissions")}
       className={`absolute ${end ? "right-0" : "left-0"} z-40 w-72 rounded-lg border border-line bg-panel p-1 shadow-lg ${up ? "bottom-full mb-1" : "top-full mt-1"}`}
     >
       {options.map((m) => (
@@ -87,8 +89,8 @@ function ModeMenu({
             {m.id === value && <Icon name="check" size={13} />}
           </span>
           <span className="min-w-0 flex-1">
-            <span className={`block text-[12.5px] font-medium ${m.id === "bypassPermissions" ? "text-warn" : "text-ink"}`}>{m.label}</span>
-            <span className="block text-[11.5px] leading-snug text-muted">{m.hint}</span>
+            <span className={`block text-[12.5px] font-medium ${m.id === "bypassPermissions" ? "text-warn" : "text-ink"}`}>{t(m.label)}</span>
+            <span className="block text-[11.5px] leading-snug text-muted">{t(m.hint)}</span>
           </span>
         </button>
       ))}
@@ -122,6 +124,7 @@ export default function ModePicker({
   // Line the menu up with the button's right edge, for a picker at the right of its row.
   end?: boolean;
 }) {
+  const t = useUiText();
   const { open, setOpen, root, menu } = useMenu();
   const mode = currentMode(backend, value);
   const options = visibleModes(backend, yolo, value);
@@ -138,12 +141,12 @@ export default function ModePicker({
         onClick={() => setOpen(!open)}
         aria-haspopup="menu"
         aria-expanded={open}
-        aria-label={`Permissions: ${mode.label}`}
-        title={titleFor(disabled, mode.hint)}
+        aria-label={`${t("Permissions")}: ${t(mode.label)}`}
+        title={t(titleFor(disabled, mode.hint))}
         className={buttonClass(small, loose)}
       >
         <Icon name={loose ? "zap" : "shield"} size={small ? 11 : 13} />
-        <span className={small ? "pr-0.5" : "pr-1"}>{mode.label}</span>
+        <span className={small ? "pr-0.5" : "pr-1"}>{t(mode.label)}</span>
         <Icon name="chevronDown" size={small ? 10 : 12} />
       </button>
       {open && <ModeMenu options={options} value={value} up={up} end={end} onPick={pick} menuRef={menu} />}

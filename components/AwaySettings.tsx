@@ -1,11 +1,13 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useState } from "react";
 import { AWAY_MINUTES, type AwayPrefs, awayPrefs, setAwayPrefs } from "@/lib/away-open";
 import SwitchRow from "./SwitchRow";
 
 // Away open (lib/away-open.ts): the switch and how long without input counts as away. Saves right away.
 export default function AwaySettings() {
+  const t = useUiText();
   // The dialog only mounts in the browser, so the cookie is there to read.
   const [prefs, setPrefs] = useState<AwayPrefs>(awayPrefs);
 
@@ -23,7 +25,7 @@ export default function AwaySettings() {
         onChange={(on) => update({ ...prefs, on })}
       />
       <label className={`flex items-center gap-3 text-[13px] text-ink ${prefs.on ? "" : "opacity-50"}`}>
-        Away after
+        {t("Away after")}
         <select
           value={prefs.minutes}
           disabled={!prefs.on}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/client";
 import { DICTATION_LANGUAGES } from "@/lib/dictation-languages";
@@ -26,6 +27,7 @@ export function advancedLine(view: DictationSettingsView): string {
 }
 
 export default function DictationSettings() {
+  const t = useUiText();
   const [view, setView] = useState<DictationSettingsView | null>(null);
   const [vocabulary, setVocabulary] = useState("");
   const [error, setError] = useState("");
@@ -64,11 +66,11 @@ export default function DictationSettings() {
       <SettingsSectionHeader title="Dictation" hint="The mic button and its shortcut turn speech into text on this Mac with whisper, in any app: the text is pasted where you're typing, or copied when there's no text box. Nothing you say leaves this Mac." />
       <section className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-0.5">
-          <h3 className="text-[13px] font-medium text-ink">Language</h3>
+          <h3 className="text-[13px] font-medium text-ink">{t("Language")}</h3>
           <p className="text-[12.5px] text-muted">Naming it is a second or two faster than detecting it each time.</p>
         </div>
         <select
-          aria-label="Dictation language"
+          aria-label={t("Dictation language")}
           value={view.prefs.language}
           onChange={(e) => change({ language: e.target.value })}
           className="shrink-0 rounded-md border border-line bg-panel px-2 py-1 text-[12px] text-ink"
@@ -82,11 +84,11 @@ export default function DictationSettings() {
       </section>
       <section className="flex flex-col gap-1.5">
         <div className="flex flex-col gap-0.5">
-          <h3 className="text-[13px] font-medium text-ink">Vocabulary</h3>
+          <h3 className="text-[13px] font-medium text-ink">{t("Vocabulary")}</h3>
           <p className="text-[12.5px] text-muted">Names and terms whisper should expect, like your projects, tools and people. Comma-separated or one per line.</p>
         </div>
         <textarea
-          aria-label="Dictation vocabulary"
+          aria-label={t("Dictation vocabulary")}
           value={vocabulary}
           rows={2}
           maxLength={600}

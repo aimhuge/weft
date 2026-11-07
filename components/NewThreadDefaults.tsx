@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useState } from "react";
 import { lastEffort, modelFor, NO_MODEL, resolveModel, setLastEffort, setModelFor } from "@/lib/new-thread";
 import type { Backend, Effort } from "@/lib/types";
@@ -19,6 +20,7 @@ export default function NewThreadDefaults({
   backend: Backend;
   onBackend: (backend: Backend) => void;
 }) {
+  const t = useUiText();
   const [models, setModels] = useState<Record<Backend, string>>(() => ({
     claude: modelFor("claude"),
     puku: modelFor("puku"),
@@ -30,7 +32,7 @@ export default function NewThreadDefaults({
   return (
     <section className="flex items-center justify-between gap-4">
       <div className="flex flex-col gap-0.5">
-        <h3 className="text-[13px] font-medium text-ink">New threads</h3>
+        <h3 className="text-[13px] font-medium text-ink" data-settings-section="New threads">{t("New threads")}</h3>
         <p className="text-[12.5px] text-muted">
           What a new thread starts on. The New thread dialog remembers what you pick there, too.
         </p>
@@ -48,7 +50,7 @@ export default function NewThreadDefaults({
             }
             setModels((m) => ({ ...m, [backend]: next, ...(resolved ? { [resolved.backend]: next } : {}) }));
           }}
-          label="Default model"
+          label={t("Default model")}
           // A CLI's own default row: that CLI, and "" (the CLI's own choice) as its model.
           cli={{
             backend,
@@ -65,7 +67,7 @@ export default function NewThreadDefaults({
             setLastEffort(next);
             setEffort(next);
           }}
-          label="Default effort"
+          label={t("Default effort")}
         />
       </div>
     </section>

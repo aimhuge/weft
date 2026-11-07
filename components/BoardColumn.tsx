@@ -4,6 +4,7 @@
 // a "Show more" button when the column is collapsed, and the placeholder / add-thread button.
 // CardView is loaded through guarded() in Board.tsx and rendered via the `renderCard` prop so this
 // file does not have to know the lazy-load wrapper.
+import { useUiText } from "@/lib/ui-language";
 import { useState } from "react";
 import type { CSSProperties, DragEvent, MouseEvent, ReactNode } from "react";
 import type { Card, Column } from "@/lib/types";
@@ -95,6 +96,7 @@ export default function BoardColumn({
   onFold,
   wide = false,
 }: BoardColumnProps) {
+  const t = useUiText();
   const style: CSSProperties = { minWidth: columnMinWidth(laneState) };
   // Which backlog card the drop indicator is on, and on which side. null when no card is hovered.
   const [dropMarker, setDropMarker] = useState<{ id: string; before: boolean } | null>(null);
@@ -160,7 +162,7 @@ export default function BoardColumn({
             onClick={onAddBacklog}
             className="flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[12.5px] text-muted hover:bg-card hover:text-ink"
           >
-            <Icon name="plus" size={13} /> Add a thread
+            <Icon name="plus" size={13} />{" "}{t("Add a thread")}
           </button>
         )}
       </div>

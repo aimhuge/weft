@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useCallback, useState } from "react";
 import { CUSTOM_PREFIX, customPictureUrl, type CustomTheme } from "@/lib/custom-theme";
 import { SCENES, THEMES, type Theme, savedTheme, sceneUrl, setCustomTheme, setTheme } from "@/lib/theme";
@@ -31,6 +32,7 @@ function TileLabel({ children }: { children: string }) {
 // Settings' Appearance: System, Light or Dark, then a tile per scene, then the themes you prompted
 // up and a tile to describe a new one (in words, around your own picture, or both). Every pick applies right away.
 export default function AppearancePicker() {
+  const t = useUiText();
   // Only mounts in the browser, so the cookie is there to read.
   const [theme, setChoice] = useState<Theme>(savedTheme);
   // Open describe box, holding the picture you dropped on its tile (or null for words alone); false when closed.
@@ -47,7 +49,7 @@ export default function AppearancePicker() {
   const { themes, pending, expect } = useCustomThemes(chooseCustom);
 
   return (
-    <div role="radiogroup" aria-label="Appearance" className="flex flex-col gap-2">
+    <div role="radiogroup" aria-label={t("Appearance")} className="flex flex-col gap-2">
       <div className="flex w-fit gap-0.5 rounded-md border border-line-strong p-0.5">
         {THEMES.map((t) => (
           <button

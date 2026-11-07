@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { useEffect, useRef, useState } from "react";
 import { cronApi } from "@/lib/cron-client";
 import { inputOf, newForm } from "@/lib/cron-form";
@@ -23,6 +24,7 @@ export interface NewThreadPicks {
 // The New thread window's ⏰ and ✕. The ⏰ puts the prompt being written on a cron instead of starting it once:
 // each run is a fresh card with this prompt, folder, model and mode (docs/architecture/crons.md).
 export default function NewThreadHeaderActions({ read, picks, onCreated, onClose }: { read: () => string; picks: NewThreadPicks; onCreated: () => void; onClose: () => void }) {
+  const t = useUiText();
   const [open, setOpen] = useState(false);
   const [runNow, setRunNow] = useState(true);
   const root = useRef<HTMLDivElement>(null);
@@ -39,16 +41,16 @@ export default function NewThreadHeaderActions({ read, picks, onCreated, onClose
 
   return (
     <div ref={root} className="relative flex items-center gap-1">
-      <button type="button" onClick={() => setOpen(!open)} title="Run this on a cron" aria-label="Run on a cron" aria-expanded={open} className={`rounded-md p-1 hover:bg-sunken ${open ? "text-cron" : "text-muted hover:text-ink"}`}>
+      <button type="button" onClick={() => setOpen(!open)} title={t("Run this on a cron")} aria-label={t("Run on a cron")} aria-expanded={open} className={`rounded-md p-1 hover:bg-sunken ${open ? "text-cron" : "text-muted hover:text-ink"}`}>
         <Icon name="clock" size={16} />
       </button>
-      <button onClick={onClose} aria-label="Close" className="rounded-md p-1 text-muted hover:bg-sunken hover:text-ink">
+      <button onClick={onClose} aria-label={t("Close")} className="rounded-md p-1 text-muted hover:bg-sunken hover:text-ink">
         <Icon name="x" size={16} />
       </button>
       {open && (
         <div className="absolute right-0 top-full z-40 mt-1.5 w-[360px] rounded-lg border border-line-strong bg-panel p-3 shadow-lg">
-          <p className="text-[13.5px] font-semibold text-ink">⏰ Run this on a cron</p>
-          <p className="mt-0.5 text-[11.5px] text-faint">Each run is a new card with the prompt you&apos;re writing.</p>
+          <p className="text-[13.5px] font-semibold text-ink">{t("⏰ Run this on a cron")}</p>
+          <p className="mt-0.5 text-[11.5px] text-faint">{t("Each run is a new card with the prompt you're writing.")}</p>
           <CronEditor
             initial={newForm("", "fresh", now)}
             now={now}
@@ -57,7 +59,7 @@ export default function NewThreadHeaderActions({ read, picks, onCreated, onClose
             footer={
               <label className="flex items-center gap-1.5 text-muted">
                 <input type="checkbox" checked={runNow} onChange={(e) => setRunNow(e.target.checked)} />
-                Also run now
+                {t("Also run now")}
               </label>
             }
             onSubmit={async (form) => {

@@ -6,6 +6,8 @@ matching doc below. When a feature lands, add or update its entry here and in it
 
 ## Docs in this folder
 
+- [Interface language](board.md#interface-language) covers the board, Settings, and desktop and web new-thread forms.
+
 - `admin.md` — the super-admin gate (`SUPER_ADMIN_EMAILS` or a `super_admins` row, via `lib/admin.ts`), the `/admin/users` (real Last seen from `user_active_days`, a per-account activity drawer), `/admin/billing`, `/admin/coupons` and `/admin/settings` pages and the admin kit they share (`components/admin/`), the rail's 🛡 Admin icon, the data routes in `app/api/admin/*`.
 - `overview.md` — what Weft is end to end: the Electron shell, the Next.js server, cards-as-threads, the loop with the user.
 - `board.md` — the board screen's structure: `Board.tsx` owns state and wiring, hooks under `lib/` decide, layer components draw; the column view and the list view (the board as a sheet on glass, on the sheet kit with its columns in `lib/list-sheet.ts`, `components/list-grid.css`); how to add a column extra, shortcut, palette item or dialog flag.

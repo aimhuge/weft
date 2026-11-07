@@ -8,6 +8,7 @@ export type SettingsSection = { page: SettingsPage; title: string; words?: strin
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { page: "general", title: "Appearance", words: "theme dark mode light mode scene wallpaper colors palette" },
+  { page: "general", title: "Interface language", words: "locale English Chinese translation" },
   { page: "general", title: "Advanced mode", words: "regular mode simple basic chrome minimal clean" },
   { page: "general", title: "Show backlog", words: "column" },
   { page: "general", title: "Show progress", words: "streak level xp badges quiet mode" },
@@ -79,19 +80,20 @@ function score(query: string[], title: string, extra: string): number {
 }
 
 // The sections and pages that match, best first; a tie keeps the order Settings draws them in.
-export function searchSettings(query: string, limit = 8): SettingsHit[] {
+export function searchSettings(query: string, limit = 8, translate = (text: string) => text): SettingsHit[] {
   const words = norm(query).split(" ").filter(Boolean);
   if (!words.length) return [];
   const label = (page: SettingsPage) => SETTINGS_PAGES.find((p) => p.id === page)?.label ?? page;
   const scored: { hit: SettingsHit; score: number; order: number }[] = [];
   SETTINGS_PAGES.forEach((p, i) => {
-    const s = score(words, p.label, p.hint);
+    const s = score(words, p.label, p.hint) || score(words, translate(p.label), translate(p.hint));
     // A page ties below its own sections: a hit that lands on the setting beats one that only opens its page.
     if (s) scored.push({ hit: { page: p.id, title: null, pageLabel: p.label }, score: s, order: i * 100 + 99 });
   });
   SETTINGS_SECTIONS.forEach((sec, i) => {
     const pageIndex = SETTINGS_PAGES.findIndex((p) => p.id === sec.page);
-    const s = score(words, sec.title, `${sec.words ?? ""} ${label(sec.page)}`);
+    const s = score(words, sec.title, `${sec.words ?? ""} ${label(sec.page)}`) ||
+      score(words, translate(sec.title), translate(label(sec.page)));
     if (s) scored.push({ hit: { page: sec.page, title: sec.title, pageLabel: label(sec.page) }, score: s, order: pageIndex * 100 + i + 1 });
   });
   return scored
