@@ -117,11 +117,19 @@ describe("with a key", () => {
   it("starts OAuth with a loopback redirect and returns the page", async () => {
     const account = await load();
     auth.signInWithOAuth.mockResolvedValue({ data: { url: "https://gh/login" }, error: null });
-    expect(await account.startSignIn("google", "http://127.0.0.1:3457/")).toBe("https://gh/login");
+    expect(await account.startSignIn("github", "http://127.0.0.1:3457/")).toBe("https://gh/login");
     expect(auth.signInWithOAuth).toHaveBeenCalledWith({
-      provider: "google",
+      provider: "github",
       options: { redirectTo: "http://127.0.0.1:3457/api/auth/callback", skipBrowserRedirect: true },
     });
+  });
+
+  it("refuses Google: GitHub is the only sign-in provider", async () => {
+    const account = await load();
+    await expect(account.startSignIn("google" as never, "http://127.0.0.1:3457/")).rejects.toThrow(
+      "Unknown sign-in provider.",
+    );
+    expect(auth.signInWithOAuth).not.toHaveBeenCalled();
   });
 
   it("goes back through weft.zip/auth/desktop when running inside the desktop app on macOS", async () => {

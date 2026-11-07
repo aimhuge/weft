@@ -32,7 +32,7 @@ No chat on the main screen; each card is the page its agent last showed, full sc
   localhost). It also reads `card.page` when the phone-readable-pages work adds it.
 - **What it writes**: only `cloud_commands` rows (`reply`, `answer`, `stop`, `new_card`) in `lib/cloud-commands.ts`'s
   shapes, and its own `push_devices` row. An `answer` with `allow: false` and `reply.chat` is "Chat about this".
-- **Sign-in**: Supabase OAuth (GitHub, Google) with PKCE in the system auth sheet, redirect `weft://auth/callback`,
+- **Sign-in**: Supabase OAuth (GitHub only) with PKCE in the system auth sheet, redirect `weft://auth/callback`,
   which must be in the project's Auth redirect allow list.
 - **Bearer routes**: `lib/web-session.ts` `requestSession(req)` gives a route the caller's RLS-scoped client from
   `Authorization: Bearer <jwt>` (the phone) or the cookie (weft.zip). `/api/web-board/[orgId]/page/[sha]` and

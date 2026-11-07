@@ -37,14 +37,14 @@ afterEach(() => {
 });
 
 describe("isWebProvider", () => {
-  it("accepts the providers the route advertises", async () => {
+  it("accepts GitHub, the only provider the route advertises", async () => {
     const { isWebProvider } = await load();
     expect(isWebProvider("github")).toBe(true);
-    expect(isWebProvider("google")).toBe(true);
   });
 
   it("rejects anything else", async () => {
     const { isWebProvider } = await load();
+    expect(isWebProvider("google")).toBe(false);
     expect(isWebProvider("twitter")).toBe(false);
     expect(isWebProvider("")).toBe(false);
     expect(isWebProvider(null)).toBe(false);

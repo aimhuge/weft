@@ -179,7 +179,7 @@ pair a box of its own (the `worker_pair_*` functions are plain RPCs), insert a s
 - **Setup checks for this to hold (done on Weft Prod, 2026-11-02).** Supabase Auth's **Secure email change** is on (a
   session alone can't move the account to an address it controls, which would also move where the confirm links go),
   changing the password needs the current password and reauthentication by an emailed code, and the email-changed and
-  password-changed notifications are on. Weft itself has no password flow: you sign in with GitHub or Google (OAuth) or
+  password-changed notifications are on. Weft itself has no password flow: you sign in with GitHub (OAuth) or
   an emailed code, so there's no password change to end other sessions. What ends a stolen session is signing out
   everywhere (`supabase.auth.signOut({ scope: "global" })`); Weft's Sign out is local only today, so a **Sign out
   everywhere** action is a follow-up, and until it ships the emails' advice to "sign out everywhere" has no button

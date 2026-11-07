@@ -19,7 +19,7 @@ import type { AccountProvider, AccountView } from "./types";
 export { ACCOUNT_EVENT } from "./auth/hooks";
 export const POLL_MS = 2000;
 export const WAIT_MS = 5 * 60 * 1000;
-export const PROVIDER_LABELS: Record<AccountProvider, string> = { github: "GitHub", google: "Google" };
+export const PROVIDER_LABELS: Record<AccountProvider, string> = { github: "GitHub" };
 
 // The board's call sites still expect the union of {provider, "email", "signout"}.
 // `useAuth` only knows OAuth and signout, so we extend it locally.
@@ -70,8 +70,8 @@ export function useAccount() {
   );
 
   // The board's call sites pass the provider as a string; we adapt to the hook's
-  // object signature. `AccountProvider` is "github" | "google" — the only OAuth
-  // providers the auth hook knows.
+  // object signature. `AccountProvider` is "github", the only OAuth provider
+  // the auth hook knows.
   const signIn = useCallback(
     (provider: AccountProvider) => signInWithOAuth({ provider }),
     [signInWithOAuth],

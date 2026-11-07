@@ -100,7 +100,7 @@ a gate (/s, /a, /u) call `connection()` themselves (`lib/prerender-check.ts` fla
   service-role client (`serviceClient`, from `SUPABASE_SECRET_KEY`, set on the deployment only).
 - `proxy.ts`: refreshes the session cookie before the team pages render (Server Components can't write cookies).
   Deployed only; matches `/login`, `/app`, `/team`, `/invite/*`, `/<slug>/team/*` and `/<slug>/billing/*`.
-- `lib/web-auth.ts` + `app/auth/{sign-in,callback,sign-out}`: GitHub (or Google) sign-in on weft.zip with PKCE in a
+- `lib/web-auth.ts` + `app/auth/{sign-in,callback,sign-out}`: GitHub sign-in on weft.zip (any other `provider` is a 400) with PKCE in a
   cookie. The callback stamps `last_login_at` and `login_count`. `/login` uses it when deployed.
 - `lib/teams.ts`: the gate. `teamAccess(slug)` answers ok / signed-out / denied / unconfigured (a missing workspace and
   a non-member get the same "denied", so membership can't be probed); `requireTeam(slug)` redirects to `/login` or

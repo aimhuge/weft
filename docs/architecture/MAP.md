@@ -463,7 +463,7 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/email-forward.ts` + `app/api/email/webhook` + `scripts/resend-domain.mjs`: mail to weft.zip, received by Resend (the domain's MX) and
   forwarded by the deployed Weft to one inbox (Svix-signed `email.received` → read back → send on; docs/architecture/email-forwarding.md).
 - `lib/account.ts` + `app/api/account` + `lib/auth/*` + `lib/use-account.ts`: the optional Weft account
-  (Supabase Auth, PKCE; the redirect target is `weft://account-callback` in the packaged app and the loopback
+  (Supabase Auth, PKCE, GitHub the only OAuth provider since 2026-11-07; the redirect target is `weft://account-callback` in the packaged app and the loopback
   HTTP origin in `next dev`, handled by `electron/account-link.cjs` and `app/api/auth/weft-callback/route.ts`;
   sign-in / sign-out pages share `lib/account-page.ts`). `lib/auth/` is a thin wrapper around the same
   `lib/account.ts` whose public API mirrors `@aimhuge/auth`; `app/login/page.tsx` is the new weft.zip sign-in

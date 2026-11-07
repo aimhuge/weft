@@ -85,9 +85,9 @@ describe("useAccount", () => {
     window.weft = undefined;
     const open = vi.spyOn(window, "open").mockReturnValue(null);
     const { result } = renderHook(() => useAccount());
-    await act(() => result.current.signIn("google"));
+    await act(() => result.current.signIn("github"));
     expect(open).toHaveBeenCalledWith("https://github.com/login/oauth", "_blank", "noopener,noreferrer");
-    expect(result.current.waiting?.what).toBe("Google");
+    expect(result.current.waiting?.what).toBe("GitHub");
   });
 
   it("gives up waiting after a sign-in code would have expired", async () => {

@@ -13,8 +13,15 @@ There are two surfaces:
 - **The desktop app** (`pnpm desktop`): the board's sign-in button, Settings → Weft account, and the
   Puku-trial upgrade prompt. The same GitHub round trip, plus the magic-link email field for the trial.
 
+**GitHub is the only sign-in provider.** Google sign-in was removed on 2026-11-07, after the phone app's
+Beta App Review: `PROVIDERS` (`lib/account.ts`) and `WEB_PROVIDERS` (`lib/web-auth.ts`) hold `github` alone,
+`AccountProvider` is `"github"`, and `/auth/sign-in?provider=google` answers 400 without reaching Supabase. The
+Google provider is turned off in the Supabase dashboard too (Auth → Providers). An old account that signed in
+with Google still reads "via google" until it signs in again. The Google Workspace connector (gog) is not sign-in
+and stays.
+
 The two surfaces share `lib/auth/`, a thin wrapper whose public API mirrors `@aimhuge/auth`. When the
-upstream tag with a `provider: "google" | "github"` option ships, swapping to the package is a one-line
+upstream tag with a `provider` option ships, swapping to the package is a one-line
 change in `lib/auth/index.ts` — every other file imports from `@/lib/auth`.
 
 ## Redirect target
@@ -181,7 +188,7 @@ the final redirect all agree on one origin.
 - `components/AccountButton.tsx`: the top bar button, right of Copilot (`CopilotButton.tsx`). Signed out it is the
   GitHub mark and "Sign in" (starts GitHub); signed in it is just your avatar (`components/Avatar.tsx`), which opens
   Settings. It renders nothing until the account loads, on a load error, or when accounts aren't configured.
-- `components/AccountSettings.tsx` (Settings → Weft account): GitHub and Google buttons, an email-link form, who you
+- `components/AccountSettings.tsx` (Settings → Weft account): the GitHub button, an email-link form, who you
   are, and Sign out (this Mac only).
 - `app/login/page.tsx`: the deployed weft.zip sign-in surface. GitHub only, the magic-link row is opt-in. A `<Suspense>`
   with a "Checking your account" spinner bridges the `readSessionIdentity` server call. The page is two panels, styled

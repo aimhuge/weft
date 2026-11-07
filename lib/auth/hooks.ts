@@ -14,7 +14,7 @@ import { api } from "../client";
 import type { AccountProvider, AccountView } from "../types";
 import { openExternal } from "./desktop";
 
-export type AuthProvider = Extract<AccountProvider, "github" | "google">;
+export type AuthProvider = Extract<AccountProvider, "github">;
 
 export type UseAuthOptions = {
   /** The auth path the round trip should land on. Default "/". */

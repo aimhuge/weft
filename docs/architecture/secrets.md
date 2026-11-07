@@ -5,8 +5,8 @@ injection, redaction) built 2026-10-12 except `request` and values for HTTP requ
 
 Weft keeps two kinds of secrets apart:
 
-- **Weft's own**: the Supabase service-role key, the database password, the GitHub and Google OAuth client
-  secrets. They live only on the server side (Supabase and the host's environment) and never ship in the
+- **Weft's own**: the Supabase service-role key, the database password, the GitHub OAuth client
+  secret. They live only on the server side (Supabase and the host's environment) and never ship in the
   desktop app. The app carries only the publishable key (`lib/account.ts`); row-level security guards the data.
 - **Yours**: your projects' `.env.local` values and their Vercel environments. Weft keeps them in its own
   vault, end-to-end encrypted, so they can be shared with a team later without Weft's servers ever
