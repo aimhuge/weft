@@ -15,6 +15,7 @@ const stop = vi.fn();
 const stopInbox = vi.fn();
 const startCloudInbox = vi.fn(() => stopInbox);
 let passed: BlobStore | undefined;
+const queueFolder = vi.hoisted(() => vi.fn());
 
 vi.mock("./account", () => ({ accountClient: () => accountClient() }));
 vi.mock("./blob-store", () => ({ createBlobStore: (opts: unknown) => (createBlobStore as (o: unknown) => typeof bundle)(opts) }));
@@ -23,12 +24,16 @@ vi.mock("./cloud-sync", () => ({
     passed = opts.blobs;
     return stop;
   },
+  queueFolder,
 }));
 
 vi.mock("./cloud-inbox", () => ({ startCloudInbox: () => startCloudInbox() }));
 const stopRepos = vi.fn();
 const startSyncRepos = vi.fn(() => stopRepos);
 vi.mock("./cloud-sync-repos", () => ({ startSyncRepos: () => startSyncRepos() }));
+const stopTeam = vi.fn();
+const startTeamSync = vi.fn<(queue: unknown) => () => void>(() => stopTeam);
+vi.mock("./cloud-sync-team", () => ({ startTeamSync: (queue: unknown) => startTeamSync(queue) }));
 const stopSettings = vi.fn();
 const startAccountSettingsPush = vi.fn(() => stopSettings);
 vi.mock("./account-settings", () => ({ startAccountSettingsPush: () => startAccountSettingsPush() }));
@@ -46,12 +51,14 @@ describe("startAccountCloudSync", () => {
     expect(passed).toBeDefined();
     expect(startCloudInbox).toHaveBeenCalledTimes(1);
     expect(startSyncRepos).toHaveBeenCalledTimes(1);
+    expect(startTeamSync).toHaveBeenCalledWith(queueFolder);
     expect(startAccountSettingsPush).toHaveBeenCalledTimes(1);
     end();
     expect(stopSettings).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
     expect(stopInbox).toHaveBeenCalledTimes(1);
     expect(stopRepos).toHaveBeenCalledTimes(1);
+    expect(stopTeam).toHaveBeenCalledTimes(1);
   });
 
   it("makes no client or blob store until a flush needs one", () => {

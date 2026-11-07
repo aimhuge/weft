@@ -11,8 +11,8 @@ import { appendOutbox, compactOutbox, readOutbox, replaceOutboxHead } from "./cl
 import type { BlobStore, OutboxEntry } from "./cloud-sync-types";
 import { uploadPending } from "./cloud-sync-upload";
 import { forgetRoutes, routeFor } from "./cloud-sync-route";
+import { syncedFolders } from "./cloud-sync-team";
 import { globalSingleton } from "./global-singleton";
-import { syncFolders } from "./settings";
 import { getCard, getThread, listCards } from "./store";
 import type { BoardEvent } from "./types";
 import type { CloudSyncStatus } from "./cloud-sync-view";
@@ -150,8 +150,9 @@ export function startCloudSync(opts: CloudSyncOptions): () => void {
   };
 }
 
+// Your own Sync switches plus the projects your teams linked (lib/cloud-sync-team.ts).
 function cardInSyncedFolder(event: BoardEvent): boolean {
-  const folders = syncFolders();
+  const folders = syncedFolders();
   if (!folders.length) return false;
   if (event.type === "card") return folders.includes(event.card.cwd);
   if (event.type === "card_deleted") return true; // the card is gone; the flush checks what it knew.

@@ -25,7 +25,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `skills.md` — skill sets: the library (Weft's, project, yours, plugins), a project's default set seeded from usage, a card's own, and how each runner gets it at session start; and the repo-analysis skill's four read-only scripts (size, import graph, docs drift, commit history).
 - `subagents.md` — how threads delegate to subagents and how Settings → Models picks their model.
 - `account.md` — the optional Weft account (Supabase Auth, PKCE, `weft://account-callback` on macOS and the loopback `/api/auth/callback` on Windows and Linux (`lib/desktop-sign-in.ts`), `~/.weft/account.json` in the Keychain).
-- `teams.md` — workspaces, members, roles, email invites on weft.zip; the `requireOrg` gate and why it's not `@aimhuge/teams`'s.
+- `teams.md` — the shared-project model (a team-linked repo shares its cards, 🔐 vault and later workers; names follow GitHub), with a team-linked repo syncing for every member (`lib/cloud-sync-team.ts`); workspaces, members, roles, email invites on weft.zip; the `requireOrg` gate and why it's not `@aimhuge/teams`'s.
 - `teams-vault.md` — the shared 🔐 vault, step 4 of `secrets.md`; team shapes and what's built vs. design, and how a teammate's Mac joins a shared vault from the drawer.
 - `team-asks.md` — one teammate asking another for a key, a join, a sync or a refresh, and the roster of who has what; design and build order.
 - `billing.md` — Free and Pro per workspace, `@aimhuge/billing`, PlanMeter, the admin console (plans, refunds, resets, Stripe mode per org), coupons and referrals, what's built and what's still TODO.
@@ -480,7 +480,10 @@ When a new doc lands in this folder, add it here on the same change.
   (`vendor/*.tgz`) for its helpers only; workspace slugs skip `lib/reserved-slugs.ts` (the package's words plus every `app/` root folder, kept in step with `private.org_slug_for` by its test): its `requireOrg` and actions pass a client into `"use cache"`, which Next 16 refuses, so the
   gate is Weft's own. Never pass the gate's `service` client to a client component (docs/architecture/teams.md, teams-vault.md).
   Project access: `lib/team-project-access.ts` (who sees each linked project, `org_project_members`) + `components/team/ProjectAccess.tsx`
-  (the **Access** checklist on a project row, for owners and admins). The desktop's Settings → Teams (`components/TeamSettings.tsx`,
+  (the **Access** checklist, under the team page's closed Advanced, for owners and admins). The desktop's team page orders
+  Projects (with each repo's card count), People (`components/team/TeamPeople.tsx`: avatars and @logins, Invite… by email
+  or @login, suggestions from the GitHub org and repo collaborators) and Advanced; New team offers your GitHub orgs
+  (`lib/github-orgs.ts`, `app/api/github/orgs`, `lib/use-github-orgs.ts`) and slugs the org. The desktop's Settings → Teams (`components/TeamSettings.tsx`,
   `lib/use-team.ts`) opens instantly on `lib/team-cache.ts`: the last snapshots in memory and localStorage, warmed at sign-in
   for the default and last-picked team, the rest once the list shows (docs/architecture/teams.md).
   The same routes run on a local server with `WEFT_WEB=1`: `proxy.ts` refreshes the cookie session on
@@ -621,6 +624,12 @@ When a new doc lands in this folder, add it here on the same change.
   The granter's main is the only place the vault key and the new device's public key meet: the key is sealed with
   `crypto_box_seal` and the server stores the sealed box. Sharing a local vault keeps its key as **version 1**, imports the existing
   ciphertexts, and writes `shared.json` so the local file becomes a shadow.
+- `electron/vault-team-link.cjs` + `electron/vault-overview.cjs` + `lib/team-vault-link.ts`: a team-linked repo's vault is the team's
+  (docs/architecture/teams-vault.md#a-linked-repo-shares-its-vault). Add project in Settings → Teams calls `vault:share-repo` (`shareRepo`
+  in `electron/vault-shared-api.cjs`, one Touch ID); after each overview `createTeamUpkeep` asks to join linked vaults, seals the vaults
+  this Mac holds to Macs the team approved once (`sealTrusted`, `trusted_vault_gaps`, `team_trusted_devices`) and notifies an admin of
+  Macs still waiting. `vaultRow` is one vault's drawer row. Unlinking closes the vault to new Macs (`vaults.grants_closed_at`), in
+  `supabase/migrations/20261107101344_team_link_vault.sql`.
 - `app/[orgSlug]/team/devices/` + `app/api/team/devices/` + `lib/team-devices-view.ts`: the workspace's **Devices** tab
   (docs/architecture/teams-vault.md#granting-a-teammates-devices). The list crosses users, so it is read with the service client on the
   server; the grant, the accept and the delete are gated by the workspace's role. The accept route takes the device id and reads the

@@ -873,12 +873,22 @@ invite link joins whichever account opens it. Billing and the shared 🔐 vault 
 (docs/architecture/teams.md).
 
 You can be in many teams. **Settings → Teams** lists every one with your role in it, the one you're viewing lit;
-click another to manage its projects, members and invites below the list, or **New team** to make one you own.
-Owners and admins choose who sees each project: **Access** on a project's row ticks the members who get it. Owners
-and admins see every project; a member sees only the ones they've been given.
+click another to see it below the list: its **projects** first (each repo with how many cards it has on your board),
+then its **people** by GitHub avatar and @login, with **Invite…** taking an email or an @login and suggesting the
+team's GitHub org members and its repos' collaborators. **New team** offers your GitHub orgs: pick one and the team
+takes its name (still editable) and its address (weft.zip/exitingcom), and its repos are suggested as projects; a
+team doesn't need an org. Roles, Remove and who sees each project sit under **Advanced**, closed until you need them:
+**Access** on a project ticks the members who get it. Owners and admins see every project; a member sees only the
+ones they've been given.
 A linked project's synced cards go to the team instead of each member's own workspace, so `weft.zip/<team>/board`
-shows everyone's cards for it. A folder syncs only once its owner switches Sync on; turning Sync off and on again moves
-its older cards into the team (docs/architecture/cloud-sync.md#team-projects).
+shows everyone's cards for it. Every member's desktop syncs it on its own, with no Sync switch to turn on: within a minute
+of the link, each Mac with a checkout of the repo sends that project's cards, older ones included, to the team. Unlinking
+it hands the project back to each person's own Sync switch (docs/architecture/teams.md#shared-projects).
+A linked project's 🔐 secrets are the team's too: linking it shares your vault for it (one Touch ID), and everyone on
+the team can add keys. A teammate's Mac asks to join by itself; you get a notification and approve that Mac once in the
+🔐 drawer, and from then on it gets every project the team links. The drawer says "Shared with <team>". Unlinking stops
+new Macs from joining, but a Mac that has the keys keeps them: to cut someone off, remove them with **Rotate shared
+vaults** and change the values at the providers (docs/architecture/teams-vault.md#a-linked-repo-shares-its-vault).
 Your teammates' cards for it show on your desktop board too, inside your own project of the same repo: each with their
 picture and "Zulker's Mac" on the tile. They're read-only: open one to read its thread and pane, but only its owner
 can reply, stop or move it. To pick one up yourself, open it: **Ask Zulker** shows them your ask on their card, and

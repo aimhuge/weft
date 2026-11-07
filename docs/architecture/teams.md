@@ -1,5 +1,29 @@
 # Teams
 
+## Shared projects
+
+The model in one line: **a project is either yours or the team's.** A team that links a project's GitHub repo
+(Settings → Teams → Projects) shares everything in it:
+
+- **Cards.** Every member's desktop syncs the project's cards to the team, with no Sync switch of their own:
+  `lib/cloud-sync-team.ts` checks each minute (and when a project opens) which local folders have a repo one of your
+  teams linked, the outbox and the inbox treat those as synced beside settings `syncFolders`, and a newly linked
+  folder has its existing cards queued. `lib/cloud-sync-route.ts` sends them to the team's workspace. Unlinking drops
+  the folder on the next check and the person's own switch decides again. Teammates' cards stay read-only on your
+  board ([cloud-sync.md](cloud-sync.md#team-projects)).
+- **Secrets.** The project's 🔐 vault is the team's, with no Share… step: linking the repo shares the linking
+  admin's vault for it (one Touch ID), and any member may start it when the admin's Mac has none. Every member can add
+  and change keys. A teammate's Mac asks to join on its own; an admin approves each Mac **once for the team** (a
+  notification says one is waiting), and from then on it gets every linked project's vault, new ones included, sealed
+  by whichever teammate's Mac holds the key. The drawer says "Shared with <team>". Unlinking stops new Macs joining,
+  but keys already on a Mac stay there until the vault is rotated
+  ([teams-vault.md](teams-vault.md#a-linked-repo-shares-its-vault)).
+- **Workers** (later): a team worker can run the project's cards.
+
+Names follow GitHub. A team is a GitHub org by default (Exitingcom → "Exiting.com" at weft.zip/exitingcom), members
+are GitHub logins (@yozulker9), your personal workspace is your GitHub username (weft.zip/fotoflo). Only the defaults
+and suggestions come from GitHub: the display name stays editable, and a team doesn't have to be an org.
+
 Status: phase 1 (workspaces, members, roles, email invites on weft.zip) built 2026-10-13. Phase 2, the shared 🔐
 vault, is designed in [teams-vault.md](teams-vault.md).
 
@@ -98,8 +122,28 @@ a gate (/s, /a, /u) call `connection()` themselves (`lib/prerender-check.ts` fla
 ## In the desktop's Settings
 
 Settings → Teams (`components/TeamSettings.tsx`) opens on **Your teams** (`components/team/TeamList.tsx`), every
-workspace you're in with your role, and below it the one you picked (`components/team/TeamPanel.tsx`): the same
-projects, roster, invite form and pending invites as weft.zip. `lib/use-managed-team.ts` remembers the pick and keeps
+workspace you're in with your role, and below it the one you picked (`components/team/TeamPanel.tsx`), in the order
+a team is used:
+
+1. **Projects** (`components/team/Projects.tsx`): each linked repo with how many of this board's cards it has
+   (`useBoardProjects` in `lib/use-board-repos.ts`, counted by folder in `cardsPerRepo`, `lib/team-view.ts`), Remove,
+   and Add project, whose typeahead suggests the team's GitHub org's repos and the board's. A secrets count isn't
+   shown: the vault lives in Electron main and the count isn't cheap from here.
+2. **People** (`components/team/TeamPeople.tsx`): everyone on one wrapping line by GitHub avatar and @login
+   (`memberLabel`: @login, else name, else email; the login comes from `lib/team-member-logins.ts`), the open invites
+   counted, and **Invite…**, which opens the shared invite form (an email, or an @login whose public email gh looks up
+   through `GET /api/github/collaborators?login=`; the web form takes emails only), the suggestions from the team's
+   GitHub org's members and its repos' collaborators (`components/team/ProjectPeople.tsx`, `?org=`), and the pending
+   invites.
+3. **Advanced**, a `<details>` closed by default: the roster with roles and Remove (`components/team/Roster.tsx`, also by
+   @login), who sees each project (`ProjectAccessList` in `components/team/ProjectAccess.tsx`) and Leave.
+
+Workers get a section once teams have them. **New team** offers your GitHub orgs above the name field
+(`lib/github-orgs.ts` through `GET /api/github/orgs`, kept for the session by `lib/use-github-orgs.ts`): a pick fills
+the name, which stays editable, and is sent as `createTeam(name, slug)`, so `runCreateTeam` slugs the org's login, not
+the name (Exitingcom named "Exiting.com" is still weft.zip/exitingcom). A team whose slug is one of your orgs' logins
+(`orgForTeam`) gets that org's repos (`GET /api/github/orgs?org=`) and members suggested; any other team works the same
+without them. `lib/use-managed-team.ts` remembers the pick and keeps
 the team you switched from while the next one loads, so the list never blinks; hovering a row prefetches it. A team you own has a pencil that
 renames it in place: `{ action: "rename" }` through `runTeamOp` to `runRenameTeam` (`lib/team-create.ts`), owners only,
 1 to 60 characters, name only (the slug is in every link and synced board, so it stays). Its trash deletes it:
