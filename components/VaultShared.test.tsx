@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { VaultBridge } from "@/lib/vault-view";
-import { DeviceRequests, JoinOffer } from "./VaultShared";
+import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
+import { DeviceRequests, JoinOffer, SharedBadge } from "./VaultShared";
 
 afterEach(cleanup);
 
@@ -56,5 +56,14 @@ describe("DeviceRequests", () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByText("Decline"));
     await waitFor(() => expect(deviceDecline).toHaveBeenCalledWith("p1"));
+  });
+});
+
+describe("SharedBadge", () => {
+  it("says who the vault is shared with", () => {
+    const shared = { org: { id: "o1", slug: "acme", name: "Acme" }, vaultId: "v1", keyVersion: 2, serverVersion: 1, recoveryShownAt: null };
+    const vault = { id: "github:a/b", label: "a/b", folder: "/repo", folders: ["/repo"], secrets: [], nudge: null, shared } as VaultSummary;
+    render(<SharedBadge vault={vault} />);
+    expect(screen.getByText("Shared with Acme")).toBeTruthy();
   });
 });

@@ -6,6 +6,7 @@ import { API_HEADERS } from "./api-client";
 import { ACCOUNT_EVENT } from "./auth/hooks";
 import { cachedTeam, clearTeamCache, loadTeam, warmTeams } from "./team-cache";
 import { vaultBridge } from "./vault-view";
+import { linkNote, shareLinkedRepo } from "./team-vault-link";
 import type { NewTeamOp, NewTeamResult, TeamActionResult, TeamClientActions, TeamOp, TeamSnapshot, VaultRotateResult } from "./team-types";
 
 // The board's view of one workspace on the deployed weft.zip (docs/architecture/teams.md). The desktop's
@@ -161,11 +162,17 @@ export function useTeam(org?: string): TeamHook {
       return result.ok && namesToRotate.length ? { ok: true, message: `Removed. Turn these at their providers: ${namesToRotate.join(", ")}` } : result;
     },
     revoke: (inviteId) => onTeam((org) => ({ org, action: "revoke", inviteId })),
-    addProject: (repo) => onTeam((org) => ({ org, action: "link-project", repo })),
+    // A linked repo's 🔐 vault is the team's: once the link is in, this Mac's vault for it is shared (lib/team-vault-link.ts).
+    addProject: async (repo) => {
+      const result = await onTeam((org) => ({ org, action: "link-project", repo }));
+      if (!result.ok || state.kind !== "ok" || result.message === "Already linked.") return result;
+      const { id, name } = state.team.org;
+      return { ...result, message: linkNote(repo, name, await shareLinkedRepo(id, name, repo)) };
+    },
     removeProject: (repo) => onTeam((org) => ({ org, action: "unlink-project", repo })),
     setProjectAccess: (repo, userId, grant) => onTeam((org) => ({ org, action: "project-access", repo, userId, grant })),
     // A new, renamed or deleted workspace changes every cached snapshot's `orgs` list, so forget them all before the refresh.
-    createTeam: (name) => postOp({ action: "create", name }).then(refreshAll),
+    createTeam: (name, slug) => postOp(slug ? { action: "create", name, slug } : { action: "create", name }).then(refreshAll),
     renameTeam: (slug, name) => postOp({ org: slug, action: "rename", name }).then(refreshAll),
     deleteTeam: (slug, confirm) => postOp({ org: slug, action: "delete", confirm }).then(refreshAll),
   };

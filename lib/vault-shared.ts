@@ -28,6 +28,24 @@ export interface VaultJoin {
   fingerprint: string;
 }
 
+// The team that linked a vault's repo as a project (Settings → Teams → Projects): the vault is that team's.
+export interface VaultLinked {
+  orgId: string;
+  name: string;
+}
+
+// What linking a repo did to this Mac's vault for it (electron/vault-shared-api.cjs, shareRepo).
+// skipped: none (no vault for the repo on this Mac), shared (already the team's), exists (the team's vault is there
+// and this Mac asks to join it by itself). denied: Touch ID was cancelled.
+export interface RepoShareResult {
+  skipped?: "none" | "shared" | "exists";
+  denied?: boolean;
+  vaultId?: string;
+  secrets?: number;
+  sealed?: number;
+  keptLocal?: string[];
+}
+
 // A teammate's Mac waiting for an admin to approve it. Its fingerprint is what the two compare.
 export interface VaultDeviceRequest {
   id: string;
@@ -57,6 +75,18 @@ export function shareTargets(orgs: VaultOrg[], repo = ""): VaultOrg[] {
   const owner = repo.split("/")[0]?.toLowerCase() ?? "";
   const own = (o: VaultOrg) => Boolean(owner) && (o.slug.toLowerCase() === owner || o.name.toLowerCase().replace(/[^a-z0-9]/g, "") === owner.replace(/[^a-z0-9]/g, ""));
   return orgs.filter((o) => o.members > 0 && o.admin !== false).sort((a, b) => Number(own(b)) - Number(own(a)));
+}
+
+// Who Share… offers a vault to: the team that linked its repo first, since any member of it may share it there, then
+// the workspaces the user runs.
+export function shareOfferOrg(orgs: VaultOrg[], repo: string, linked?: VaultLinked): VaultOrg | null {
+  const team = linked && orgs.find((o) => o.id === linked.orgId);
+  return team ?? shareTargets(orgs, repo)[0] ?? null;
+}
+
+// The badge's words: who the vault is shared with.
+export function sharedLabel(shared: VaultShared): string {
+  return shared.org.name ? `Shared with ${shared.org.name}` : "Shared";
 }
 
 // The badge's tooltip: which key version the vault is on, and when it was bumped.

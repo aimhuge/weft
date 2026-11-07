@@ -8,7 +8,7 @@ import { keyLabel } from "@/lib/hotkeys";
 import { searchSecrets } from "@/lib/vault-search";
 import { environmentsOf, groupSecrets, nudgeText, secretKey, type VaultBridge, type VaultConflict, type VaultSecret, type VaultSummary } from "@/lib/vault-view";
 import { conflictKey } from "@/lib/use-vault-conflicts";
-import { repoOf, shareTargets, type VaultOrg } from "@/lib/vault-shared";
+import { repoOf, shareOfferOrg, type VaultOrg } from "@/lib/vault-shared";
 import type { RowAction } from "./SecretRow";
 import type { Editing } from "./VaultParts";
 import { Note } from "./VaultParts";
@@ -92,7 +92,7 @@ export function VaultSection({
         {!v.shared && !v.join && (
           <ShareOffer
             folder={v.folder}
-            org={shareTargets(orgs, repoOf(v.id))[0] ?? null}
+            org={shareOfferOrg(orgs, repoOf(v.id), v.linked)}
             orgs={orgs}
             bridge={bridge}
             label={v.label}

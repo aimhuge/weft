@@ -670,3 +670,5 @@ One Touch ID lets one card use one project's vault for an hour without being ask
    thread. Pull built 2026-10-13: plain Vercel variables the vault has no value for come down, by hand or live through a
    team webhook (docs/architecture/vercel.md). Still open: "changed" (needs Vercel's values).
 6. **Teams** (built 2026-10-27): invites, fingerprint check, roles, rotate-on-remove, the event log in the panel.
+   A team-linked repo's vault is the team's (built 2026-11-07): linking shares it, any member may add keys, and a Mac
+   is approved once for the team ([teams-vault.md](./teams-vault.md#a-linked-repo-shares-its-vault)).

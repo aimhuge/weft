@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
-import { keyVersionTitle, shareTargets, type VaultDeviceRequest, type VaultJoin, type VaultOrg } from "@/lib/vault-shared";
+import { keyVersionTitle, sharedLabel, shareTargets, type VaultDeviceRequest, type VaultJoin, type VaultOrg } from "@/lib/vault-shared";
 import Icon from "./Icon";
 import { VaultShareDialog } from "./VaultShareDialog";
 
@@ -18,7 +18,7 @@ export function SharedBadge({ vault }: { vault: VaultSummary }) {
       className="flex shrink-0 items-center gap-1 rounded bg-accent-soft px-1.5 py-0.5 text-[10px] leading-[15px] text-accent"
     >
       <Icon name="share" size={10} />
-      <span className="max-w-[120px] truncate">{shared.org.name}</span>
+      <span className="max-w-[140px] truncate">{sharedLabel(shared)}</span>
       <span className="font-mono opacity-80">v{shared.keyVersion}</span>
     </span>
   );
