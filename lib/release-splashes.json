@@ -1,4 +1,11 @@
 {
+  "0.7.7": {
+    "lines": [
+      "Link a repo to your team, so your teammates’ cards show up on your board and your vault is shared securely.",
+      "Fold your AI’s question down with the chevron, so you can read the reply above it before you answer.",
+      "The copilot is off now, so Weft spends nothing in the background on a copilot you don’t use."
+    ]
+  },
   "0.7.6": {
     "lines": [
       "Weft runs on Windows now, on Intel or ARM: install it once and it updates itself, like on the Mac.",
