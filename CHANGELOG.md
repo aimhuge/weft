@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **The phone app's TestFlight link works again once Apple approves build 5.** The link said "This beta isn't accepting any new testers" because Beta App Review rejected build 4: the app only offered GitHub sign-in, so the reviewer had no account. The phone app now has a "Sign in with email" link, there's an App Review demo account with seeded cards, and build 5 is in review. Doc: docs/architecture/mobile.md.
+
 ### Removed
 
 - **GitHub is the only way to sign in.** Settings → Weft account and weft.zip's sign-in no longer offer Google, and `/auth/sign-in?provider=google` now answers 400 without reaching Supabase. Connecting a Google account for Gmail, Drive and Calendar (Settings → Connectors) still works as before. Files: lib/account.ts, lib/web-auth.ts, app/auth/sign-in/route.ts, lib/auth/login-form.tsx, lib/use-account.ts.
