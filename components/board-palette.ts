@@ -163,7 +163,9 @@ export function boardPaletteItems(s: PaletteState, a: PaletteActions): PaletteIt
     project: folderName(card.cwd),
     column: card.column,
     root: s.rootOf(card.cwd),
-    keywords: [card.prompt, card.lastLine, card.stage, card.remaining, folderName(card.cwd)].filter(Boolean).join(" "),
+    // The id too, so a card named by its short id ("42c9805c") in another card's reply is found by it.
+    keywords: [card.id, card.prompt, card.stage, card.remaining, folderName(card.cwd)].filter(Boolean).join(" "),
+    mentions: card.lastLine,
     preview: (card.error || card.lastLine)?.replace(/\s+/g, " ").trim() || undefined,
     when: timeAgo(activeAt(card), now),
     icon: "file",

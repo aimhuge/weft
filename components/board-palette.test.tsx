@@ -161,7 +161,8 @@ describe("boardPaletteItems", () => {
     expect(byId.get("project-/Users/me/dev/app")?.detail).toBe("~/dev/app");
     expect(byId.get("project-/srv/site")?.detail).toBe("/srv/site");
     expect(byId.has("card-cp")).toBe(false);
-    expect(byId.get("card-c1")?.keywords).toContain("done it");
+    expect(byId.get("card-c1")?.mentions).toBe("done it");
+    expect(byId.get("card-c1")?.keywords).toContain("c1");
     byId.get("project-all")?.run();
     byId.get("card-c1")?.run();
     expect(a.chooseProject).toHaveBeenCalledWith(null);
