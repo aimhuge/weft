@@ -207,7 +207,7 @@ describe("folderGuard hook", () => {
     expect(result).toMatchObject({ hookSpecificOutput: { permissionDecision: "ask", permissionDecisionReason: `Outside the project: use ${away}` } });
     expect(folderAsk("t1")).toEqual({
       question: `Outside the project: use ${away}`,
-      why: { category: "outside", detail: `${away} isn't in this card's project folder` },
+      why: { category: "outside", detail: `${away} isn't in this card's project folder`, match: { before: "ls ", token: away, after: "" } },
       folder: { directory: away, token: away },
     });
   });

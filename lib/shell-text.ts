@@ -20,6 +20,19 @@ const GIT_MESSAGE = new Set(["commit", "tag", "notes", "merge", "stash"]);
 const GIT_VALUED = new Set(["-C", "-c", "--git-dir", "--work-tree", "--namespace", "--super-prefix", "--config-env", "--exec-path"]);
 // echo and printf print their words; a word with a space in it was quoted, so the shell globs none of it.
 const PRINTERS = new Set(["echo", "printf"]);
+// An agent CLI's prompt or a tool's message, on any command: `puku-cli -p "…"`, `claude --prompt="…"`, `llm -m …`. Only
+// a sentence counts (a space in it, not starting like a path), so `mkdir -p "/Users/me/My Drive/x"` and `ssh -p 22` stay
+// words; a long prompt saying "-- and /* */ comments" read as a root glob and asked about /Volumes (2026-11-08).
+const PROMPT_FLAG = /^(?:-p|-m|--prompt|--message)$/;
+const PROMPT_JOINED = /^--(?:prompt|message)=([^]*)$/;
+const sentence = (w: string) => /\s/.test(w) && !/^(?:~|\$HOME|\$\{HOME\}|\.{0,2}\/)/.test(w);
+function promptWords(words: string[], text: Set<number>) {
+  for (let i = 1; i < words.length; i++) {
+    const w = words[i] as string;
+    if (sentence(PROMPT_JOINED.exec(w)?.[1] ?? "")) text.add(i);
+    else if (PROMPT_FLAG.test(w) && sentence(words[i + 1] ?? "")) text.add(++i);
+  }
+}
 // These run their words as code or as a command of their own, so a heredoc fed to one may be code.
 export const RUNS_CODE = new Set(
   "sh bash zsh dash ksh fish eval python python3 node ruby perl php deno bun tsx ts-node osascript xargs find npx bunx pnpx dlx pnpm npm yarn env sudo".split(" "),
@@ -43,6 +56,7 @@ export function textWords(words: string[]): Set<number> {
   const cmd = path.basename(words[0] ?? "");
   const text = new Set<number>();
   const short = SHORT[cmd] ?? /$^/;
+  promptWords(words, text);
   if (!PRINTERS.has(cmd) && !(cmd in SHORT && takesText(cmd, words))) return text;
   for (let i = 1; i < words.length; i++) {
     const w = words[i] as string;

@@ -129,13 +129,32 @@ function reached(token: string, cwd: string, home: string): string[] {
   return (matches.length ? matches : [fixedStart(abs)]).map(realish);
 }
 
+// A glob one level under the root (`/*`, `/U*`) is prose or a listing, not a folder: `/*` in a comment once
+// expanded to /Users and /Volumes and asked about both (2026-11-08). `/*/x` still expands.
+const ROOT_GLOB = /^\/[^/]*[*?[{][^/]*\/?$/;
+
+// Where in a Bash command the matched token sits, with a little of the line on each side, so the prompt can say which
+// word made Weft think the call leaves the project. Undefined when the token isn't there verbatim (an unescaped `\ `).
+export function tokenContext(command: string, token: string, span = 28) {
+  const at = command.indexOf(token);
+  if (at < 0) return undefined;
+  const flat = (s: string) => s.replace(/\s+/g, " ");
+  const from = Math.max(0, at - span);
+  const to = Math.min(command.length, at + token.length + span);
+  return {
+    before: (from > 0 ? "…" : "") + flat(command.slice(from, at)),
+    token,
+    after: flat(command.slice(at + token.length, to)) + (to < command.length ? "…" : ""),
+  };
+}
+
 export const tilde = (p: string, home = os.homedir()) => (inside(p, home) ? path.join("~", path.relative(home, p)) : p);
 
 // The paths a tool call names: its file or folder argument, or for Bash every absolute, ~/ and ../ token in
 // the command (a heuristic: a path a script builds at run time isn't visible). A glob stays whole; reached() expands it.
 export function pathsOf(toolName: string, input: Record<string, unknown>): string[] {
   const str = (v: unknown) => (typeof v === "string" && v ? v : undefined);
-  if (toolName === "Bash") return bashPaths(str(input.command) ?? "");
+  if (toolName === "Bash") return bashPaths(str(input.command) ?? "").filter((t) => !ROOT_GLOB.test(t));
   if (toolName === "Glob") {
     const pattern = str(input.pattern);
     return [str(input.path), pattern && /^[/~]/.test(pattern) ? pattern : undefined].filter((p): p is string => Boolean(p));
@@ -246,7 +265,10 @@ export function folderGuard(cardId: () => string | undefined): HookCallback {
     if (!out) return Promise.resolve({});
     const where = tilde(out.directory);
     const question = `Outside the project: ${out.verb} ${where}`;
-    pending.set(toolUseId, { question, why: { category: "outside", detail: `${where} isn't in this card's project folder` }, folder: { directory: out.directory, token: where } });
+    const toolInput = (input.tool_input ?? {}) as Record<string, unknown>;
+    const match = input.tool_name === "Bash" ? tokenContext(typeof toolInput.command === "string" ? toolInput.command : "", out.token) : undefined;
+    const why: PromptReason = { category: "outside", detail: `${where} isn't in this card's project folder`, ...(match && { match }) };
+    pending.set(toolUseId, { question, why, folder: { directory: out.directory, token: where } });
     if (pending.size > PENDING_CAP) pending.delete(pending.keys().next().value as string);
     return Promise.resolve({ hookSpecificOutput: { hookEventName: "PreToolUse" as const, permissionDecision: "ask" as const, permissionDecisionReason: question } });
   };
