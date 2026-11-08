@@ -99,7 +99,7 @@ a gate (/s, /a, /u) call `connection()` themselves (`lib/prerender-check.ts` fla
 - `lib/web-session.ts`: the weft.zip visitor's cookie session (`webClient`, `webUser` from the JWT claims) and the
   service-role client (`serviceClient`, from `SUPABASE_SECRET_KEY`, set on the deployment only).
 - `proxy.ts`: refreshes the session cookie before the team pages render (Server Components can't write cookies).
-  Deployed only; matches `/login`, `/app`, `/team`, `/invite/*`, `/<slug>/team/*` and `/<slug>/billing/*`.
+  Deployed only; matches `/login`, `/app`, `/team`, `/invite/*`, `/<slug>/team/*`, `/<slug>/board/*` and `/<slug>/billing/*`.
 - `lib/web-auth.ts` + `app/auth/{sign-in,callback,sign-out}`: GitHub sign-in on weft.zip (any other `provider` is a 400) with PKCE in a
   cookie. The callback stamps `last_login_at` and `login_count`. `/login` uses it when deployed.
 - `lib/teams.ts`: the gate. `teamAccess(slug)` answers ok / signed-out / denied / unconfigured (a missing workspace and
@@ -160,7 +160,8 @@ board ── useTeam() ──▶ /api/account/team (local, guarded) ──Bearer
 ```
 
 - `app/api/teams` (weft.zip, no localhost guard; the bearer token is the check, `bearerUser` in `lib/web-session.ts`):
-  GET a `TeamSnapshot`, POST a `TeamOp`. 401 signed out, 404 not a member, 503 not configured.
+  GET a `TeamSnapshot`, POST a `TeamOp`. 401 signed out, 404 not a member (or, signed in, no workspace at all), 503 not
+  configured (no `SUPABASE_KEY` or no service key), so a deployment that isn't set up never reads as "signed out".
 - `lib/team-ops.ts`: one core for that API and the server actions, so both enforce the same rules. `runInvite`
   consults the plan gate (`workspaceCanHaveMembers`) and exports `TEAM_GATE_MESSAGE`; `checkInvite` holds the free
   input checks so the op stays small.
@@ -219,8 +220,24 @@ project and decide who else does; a member sees only the projects granted to the
   ([cloud-sync.md](cloud-sync.md#team-projects)), and each member's desktop board shows the others' cards for it inside
   their own checkout of the repo, read-only, with whose Mac runs each
   ([cloud-sync.md](cloud-sync.md#team-projects-on-the-desktop-board)).
-- What a grant gates today is the team page's project list. Synced cards (`cloud_cards`) and the shared vault aren't
-  scoped by project yet; when they are, they should read `org_project_members` the same way.
+- **A grant gates the project's synced cards and its vault too** (`supabase/migrations/20261108051456_project_scoped_reads.sql`,
+  applied 2026-11-08). One check, `private.can_use_repo(org, repo, user)`: a member of the workspace who is an owner or
+  admin, or the only member (a personal workspace), or granted the repo. Repos compare without case (`org_projects`
+  keeps GitHub's casing; `cloud_cards.repo` is lowercased).
+  - Cards: `cloud_cards` reads for its owner or `private.can_read_card`; `cloud_thread_items`, `cloud_tool_outputs`,
+    `cloud_commands`, `cloud_shares` and `cloud_card_takeovers` read as their card does, through an `EXISTS` on
+    `cloud_cards` written into each policy (a per-row function took ~1 s for a 9,556-item thread; the join takes ~5 ms,
+    faster than the old `is_org_member` policy). A team card with no repo, or one since unlinked, is its owner's and
+    the admins'. Everything that reads as the user follows: the desktop's team board, the web board, the phone,
+    Realtime. Blobs stay per workspace (fetched by sha256, so you need an item that names one).
+  - Routing: `team_orgs_for_repos` names the team only to someone who can use the repo, so a member not granted a
+    project keeps that checkout's cards in their own workspace and their Mac never asks for its vault.
+  - Vault: `trusted_vault_gaps` leaves out Macs whose person can't use the repo; a BEFORE INSERT trigger
+    (`private.vault_grant_access_check`) refuses an ask to join (`pending_device_grants`) with what to do, and drops a
+    key row (`vault_grants`) for such a Mac, so a rotation after a grant is taken away completes without it. Keys
+    already on a Mac stay until the vault is rotated.
+  - Checked on prod in rolled-back transactions: in the one real team, both owners and the granted member read all 156
+    cards; with the grant removed the member reads only their own 154 and routing stops naming the team.
 
 ## Setup on the deployment
 
