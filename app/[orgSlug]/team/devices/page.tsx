@@ -1,5 +1,4 @@
-// The team's Devices page on weft.zip: every machine the workspace has registered, and the grants that
-// are waiting on a TOFU check.
+// The team's Devices page on weft.zip: every machine the workspace has registered.
 //
 // The page is a server component. It gates with requireTeam(slug) — the same gate every team page uses —
 // and reads the devices through the service client, because the list crosses users: it shows every
@@ -8,30 +7,23 @@
 // The service client stays on the server. What the page hands to its client components is plain data:
 // a name, a platform, a last-seen time and a fingerprint. Nothing else.
 //
-// The flow the page supports (docs/architecture/teams-vault.md, "Granting a teammate's devices"):
-//
-//   1. An admin pastes a device's fingerprint and presses Add. That writes a `pending_device_grants`
-//      row and nothing else — no grant, no key.
-//   2. The other machine hears about the request, shows the same fingerprint, and the two users compare
-//      the strings out of band. That check is the user's job; the UI can't skip it for them.
-//   3. The target accepts (app/api/team/devices/accept), which records the device and its public key.
-//   4. The granter's Weft seals the vault key to that public key — on the granter's machine, which is
-//      the only place the unwrapped key exists (card 8).
+// The page is a list, not a grant flow. Adding a Mac happens in Weft's 🔐 drawer (docs/architecture/teams-vault.md,
+// "Joining a shared vault" and "A linked repo shares its vault"): a teammate's Mac asks to join on its own, and an admin
+// approves it once for the team there, with the fingerprint check and Touch ID — the drawer is where the vault key is.
+// The page's old fingerprint-paste forms (AddDeviceForm, PendingGrantForm) were removed: they wrote a
+// `pending_device_grants` row that nothing on either Mac ever finished.
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { isWebEnabled } from "@/lib/home";
 import { requireTeam } from "@/lib/teams";
-import { canGrantDevices } from "@/app/api/team/devices/auth";
-import { listOrgMembersForGrant, listOrgVaults, listPendingGrants, listTeamDevices } from "@/app/api/team/devices/queries";
-import { AddDeviceForm } from "./AddDeviceForm";
+import { listOrgVaults, listTeamDevices } from "@/app/api/team/devices/queries";
 import { DeviceRow } from "./DeviceRow";
-import { PendingGrantForm } from "./PendingGrantForm";
 import { TeamTabs } from "./TeamTabs";
 import "./devices.css";
 
 export const metadata: Metadata = {
   title: "Devices",
-  description: "The machines your workspace can share secrets with, and the ones waiting to be added.",
+  description: "The machines your workspace can share secrets with.",
 };
 
 function NotDeployedCard({ slug }: { slug: string }) {
@@ -49,13 +41,7 @@ async function DevicesPageBody({ orgSlug }: { orgSlug: string }) {
   const ctx = await requireTeam(orgSlug, `/${orgSlug}/team/devices`);
   // The service client (ctx.service) does the reads here, on the server: the device list crosses users,
   // so it is scoped by the queries module to the workspace's own members.
-  const [devices, pending, vaults, members] = await Promise.all([
-    listTeamDevices(ctx.service, ctx.org.id, ctx.user.id),
-    listPendingGrants(ctx.service, ctx.org.id, ctx.user.id),
-    listOrgVaults(ctx.service, ctx.org.id),
-    listOrgMembersForGrant(ctx.service, ctx.org.id),
-  ]);
-  const canGrant = canGrantDevices(ctx);
+  const [devices, vaults] = await Promise.all([listTeamDevices(ctx.service, ctx.org.id, ctx.user.id), listOrgVaults(ctx.service, ctx.org.id)]);
   const live = devices.filter((d) => !d.revokedAt);
 
   return (
@@ -72,10 +58,6 @@ async function DevicesPageBody({ orgSlug }: { orgSlug: string }) {
         <div className="wz-stat">
           <span className="wz-statLabel">Devices</span>
           <span className="wz-statValue">{live.length}</span>
-        </div>
-        <div className="wz-stat">
-          <span className="wz-statLabel">Waiting</span>
-          <span className="wz-statValue">{pending.length}</span>
         </div>
         <div className="wz-stat">
           <span className="wz-statLabel">Shared vaults</span>
@@ -106,30 +88,13 @@ async function DevicesPageBody({ orgSlug }: { orgSlug: string }) {
         )}
       </section>
 
-      {pending.length > 0 ? (
-        <section className="wz-teamSection">
-          <h2 className="wz-teamSectionTitle">Waiting on a check</h2>
-          <p className="wz-teamSub">
-            Each request waits until the two machines show the same fingerprint. Read the fingerprint out to the other side, compare, and accept there.
-          </p>
-          <PendingGrantForm org={orgSlug} grants={pending} viewerId={ctx.user.id} />
-        </section>
-      ) : null}
-
-      {canGrant ? (
-        <section className="wz-teamSection">
-          <h2 className="wz-teamSectionTitle">Add a device</h2>
-          {vaults.length === 0 ? (
-            <p className="wz-teamSub">This workspace has no shared vault yet. Open a vault in Weft and share it with {ctx.org.name} first.</p>
-          ) : null}
-          {vaults.length > 0 ? (
-            <AddDeviceForm org={orgSlug} vaults={vaults} members={members} viewerId={ctx.user.id} title="Add a teammate&apos;s device" />
-          ) : null}
-          {vaults.length > 0 ? (
-            <AddDeviceForm org={orgSlug} vaults={vaults} members={members} viewerId={ctx.user.id} title="Add this device (another machine of yours)" />
-          ) : null}
-        </section>
-      ) : null}
+      <section className="wz-teamSection">
+        <h2 className="wz-teamSectionTitle">Adding a machine</h2>
+        <p className="wz-teamSub">
+          A teammate&apos;s Mac asks to join from Weft&apos;s 🔐 drawer, by itself on a project the team linked. An admin approves it there once, after
+          comparing the fingerprint above with the one that Mac shows, and it opens every shared vault of {ctx.org.name}.
+        </p>
+      </section>
 
       <footer className="wz-teamFooter">
         A fingerprint identifies a machine, not a person. Share it in person or over a channel you trust — anyone who can read it can confirm a device they control.

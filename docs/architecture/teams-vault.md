@@ -409,7 +409,9 @@ round-trip is sub-200ms, so the optimism isn't worth the rollback code.
 
 **This is the path that runs.** Built 2026-10-31, in the 🔐 drawer, with the functions in
 `supabase/migrations/20261031094535_vault_device_requests.sql`. The older fingerprint-paste flow described
-in the next section stops at a pending row: its Add form works, but nothing on either Mac finishes it.
+in "Granting a teammate's devices" stopped at a pending row: nothing on either Mac ever finished it, so its forms
+(`AddDeviceForm`, `PendingGrantForm` and their `client.ts`) were removed from the Devices page on 2026-11-08. That
+page is now the team's list of machines plus a pointer to the drawer, where a Mac asks to join and an admin approves it.
 
 1. **An admin shares** a local vault from the drawer. The offer lists only workspaces with someone else in
    them where the user is an admin. A repo the workspace already shares refuses a second share: that Mac's
@@ -476,6 +478,10 @@ rotation" below) for a new vault key sealed only to the Macs that stay, or revok
 page, then change the values at their providers, because whatever a Mac decrypted before is already out.
 
 ## Granting a teammate's devices
+
+**Superseded.** This was the first plan, and the Devices page's paste-a-fingerprint forms were removed on 2026-11-08
+(see "Joining a shared vault" above for what runs). `app/api/team/devices` (`POST`/`DELETE` of a
+`pending_device_grants` row, and `accept`) is still deployed, but no screen calls its `POST` or `DELETE` now.
 
 The owner (or any `admin`) opens the team's **Devices** page on the deployed weft.zip (a
 `app/[orgSlug]/team/devices/page.tsx` this card would add; today the team page is
@@ -802,8 +808,8 @@ because the `shared` block is purely additive.
 **Files added**:
 - `app/[orgSlug]/team/devices/page.tsx` (server component, calls `requireTeam(slug)`, fetches the
   devices list through a service client because the list crosses users).
-- `app/[orgSlug]/team/devices/DeviceRow.tsx`, `PendingGrantForm.tsx`, `AddDeviceForm.tsx` — client
-  components for the page.
+- `app/[orgSlug]/team/devices/DeviceRow.tsx` — the page's row. (`PendingGrantForm.tsx` and `AddDeviceForm.tsx`
+  shipped here too and were removed on 2026-11-08: see "Joining a shared vault".)
 - `app/api/team/devices/route.ts` — `POST` creates a `pending_device_grants` row; `DELETE` removes
   one. RLS gates; the route is just a thin wrapper.
 - `app/api/team/devices/accept/route.ts` — `POST` from the accepting device, sets the pending row's
