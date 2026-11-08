@@ -6,17 +6,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/slack-growth", async () => {
   const actual = await vi.importActual<typeof import("@/lib/slack-growth")>("@/lib/slack-growth");
-  return { ...actual, postGrowthSummary: vi.fn(() => Promise.resolve(true)) };
+  return {
+    ...actual,
+    postGrowthSummary: vi.fn(() => Promise.resolve({ posted: true, failure: null, overview: null, detail: null })),
+  };
 });
 
 vi.mock("@/lib/growth-read", async () => {
   const actual = await vi.importActual<typeof import("@/lib/growth-read")>("@/lib/growth-read");
-  return { ...actual, growthOverview: vi.fn(() => Promise.resolve(actual.growthOverview)) };
+  return {
+    ...actual,
+    growthOverviewResult: vi.fn(() => Promise.resolve({ overview: null, failure: null, source: "environment" })),
+  };
 });
 
 const { POST, GET } = await import("./route");
 const { postGrowthSummary } = await import("@/lib/slack-growth");
-const { growthOverview } = await import("@/lib/growth-read");
+const { growthOverviewResult } = await import("@/lib/growth-read");
 
 const WRITE = { host: "localhost:3457", "x-weft-token": "1", "content-type": "application/json" };
 const READ = { host: "localhost:3457", "content-type": "application/json" };
@@ -39,9 +45,9 @@ const req = (headers: Record<string, string>) => new Request("http://localhost:3
 
 beforeEach(() => {
   vi.mocked(postGrowthSummary).mockClear();
-  vi.mocked(postGrowthSummary).mockResolvedValue(true);
-  vi.mocked(growthOverview).mockClear();
-  vi.mocked(growthOverview).mockResolvedValue(OVERVIEW);
+  vi.mocked(postGrowthSummary).mockResolvedValue({ posted: true, failure: null, overview: OVERVIEW, detail: null });
+  vi.mocked(growthOverviewResult).mockClear();
+  vi.mocked(growthOverviewResult).mockResolvedValue({ overview: OVERVIEW, failure: null, source: "environment" });
 });
 
 describe("POST", () => {
@@ -51,6 +57,7 @@ describe("POST", () => {
     expect(await res.json()).toEqual({
       ok: true,
       url: "https://weft.zip/@fotoflo/apps/growth",
+      source: "environment",
       lines: [
         "3 new in 7 days (9 in 30)",
         "12 accounts, 5 signed in this week",
@@ -62,7 +69,7 @@ describe("POST", () => {
   });
 
   it("says so when the summary did not go out", async () => {
-    vi.mocked(postGrowthSummary).mockResolvedValue(false);
+    vi.mocked(postGrowthSummary).mockResolvedValue({ posted: false, failure: "no_channel", overview: null, detail: null });
     const res = await POST(req(WRITE));
     expect(res.status).toBe(503);
     const body = (await res.json()) as { ok: boolean; error: string };
@@ -70,12 +77,36 @@ describe("POST", () => {
     expect(body.error).toContain("did not go out");
   });
 
-  it("says nothing about numbers it could not read", async () => {
+  it("says why the summary did not go out, so the fix is not a guess", async () => {
+    const errorOf = async () => ((await (await POST(req(WRITE))).json()) as { error: string }).error;
+    // A missing channel, a missing key and a Slack refusal each need a different fix.
+    vi.mocked(postGrowthSummary).mockResolvedValue({ posted: false, failure: "no_channel", overview: null, detail: null });
+    expect(await errorOf()).toContain("no growth channel is set");
+
+    vi.mocked(postGrowthSummary).mockResolvedValue({ posted: false, failure: "no_service_key", overview: null, detail: null });
+    expect(await errorOf()).toContain("no Supabase service key");
+
+    vi.mocked(postGrowthSummary).mockResolvedValue({ posted: false, failure: "read_failed", overview: null, detail: null });
+    expect(await errorOf()).toContain("the growth_overview read failed");
+
+    vi.mocked(postGrowthSummary).mockResolvedValue({ posted: false, failure: "slack_refused", overview: null, detail: "channel_not_found" });
+    const body = (await (await POST(req(WRITE))).json()) as { error: string; detail?: string };
+    expect(body.error).toContain("Slack refused the message");
+    expect(body.detail).toBe("channel_not_found");
+  });
+
+  it("says why the numbers that follow it could not be read", async () => {
     // The summary went out; the numbers that come after it could not be read.
-    vi.mocked(growthOverview).mockResolvedValue(null);
+    vi.mocked(growthOverviewResult).mockResolvedValue({ overview: null, failure: "no_service_key", source: null });
     const res = await POST(req(WRITE));
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ ok: true, url: "https://weft.zip/@fotoflo/apps/growth", lines: [] });
+    expect(await res.json()).toEqual({
+      ok: true,
+      url: "https://weft.zip/@fotoflo/apps/growth",
+      source: null,
+      lines: [],
+      warning: "The summary went out, but the numbers could not be read: no Supabase service key in the environment.",
+    });
   });
 
   it("refuses a write without the board's token", async () => {
@@ -111,21 +142,36 @@ describe("GET", () => {
         "21 cards synced by 4 accounts",
       ],
       overview: OVERVIEW,
+      source: "environment",
     });
     // A read posts nothing.
     expect(postGrowthSummary).not.toHaveBeenCalled();
   });
 
   it("says so when the numbers can't be read", async () => {
-    vi.mocked(growthOverview).mockResolvedValue(null);
+    vi.mocked(growthOverviewResult).mockResolvedValue({ overview: null, failure: "no_service_key", source: null });
     const res = await GET(req(READ));
     expect(res.status).toBe(503);
-    expect(await res.json()).toEqual({ error: "The growth numbers could not be read." });
+    expect(await res.json()).toEqual({
+      error: "The growth numbers could not be read: no Supabase service key in the environment.",
+    });
+  });
+
+  it("says why the numbers could not be read, so the fix is not a guess", async () => {
+    // A missing key, a failed read and an empty answer each need a different fix.
+    vi.mocked(growthOverviewResult).mockResolvedValue({ overview: null, failure: "read_failed", source: null });
+    expect(await (await GET(req(READ))).json()).toEqual({
+      error: "The growth numbers could not be read: the growth_overview read failed.",
+    });
+    vi.mocked(growthOverviewResult).mockResolvedValue({ overview: null, failure: "empty_answer", source: null });
+    expect(await (await GET(req(READ))).json()).toEqual({
+      error: "The growth numbers could not be read: the growth_overview read answered with nothing.",
+    });
   });
 
   it("refuses a request from another host", async () => {
     const res = await GET(new Request("http://evil.test/api/slack/growth-summary", { headers: { "content-type": "application/json" } }));
     expect(res.status).toBe(403);
-    expect(growthOverview).not.toHaveBeenCalled();
+    expect(growthOverviewResult).not.toHaveBeenCalled();
   });
 });

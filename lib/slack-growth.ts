@@ -1,5 +1,5 @@
 import { appPublicUrl } from "./app-share-types";
-import { growthOverview, type GrowthEvent, type GrowthOverview } from "./growth-read";
+import { growthOverviewResult, type GrowthEvent, type GrowthOverview } from "./growth-read";
 import { growthMessage, growthSummaryMessage } from "./slack-messages";
 import { postToSlack } from "./slack-post";
 import { channelFor } from "./slack-route";
@@ -128,21 +128,50 @@ export function growthDashboardUrl(env: Record<string, string | undefined> = pro
 }
 
 /**
- * Posts the daily growth summary to the growth channel. False when there is no channel, no service key, or
- * Slack refused it — the caller says so rather than pretending it went out.
+ * Why the daily growth summary did not go out.
+ *
+ * The three causes need three different fixes, and "it did not go out" sends people looking in the wrong place:
+ * a missing channel looks like a missing key looks like Slack refusing the message.
  */
-export async function postGrowthSummary(env: Record<string, string | undefined> = process.env): Promise<boolean> {
+export type GrowthSummaryFailure = "no_channel" | "no_service_key" | "read_failed" | "empty_answer" | "slack_refused";
+
+export interface GrowthSummaryResult {
+  posted: boolean;
+  /** Why it did not go out, when it did not. */
+  failure: GrowthSummaryFailure | null;
+  /** The numbers it posted, when it posted. */
+  overview: GrowthOverview | null;
+  /** What Slack said, when Slack was the one that refused. */
+  detail: string | null;
+}
+
+/**
+ * Posts the daily growth summary to the growth channel, and says what happened.
+ *
+ * The numbers come from lib/growth-read.ts, which reads them with the service key in the 🔐 vault — in the
+ * packaged app, from Electron main (electron/growth-read.cjs). The caller says what happened rather than
+ * pretending a message went out.
+ */
+export async function postGrowthSummary(env: Record<string, string | undefined> = process.env): Promise<GrowthSummaryResult> {
   const settings = slackSettings();
   const channel = channelFor(settings, "", "growth");
-  if (!channel) return false;
-  const overview = await growthOverview(env);
-  if (!overview) return false;
+  if (!channel) return { posted: false, failure: "no_channel", overview: null, detail: null };
+  const { overview, failure } = await growthOverviewResult(env);
+  if (!overview) {
+    return {
+      posted: false,
+      failure: failure === "read_failed" ? "read_failed" : failure === "empty_answer" ? "empty_answer" : "no_service_key",
+      overview: null,
+      detail: null,
+    };
+  }
   try {
     await postToSlack(channel, growthSummaryMessage(overview, growthDashboardUrl(env)));
-    return true;
+    return { posted: true, failure: null, overview, detail: null };
   } catch (err) {
-    console.warn(`[weft] slack growth: ${err instanceof Error ? err.message : String(err)}`);
-    return false;
+    const detail = err instanceof Error ? err.message : String(err);
+    console.warn(`[weft] slack growth: ${detail}`);
+    return { posted: false, failure: "slack_refused", overview, detail };
   }
 }
 
