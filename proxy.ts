@@ -71,7 +71,7 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  // The weft.zip pages that read the session: sign-in, the workspace's team page, /billing (the pricing cards' way in) and invite links.
+  // The weft.zip pages that read the session: sign-in, the workspace's team page and board, /billing (the pricing cards' way in) and invite links.
   // /s/:path* is included so a private share's redirect-to-login sees the visitor's cookie state.
   // The app-link matchers let the proxy decide on every request; non-matches still hit the function
   // but return NextResponse.next() at once (no session work for them).
@@ -84,6 +84,8 @@ export const config = {
     "/pair",
     "/:orgSlug/team/:path*",
     "/:orgSlug/billing/:path*",
+    // The web board renders through requireTeam and webClient() like the team page, so its cookie is refreshed here too.
+    "/:orgSlug/board/:path*",
     "/s/:path*",
     // A tunnel's address reads the visitor's session the same way (lib/tunnel-address.ts).
     "/t/:path*",
