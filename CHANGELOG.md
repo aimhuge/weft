@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **Share no longer hangs on "Uploading this card…" for team projects.** A card in a folder a team linked syncs to the team's workspace, but the Share dialog looked for it in your personal one and waited forever. It now looks where sync actually put it (`lib/card-share.ts`).
+
 ## [0.7.8] - 2026-11-07
 
 ### Fixed
