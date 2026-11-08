@@ -1,4 +1,11 @@
 {
+  "0.8.0": {
+    "lines": [
+      "Share an agent with your team, and choose who on the team can reach each project’s cards and vault.",
+      "Before your AI runs SQL that could delete data, a second model reads it and tells you what it does.",
+      "Sharing a card from your team’s project no longer stalls on uploading, so your link is ready in a few clicks."
+    ]
+  },
   "0.7.8": {
     "lines": [
       "Linking a big project to a team no longer stalls sync, so every card reaches your team.",
