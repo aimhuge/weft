@@ -18,6 +18,13 @@ vi.mock("@/lib/agent-store", () => ({
   resetAgent: vi.fn(),
 }));
 
+// Team agents: the last pull's teams and your shares, and the calls that change them (lib/team-agents.ts).
+vi.mock("@/lib/team-agent-cache", () => ({
+  readTeamCache: vi.fn(() => ({ me: "me", teams: [{ id: "org-1", name: "Acme" }], rows: [] })),
+  myShares: vi.fn(() => ({ "a-1": ["org-1"] })),
+}));
+vi.mock("@/lib/team-agents", () => ({ syncTeamAgentsSoon: vi.fn(), shareAgent: vi.fn(), unshareAgent: vi.fn() }));
+
 vi.mock("@/lib/new-card", () => ({
   createCardFromBody: vi.fn((body: Record<string, unknown>) => ({ id: "c1", title: "Write an agent", ...body })),
   startCard: vi.fn(() => ({ started: true })),
@@ -45,6 +52,8 @@ const show = await import("@/lib/show");
 const route = await import("./agents/route");
 const agentRoute = await import("./agents/[id]/route");
 const resetRoute = await import("./agents/[id]/reset/route");
+const shareRoute = await import("./agents/[id]/share/route");
+const teamAgents = await import("@/lib/team-agents");
 const authorRoute = await import("./agents/author/route");
 const designRoute = await import("./agents/design/route");
 const URL = "http://localhost:3457/api/agents";
@@ -66,7 +75,7 @@ beforeEach(() => {
 });
 
 describe("/api/agents", () => {
-  it("GET returns every agent and each project's default", async () => {
+  it("GET returns every agent, each project's default, your teams and your shares, and asks for a fresh pull", async () => {
     vi.mocked(store.listAgents).mockReturnValueOnce([{ id: "builder", name: "Builder", emoji: "🤖", tagline: "", soul: "You build." }] as never);
     vi.mocked(store.projectAgents).mockReturnValueOnce({ "/work/app": "a-1" });
     const res = route.GET(new Request(URL, { headers: READ }));
@@ -74,7 +83,10 @@ describe("/api/agents", () => {
     expect(await body(res)).toEqual({
       agents: [{ id: "builder", name: "Builder", emoji: "🤖", tagline: "", soul: "You build." }],
       projects: { "/work/app": "a-1" },
+      teams: [{ id: "org-1", name: "Acme" }],
+      shares: { "a-1": ["org-1"] },
     });
+    expect(teamAgents.syncTeamAgentsSoon).toHaveBeenCalled();
   });
 
   it("GET is refused when the guard denies", () => {
@@ -282,5 +294,33 @@ describe("/api/agents/design", () => {
     expect(res.status).toBe(400);
     expect((await body(res)).error).toContain("what the agent is for");
     expect(newCard.createCardFromBody).not.toHaveBeenCalled();
+  });
+});
+
+describe("/api/agents/[id]/share", () => {
+  it("shares with the team named and answers the new list, teams and shares", async () => {
+    const res = await shareRoute.POST(req("POST", { org: "org-1" }), ctx("a-1"));
+    expect(res.status).toBe(200);
+    expect(teamAgents.shareAgent).toHaveBeenCalledWith("a-1", "org-1");
+    expect(await body(res)).toEqual({ agents: [], teams: [{ id: "org-1", name: "Acme" }], shares: { "a-1": ["org-1"] } });
+  });
+
+  it("stops sharing with DELETE", async () => {
+    expect((await shareRoute.DELETE(req("DELETE", { org: "org-1" }), ctx("a-1"))).status).toBe(200);
+    expect(teamAgents.unshareAgent).toHaveBeenCalledWith("a-1", "org-1");
+  });
+
+  it("needs a team, and says what went wrong", async () => {
+    expect(await body(await shareRoute.POST(req("POST", {}), ctx("a-1")))).toEqual({ error: "Which team?" });
+    vi.mocked(teamAgents.shareAgent).mockRejectedValueOnce(new Error("Sign in to Weft to share agents with a team."));
+    const res = await shareRoute.POST(req("POST", { org: "org-1" }), ctx("a-1"));
+    expect(res.status).toBe(400);
+    expect((await body(res)).error).toBe("Sign in to Weft to share agents with a team.");
+  });
+
+  it("is refused when elevated denies: a thread can't share a soul with your team", async () => {
+    state.elevatedDenied = true;
+    expect((await shareRoute.POST(req("POST", { org: "org-1" }), ctx("a-1"))).status).toBe(403);
+    expect(teamAgents.shareAgent).not.toHaveBeenCalled();
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { BUILT_IN_AGENTS, type AgentInfo } from "./agents";
+import { BUILT_IN_AGENTS, type AgentInfo, type TeamRef } from "./agents";
 import { api } from "./client";
 
 // Every agent and each project's default, for the board's pickers and marks (the New thread dialog, the card menu, the
@@ -12,9 +12,12 @@ export interface AgentList {
   agents: AgentInfo[];
   // A project's default agent by folder; a folder left out starts on Builder.
   projects: Record<string, string>;
+  // Your Weft teams, and which teams each of your agents is shared with (docs/architecture/agents.md "Team agents").
+  teams: TeamRef[];
+  shares: Record<string, string[]>;
 }
 
-const SHIPPED: AgentList = { agents: BUILT_IN_AGENTS, projects: {} };
+const SHIPPED: AgentList = { agents: BUILT_IN_AGENTS, projects: {}, teams: [], shares: {} };
 let list: AgentList = SHIPPED;
 let loading: Promise<void> | null = null;
 const listeners = new Set<() => void>();

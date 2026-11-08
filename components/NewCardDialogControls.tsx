@@ -7,7 +7,7 @@
 import { useUiText } from "@/lib/ui-language";
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
 import { EFFORTS } from "@/lib/new-thread";
-import { agentOf, type ThreadAgent } from "@/lib/agents";
+import { agentLabel, agentOf, type ThreadAgent } from "@/lib/agents";
 import { useAgents } from "@/lib/use-agents";
 import ModelSelect from "./ModelSelect";
 import Icon from "./Icon";
@@ -128,7 +128,7 @@ function AgentSelect({ value, onPick, onManage }: AgentPick) {
       <select value={value} onChange={(e) => (e.target.value === MANAGE ? onManage?.() : onPick(e.target.value))} className={BARE_SELECT}>
         {agents.map((a) => (
           <option key={a.id} value={a.id}>
-            {a.emoji} {a.name}
+            {agentLabel(a)}
           </option>
         ))}
         {onManage && <option value={MANAGE}>{t("Manage agents…")}</option>}

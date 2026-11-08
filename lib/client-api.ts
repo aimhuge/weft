@@ -2,7 +2,7 @@
 // the XHR upload and audio transcribe helpers.
 
 import { withCreateWiden } from "./widen-signer";
-import type { AgentInfo, ThreadAgent } from "./agents";
+import type { AgentInfo, TeamRef, ThreadAgent } from "./agents";
 import type { TagInfo, TagRow } from "./tags";
 // The webhook, intake and clone shapes come from their own type-only modules, not from the server modules
 // that hold them: naming a server module's type still makes Turbopack resolve that module (node:fs,
@@ -72,6 +72,9 @@ export interface NewCardInput {
 
 // Whose skill set: a project's, a card's or an agent's.
 export type SkillSetWhere = { cwd: string } | { card: string } | { agent: string };
+
+// The list after a share changes: every agent, your teams, and which teams each of yours is shared with.
+export type AgentShares = { agents: AgentInfo[]; teams: TeamRef[]; shares: Record<string, string[]> };
 
 // What Settings → Agents sends to make or edit one.
 export type AgentDraft = Pick<AgentInfo, "name" | "emoji" | "tagline" | "soul">;
@@ -189,7 +192,10 @@ export const api = {
   // A new soul: the card's CLI ends and its next turn resumes the conversation under it (lib/agents.ts).
   setAgent: (id: string, agent: ThreadAgent) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { agent }),
   // Settings → Agents (lib/agent-store.ts): every agent, and yours to make, edit, delete or (built-ins) reset.
-  agents: () => call<{ agents: AgentInfo[]; projects: Record<string, string> }>("GET", "/api/agents"),
+  agents: () => call<{ agents: AgentInfo[]; projects: Record<string, string>; teams: TeamRef[]; shares: Record<string, string[]> }>("GET", "/api/agents"),
+  // Share one of your agents with a team, or stop (docs/architecture/agents.md "Team agents").
+  shareAgent: (id: string, org: string) => call<AgentShares>("POST", `/api/agents/${encodeURIComponent(id)}/share`, { org }),
+  unshareAgent: (id: string, org: string) => call<AgentShares>("DELETE", `/api/agents/${encodeURIComponent(id)}/share`, { org }),
   // A project's default agent; null puts it back on Builder.
   setProjectAgent: (cwd: string, agent: string | null) => call<{ projects: Record<string, string> }>("PUT", "/api/agents", { cwd, agent }),
   createAgent: (agent: AgentDraft) => call<{ agent: AgentInfo }>("POST", "/api/agents", agent),
@@ -227,6 +233,7 @@ export const api = {
   allowFolder: (folder: string) => call("POST", "/api/folders", { folder }),
   // Settings → Security's trusted-folders row: take a folder back out, so threads ask about it again.
   unallowFolder: (folder: string) => call<{ ok: true }>("DELETE", "/api/folders", { folder }),
+  allowSafeSql: (id: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { safeSql: true }),
   setReadScope: (id: string, path: string) => call<{ card: Card }>("PATCH", `/api/cards/${id}`, { readScope: path }),
   remove: (id: string) => call("DELETE", `/api/cards/${id}`),
   send: (id: string, text: string) => call<{ card: Card }>("POST", `/api/cards/${id}/messages`, { text }),
@@ -379,7 +386,7 @@ export const api = {
   // The GitHub drawer: who gh is signed in as, and each folder's repo and issue sync (lib/github-status.ts).
   github: (folders: string[]) => call<GithubStatus>("GET", `/api/github?${new URLSearchParams(folders.map((f) => ["folder", f]))}`),
   // The Settings → Sync page (lib/use-cloud-sync.ts): opt-in folders and the live flush status.
-  cloudSync: () => call<{ folders: string[]; status: CloudSyncStatus }>("GET", "/api/cloud-sync"),
+  cloudSync: () => call<{ folders: string[]; teams?: Record<string, string>; status: CloudSyncStatus }>("GET", "/api/cloud-sync"),
   cloudSyncSetFolder: (folder: string, on: boolean) => call<{ folder: string; on: boolean; folders: string[]; status: CloudSyncStatus }>("POST", "/api/cloud-sync", { folder, on }),
   // A project's "Run on This Mac / Run on Worker" in its right-click menu (lib/worker-handoff.ts).
   workerFolders: () => call<{ folders: string[] }>("GET", "/api/workers?folders=1"),

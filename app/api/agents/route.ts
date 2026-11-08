@@ -1,14 +1,19 @@
 import { createAgent, listAgents, projectAgents, setProjectAgent } from "@/lib/agent-store";
 import { elevated, fail, guard } from "@/lib/guard";
+import { myShares, readTeamCache } from "@/lib/team-agent-cache";
+import { syncTeamAgentsSoon } from "@/lib/team-agents";
 
-// Settings → Agents (docs/architecture/agents.md): every agent, built-ins first, and each project's default; a new one of
+// Settings → Agents (docs/architecture/agents.md): every agent (built-ins first, your teams' last), each project's
+// default, the teams you could share with and what you share with them; a new one of
 // your own (POST), or a project's default (PUT { cwd, agent }, null for Builder).
 // A soul is a system prompt, so only Weft's own window may write one, never a thread's curl.
 
 export function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
-  return Response.json({ agents: listAgents(), projects: projectAgents() });
+  // The list is the last pull's; this asks for a fresh one, at most once a minute, for the next look.
+  syncTeamAgentsSoon();
+  return Response.json({ agents: listAgents(), projects: projectAgents(), teams: readTeamCache().teams, shares: myShares() });
 }
 
 export async function POST(req: Request) {

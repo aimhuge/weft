@@ -1,7 +1,8 @@
 "use client";
 
 // One agent's form in Settings → Agents (docs/architecture/agents.md): its emoji, name, one line, soul and, once it
-// exists, its skills. A built-in's edit is saved over the one that shipped; Reset in the list brings it back.
+// exists, its skills. A built-in's edit is saved over the one that shipped; Reset in the list brings it back. A team's
+// agent is its sharer's, so it shows read-only here: Duplicate in the list makes a copy you can change.
 import { useEffect, useState } from "react";
 import type { AgentInfo } from "@/lib/agents";
 import { api, type AgentDraft } from "@/lib/client";
@@ -28,6 +29,7 @@ export default function AgentEditor({ agent, seed, onDone }: {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (key: keyof AgentDraft) => (e: { target: { value: string } }) => setDraft((d) => ({ ...d, [key]: e.target.value }));
+  const team = agent?.team;
 
   async function save() {
     setBusy(true);
@@ -46,23 +48,25 @@ export default function AgentEditor({ agent, seed, onDone }: {
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-line bg-canvas/60 p-3">
       <div className="flex gap-2">
-        <input aria-label="Emoji" value={draft.emoji} onChange={set("emoji")} placeholder="🤖" className={`${FIELD} w-12 text-center`} />
-        <input aria-label="Name" value={draft.name} onChange={set("name")} placeholder="Name, like Reviewer" className={`${FIELD} min-w-0 flex-1`} />
+        <input aria-label="Emoji" value={draft.emoji} onChange={set("emoji")} readOnly={Boolean(team)} placeholder="🤖" className={`${FIELD} w-12 text-center`} />
+        <input aria-label="Name" value={draft.name} onChange={set("name")} readOnly={Boolean(team)} placeholder="Name, like Reviewer" className={`${FIELD} min-w-0 flex-1`} />
       </div>
-      <input aria-label="One line" value={draft.tagline} onChange={set("tagline")} placeholder="One line: what it’s for" className={FIELD} />
+      <input aria-label="One line" value={draft.tagline} onChange={set("tagline")} readOnly={Boolean(team)} placeholder="One line: what it’s for" className={FIELD} />
       <label className="flex flex-col gap-1">
         <span className="text-[12px] text-muted">Soul: the start of every system prompt this agent’s threads get</span>
-        <textarea aria-label="Soul" value={draft.soul} onChange={set("soul")} rows={12}
+        <textarea aria-label="Soul" value={draft.soul} onChange={set("soul")} readOnly={Boolean(team)} rows={12}
           className={`${FIELD} resize-y font-mono text-[12px] leading-relaxed`} />
       </label>
-      {agent ? <AgentSkills id={agent.id} /> : <p className="text-[12px] text-faint">Add the agent first, then pick its skills here.</p>}
+      {team ? <p className="text-[12px] text-faint">Shared by {team.name}. Duplicate it to make a copy you can change.</p>
+        : agent ? <AgentSkills id={agent.id} /> : <p className="text-[12px] text-faint">Add the agent first, then pick its skills here.</p>}
       {error && <p className="text-[12.5px] text-danger">{error}</p>}
       <div className="flex justify-end gap-2">
-        <button type="button" onClick={onDone} className="rounded-md px-3 py-1.5 text-[13px] text-muted hover:text-ink">Cancel</button>
-        <button type="button" disabled={busy} onClick={() => void save()}
-          className={BUTTON_PRIMARY}>
-          {agent ? "Save agent" : "Add agent"}
-        </button>
+        <button type="button" onClick={onDone} className="rounded-md px-3 py-1.5 text-[13px] text-muted hover:text-ink">{team ? "Close" : "Cancel"}</button>
+        {!team && (
+          <button type="button" disabled={busy} onClick={() => void save()} className={BUTTON_PRIMARY}>
+            {agent ? "Save agent" : "Add agent"}
+          </button>
+        )}
       </div>
     </div>
   );

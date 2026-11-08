@@ -1,4 +1,4 @@
-import { agentOf, BUILT_IN_AGENTS, type AgentInfo, type ThreadAgent } from "./agents";
+import { agentLabel, agentOf, BUILT_IN_AGENTS, type AgentInfo, type ThreadAgent } from "./agents";
 import { isLive } from "./format";
 import { permissionOptions, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "./types";
 import { BACKENDS } from "./new-thread";
@@ -175,7 +175,7 @@ function agentItems(card: Card, live: boolean, agents: AgentInfo[]): MenuItem[] 
     const key = agentKey(i);
     return {
       id: `agent:${agent.id}`,
-      label: `Agent: ${agent.emoji} ${agent.name}`,
+      label: `Agent: ${agentLabel(agent)}`,
       checked: current === agent.id,
       enabled: !live || current === agent.id,
       ...(key ? { accelerator: key } : {}),

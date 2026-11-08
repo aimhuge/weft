@@ -12,6 +12,7 @@ import { startCloudInbox } from "./cloud-inbox";
 import { queueFolder, startCloudSync } from "./cloud-sync";
 import { startSyncRepos } from "./cloud-sync-repos";
 import { startTeamSync } from "./cloud-sync-team";
+import { startTeamAgentsSync } from "./team-agents";
 
 export function startAccountCloudSync(): () => void {
   let store: BlobStoreBundle | null = null;
@@ -31,7 +32,10 @@ export function startAccountCloudSync(): () => void {
   const stopTeam = startTeamSync(queueFolder);
   // Your account's settings to your workers (lib/account-settings.ts); a save pushes again.
   const stopSettings = startAccountSettingsPush();
+  // Your teams' agents in, and your shared ones out after each edit (lib/team-agents.ts).
+  const stopTeamAgents = startTeamAgentsSync();
   return () => {
+    stopTeamAgents();
     stopSettings();
     stopTeam();
     stopRepos();

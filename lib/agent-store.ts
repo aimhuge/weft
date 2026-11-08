@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { agentOf, isBuiltIn, mergeAgents, shippedAgent, type AgentInfo } from "./agents";
 import { DATA_DIR, listCards, updateCard } from "./store";
+import { teamAgents, teamCacheHash } from "./team-agent-cache";
 import { isWorkerProject, parseWorkerProject } from "./worker-project";
 
 // The agents you made and the built-ins you edited (Settings → Agents), kept in ~/.weft/agents.json. lib/agents.ts merges
@@ -70,14 +71,18 @@ export function forgetAgents() {
   cache = null;
 }
 
+// Every agent: the built-ins with your edits, yours, then your teams' (the last pull's copy, lib/team-agent-cache.ts).
 export function listAgents(): AgentInfo[] {
-  return mergeAgents(readSaved());
+  return [...mergeAgents(readSaved()), ...teamAgents()];
 }
 
-// Changes whenever a saved agent does, so the prompt fingerprint (lib/weft-prompts.ts promptsBuild) replaces idle CLIs.
+// Changes whenever a saved agent or a team's agent does, so the prompt fingerprint (lib/weft-prompts.ts promptsBuild)
+// replaces idle CLIs.
 export function savedAgentsHash(): string {
   const saved = readSaved();
-  return saved.length ? createHash("sha1").update(JSON.stringify(saved)).digest("hex").slice(0, 12) : "";
+  const mine = saved.length ? createHash("sha1").update(JSON.stringify(saved)).digest("hex").slice(0, 12) : "";
+  const team = teamCacheHash();
+  return team ? `${mine}:${team}` : mine;
 }
 
 // The agent a new thread in this folder starts as, when it names none (Settings → Agents); none means Builder.
@@ -114,7 +119,7 @@ export const agentSkillsOff = (id: string | undefined): string[] => agentOf(id, 
 
 // One skill or plugin on or off for every thread with this agent; a built-in's change is saved over it.
 export function setAgentSkill(id: string, name: string, on: boolean): AgentInfo {
-  const agent = requireAgent(id);
+  const agent = requireOwn(id);
   const off = new Set(agent.skillsOff ?? []);
   if (on) off.delete(name);
   else off.add(name);
@@ -136,7 +141,8 @@ function clean(input: Record<string, unknown>, id: string): Omit<AgentInfo, "bui
   const soul = typeof input.soul === "string" ? input.soul.trim() : "";
   if (!soul) throw new Error("An agent needs a soul: who it is and how it works.");
   if (soul.length > LIMITS.soul) throw new Error(`A soul is at most ${LIMITS.soul.toLocaleString("en-US")} characters.`);
-  const taken = listAgents().find((a) => a.id !== id && a.name.toLowerCase() === name.toLowerCase());
+  // A team's agent of the same name doesn't count: it carries its team's name beside it.
+  const taken = listAgents().find((a) => !a.team && a.id !== id && a.name.toLowerCase() === name.toLowerCase());
   if (taken) throw new Error(`There's already an agent called ${taken.name}.`);
   const tagline = text(input.tagline, LIMITS.tagline).replace(/\s+/g, " ");
   const skillsOff = cleanSkills(input.skillsOff);
@@ -155,10 +161,17 @@ function requireAgent(id: string): AgentInfo {
   return agent;
 }
 
+// One that's yours to change: a team's agent belongs to whoever shared it.
+function requireOwn(id: string): AgentInfo {
+  const agent = requireAgent(id);
+  if (agent.team) throw new Error(`${agent.name} is shared by ${agent.team.name}: duplicate it to make a copy of your own.`);
+  return agent;
+}
+
 // A built-in's edit is saved over it; one you made is changed in place.
 // Its skills stay as they were unless the edit names them (the form sends words; the skill list sends skills).
 export function updateAgent(id: string, input: Record<string, unknown>): AgentInfo {
-  const before = requireAgent(id);
+  const before = requireOwn(id);
   const agent = clean({ skillsOff: before.skillsOff, ...input }, id);
   const saved = readSaved();
   const at = saved.findIndex((a) => a.id === id);
@@ -168,7 +181,7 @@ export function updateAgent(id: string, input: Record<string, unknown>): AgentIn
 
 // Only the ones you made: a built-in resets instead. Cards that had it go back to Builder.
 export function deleteAgent(id: string) {
-  const agent = requireAgent(id);
+  const agent = requireOwn(id);
   if (agent.builtIn) throw new Error(`${agent.name} is built in: reset it instead.`);
   const projects = Object.fromEntries(Object.entries(readFile().projects).filter(([, a]) => a !== id));
   writeFile({ agents: readSaved().filter((a) => a.id !== id), projects });

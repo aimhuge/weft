@@ -23,6 +23,7 @@ vi.mock("./settings", async (importOriginal) => ({
 }));
 
 const store = await import("./agent-store");
+const teamCache = await import("./team-agent-cache");
 const reviewer = { name: "Reviewer", emoji: "🔍", tagline: "Reviews  code", soul: "You review." };
 const file = () => path.join(h.dir, "agents.json");
 
@@ -31,6 +32,7 @@ beforeEach(() => {
   h.cards = [];
   h.updated = [];
   store.forgetAgents();
+  teamCache.forgetTeamCache();
 });
 
 afterEach(() => vi.unstubAllGlobals());
@@ -213,5 +215,35 @@ describe("the prompt", () => {
     const mine = store.createAgent(reviewer);
     expect(promptsBuild()).not.toBe(before);
     expect(weftSystemPrompt({ backend: "claude", agent: mine.id }).startsWith("You review.")).toBe(true);
+  });
+});
+
+describe("your teams' agents", () => {
+  const shared = { orgId: "0123456789abcdef", orgName: "Acme", agentId: "a-9", name: "Reviewer", emoji: "🔍", tagline: "", soul: "You review.", skillsOff: [], createdBy: "them" };
+  const teamId = "t-01234567-a-9";
+
+  it("follow yours in the list, and change the fingerprint when a teammate edits one", () => {
+    const before = store.savedAgentsHash();
+    teamCache.writeTeamCache({ me: "me", teams: [], rows: [shared] });
+    expect(store.listAgents().at(-1)).toMatchObject({ id: teamId, team: { name: "Acme" } });
+    expect(store.savedAgentsHash()).not.toBe(before);
+    store.createAgent({ ...reviewer, name: "Mine" });
+    expect(store.savedAgentsHash()).toMatch(/^[0-9a-f]{12}:[0-9a-f]{12}$/);
+  });
+
+  it("are read-only here: no edit, delete or skill change, and their names don't block yours", () => {
+    teamCache.writeTeamCache({ me: "me", teams: [], rows: [shared] });
+    expect(() => store.updateAgent(teamId, reviewer)).toThrow("is shared by Acme: duplicate it");
+    expect(() => store.deleteAgent(teamId)).toThrow("is shared by Acme");
+    expect(() => store.setAgentSkill(teamId, "tdac", false)).toThrow("is shared by Acme");
+    expect(store.createAgent(reviewer).name).toBe("Reviewer");
+  });
+
+  it("can be a project's default, and a card can be one", () => {
+    teamCache.writeTeamCache({ me: "me", teams: [], rows: [shared] });
+    store.setProjectAgent("/dev/app", teamId);
+    expect(store.projectAgent("/dev/app")).toBe(teamId);
+    teamCache.writeTeamCache({ me: "me", teams: [], rows: [] });
+    expect(store.projectAgent("/dev/app")).toBeUndefined();
   });
 });

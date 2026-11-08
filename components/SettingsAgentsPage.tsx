@@ -1,10 +1,11 @@
 "use client";
 
-// Settings → Agents (docs/architecture/agents.md): who your threads are. Every agent, built-ins first, each editable;
-// a built-in resets to its latest text from Weft's repo on GitHub, one you made can be deleted. Below, each project's
-// default agent. Changes apply as you make them, like Shortcuts: nothing waits for Save.
+// Settings → Agents (docs/architecture/agents.md): who your threads are. Every agent, built-ins first and your teams'
+// last; a built-in resets to its latest text from Weft's repo on GitHub, one you made can be deleted or shared with a
+// team (components/SettingsAgentRow.tsx). Below, each project's default agent. Changes apply as you make them, like
+// Shortcuts: nothing waits for Save.
 import { useState } from "react";
-import type { AgentInfo } from "@/lib/agents";
+import { agentLabel, type AgentInfo } from "@/lib/agents";
 import { api, type AgentDraft } from "@/lib/client";
 import { folderName } from "@/lib/format";
 import { errorText } from "@/lib/new-thread";
@@ -12,15 +13,11 @@ import { refreshAgents, showAgents, useAgentList } from "@/lib/use-agents";
 import { useWorkerProjectsOnce } from "@/lib/use-worker-projects-once";
 import AgentEditor, { STARTER_SOUL } from "./AgentEditor";
 import AgentBuilder from "./AgentBuilder";
+import SettingsAgentRow, { LINK } from "./SettingsAgentRow";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 
-const LINK = "text-[12.5px] text-accent hover:underline disabled:text-faint disabled:no-underline";
-
-// What a built-in's mark says: you changed it, or Reset brought GitHub's newer text.
-const CHANGED = { you: "Edited", github: "Latest from GitHub" } as const;
-
 export default function SettingsAgentsPage({ projects }: { projects: string[] }) {
-  const { agents, projects: defaults } = useAgentList();
+  const { agents, projects: defaults, teams, shares } = useAgentList();
   // The agent whose form is open, or "new" with what it starts from.
   const [open, setOpen] = useState<{ id: string } | { seed: AgentDraft } | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -50,24 +47,12 @@ export default function SettingsAgentsPage({ projects }: { projects: string[] })
         <ul className="flex flex-col gap-2">
           {agents.map((a) => (
             <li key={a.id} className="flex flex-col gap-2">
-              <div className="flex items-center gap-3 rounded-lg border border-line px-3 py-2">
-                <span className="text-[18px] leading-none">{a.emoji}</span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2 text-[13px] font-medium text-ink">
-                    {a.name}
-                    {a.builtIn && <span className="rounded border border-line px-1.5 text-[10.5px] font-normal text-faint">Built in</span>}
-                    {a.changed && <span className="text-[11px] font-normal text-accent">{CHANGED[a.changed]}</span>}
-                  </div>
-                  {a.tagline && <p className="truncate text-[12px] text-muted">{a.tagline}</p>}
-                </div>
-                <div className="flex shrink-0 gap-3">
-                  <button type="button" className={LINK} onClick={() => setOpen(open && "id" in open && open.id === a.id ? null : { id: a.id })}>Edit</button>
-                  <button type="button" className={LINK} onClick={() => duplicate(a)}>Duplicate</button>
-                  {a.builtIn
-                    ? <button type="button" className={LINK} title="Pull its latest text from Weft's repo on GitHub" onClick={() => reset(a)}>Reset</button>
-                    : <button type="button" className={LINK} onClick={() => remove(a)}>Delete</button>}
-                </div>
-              </div>
+              <SettingsAgentRow agent={a} teams={teams} sharedWith={shares[a.id] ?? []} actions={{
+                onEdit: () => setOpen(open && "id" in open && open.id === a.id ? null : { id: a.id }),
+                onDuplicate: () => duplicate(a),
+                onReset: () => reset(a),
+                onDelete: () => remove(a),
+              }} />
               {open && "id" in open && open.id === a.id && <AgentEditor key={a.id} agent={a} onDone={() => setOpen(null)} />}
             </li>
           ))}
@@ -106,7 +91,7 @@ function ProjectDefaults({ agents, defaults, projects }: { agents: AgentInfo[]; 
             <span className="truncate text-[13px] text-ink" title={cwd}>{label(cwd)}</span>
             <select aria-label={`Default agent for ${label(cwd)}`} value={defaults[cwd] ?? "builder"} onChange={(e) => pick(cwd, e.target.value)}
               className="rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12.5px] text-ink">
-              {agents.map((a) => <option key={a.id} value={a.id}>{a.emoji} {a.name}</option>)}
+              {agents.map((a) => <option key={a.id} value={a.id}>{agentLabel(a)}</option>)}
             </select>
           </li>
         ))}
