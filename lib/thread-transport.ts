@@ -62,6 +62,8 @@ export const localTransport: ThreadTransport = {
   shell: (cardId, command) => api.shell(cardId, command).then(() => {}),
   editLast: (cardId, text) => api.editLast(cardId, text).then(() => {}),
   fresh: (cardId, message) => api.fresh(cardId, message).then(() => {}),
+  allowSafeSql: (cardId) => api.allowSafeSql(cardId).then(() => {}),
+  setMode: (cardId, mode) => api.setMode(cardId, mode).then(() => {}),
   grantFolder: (cardId, directory, scope) => (scope === "always" ? api.allowFolder(directory) : api.setReadScope(cardId, directory)).then(() => {}),
   waitPermission: waitNow,
   putFirst: firstNow,

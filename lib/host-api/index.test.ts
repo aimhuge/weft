@@ -248,6 +248,8 @@ describe("HOST_API", () => {
     expect(needsElevation("card.update", { id: "c1", body: { title: "x" } })).toBe(false);
     expect(needsElevation("card.update", { id: "c1", body: { permissionMode: "auto" } })).toBe(true);
     expect(needsElevation("card.update", { id: "c1", body: { readScope: "/x" } })).toBe(true);
+    expect(needsElevation("card.update", { id: "c1", body: { safeSql: true } })).toBe(true);
+    expect(needsElevation("card.update", { id: "c1", body: { safeSql: false } })).toBe(true);
     expect(needsElevation("card.create", { id: "n1" })).toBe(false);
     expect(needsElevation("card.create", { id: "n1", permissionMode: "default" })).toBe(false);
     expect(needsElevation("card.create", { id: "n1", permissionMode: "acceptEdits" })).toBe(true);

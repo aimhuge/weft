@@ -48,7 +48,7 @@ function PermissionLine({ item }: { item: Permission }) {
         <span className="min-w-0 flex-1 text-muted">{item.title}</span>
       </span>
       <span className={`${item.answer ? "pl-5" : "shrink-0"} ${decisionColor}`}>
-        {item.answer ? `Answered: ${item.answer}` : item.decision === "allow" ? "Allowed" : item.decision === "deny" ? "Denied" : "Waiting for you"}
+        {item.answer ? `Answered: ${item.answer}` : item.auto ? `Allowed automatically: ${item.auto}` : item.decision === "allow" ? "Allowed" : item.decision === "deny" ? "Denied" : "Waiting for you"}
       </span>
     </div>
   );

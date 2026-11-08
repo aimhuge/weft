@@ -39,6 +39,15 @@ describe("PermissionInput", () => {
     expect(screen.getByTestId("clash-faces").querySelectorAll("[role=img]")).toHaveLength(1);
   });
 
+  it("names the word that read as an outside path and folds the JSON behind Raw", async () => {
+    const match = { before: "…-- and ", token: "/*", after: " */ comm…" };
+    render(<PermissionInput input={{ command: "puku-cli -p long" }} why={{ category: "outside", detail: "/Volumes isn't in this card's project folder", match }} />);
+    expect(screen.getByText("/*", { selector: "code" })).toBeTruthy();
+    expect(screen.queryByText(/puku-cli -p long/)).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Raw" }));
+    expect(screen.getByText(/puku-cli -p long/)).toBeTruthy();
+  });
+
   it("names an outside-project folder with its own chip", () => {
     render(<PermissionInput input={{ command: "ls ~/Downloads" }} why={{ category: "outside", detail: "~/Downloads isn't in this card's project folder" }} />);
     expect(screen.getByText("⚠ Outside project").parentElement?.title).toBe(REASONS.outside.tip);
@@ -180,15 +189,15 @@ describe("PermissionActions", () => {
     expect(onAnswer).toHaveBeenLastCalledWith(false);
   });
 
-  it("offers Allow once, This card and Always for a folder outside the project", async () => {
+  it("offers Allow, Grant this card and Always for a folder outside the project", async () => {
     const onAnswer = vi.fn();
     const onGrant = vi.fn();
     const pending = { ...base, why: { category: "outside" as const, detail: "~/Downloads isn't in this card's project folder" }, readScope: { directory: "/Users/me/Downloads", token: "~/Downloads" } };
     render(<PermissionActions pending={pending} answered={false} onAnswer={onAnswer} onWait={vi.fn()} onGrant={onGrant} />);
-    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Allow once", "This card", "Always", "Deny"]);
-    await userEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Allow", "Grant this card", "Always", "Deny"]);
+    await userEvent.click(screen.getByRole("button", { name: "Allow" }));
     expect(onAnswer).toHaveBeenLastCalledWith(true);
-    await userEvent.click(screen.getByRole("button", { name: "This card" }));
+    await userEvent.click(screen.getByRole("button", { name: "Grant this card" }));
     expect(onGrant).toHaveBeenLastCalledWith("card");
     await userEvent.click(screen.getByRole("button", { name: "Always" }));
     expect(onGrant).toHaveBeenLastCalledWith("always");
@@ -199,5 +208,36 @@ describe("PermissionActions", () => {
   it("is plain Allow and Deny with no holder", () => {
     setup(base);
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Allow", "Deny"]);
+  });
+});
+
+describe("PermissionActions on flagged SQL", () => {
+  const sql = { server: "supabase", tool: "execute_sql", sql: "delete from t;", flagged: [0] };
+  const pending = { id: "p", toolName: "mcp__supabase__execute_sql", title: "t", input: {}, sql };
+
+  it("leads with Deny as the primary button until the review says Safe", async () => {
+    const onAnswer = vi.fn();
+    render(<PermissionActions pending={pending} answered={false} onAnswer={onAnswer} />);
+    expect(screen.getByText("Suggested: Decline. Wait for the review, or read the SQL.")).toBeTruthy();
+    const buttons = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(buttons).toEqual(["Deny", "Allow"]);
+    expect(screen.getByRole("button", { name: "Deny" }).className).toContain("bg-accent");
+    await userEvent.click(screen.getByRole("button", { name: "Deny" }));
+    expect(onAnswer).toHaveBeenCalledWith(false);
+  });
+
+  it("puts Allow first again once the review says Safe", () => {
+    const review = { verdict: "safe" as const, summary: "", statements: [], concerns: [], model: "sonnet" };
+    render(<PermissionActions pending={{ ...pending, sql: { ...sql, review } }} answered={false} onAnswer={() => {}} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Allow", "Deny"]);
+  });
+
+  it("puts the extra button between Allow and Deny, and leaves it out while risky", () => {
+    const review = { verdict: "safe" as const, summary: "", statements: [], concerns: [], model: "sonnet" };
+    const extra = <button key="x">Allow safe SQL on this card</button>;
+    const { rerender } = render(<PermissionActions pending={{ ...pending, sql: { ...sql, review } }} answered={false} onAnswer={() => {}} extra={extra} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Allow", "Allow safe SQL on this card", "Deny"]);
+    rerender(<PermissionActions pending={pending} answered={false} onAnswer={() => {}} extra={extra} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Deny", "Allow"]);
   });
 });

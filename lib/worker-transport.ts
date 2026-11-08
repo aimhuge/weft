@@ -92,7 +92,9 @@ export const forgetWorkerSkills = () => skillLists.forget();
 // thread link to the editor.
 const pending = (cardId: string, pendingId: string): HostArgs => ({ id: cardId, pendingId });
 
-const signedVerbs = (act: typeof actOnWorker): Pick<ThreadTransport, "shell" | "grantFolder"> => ({
+const signedVerbs = (act: typeof actOnWorker): Pick<ThreadTransport, "shell" | "grantFolder" | "allowSafeSql" | "setMode"> => ({
+  setMode: (cardId, permissionMode) => act("card.update", { id: cardId, body: { permissionMode } }).then(() => {}),
+  allowSafeSql: (cardId) => act("card.update", { id: cardId, body: { safeSql: true } }).then(() => {}),
   shell: (cardId, command) => act("card.shell", { id: cardId, command }).then(() => {}),
   grantFolder: (cardId, directory) => act("card.update", { id: cardId, body: { readScope: directory } }).then(() => {}),
 });

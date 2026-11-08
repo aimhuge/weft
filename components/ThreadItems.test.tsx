@@ -22,3 +22,18 @@ describe("a task notification in the thread", () => {
     expect(screen.getByText('Background command "tests" stopped').className).toContain("text-warn");
   });
 });
+
+describe("a permission line in the thread", () => {
+  const permission = (over: Partial<Extract<ThreadItem, { kind: "permission" }>> = {}): ThreadItem => ({ kind: "permission", id: "p", toolName: "mcp__supabase__execute_sql", title: "Run SQL on supabase", decision: "allow", at: 1, ...over });
+
+  it("says why Weft allowed it without asking", () => {
+    render(<ThreadMessage item={permission({ auto: "the review says Safe" })} cardId="c1" />);
+    expect(screen.getByText("Allowed automatically: the review says Safe")).toBeTruthy();
+  });
+
+  it("says plain Allowed without an auto reason", () => {
+    render(<ThreadMessage item={permission()} cardId="c1" />);
+    expect(screen.getByText("Allowed")).toBeTruthy();
+    expect(screen.queryByText(/Allowed automatically/)).toBeNull();
+  });
+});

@@ -95,6 +95,20 @@ describe("widenLabel", () => {
     );
     expect(widenLabel({})).toBe("change nothing");
   });
+
+  it("says allowing safe SQL in words", () => {
+    expect(widenLabel({ safeSql: true })).toBe("let it run SQL a review calls Safe without asking");
+    expect(widenLabel({ readScope: "/r", safeSql: true })).toBe("let it read from /r, let it run SQL a review calls Safe without asking");
+  });
+});
+
+describe("allowing safe SQL", () => {
+  it("widens only when an update turns it on", () => {
+    expect(widenChangeOf({ verb: "card.update", args: { id: "c1", body: { safeSql: true } } })).toEqual({ safeSql: true });
+    expect(widenChangeOf({ verb: "card.update", args: { id: "c1", body: { safeSql: false } } })).toBeNull();
+    expect(widenChangeOf({ verb: "card.update", args: { id: "c1", body: { safeSql: "yes" } } })).toBeNull();
+    expect(widenChangeOf({ verb: "card.update", args: { id: "c1", body: { safeSql: true, title: "x" } } })).toEqual({ safeSql: true });
+  });
 });
 
 describe("Goose's provider on a worker", () => {

@@ -107,11 +107,19 @@ function reorder(id: string, body: CardPatch) {
   reorderCard(id, body.before ?? null);
 }
 
+// "Allow safe SQL on this card" (lib/db-calls.ts harmless decides what's safe); false turns it back off.
+function setSafeSql(card: Card, value: unknown) {
+  if (value === undefined) return;
+  if (typeof value !== "boolean") throw new Error("safeSql must be true or false.");
+  updateCard(card.id, { safeSql: value || undefined });
+}
+
 export async function updateCardVerb({ id, body }: CardUpdateArgs): Promise<{ card: Card | undefined }> {
   const card = requireCard(id);
   setTitleAndArchive(card, body);
   setMarks(id, body);
   grantReadAndMode(card, body);
+  setSafeSql(card, body.safeSql);
   if (body.agent !== undefined) await setAgent(card, body.agent);
   if (body.skill !== undefined) await setSkill(card, body.skill);
   setFolder(id, body.cwd);

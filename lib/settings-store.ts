@@ -23,6 +23,9 @@ export interface Settings {
   automations?: Automation[];
   // Whether /weft:done pushes after it commits cleanly; unset means on. Its push.sh reads this file.
   pushOnDone?: boolean;
+  // Settings → Security: let a database call's SQL through without asking when the review and the static scan both
+  // call it harmless (lib/db-calls.ts). Unset means off.
+  sqlAutoAccept?: boolean;
   // The model board threads' subagents run on; unset means the thread picks per subagent (lib/subagents.ts).
   subagentModel?: SubagentModel;
   // The model /weft:done runs on; "" means use the card's own model. Applies to cards on the CLI that serves it
@@ -85,6 +88,7 @@ export function settings(): Settings {
       defaultBackend: saved.defaultBackend,
       automations: saved.automations,
       pushOnDone: saved.pushOnDone,
+      sqlAutoAccept: saved.sqlAutoAccept,
       subagentModel: saved.subagentModel,
       doneModel: saved.doneModel,
       doneEffort: saved.doneEffort,

@@ -116,6 +116,18 @@ describe("card.update", () => {
     await expect(update({ readScope: "/x" })).rejects.toThrow("The copilot doesn't read from project folders.");
   });
 
+  it("allows safe SQL on the card, clears it on false and refuses a non-boolean", async () => {
+    addCard();
+    await update({ safeSql: true });
+    expect(db.cards.get("c1")!.safeSql).toBe(true);
+    await update({ safeSql: false });
+    expect(db.cards.get("c1")!.safeSql).toBeUndefined();
+    expect(store.updateCard).toHaveBeenLastCalledWith("c1", { safeSql: undefined });
+    await expect(update({ safeSql: "yes" })).rejects.toThrow("safeSql must be true or false.");
+    await expect(update({ safeSql: null })).rejects.toThrow("safeSql must be true or false.");
+    expect(store.updateCard).toHaveBeenCalledTimes(2);
+  });
+
   it("sets the permission mode after checking it", async () => {
     addCard();
     await update({ permissionMode: "auto" });

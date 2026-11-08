@@ -13,12 +13,14 @@ import type { GrantScope } from "@/lib/cloud-commands";
 import { useThreadTransport } from "@/lib/thread-transport";
 import type { Card } from "@/lib/types";
 import type { CacheState } from "@/lib/types-card";
+import { autoForCard } from "./AutoForCard";
 import BackendPicker from "./BackendPicker";
 import CrashGuard from "./CrashGuard";
 import ElicitationForm from "./ElicitationForm";
 import { guarded } from "./guarded";
 import Icon from "./Icon";
 import PermissionInput, { PermissionActions } from "./PermissionInput";
+import SqlReview, { riskySql, safeForCard } from "./SqlReview";
 import type { QuestionProps } from "./QuestionForm";
 import StatusStrip from "./StatusStrip";
 
@@ -29,9 +31,14 @@ const ReplyBox = guarded(() => import("./ReplyBox"), { what: "reply box", classN
 // The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered;
 // an MCP server's form (lib/elicitation.ts) answers with its values too.
 export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>, grant?: GrantScope) => void }) {
-  const { grantFolder, grantInAnswer, waitPermission, putFirst, putHolderFirst } = useThreadTransport();
+  const { grantFolder, grantInAnswer, waitPermission, putFirst, putHolderFirst, allowSafeSql, setMode } = useThreadTransport();
   const pending = card.pending;
   if (!pending || pending.questions) return null;
+  // "Allow safe SQL on this card": the switch goes on and this prompt is accepted, both at once, like a folder grant.
+  const safe = safeForCard(pending.sql, card.safeSql, answered, allowSafeSql && (() => {
+    void allowSafeSql(card.id).catch(() => {});
+    answer(true);
+  }));
 
   // "This card" / "Always" on an outside-folder prompt: grant the folder and allow the call (lib/folder-guard.ts).
   // Both go at once, the grant first, so the prompt leaves without waiting on the grant's round trip. On another
@@ -54,10 +61,11 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
           <Icon name="lock" size={14} className="mt-0.5 text-warn" />
           <span>{pending.title}</span>
         </div>
+        {pending.sql && <SqlReview sql={pending.sql} />}
         {pending.elicitation ? (
-          <ElicitationForm elicitation={pending.elicitation} answered={answered} readOnly={readOnly} onAnswer={answer} />
+          <ElicitationForm elicitation={pending.elicitation} answered={answered} readOnly={readOnly} risky={riskySql(pending.sql)} extra={safe} onAnswer={answer} />
         ) : (
-          <PermissionInput input={pending.input} edit={pending.edit} previewUrl={pending.previewUrl} askedBy={card.title} why={pending.why} me={card} />
+          <PermissionInput input={pending.sql ? withoutSql(pending.input) : pending.input} edit={pending.edit} previewUrl={pending.previewUrl} askedBy={card.title} why={pending.why} me={card} />
         )}
         {!readOnly && !pending.elicitation && (
           <PermissionActions
@@ -69,12 +77,16 @@ export function PermissionRequest({ card, readOnly, answered, answer }: { card: 
             onOtherFirst={putHolderFirst && (() => void putHolderFirst(card.id, pending.id).catch(() => {}))}
             onGrant={grantFolder || grantInAnswer ? grant : undefined}
             elsewhere={grantInAnswer}
+            extra={safe ?? autoForCard(card, answered, setMode, () => answer(true))}
           />
         )}
       </div>
     </CrashGuard>
   );
 }
+
+// The call's input without the SQL the review block above already shows.
+const withoutSql = (input: Record<string, unknown>) => Object.fromEntries(Object.entries(input).filter(([k]) => k !== "query" && k !== "sql"));
 
 type EditLast = { text: string; canRewind: boolean; fileEdits: number; onEdit: (text: string) => Promise<void> };
 

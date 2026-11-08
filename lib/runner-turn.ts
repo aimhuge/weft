@@ -4,6 +4,7 @@ import { recordLimit } from "./activity";
 import { publish } from "./bus";
 import { switchToBackup } from "./backend-switch";
 import { runsOn } from "./cli-defaults";
+import { endDbCall, trackDbCall } from "./db-calls";
 import { editPreview } from "./edit-preview";
 import { firstLine, shortToolName, summarizeInput, toolAction } from "./format";
 import { askAboutDenials, noteDenial } from "./classifier-denial";
@@ -157,6 +158,7 @@ function handleAssistant(id: string, session: Session, msg: Extract<SDKMessage, 
         ...(fileEdit.edit && { edit: fileEdit.edit }),
       });
       session.toolIndex.set(block.id, index);
+      trackDbCall(session, block.id, block.name, input);
       safeUpdate(id, { lastLine: `${shortToolName(block.name)} ${summary}`.trim() });
     }
   }
@@ -210,6 +212,7 @@ function relativize(given: string, cwd: string): string {
 function handleToolResults(id: string, session: Session, msg: Extract<SDKMessage, { type: "user" }>): void | Promise<void> {
   const content = msg.message.content;
   if (!Array.isArray(content)) return;
+  for (const b of content) if (b.type === "tool_result") endDbCall(session, b.tool_use_id);
   const pending = content.flatMap((b) =>
     b.type === "tool_result" && session.toolIndex.has(b.tool_use_id)
       ? [{ index: session.toolIndex.get(b.tool_use_id) as number, result: liveToolResult(b.content), isError: Boolean(b.is_error) }]

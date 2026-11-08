@@ -272,6 +272,8 @@ describe("the worker card's verbs", () => {
     // A "!" says so in the box instead of reaching the agent.
     expect(workerTransport.shellRefusal).toBe("A shell runs only on this Mac's cards.");
     expect(workerTransport.grantFolder).toBeUndefined();
+    expect(workerTransport.allowSafeSql).toBeUndefined();
+    expect(workerTransport.setMode).toBeUndefined();
     expect(workerTransport.cardEdits).toBe(true);
     expect(workerTransport.signsSkip).toBe(false);
   });
@@ -283,8 +285,12 @@ describe("the worker card's verbs", () => {
       const t = workerTransportVia(act, () => {});
       await t.shell!("c1", "ls");
       await t.grantFolder!("c1", "/w/app/docs", "card");
+      await t.allowSafeSql!("c1");
+      await t.setMode!("c1", "auto");
       expect(act).toHaveBeenNthCalledWith(1, "card.shell", { id: "c1", command: "ls" });
       expect(act).toHaveBeenNthCalledWith(2, "card.update", { id: "c1", body: { readScope: "/w/app/docs" } });
+      expect(act).toHaveBeenNthCalledWith(3, "card.update", { id: "c1", body: { safeSql: true } });
+      expect(act).toHaveBeenNthCalledWith(4, "card.update", { id: "c1", body: { permissionMode: "auto" } });
       // The mode picker offers YOLO too: the act signs that change as well (lib/widen-signer.ts).
       expect(t.signsSkip).toBe(true);
     } finally {

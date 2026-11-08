@@ -4,6 +4,7 @@
 import DeleteConfirmSwitch from "./DeleteConfirmSwitch";
 import KeychainAccess from "./KeychainAccess";
 import ModePicker from "./ModePicker";
+import { SqlAutoAcceptSwitch } from "./SqlAutoAcceptSwitch";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 import { SiteNotesSwitch } from "./SiteNotesSwitch";
 import { StatsSwitch } from "./StatsSwitch";
@@ -43,6 +44,10 @@ export default function SettingsSecurityPage({
       </SettingsCard>
       <SettingsCard>
         <TrustedFolders folders={allowedFolders} />
+      </SettingsCard>
+      <SettingsCard>
+        <SettingsSectionHeader title="Database changes" hint="A second model reviews the SQL behind every destructive database prompt; you still decide." />
+        <SqlAutoAcceptSwitch />
       </SettingsCard>
       <SettingsCard>
         <DeleteConfirmSwitch />

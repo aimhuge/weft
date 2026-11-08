@@ -6,13 +6,14 @@ import type { RetryWindow } from "./retry-window";
 import type { CliProcess } from "./cli-process";
 import type { ThreadAgent } from "./agents";
 import type { CopilotPersona } from "./copilot-personas";
+import type { DbCall } from "./db-calls";
 import type { EditPreview } from "./edit-preview";
 import { projectFolders } from "./project-folders";
 import { allowedFolders, gooseBaseUrl, gooseModelId, gooseProviderId, keepAliveMinutes } from "./settings";
 import type { BoardStatus } from "./status";
 import { getCard, updateCard } from "./store";
 import { hasLiveTasks } from "./task-ledger";
-import type { Backend, CacheState, Card, Effort, PendingElicitation, PermissionMode, PromptReason, Question } from "./types";
+import type { Backend, CacheState, Card, Effort, PendingElicitation, PendingSql, PermissionMode, PromptReason, Question } from "./types";
 import { globalSingleton } from "./global-singleton";
 import { effortFor, modelOn } from "./new-thread";
 import { idleToClose, keepAliveFor } from "./puku-idle";
@@ -38,6 +39,7 @@ export interface Pending {
   why?: PromptReason;
   waiting?: boolean;
   elicitation?: PendingElicitation;
+  sql?: PendingSql;
   resolve: (result: PermissionResult) => void;
 }
 
@@ -135,6 +137,8 @@ export interface Session {
   // Open while the live CLI is out of auto mode for one of those calls (lib/retry-window.ts).
   retryWindow?: RetryWindow;
   toolIndex: Map<string, number>;
+  // The database calls running now, for the SQL a prompt they cause should show (lib/db-calls.ts).
+  dbCalls?: Map<string, DbCall>;
   // Ids of the messages sent mid-turn that the CLI hasn't taken in yet (lib/runner-steer.ts).
   steered?: Set<string>;
   // Ids of this CLI's tasks that ran in the background, whose end gets a row in the thread (lib/runner-tasks.ts).

@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { describeBoardTool } from "./board-tools";
+import { attachSql } from "./db-calls";
 import { editPreview } from "./edit-preview";
 import { shortToolName, summarizeInput } from "./format";
 import { isPlanTool, writePlanPreview } from "./plan-preview";
@@ -51,6 +52,8 @@ export function askUser(
     const why = ownForm ? undefined : (claim.why ?? modeWhy(session.spec.permissionMode, toolName));
     const p: Pending = { id, index, toolName, title: label, input, questions, readScope, previewUrl, edit, why, elicitation, resolve };
     session.pending.push(p);
+    // A database call's SQL, which the Supabase MCP's own confirmation leaves out, and a second model's review of it.
+    attachSql(cardId, session, p);
     if (session.pending.length === 1) {
       // A symbol clash (lib/claims.ts) waits by itself: the holder is editing the same code, so the
       // card goes to Running and waits instead of parking in Needs you for an answer that is almost

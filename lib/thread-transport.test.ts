@@ -12,6 +12,8 @@ const api = vi.hoisted(() => ({
   editLast: vi.fn(),
   allowFolder: vi.fn(),
   setReadScope: vi.fn(),
+  allowSafeSql: vi.fn(),
+  setMode: vi.fn(),
   waitPermission: vi.fn(),
   putFirst: vi.fn(),
   stopTask: vi.fn(),
@@ -86,6 +88,8 @@ describe("localTransport's actions", () => {
     await localTransport.editLast?.("c1", "again");
     await localTransport.grantFolder?.("c1", "/tmp", "card");
     await localTransport.grantFolder?.("c1", "/tmp", "always");
+    await localTransport.allowSafeSql?.("c1");
+    await localTransport.setMode?.("c1", "auto");
     await localTransport.waitPermission?.("c1", "p1");
     await localTransport.stopTask?.("c1", "t1");
     expect(api.stop).toHaveBeenCalledWith("c1");
@@ -93,6 +97,8 @@ describe("localTransport's actions", () => {
     expect(api.editLast).toHaveBeenCalledWith("c1", "again");
     expect(api.setReadScope).toHaveBeenCalledWith("c1", "/tmp");
     expect(api.allowFolder).toHaveBeenCalledWith("/tmp");
+    expect(api.allowSafeSql).toHaveBeenCalledWith("c1");
+    expect(api.setMode).toHaveBeenCalledWith("c1", "auto");
     expect(api.waitPermission).toHaveBeenCalledWith("c1", "p1");
     expect(api.stopTask).toHaveBeenCalledWith("c1", "t1");
     expect(localTransport.desktop).toBe(true);
