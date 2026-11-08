@@ -21,7 +21,7 @@ import { runCreateTeam } from "@/lib/team-create";
 import { teamSnapshot, runTeamOp } from "@/lib/team-ops";
 import { currentWorkspaceFor, teamAccessFor } from "@/lib/teams";
 import { TEAM_ROLES, type NewTeamOp, type TeamOp, type TeamRole } from "@/lib/team-types";
-import { bearerUser } from "@/lib/web-session";
+import { bearerUser, serviceClient } from "@/lib/web-session";
 
 // It reads the request, so each handler awaits connection(); route segment config like `dynamic` isn't allowed
 // with cacheComponents.
@@ -35,8 +35,10 @@ function unconfigured() {
 // 401 for a missing/invalid bearer; 404 for "you're not a member of this
 // workspace" (or it doesn't exist). The message strings match what the
 // desktop's forwarder / the board hook expect — see lib/use-team.ts.
+// Without the service key (SUPABASE_SECRET_KEY) the lookups below answer "none" or "unconfigured", which used to
+// reach the desktop as "signed out"; it's a deployment that isn't set up, so it says so.
 async function authAndAccess(req: Request, orgSlug: string | null) {
-  if (!SUPABASE_KEY) return { kind: "unconfigured" as const };
+  if (!SUPABASE_KEY || !serviceClient()) return { kind: "unconfigured" as const };
   const user = await bearerUser(req);
   if (!user) return { kind: "signed-out" as const };
   // ?org omitted → use the user's current workspace, healing a stale
@@ -44,11 +46,14 @@ async function authAndAccess(req: Request, orgSlug: string | null) {
   let slug = orgSlug;
   if (!slug) {
     const ws = await currentWorkspaceFor(user);
-    if (ws.kind !== "ok") return { kind: "signed-out" as const };
+    if (ws.kind === "signed-out") return { kind: "signed-out" as const };
+    // Signed in with no workspace: 404, which the board reads as "No workspace found.", not a sign-in prompt.
+    if (ws.kind === "none") return { kind: "denied" as const };
     slug = ws.slug;
   }
   const access = await teamAccessFor(user, slug);
   if (access.kind === "signed-out") return { kind: "signed-out" as const };
+  if (access.kind === "unconfigured") return { kind: "unconfigured" as const };
   if (access.kind !== "ok") return { kind: "denied" as const };
   return { kind: "ok" as const, ctx: access.ctx, slug };
 }

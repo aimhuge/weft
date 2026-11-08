@@ -44,6 +44,8 @@ interface SyncState {
   timer: ReturnType<typeof setTimeout> | null;
   // Each signed-in user's personal org, so a flush doesn't re-query and a new account gets its own.
   orgs: Map<string, string | null>;
+  // When each user's "no workspace yet" answer was read: it's asked again after NO_ORG_RECHECK_MS, so one made later syncs.
+  orgMisses: Map<string, number>;
   // Has startCloudSync run yet? syncNow / queueFolder are no-ops without it, so a board with no
   // settings.json (or no opt-in folders) can still be probed.
   started: boolean;
@@ -76,6 +78,7 @@ export function syncOrgId(client: SupabaseClient, userId: string): Promise<strin
 // (Settings → Teams, through app/api/account/team).
 export function forgetSyncOrg(): void {
   state().orgs.clear();
+  state().orgMisses.clear();
   forgetRoutes();
 }
 
@@ -94,9 +97,10 @@ const freshState = (): SyncState => ({
   warnedThisStreak: false,
   timer: null,
   orgs: new Map(),
+  orgMisses: new Map(),
   started: false,
   blobs: null,
-  now: Date.now,
+  now: () => Date.now(),
   lastSignedOut: false,
   lastNoWorkspace: false,
   lastSyncAt: null,
@@ -262,9 +266,14 @@ async function currentUserId(client: SupabaseClient): Promise<string | null> {
   return data.session?.user.id ?? null;
 }
 
-// The first org this user owns: their personal workspace.
+export const NO_ORG_RECHECK_MS = 60_000;
+
+// The first org this user owns: their personal workspace. Found, it's kept; not found, it's asked again a minute on.
 async function resolveOrgId(s: SyncState, client: SupabaseClient, userId: string): Promise<string | null> {
-  if (s.orgs.has(userId)) return s.orgs.get(userId) ?? null;
+  const found = s.orgs.get(userId);
+  if (found) return found;
+  const missedAt = s.orgMisses.get(userId);
+  if (missedAt !== undefined && s.now() - missedAt < NO_ORG_RECHECK_MS) return null;
   const { data, error } = await client
     .from("org_memberships")
     .select("org_id")
@@ -275,7 +284,10 @@ async function resolveOrgId(s: SyncState, client: SupabaseClient, userId: string
     .maybeSingle<{ org_id: string }>();
   if (error) throw error;
   const org = data?.org_id ?? null;
-  s.orgs.set(userId, org);
+  if (org) {
+    s.orgs.set(userId, org);
+    s.orgMisses.delete(userId);
+  } else s.orgMisses.set(userId, s.now());
   return org;
 }
 

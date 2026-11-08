@@ -592,23 +592,6 @@ describe("startCloudSync", () => {
     expect(lastCard!.org_id).toBe("o2");
   });
 
-  it("a user's cached null org (no workspace) is used without re-querying", async () => {
-    cardInStore("a");
-    rowsByTable.org_memberships = [];
-    authSession.id = "u3";
-    await start();
-    publish({ type: "card", card: cards.get("a")! });
-    await flush();
-    const state = g.__weftCloudSync as { orgs: Map<string, string | null> };
-    expect(state.orgs.get("u3")).toBeNull();
-    // Second publish should not call .from("org_memberships") again.
-    const initialCalls = (writesByTable.org_memberships ?? []).length;
-    publish({ type: "card", card: cards.get("a")! });
-    await flush();
-    const afterCalls = (writesByTable.org_memberships ?? []).length;
-    expect(afterCalls).toBe(initialCalls);
-  });
-
   it("stop() unsubscribes and stops the 10s tick", async () => {
     cardInStore("a");
     await start();

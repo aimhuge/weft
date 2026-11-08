@@ -4,7 +4,8 @@
 //
 //   linkedRepos   which of the drawer's repos a team has linked (public.team_orgs_for_repos), so the drawer can say
 //     "Shared with <team>" and offer the share to any member, not only an admin.
-//   autoAsk       a Mac on a linked repo the team already shares asks to join by itself, once per vault. A Mac the team
+//   autoAsk       a Mac on a linked repo the team already shares asks to join by itself, once per vault (a failed ask is
+//     retried a few minutes later). A Mac the team
 //     already trusts is then sealed the key by whoever holds it (sealTrusted in electron/vault-shared-api.cjs).
 //   newRequests   the Macs waiting on an admin that this Mac hasn't told the admin about yet, for a notification.
 //
@@ -59,24 +60,34 @@ function askedStore(dir) {
   };
 }
 
+// The upkeep runs after every overview (each focus), so a failed ask waits this long before it's tried again.
+const RETRY_MS = 5 * 60 * 1000;
+
 /**
- * Ask to join every vault the team shares for a linked repo this Mac has and isn't in yet, once each.
+ * Ask to join every vault the team shares for a linked repo this Mac has and isn't in yet, once each. Only an ask
+ * that went through is remembered in `asked`; a failed one (a server hiccup, offline) goes in `failed` with its time
+ * and is tried again on the first check RETRY_MS later. Its first failure is logged, the retries that follow aren't.
  *
  * @param {{ joins: Map<string, VaultJoin>, linked: Map<string, string>, asked: { has: (id: string) => boolean, add: (id: string) => void },
- *   requestJoin: (vaultId: string) => Promise<unknown> }} deps
+ *   requestJoin: (vaultId: string) => Promise<unknown>, failed?: Map<string, number>, at?: number, warn?: (line: string) => void }} deps
  * @returns {Promise<string[]>} the vault ids asked for now
  */
-async function autoAsk({ joins, linked, asked, requestJoin }) {
+async function autoAsk({ joins, linked, asked, requestJoin, failed = new Map(), at = Date.now(), warn = console.warn }) {
   const now = [];
   for (const join of joins.values()) {
     if (join.state !== "none" || linked.get(join.repo.toLowerCase()) !== join.orgId || asked.has(join.vaultId)) continue;
+    const last = failed.get(join.vaultId);
+    if (last !== undefined && at - last < RETRY_MS) continue;
     try {
       await requestJoin(join.vaultId);
-      now.push(join.vaultId);
-    } catch {
-      // A closed vault or a server hiccup: the drawer's "Ask to join" is still there.
+    } catch (err) {
+      if (last === undefined) warn(`Couldn't ask to join team vault ${join.vaultId}, trying again later: ${/** @type {Error} */ (err)?.message ?? err}`);
+      failed.set(join.vaultId, at);
+      continue;
     }
+    failed.delete(join.vaultId);
     asked.add(join.vaultId);
+    now.push(join.vaultId);
   }
   return now;
 }
@@ -135,11 +146,13 @@ async function linkedOf({ accountClient, vaults, orgs }) {
  */
 function createTeamUpkeep({ dir, accountClient, sharedApi, notifyUser, onChange }) {
   const asked = askedStore(dir);
+  // Failed asks by vault id → when, for autoAsk's retry wait; a fresh launch tries them all again.
+  const failed = new Map();
   const told = new Set();
   let running = null;
   async function once(team, linked, folder) {
     const api = await sharedApi();
-    const now = await autoAsk({ joins: team.joins, linked, asked, requestJoin: (vaultId) => api.requestJoin({ vaultId, accountClient }) });
+    const now = await autoAsk({ joins: team.joins, linked, asked, failed, requestJoin: (vaultId) => api.requestJoin({ vaultId, accountClient }) });
     const { sealed } = await api.sealTrusted({ accountClient });
     // A sealed Mac's request is gone on the next load; telling the admin about it now would be a false alarm.
     const notice = sealed ? null : requestNotice(newRequests(team.requests, told));
@@ -160,4 +173,4 @@ function createTeamUpkeep({ dir, accountClient, sharedApi, notifyUser, onChange 
   };
 }
 
-module.exports = { linkedRepos, linkedOf, askedStore, autoAsk, newRequests, requestNotice, createTeamUpkeep };
+module.exports = { RETRY_MS, linkedRepos, linkedOf, askedStore, autoAsk, newRequests, requestNotice, createTeamUpkeep };

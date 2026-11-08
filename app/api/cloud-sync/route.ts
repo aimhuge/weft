@@ -4,16 +4,17 @@ import { fail, guard } from "@/lib/guard";
 import { setSyncFolder, syncFolders } from "@/lib/settings";
 import { cloudSyncStatus, queueFolder, syncNow } from "@/lib/cloud-sync";
 import { rememberSyncRepo } from "@/lib/cloud-sync-repos";
+import { teamSyncNames } from "@/lib/cloud-sync-team";
 
 // The Settings → Sync page (lib/use-cloud-sync.ts, components/SyncSettings.tsx). GET returns which folders
-// have sync turned on and how the last flush went; POST turns a folder on or off (and queues its cards when
+// have sync turned on, which sync because a team linked them (folder → team name), and how the last flush went; POST turns a folder on or off (and queues its cards when
 // on) or asks for a flush right now ({ sync: true }).
 
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
-  return Response.json({ folders: syncFolders(), status: cloudSyncStatus() });
+  return Response.json({ folders: syncFolders(), teams: teamSyncNames(), status: cloudSyncStatus() });
 }
 
 export async function POST(req: Request) {

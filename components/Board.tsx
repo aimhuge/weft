@@ -330,7 +330,7 @@ export default function Board() {
           restart: <RestartChip restart={restartView.restart} notify={notify} />,
           badges: <HeaderBadges cwd={reads} cards={boardCards} start={improveQuality} notify={notify} toast={setToast} />,
           copilot: <CopilotButton open={laneOpen} needsYou={copilotNeedsYou} title={hint("copilot", "Copilot")} onClick={toggleCopilot} />,
-          account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} project={menuProject(folder, rootOf)} sync={sync} />,
+          account: <AccountButton onOpenSettings={() => setShowSettings(true)} onShareBoard={() => setSharingBoard(true)} project={menuProject(folder, rootOf)} sync={sync} teamError={workers.teamError} />,
         }}
       />
 

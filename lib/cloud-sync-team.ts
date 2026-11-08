@@ -32,11 +32,27 @@ function writeBackfilled(folders: Set<string>): void {
   fs.writeFileSync(BACKFILLED_FILE, JSON.stringify([...folders]));
 }
 
-const state = () => globalSingleton("__weftTeamSyncFolders", () => ({ folders: new Set<string>() }));
+// Each folder synced because a team linked its repo, and that team's id; and each such team's name, read once.
+const state = () => globalSingleton("__weftTeamSyncFolders", () => ({ folders: new Map<string, string>(), names: new Map<string, string>() }));
 
 // The folders synced because a team linked their repo.
 export function teamSyncFolders(): string[] {
-  return [...state().folders];
+  return [...state().folders.keys()];
+}
+
+// Settings → Sync shows these with the team's name in place of a switch: folder → name ("your team" until it's read).
+export function teamSyncNames(): Record<string, string> {
+  const { folders, names } = state();
+  return Object.fromEntries([...folders].map(([folder, org]) => [folder, names.get(org) ?? "your team"]));
+}
+
+// The names of teams not asked about yet, from orgs (members can read their own). Only a label: a failure leaves it.
+async function readTeamNames(client: SupabaseClient, orgs: Iterable<string>): Promise<void> {
+  const names = state().names;
+  const ask = [...new Set(orgs)].filter((org) => !names.has(org));
+  if (!ask.length) return;
+  const { data } = await client.from("orgs").select("id, name").in("id", ask);
+  for (const row of (data ?? []) as { id: string; name: string }[]) names.set(row.id, row.name);
 }
 
 // Every folder whose cards sync: the person's own switches plus their teams' linked projects.
@@ -67,9 +83,15 @@ export async function refreshTeamFolders(folders: string[], client: SupabaseClie
     if (repo) repoOf.set(f, repo.toLowerCase());
   }
   const teams = repoOf.size ? await teamOrgsFor(client, [...repoOf.values()], now) : new Map<string, string | null>();
-  const linked = new Set([...repoOf].filter(([, repo]) => teams.get(repo)).map(([folder]) => folder));
+  const linkedTo = new Map<string, string>();
+  for (const [folder, repo] of repoOf) {
+    const org = teams.get(repo);
+    if (org) linkedTo.set(folder, org);
+  }
+  const linked = new Set(linkedTo.keys());
   known.clear();
-  for (const f of linked) known.add(f);
+  for (const [f, org] of linkedTo) known.set(f, org);
+  await readTeamNames(client, linkedTo.values()).catch(() => {});
   // A folder that was unlinked is forgotten, so linking it again moves its newer cards back into the team.
   const done = readBackfilled();
   const kept = new Set([...done].filter((f) => linked.has(f) || !repoOf.has(f)));

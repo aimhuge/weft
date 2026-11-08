@@ -27,7 +27,11 @@ vi.mock("./settings", () => ({
 const rpc = vi.fn((_fn: string, args: { repos: string[] }) =>
   Promise.resolve({ data: args.repos.filter((r) => linked.has(r)).map((r) => ({ repo: r, org_id: linked.get(r) })), error: null }),
 );
-const client = { rpc } as never;
+// orgs: the team names a member can read; `in` records which ids were asked for.
+const orgNames = new Map<string, string>();
+const askedNames = vi.fn((ids: string[]) => Promise.resolve({ data: ids.filter((id) => orgNames.has(id)).map((id) => ({ id, name: orgNames.get(id) })), error: null }));
+const from = vi.fn(() => ({ select: () => ({ in: (_col: string, ids: string[]) => askedNames(ids) }) }));
+const client = { rpc, from } as never;
 
 let team: typeof import("./cloud-sync-team");
 let now = 0;
@@ -39,6 +43,7 @@ beforeEach(async () => {
   delete (globalThis as Record<string, unknown>).__weftSyncRoutes;
   repos.clear();
   linked.clear();
+  orgNames.clear();
   handlers.clear();
   settings.sync = [];
   settings.projects = [];
@@ -59,6 +64,30 @@ async function restart() {
   vi.resetModules();
   team = await import("./cloud-sync-team");
 }
+
+describe("teamSyncNames", () => {
+  it("names each team-synced folder's team, reading each team's name once", async () => {
+    repos.set("/dev/app", "acme/app").set("/dev/api", "acme/api");
+    linked.set("acme/app", "org-acme").set("acme/api", "org-acme");
+    orgNames.set("org-acme", "Acme");
+    await team.refreshTeamFolders(["/dev/app", "/dev/api"], client, now);
+    await team.refreshTeamFolders(["/dev/app", "/dev/api"], client, now + 120_000);
+    expect(team.teamSyncNames()).toEqual({ "/dev/app": "Acme", "/dev/api": "Acme" });
+    expect(askedNames.mock.calls).toEqual([[["org-acme"]]]);
+  });
+
+  it("says 'your team' when the name can't be read, and the folder still syncs", async () => {
+    repos.set("/dev/app", "acme/app");
+    linked.set("acme/app", "org-acme");
+    askedNames.mockRejectedValueOnce(new Error("offline"));
+    expect(await team.refreshTeamFolders(["/dev/app"], client, now)).toEqual(["/dev/app"]);
+    expect(team.teamSyncNames()).toEqual({ "/dev/app": "your team" });
+  });
+
+  it("is empty with nothing team-synced", () => {
+    expect(team.teamSyncNames()).toEqual({});
+  });
+});
 
 describe("refreshTeamFolders", () => {
   it("team-syncs a folder whose repo a team linked, and returns it as newly linked", async () => {

@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VaultDeviceRequest, VaultJoin } from "../lib/vault-shared";
-import { askedStore, autoAsk, createTeamUpkeep, linkedOf, linkedRepos, newRequests, requestNotice } from "./vault-team-link.cjs";
+import { RETRY_MS, askedStore, autoAsk, createTeamUpkeep, linkedOf, linkedRepos, newRequests, requestNotice } from "./vault-team-link.cjs";
 
 // A waiting Mac with only the fields a test cares about.
 const req = (r: Partial<VaultDeviceRequest> & { id: string }): VaultDeviceRequest => ({ person: "", deviceName: "", fingerprint: "", ...r });
@@ -106,12 +106,42 @@ describe("autoAsk", () => {
     expect(await autoAsk({ joins, linked: new Map([["owner/name", "org-1"]]), asked, requestJoin })).toEqual([]);
   });
 
-  it("still records a vault whose request throws, without answering it", async () => {
+  it("doesn't record a vault whose request throws, logs it once and retries it after the wait", async () => {
     const asked = askedStore(tempDir());
-    const requestJoin = vi.fn(() => Promise.reject(new Error("closed")));
-    const now = await autoAsk({ joins: new Map([["a", join("v1")]]), linked: new Map([["owner/name", "org-1"]]), asked, requestJoin });
-    expect(now).toEqual([]);
+    const failed = new Map<string, number>();
+    const warn = vi.fn();
+    const requestJoin = vi.fn(() => Promise.reject(new Error("offline")));
+    const deps = { joins: new Map([["a", join("v1")]]), linked: new Map([["owner/name", "org-1"]]), asked, failed, requestJoin, warn };
+    expect(await autoAsk({ ...deps, at: 1000 })).toEqual([]);
+    expect(asked.has("v1")).toBe(false);
+    expect(failed.get("v1")).toBe(1000);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/v1.*offline/));
+    // Inside the wait it isn't tried; after it, it is, and a second failure stays quiet.
+    await autoAsk({ ...deps, at: 1000 + RETRY_MS - 1 });
+    expect(requestJoin).toHaveBeenCalledOnce();
+    await autoAsk({ ...deps, at: 1000 + RETRY_MS });
+    expect(requestJoin).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalledOnce();
+    expect(asked.has("v1")).toBe(false);
+    // The retry that goes through is recorded and never repeated.
+    requestJoin.mockImplementation(() => Promise.resolve({}) as never);
+    expect(await autoAsk({ ...deps, at: 1000 + 2 * RETRY_MS })).toEqual(["v1"]);
     expect(asked.has("v1")).toBe(true);
+    expect(failed.has("v1")).toBe(false);
+    expect(await autoAsk({ ...deps, at: 1000 + 10 * RETRY_MS })).toEqual([]);
+    expect(requestJoin).toHaveBeenCalledTimes(3);
+  });
+
+  it("logs a thrown non-Error, and defaults the clock, the failures and the log", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const asked = askedStore(tempDir());
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a server lib may throw a plain string
+    const requestJoin = vi.fn(() => Promise.reject("nope"));
+    expect(await autoAsk({ joins: new Map([["a", join("v1")]]), linked: new Map([["owner/name", "org-1"]]), asked, requestJoin })).toEqual([]);
+    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/v1.*nope/));
+    expect(asked.has("v1")).toBe(false);
+    warn.mockRestore();
   });
 });
 
@@ -213,6 +243,26 @@ describe("createTeamUpkeep", () => {
     await first;
     await upkeep.run(idleTeam(), linked, "/repo");
     expect(deps.sharedApi).toHaveBeenCalledTimes(2);
+  });
+
+  it("waits before asking again after a failed ask, then asks once it's due", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    vi.useFakeTimers({ now: 0 });
+    try {
+      const { api, deps, upkeep } = setup();
+      api.requestJoin.mockImplementationOnce(() => Promise.reject(new Error("blip")));
+      await upkeep.run(joinTeam(), linked, "/repo");
+      await upkeep.run(joinTeam(), linked, "/repo");
+      expect(api.requestJoin).toHaveBeenCalledOnce();
+      expect(deps.onChange).not.toHaveBeenCalled();
+      vi.setSystemTime(RETRY_MS);
+      await upkeep.run(joinTeam(), linked, "/repo");
+      expect(api.requestJoin).toHaveBeenCalledTimes(2);
+      expect(deps.onChange).toHaveBeenCalledWith("/repo");
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(console.warn).mockRestore();
+    }
   });
 
   it("swallows an error and runs again afterwards", async () => {

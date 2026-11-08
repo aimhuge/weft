@@ -12,20 +12,28 @@ import { FULL_READ_EVERY_MS } from "./worker-board-merge";
 export const TEAM_POLL_MS = 5_000;
 export const TEAM_IDLE_POLL_MS = 60_000;
 
-async function load(since?: string): Promise<TeamBoard | null> {
+// What the hook hands back: the last good read, plus why the latest one failed (cleared by the next good one), so a
+// 401 or a 500 says so instead of teammates' cards just never showing up.
+export type TeamBoardState = TeamBoard & { error?: string };
+
+// A read's answer, or why it failed: the server's own `error` when it sent one, else the status or the thrown message.
+export async function loadTeamBoard(since?: string): Promise<{ board: TeamBoard } | { error: string }> {
   try {
     const res = await apiFetch(since ? `/api/team-board?${new URLSearchParams({ since }).toString()}` : "/api/team-board");
-    return res.ok ? ((await res.json()) as TeamBoard) : null;
-  } catch {
-    return null;
+    if (res.ok) return { board: (await res.json()) as TeamBoard };
+    const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+    const why = typeof body?.error === "string" && body.error ? body.error : res.statusText || "failed";
+    return { error: `${res.status} ${why}` };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : String(err) };
   }
 }
 
 // How long until the next read: fast while there's something to watch and the board is on screen.
 export const teamPollDelay = (board: TeamBoard, hidden: boolean) => (board.cards.length && !hidden ? TEAM_POLL_MS : TEAM_IDLE_POLL_MS);
 
-export function useTeamBoard(): TeamBoard {
-  const [board, setBoard] = useState<TeamBoard>(EMPTY_TEAM_BOARD);
+export function useTeamBoard(): TeamBoardState {
+  const [board, setBoard] = useState<TeamBoardState>(EMPTY_TEAM_BOARD);
   useEffect(() => {
     let alive = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -34,13 +42,16 @@ export function useTeamBoard(): TeamBoard {
     const tick = async () => {
       clearTimeout(timer);
       const since = raw.asOf && Date.now() - wholeAt < FULL_READ_EVERY_MS ? raw.asOf : undefined;
-      const next = await load(since);
+      const next = await loadTeamBoard(since);
       if (!alive) return;
-      // A failed read keeps what's drawn, so a blip doesn't empty the project.
-      if (next) {
-        if (!next.delta) wholeAt = Date.now();
-        raw = mergeTeamBoard(raw, next);
+      // A failed read keeps what's drawn, so a blip doesn't empty the project, and says why (unchanged: no re-render).
+      if ("board" in next) {
+        if (!next.board.delta) wholeAt = Date.now();
+        raw = mergeTeamBoard(raw, next.board);
         setBoard(raw);
+      } else {
+        const error = next.error;
+        setBoard((b) => (b.error === error ? b : { ...raw, error }));
       }
       timer = setTimeout(() => void tick(), teamPollDelay(raw, document.hidden));
     };

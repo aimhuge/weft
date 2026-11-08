@@ -31,7 +31,8 @@ is the contract between the parts:
   `item_1` from turn to turn, and Postgres refuses an upsert that names a row twice. Known gap: `cloud_tool_outputs` is keyed
   by (card, tool id), so two long outputs with one id still overwrite each other remotely; the later wins. Signed out or no workspace: entries wait. An
   error: backoff from 1 s doubling to 5 min, one warning per streak. Cards go to the user's personal workspace (the
-  first org they own).
+  first org they own). A workspace found is kept; "no workspace yet" is asked again after `NO_ORG_RECHECK_MS` (a minute),
+  so one made later starts syncing without a restart.
 - `lib/blob-store.ts`: images, attachments and `~/.weft/show` pages referenced by an item are hashed (sha256),
   uploaded once to `weft-blobs/<org>/<sha>` and swapped for `blob:sha256:…` in the uploaded copy. Never anything
   outside home, in the vault, a token file or a `.env*`.
@@ -238,7 +239,9 @@ error fails the flush, so a team's card never lands at home by accident.
   deleted, so the personal board doesn't keep a stale one. A delete is marked in every workspace the Mac sends to.
 - The inbox (`macCheck` in `lib/cloud-inbox-cards.ts`) takes a command for the workspace that folder routes to, and a
   pasted file comes down from the command's own workspace (`macReceive`, `lib/cloud-inbox-receive.ts`).
-- Only folders switched on in Sync are routed: linking a repo never uploads a folder its owner left off.
+- A folder whose repo a team linked syncs to the team for every member, Sync switch or not (by design: a project is
+  yours or the team's, [teams.md](teams.md#shared-projects)). Settings → Sync shows it as "Synced with <team>" in place
+  of a switch (`teamSyncNames` in `lib/cloud-sync-team.ts`, through `GET /api/cloud-sync`'s `teams`).
 - `syncOrgId` stays the personal workspace: Workers, mini apps and the workers' board still read it.
 - Moving a folder's old cards into the team: turn its Sync off and on (`queueFolder` re-uploads them, now to the team).
 - A teammate can read the team's cards but not drive them: `cloud_commands` inserts need a device you own and the

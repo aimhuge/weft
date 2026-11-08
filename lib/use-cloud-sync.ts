@@ -18,6 +18,8 @@ const EMPTY: CloudSyncStatus = { waiting: 0, lastSyncAt: null, uploaded: 0, last
 
 export function useCloudSync(active = false, pollMs = POLL_MS) {
   const [folders, setFolders] = useState<string[]>([]);
+  // Folders a team linked: they sync for every member, so the page names the team instead of a switch.
+  const [teams, setTeams] = useState<Record<string, string>>({});
   const [status, setStatus] = useState<CloudSyncStatus>(EMPTY);
   const [error, setError] = useState<string | null>(null);
   // The newest fetch wins; the answer is dropped if folders have since changed (we don't filter on folders,
@@ -30,6 +32,7 @@ export function useCloudSync(active = false, pollMs = POLL_MS) {
       const answer = await api.cloudSync();
       if (mine !== latest.current) return;
       setFolders(answer.folders);
+      setTeams(answer.teams ?? {});
       setStatus(answer.status);
       setError(null);
     } catch (err) {
@@ -42,6 +45,7 @@ export function useCloudSync(active = false, pollMs = POLL_MS) {
   const read = useCallback(async () => {
     const answer = await api.cloudSync();
     setFolders(answer.folders);
+    setTeams(answer.teams ?? {});
     setStatus(answer.status);
     setError(null);
     return answer;
@@ -83,5 +87,5 @@ export function useCloudSync(active = false, pollMs = POLL_MS) {
     setStatus(answer.status);
   }, []);
 
-  return { folders, status, error, reload, read, setFolder, syncNow };
+  return { folders, teams, status, error, reload, read, setFolder, syncNow };
 }
