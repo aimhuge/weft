@@ -91,7 +91,7 @@ only needs that row, so **Share…** on a worker card works from the board with 
 
 ```
 Share… ─ GET/PUT /api/cards/<id>/share ─ lib/card-share.ts target(id)
-           ├─ in this Mac's store: signed in → syncOrgId → synced folder → its cloud_cards row (as before)
+           ├─ in this Mac's store: signed in → syncOrgId (home) → synced folder (own switch or team-linked, `syncedFolders`) → `orgForFolder` (the team's workspace for a team-linked repo, else home) → its cloud_cards row there
            └─ not: workerShareCard (lib/card-share-worker.ts) ─ cloud_cards where card_id, owner_user = me,
                    deleted = false, owner_worker not null ─▶ { org_id, title } ─▶ the same cloud_shares read/write
 ```
