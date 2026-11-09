@@ -652,7 +652,7 @@ members' Macs whose `devices.local_vaults` names the repo. It selects names, fin
 says which repos it keeps an unshared vault with at least one value for: `electron/vault-local-repos.cjs` reads each
 `~/.weft/vault/<hash>.json`'s `id` and whether an entry has ciphertext (nothing is decrypted, no `.shared.json` beside it),
 and `reportLocalVaults` in `electron/device-beat.cjs` writes the sorted `owner/name` list to the Mac's own `devices` row,
-on the first beat and whenever it changes. `supabase/migrations/20261105150000_device_local_vaults.sql` adds the column
+on the first beat and whenever it changes. `supabase/migrations/20261109073000_device_local_vaults.sql` adds the column
 (owner-only writes, by trigger, as with `host_device`). A database without it yet only warns once.
 
 **The chip** (`lib/team-vault-view.ts` `vaultChip`): **Secrets shared · N devices** (the title lists them), **Secrets on

@@ -489,7 +489,7 @@ When a new doc lands in this folder, add it here on the same change.
   Approve through main's bridge (`lib/use-here-vaults.ts` reads this Mac's vaults); in a browser it links `weft://secrets?repo=…&share=1`
   (`electron/board-links.cjs` → the `open-secrets` menu action → `lib/vault-ask.ts`, which filters the 🔐 drawer and opens Share…).
   `electron/vault-local-repos.cjs` lists this Mac's unshared vaults' repos and `electron/device-beat.cjs` `reportLocalVaults` puts them on
-  its devices row (`supabase/migrations/20261105150000_device_local_vaults.sql`) (docs/architecture/teams-vault.md#sharing-from-the-team-page).
+  its devices row (`supabase/migrations/20261109073000_device_local_vaults.sql`) (docs/architecture/teams-vault.md#sharing-from-the-team-page).
   Project access: `lib/team-project-access.ts` (who sees each linked project, `org_project_members`) + `components/team/ProjectAccess.tsx`; the database enforces it on synced cards, routing and the vault (`private.can_use_repo`, `20261108051456_project_scoped_reads.sql`)
   (the **Access** checklist, under the team page's closed Advanced, for owners and admins). The desktop's team page orders
   Projects (with each repo's card count), People (`components/team/TeamPeople.tsx`: avatars and @logins, Invite… by email
