@@ -89,10 +89,10 @@ describe("thread addresses", () => {
 });
 
 describe("seedShareState", () => {
-  it("draws the remembered share, a private one without it, or the sign-in", () => {
+  it("draws the remembered share, the first-share default without it, or the sign-in", () => {
     expect(seedShareState({ share: { id: "abc", mode: "email", hasPassword: false } }, false)).toEqual({ kind: "ok", id: "abc", url: "https://weft.zip/s/abc", mode: "email", hasPassword: false, slug: null, showChat: true });
     expect(seedShareState({ share: { id: null, mode: "private", hasPassword: false } }, false)).toMatchObject({ url: null });
-    expect(seedShareState({}, false)).toEqual({ kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true });
+    expect(seedShareState({}, false)).toEqual({ kind: "ok", id: null, url: null, mode: "public", hasPassword: false, slug: null, showChat: false });
     const memo = { id: "abc", mode: "public" as const, hasPassword: false, url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false };
     expect(seedShareState({ share: memo }, false)).toMatchObject({ url: "https://weft.zip/@fo/threads/x", slug: "x", showChat: false });
     expect(seedShareState({ share: { id: "abc", mode: "public", hasPassword: false } }, true)).toEqual({ kind: "signed-out" });

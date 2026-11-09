@@ -85,13 +85,17 @@ export type CardShareState =
 export function seedShareState(card: Pick<Card, "share">, signedOut: boolean): CardShareState {
   if (signedOut) return { kind: "signed-out" };
   const memo = card.share;
-  if (!memo) return { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true };
+  if (!memo) return { kind: "ok", id: null, url: null, mode: FIRST_SHARE.mode, hasPassword: false, slug: null, showChat: FIRST_SHARE.showChat };
   const url = memo.url ?? (memo.id ? shareUrl(memo.id) : null);
   return { kind: "ok", id: memo.id, url, mode: memo.mode, hasPassword: memo.hasPassword, slug: memo.slug ?? null, showChat: memo.showChat ?? true };
 }
 
 // PUT /api/cards/[id]/share. A password is hashed on the Mac and only its hash goes up; omitted keeps the old one.
 // showChat and slug are left as they are when omitted; a slug that's taken is refused (409).
+// What Share… opens a never-shared card as: a live link anyone can open, with only the browser pane on it. A card
+// that has a share row keeps its own choice, so one set back to private stays private.
+export const FIRST_SHARE = { mode: "public", showChat: false } as const satisfies CardShareUpdate;
+
 export interface CardShareUpdate {
   mode: CardShareMode;
   password?: string;

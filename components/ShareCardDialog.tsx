@@ -3,7 +3,7 @@
 import { type ReactNode, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import { ShareAccessFields, useShareAccess, type SaveShareAccess } from "@aimhuge/share/client";
 import { api } from "@/lib/client";
-import { isCardShareMode, seedShareState, type CardShareState } from "@/lib/share-types";
+import { FIRST_SHARE, isCardShareMode, seedShareState, type CardShareState } from "@/lib/share-types";
 import type { Card } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
 import Icon, { Spinner } from "./Icon";
@@ -15,7 +15,8 @@ import WeftShareDialog from "./WeftShareDialog";
 // behind one of @aimhuge/share's modes (never editing: that would run turns on this Mac). The link reads the
 // card from cloud sync, so until the card is on Supabase the dialog says why and offers the next step
 // (lib/card-share.ts answers the state). It never waits on that answer (~2 s): it draws at once from the share the
-// card remembers (card.share, else private) and the answer replaces it. The package's dialog draws the frame and closes on Escape itself.
+// card remembers (card.share, else FIRST_SHARE) and the answer replaces it. A card never shared before is shared on
+// open as FIRST_SHARE (anyone with the link, chat hidden), so Copy link works straight away. The package's dialog draws the frame and closes on Escape itself.
 const POLL_MS = 2000;
 
 function hydrateFrom(state: CardShareState, hydrate: ReturnType<typeof useShareAccess>["hydrate"]) {
@@ -48,7 +49,8 @@ export default function ShareCardDialog({ card, onClose }: { card: Card; onClose
 
   const load = useCallback(async () => {
     try {
-      const answer = await api.getShare(card.id);
+      const read = await api.getShare(card.id);
+      const answer = read.kind === "ok" && read.id === null ? await api.setShare(card.id, FIRST_SHARE) : read;
       setState(answer);
       setError(null);
       hydrateFrom(answer, hydrate);

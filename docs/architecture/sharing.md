@@ -55,6 +55,8 @@ gated links answer "Sharing isn't set up on this server" rather than trusting a 
   the signed-in account, in the workspace cloud sync uploads to (a worker card's: the workspace its worker publishes to,
   below). The states: `signed-out`, `no-workspace`, `not-synced`
   (with the folder), `pending` (the card's `cloud_cards` row isn't up yet, so a flush is asked for), `ok`.
+  A card with no share row yet (`ok` with `id: null`) is shared on open as `FIRST_SHARE` (`lib/share-types.ts`):
+  `public`, no password, `show_chat = false`, so Copy link works at once. A card set back to private keeps its row and stays private.
   `components/ShareCardDialog.tsx` is the package's `ShareDialog` + `ShareAccessFields` + `CopyLinkButton` over
   `useShareAccess`, opened from **Share…** in `lib/card-menu.ts`. It never shows a loading state: the state read takes
   a few Supabase round-trips (~2 s), so the dialog draws at once from `card.share` (the last answer, kept on the card by
