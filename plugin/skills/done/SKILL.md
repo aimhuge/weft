@@ -61,16 +61,26 @@ When it runs:
    "high|medium|low", "fix"}`. Smells are named Fowler-style (Long Function, Duplicated Code, Feature
    Envy…), or a lint rule worth turning on, a loose type, a risky change with no test. `fix` is one
    sentence specific enough to be a card's prompt.
-3. Drop findings that are wrong or trivial. Write the rest to `<dir>/findings.json`
-   (`<dir>` from `${CLAUDE_SKILL_DIR}/scratch.sh new`, never inside the project), run
+3. Drop findings that are wrong or trivial. Write the rest to `<dir>/findings.json`, run
    `node ${CLAUDE_SKILL_DIR}/scout-save.mjs <dir>/findings.json <session files>` (it feeds Weft's
-   quality badge, where each finding can start a card), then `${CLAUDE_SKILL_DIR}/scratch.sh clean <dir>`.
+   quality badge, where each finding can start a card).
 
 ### Sub-agents
 
-Use the `Agent` tool and always name its `model`: `"sonnet"` on Claude Code, `"puku-ai-2.8"` on
-puku-cli (it refuses other models). An agent without one inherits the parent's model and its
-context billing.
+`<dir>` is this run's scratch folder: `${CLAUDE_SKILL_DIR}/scratch.sh new` prints it, never inside
+the project. Remove it when the report is written: `${CLAUDE_SKILL_DIR}/scratch.sh clean <dir>`.
+
+**Puku first, when it's there.** If `~/.claude/skills/puku-agent/puku-agent.mjs` exists, run the agent
+on the Puku gateway (free, no Anthropic tokens): write its prompt to `<dir>/<id>.md` and
+`<dir>/tasks.json` as `[{"id": "<id>", "model": "opus-4.8", "tools": "write" or "bash",
+"prompt_file": "<dir>/<id>.md"}]`, then from the repo root
+`node ~/.claude/skills/puku-agent/puku-agent.mjs --batch <dir>/tasks.json --out <dir>/out --workdir . --quiet`
+and read `<dir>/out/summary.json` and `<dir>/out/<id>.md`.
+
+**Sonnet otherwise.** No puku-agent (most users), or the run comes back `error` (credentials, gateway
+down): use the `Agent` tool and always name its `model`: `"sonnet"` on Claude Code, `"puku-ai-2.8"` on
+puku-cli (it refuses other models). An agent without one inherits the parent's model and its context
+billing. Say in the report which one ran.
 
 ## Phase 4: Commit, push, deploy (you)
 
