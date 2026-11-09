@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Changed
+
+- **The browser pane stops asking for localhost and well-known sites.** Threads now open localhost, file pages and the public top 1000 sites (Tranco) without a Touch ID prompt. Sites you'd be signed into (mail, banks, shopping, social, code hosts) and anything off the list still ask once. A yes now holds for every card and across restarts, and Settings → Security lists those sites so you can add or remove one. A card's first page no longer gets a free pass on the ask (`electron/pane-sites.cjs`, `electron/pane-origins.cjs`, `components/PaneSites.tsx`).
+
 ## [0.7.6] - 2026-11-05
 
 ### Added
