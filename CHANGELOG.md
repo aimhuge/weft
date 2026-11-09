@@ -15,6 +15,11 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Changed
 
 - **Share… gives you a link straight away.** Opening Share on a card that's never been shared now makes it a live link anyone can open, with no password and the chat hidden (viewers see the browser pane only), so Copy link works at once. A card you set back to Private stays private (`components/ShareCardDialog.tsx`, `FIRST_SHARE` in `lib/share-types.ts`).
+- **Moving a card to Done wraps up faster.** `/weft:done` no longer starts three Opus agents on every card. The thread runs the related tests and writes the docs itself. The refactor scout runs only after a big change, as one Sonnet agent. The test script no longer falls back to an unguarded whole-suite run (`plugin/skills/done/SKILL.md`, `plugin/skills/done/tests.sh`).
+
+### Fixed
+
+- **Clicking the uncommitted +/- numbers no longer starts a card.** The badge only opens its bubble on hover now; just the bubble's Commit them / Review N cards button starts the commit walk-through. Files: `components/PileBadge.tsx`.
 
 ## [0.8.0] - 2026-11-08
 
