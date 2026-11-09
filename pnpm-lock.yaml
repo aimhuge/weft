@@ -23,8 +23,8 @@ importers:
         specifier: github:aimhuge/components#v0.7.0&path:/packages/admin
         version: https://codeload.github.com/aimhuge/components/tar.gz/7ba871030b1170cd4839e1499a36bc762cc074e1#path:/packages/admin(@aimhuge/teams@file:vendor/aimhuge-teams-0.1.0.tgz(@supabase/ssr@0.12.7(@supabase/supabase-js@2.119.0(@opentelemetry/api@1.10.0)))(@supabase/supabase-js@2.119.0(@opentelemetry/api@1.10.0))(lucide-react@1.70.0(@types/react@19.3.0)(react@19.3.1))(next@16.4.5(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1))(@tanstack/react-table@8.21.3(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(date-fns@4.4.0)(lucide-react@1.70.0(@types/react@19.3.0)(react@19.3.1))(next@16.4.5(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
       '@aimhuge/billing':
-        specifier: github:aimhuge/components#v0.5.0&path:/packages/billing
-        version: https://codeload.github.com/aimhuge/components/tar.gz/051acbc55b2b7d01dfed6d5f454ce6d4d6392c0c#path:/packages/billing(@supabase/supabase-js@2.119.0(@opentelemetry/api@1.10.0))(@types/node@26.6.5)
+        specifier: github:aimhuge/components#v0.5.1&path:/packages/billing
+        version: https://codeload.github.com/aimhuge/components/tar.gz/08705e8c5c32b824cb28e4291140b9bd8ffe7a99#path:/packages/billing(@supabase/supabase-js@2.119.0(@opentelemetry/api@1.10.0))(@types/node@26.6.5)
       '@aimhuge/share':
         specifier: github:aimhuge/components#v0.8.0&path:/packages/share
         version: https://codeload.github.com/aimhuge/components/tar.gz/62d3085d0c1152174953b7f6fb0a953e5619a29c#path:/packages/share(lucide-react@1.70.0(@types/react@19.3.0)(react@19.3.1))(next@16.4.5(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
@@ -170,8 +170,8 @@ importers:
         specifier: ^0.35.5
         version: 0.35.5(@types/node@26.6.5)
       stripe:
-        specifier: 22.5.0
-        version: 22.5.0(@types/node@26.6.5)
+        specifier: 23.1.0
+        version: 23.1.0(@types/node@26.6.5)
       werift:
         specifier: ^0.26.0
         version: 0.26.0
@@ -255,9 +255,9 @@ packages:
       next: '>=16.0.0'
       react: '>=19.0.0'
 
-  '@aimhuge/billing@https://codeload.github.com/aimhuge/components/tar.gz/051acbc55b2b7d01dfed6d5f454ce6d4d6392c0c#path:/packages/billing':
-    resolution: {path: /packages/billing, tarball: https://codeload.github.com/aimhuge/components/tar.gz/051acbc55b2b7d01dfed6d5f454ce6d4d6392c0c}
-    version: 0.5.0
+  '@aimhuge/billing@https://codeload.github.com/aimhuge/components/tar.gz/08705e8c5c32b824cb28e4291140b9bd8ffe7a99#path:/packages/billing':
+    resolution: {path: /packages/billing, tarball: https://codeload.github.com/aimhuge/components/tar.gz/08705e8c5c32b824cb28e4291140b9bd8ffe7a99}
+    version: 0.5.1
     peerDependencies:
       '@supabase/supabase-js': ^2.0.0
 
@@ -4646,11 +4646,11 @@ packages:
     resolution: {integrity: sha512-6fPc+R4ihwqP6N/aIv2f1gMH8lOVtWQHoqC4yK6oSDVVocumAsfCqjkXnqiYMhmMwS/mEHLp7Vehlt3ql6lEig==}
     engines: {node: '>=8'}
 
-  stripe@22.5.0:
-    resolution: {integrity: sha512-QVwMwriC0bbySx6R4dpsvJ0W//GojC1kwWVS6rPSoVqDUIZX4Hy3TaUrd2AZeXEAaKbfWIjQjvo3vKAReHZ0vQ==}
-    engines: {node: '>=18'}
+  stripe@23.1.0:
+    resolution: {integrity: sha512-fVUfMSfTPoukfoV//MUKAx2+YxyKmYaYtnAL9VkfnHfaPNQylFdWZMD+zgUFerI8rjbaiER8Vzj2XEUQ2AhAsQ==}
+    engines: {node: '>=20'}
     peerDependencies:
-      '@types/node': '>=18'
+      '@types/node': '>=20'
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -5156,10 +5156,10 @@ snapshots:
       next: 16.4.5(@babel/core@7.29.7)(@opentelemetry/api@1.10.0)(@types/node@26.6.5)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       react: 19.3.1
 
-  '@aimhuge/billing@https://codeload.github.com/aimhuge/components/tar.gz/051acbc55b2b7d01dfed6d5f454ce6d4d6392c0c#path:/packages/billing(@supabase/supabase-js@2.119.0(@opentelemetry/api@1.10.0))(@types/node@26.6.5)':
+  '@aimhuge/billing@https://codeload.github.com/aimhuge/components/tar.gz/08705e8c5c32b824cb28e4291140b9bd8ffe7a99#path:/packages/billing(@supabase/supabase-js@2.119.0(@opentelemetry/api@1.10.0))(@types/node@26.6.5)':
     dependencies:
       '@supabase/supabase-js': 2.119.0(@opentelemetry/api@1.10.0)
-      stripe: 22.5.0(@types/node@26.6.5)
+      stripe: 23.1.0(@types/node@26.6.5)
     transitivePeerDependencies:
       - '@types/node'
 
@@ -10329,7 +10329,7 @@ snapshots:
 
   strip-json-comments@3.1.1: {}
 
-  stripe@22.5.0(@types/node@26.6.5):
+  stripe@23.1.0(@types/node@26.6.5):
     optionalDependencies:
       '@types/node': 26.6.5
 

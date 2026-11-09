@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "@aimhuge/admin": "github:aimhuge/components#v0.7.0&path:/packages/admin",
-    "@aimhuge/billing": "github:aimhuge/components#v0.5.0&path:/packages/billing",
+    "@aimhuge/billing": "github:aimhuge/components#v0.5.1&path:/packages/billing",
     "@aimhuge/share": "github:aimhuge/components#v0.8.0&path:/packages/share",
     "@aimhuge/sheet": "github:aimhuge/components#v0.9.0&path:/packages/sheet",
     "@aimhuge/teams": "file:vendor/aimhuge-teams-0.1.0.tgz",
@@ -101,7 +101,7 @@
     "remark-gfm": "^4.0.1",
     "server-only": "^0.0.1",
     "sharp": "^0.35.5",
-    "stripe": "22.5.0",
+    "stripe": "23.1.0",
     "werift": "^0.26.0",
     "zod": "^4.6.7"
   },
