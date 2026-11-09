@@ -1,4 +1,11 @@
 {
+  "0.8.1": {
+    "lines": [
+      "Share a thread with anyone on GitHub, so they can open it without joining your workspace.",
+      "The browser pane stops asking before your own app and well-known sites, so your AI shows its work sooner.",
+      "Moving a card to Done wraps up faster, so you're on to your next idea sooner."
+    ]
+  },
   "0.8.0": {
     "lines": [
       "Share an agent with your team, and choose who on the team can reach each project’s cards and vault.",
