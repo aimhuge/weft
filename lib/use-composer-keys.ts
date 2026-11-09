@@ -9,9 +9,10 @@ import type { useDictation } from "@/lib/use-dictation";
 import type { SlashQuery } from "./composer-slash";
 import type { SkillInfo } from "./types";
 
-export interface TypeaheadState {
+// The "/" skills or the "@" people (lib/use-mention-typeahead.ts): whichever is open, the same keys drive it.
+export interface TypeaheadState<T = SkillInfo> {
   query: SlashQuery | null;
-  suggestions: SkillInfo[];
+  suggestions: T[];
   active: number;
   setActive: (next: number | ((i: number) => number)) => void;
   dismissedAt: number | null;
@@ -22,7 +23,7 @@ export interface TypeaheadState {
 const NAV_KEYS = new Set(["ArrowDown", "ArrowUp", "Enter", "Tab", "Escape"]);
 
 // Arrow keys / Enter / Tab / Escape drive the open "/" typeahead; true when the key was taken.
-function typeaheadKey(ne: KeyboardEvent, typeahead: TypeaheadState, pickSkill: (skill: SkillInfo) => void): boolean {
+function typeaheadKey<T>(ne: KeyboardEvent, typeahead: TypeaheadState<T>, pickSkill: (item: T) => void): boolean {
   const { query, suggestions, active, setActive, setDismissedAt, typeaheadOpen } = typeahead;
   if (!typeaheadOpen || !query || ne.isComposing || !NAV_KEYS.has(ne.key)) return false;
   const last = suggestions.length - 1;
@@ -38,14 +39,14 @@ function typeaheadKey(ne: KeyboardEvent, typeahead: TypeaheadState, pickSkill: (
   return true;
 }
 
-export function useComposerKeys({
+export function useComposerKeys<T = SkillInfo>({
   typeahead,
   dictation,
   pickSkill,
 }: {
-  typeahead: TypeaheadState;
+  typeahead: TypeaheadState<T>;
   dictation: ReturnType<typeof useDictation>;
-  pickSkill: (skill: SkillInfo) => void;
+  pickSkill: (item: T) => void;
 }) {
   // The key is claimed at capture so the editor or textarea can't type its macOS character first
   // (Option+' is "æ"). Matching on e.code is what makes that work.

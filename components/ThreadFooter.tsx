@@ -23,6 +23,7 @@ import PermissionInput, { PermissionActions } from "./PermissionInput";
 import SqlReview, { riskySql, safeForCard } from "./SqlReview";
 import type { QuestionProps } from "./QuestionForm";
 import StatusStrip from "./StatusStrip";
+import { useMentionSend } from "./MentionAsk";
 
 // Loaded in its own CrashGuard (components/guarded.tsx): a reply box that fails, even as its module loads,
 // leaves the thread readable.
@@ -123,10 +124,14 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   const { shell } = transport;
   const { fresh } = transport;
   const pilot = card.role === "copilot";
+  // A shared card's @mentions ask before they let anyone in (lib/use-mention-ask.ts).
+  const { send, bar } = useMentionSend(card, onSend, transport.desktop && !pilot);
   // Off this Mac (a worker's card, weft.zip) the plan limits are the card's own, from the CLI that runs it there.
   const status = pilot ? <BackendPicker card={card} up /> : <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} cardLimits={!transport.desktop} />;
   if (!show) return <div className="shrink-0 border-t border-line px-4 py-1.5">{status}</div>;
   return (
+    <>
+    {bar}
     <ReplyBox key={card.id} question={question} cardId={card.id} cwd={card.cwd} live={live} placeholder={placeholder} suggestion={card.suggestion}
       midTurn={!pilot && (card.backend === "claude" || card.backend === "puku")}
       sendLater={scheduling && { backend: card.backend, resets: scheduling.resets, scheduled: card.scheduled ?? [] }}
@@ -145,6 +150,7 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
       model={modelOn(card.backend, card.model) ?? card.stats?.runsOn?.model}
       editLast={editLast} onEditing={onEditing}
       noShell={shell ? undefined : transport.shellRefusal}
-      onSend={onSend} onShell={shell && ((command) => shell(card.id, command))} onStop={() => transport.stop(card.id)} />
+      onSend={send} onShell={shell && ((command) => shell(card.id, command))} onStop={() => transport.stop(card.id)} />
+    </>
   );
 }

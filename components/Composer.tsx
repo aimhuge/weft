@@ -8,7 +8,6 @@ import { forwardRef, useCallback, useEffect, useRef, useState, type ReactNode } 
 import { mediaMarkdown } from "@/lib/media";
 import { LOOKS_LIKE_MARKDOWN } from "@/lib/composer-slash";
 import { useComposerHandle, type ComposerHandle } from "@/lib/composer-handle";
-import { useSkillTypeahead } from "@/lib/use-skill-typeahead";
 import { useThreadTransport } from "@/lib/thread-transport";
 import { useComposerKeys } from "@/lib/use-composer-keys";
 import { useDictation } from "@/lib/use-dictation";
@@ -16,7 +15,7 @@ import { useDesktopDictation } from "@/lib/use-desktop-dictation";
 import { useHandedFiles } from "@/lib/use-file-drop";
 import { removeFromEditor, SecretBars, useComposerSecrets } from "./SecretPaste";
 import { Media, NO_UPLOAD, insertFiles } from "./MediaNode";
-import SkillTypeahead from "./SkillTypeahead";
+import { useComposerTypeaheads } from "./use-composer-typeaheads";
 import ComposerFormatBar from "./ComposerFormatBar";
 import ComposerBottomBar from "./ComposerBottomBar";
 import ComposerSourceTextarea from "./ComposerSourceTextarea";
@@ -140,14 +139,8 @@ const Composer = forwardRef<
     editorRef.current = editor;
   }, [editor]);
 
-  // Typing "/" offers the skills for this folder; they load the first time it's needed.
-  const typeahead = useSkillTypeahead(editor, cwd, cardId);
-  const { query: slash, suggestions, active: activeSkill, setActive: setActiveSkill, typeaheadOpen } = typeahead;
-
-  function pickSkill(skill: { name: string }) {
-    if (!editor || !slash) return;
-    editor.chain().focus().insertContentAt({ from: slash.from, to: slash.to }, `/${skill.name} `).run();
-  }
+  // Typing "/" offers the skills for this folder, "@" people (lib/use-composer-typeaheads.ts).
+  const { typeahead, pick, list } = useComposerTypeaheads(editor, cwd, cardId, variant);
 
   // The placeholder can change (a reply box while its thread works); redraw it when it does.
   useEffect(() => {
@@ -190,7 +183,7 @@ const Composer = forwardRef<
   }, [source, editor]);
   const dictation = useDesktopDictation(recorder, focusForDictation);
 
-  const { onKeyDownCapture, onKeyDown } = useComposerKeys({ typeahead, dictation, pickSkill });
+  const { onKeyDownCapture, onKeyDown } = useComposerKeys({ typeahead, dictation, pickSkill: pick });
 
   // The Markdown view's text changed: by typing, an insert, or Remove it.
   function editSource(next: string) {
@@ -251,15 +244,7 @@ const Composer = forwardRef<
         dragging ? "border-accent bg-accent-soft" : "border-line-strong"
       } ${className}`}
     >
-      {typeaheadOpen && slash && (
-        <SkillTypeahead
-          skills={suggestions}
-          active={Math.min(activeSkill, suggestions.length - 1)}
-          above={variant === "reply"}
-          onPick={pickSkill}
-          onHover={setActiveSkill}
-        />
-      )}
+      {list}
 
       {header}
 

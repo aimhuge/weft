@@ -24,7 +24,7 @@ export function clearGithubEmails() {
   emails().clear();
 }
 
-async function repoCollaborators(repo: string): Promise<{ login: string; avatarUrl: string }[]> {
+export async function repoCollaborators(repo: string): Promise<{ login: string; avatarUrl: string }[]> {
   const { stdout } = await run("gh", ["api", `repos/${repo}/collaborators`, "--paginate", "--jq", '.[] | [.login, .avatar_url] | @tsv'], {
     timeout: 20_000,
     maxBuffer: 4 * 1024 * 1024,

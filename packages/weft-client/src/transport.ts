@@ -12,6 +12,14 @@ import { applyThreadEvent, type ThreadPage } from "./thread-page";
 // A change to the loaded window, applied to whatever it holds when it lands.
 export type PageUpdate = (prev: ThreadPage) => ThreadPage;
 
+// One person the "@" picker offers: in the card's workspace, on its repo, or a GitHub search hit.
+export interface MentionPerson {
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+  kind: "team" | "repo" | "github";
+}
+
 export interface ThreadTransport {
   // One page of the thread: the newest (before omitted) or the one ending at index `before`. Null when it can't be read.
   loadPage(cardId: string, before?: number): Promise<ThreadPage | null>;
@@ -49,6 +57,9 @@ export interface ThreadTransport {
   // The composer's "/" list: the skills of the card's folder on the machine that runs it (the skills.list verb). Off
   // a card (the New thread dialog) there's no cardId, and cwd names the folder. Left out, "/" offers nothing.
   listSkills?: (cardId: string | undefined, cwd: string | undefined) => Promise<SkillInfo[]>;
+  // The composer's "@" list: people by GitHub login, the card's workspace and repo first (the app's lib/people-search.ts).
+  // Left out, "@" offers nothing.
+  searchPeople?: (cardId: string | undefined, query: string) => Promise<MentionPerson[]>;
   // Send later: the machine that runs the card holds the message until its time (card.schedule, card.unschedule).
   schedule?: (cardId: string, text: string, at: number) => Promise<unknown>;
   unschedule?: (cardId: string, messageId: string) => Promise<unknown>;

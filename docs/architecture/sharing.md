@@ -109,6 +109,48 @@ Share… ─ GET/PUT /api/cards/<id>/share ─ lib/card-share.ts target(id)
 - **Where.** `remoteMenu` keeps `share`, `cloudHost.can("share")` is true, so `OpenCard` passes `onShare` to the pane's
   toolbar and the thread header like a local card's.
 
+## People: sharing with anyone on GitHub
+
+Built 2026-11-09 (`supabase/migrations/20261109060646_share_grants.sql`). A growth feature as much as a sharing one:
+every grant is an invite to a developer, and the loop is built to close.
+
+- **Who.** The Share dialog's **People** field (`components/SharePeople.tsx`) takes a GitHub login: it opens on the
+  card's repo collaborators (`suggestPeople`, `lib/github-users.ts`, through `gh`), searches GitHub as you type
+  (`searchGithubUsers`, `gh api search/users`, debounced, cached 5 min) and lists who's in. Each person is a
+  `cloud_share_grants` row: `share_id`, `github_id` (GitHub's numeric id, never the login alone: logins get renamed and
+  re-registered), `github_login` to show, `via` (`share` | `mention`), `granted_by`, and the deployed Weft's stamps
+  `notified_at` and `opened_at`. Only the card's owner reads, adds or removes them (RLS through `private.is_card_owner`);
+  the column grants keep the stamps the service role's.
+- **The gate.** `shareAccessFor` (`lib/share-access.ts`) asks a refusal (`login`, `denied`, `gate`) one more question,
+  `grantAdmits` (`lib/share-grant-gate.ts`): the service-role RPC `share_grant_admits(share, uid)` matches the visitor's
+  `auth.identities` GitHub row to a grant and stamps `opened_at` the first time. So a named person gets in to a private
+  link without being in the workspace, and past a password or email gate (the owner chose that: they named the
+  person). A password or email form carries "Shared with your GitHub account? Sign in with GitHub"
+  (`components/share-view/SharedCardPage.tsx`). A public link lets everyone in anyway; its grants are kept, so setting it
+  back to private keeps those people in.
+- **Telling them.** The Mac adds the grant (`lib/card-share-grants.ts`, `app/api/cards/[id]/share/grants`), then asks
+  weft.zip to tell them (`POST /api/s/[id]/grants/notify` on the owner's own token, `lib/share-grant-notify.ts`). The
+  address is the weft.zip account signed in with that GitHub id (`share_grant_contact`), else the account's public GitHub
+  email (`GITHUB_LOOKUP_TOKEN` lifts the anonymous rate limit). About 38% of active GitHub contributors show one (96
+  sampled, 2026-11-09); every Weft user has one. The email (`lib/share-grant-email.ts`) carries the card's emoji and
+  title and, for a mention, the owner's own words (redacted, 280 chars), never the thread; one button, **Open with
+  GitHub**. Once per person per share, at most 50 a day per sharer. With no address the answer is `no-email`, and the
+  person's chip says "no email on file · send them the link" beside Copy link; once they open it, "opened 2m ago".
+
+## Mentions
+
+The composer's **@** (`lib/use-mention-typeahead.ts`, `lib/composer-mention.ts`) opens a people list above the reply
+box like the "/" skills (`components/use-composer-typeaheads.tsx` keeps one set of keys for both;
+`components/PeopleTypeahead.tsx`): workspace members first, then the card's repo people, then GitHub logins
+(`lib/people-search.ts`, the transport's `searchPeople`). Picking one inserts `@login `.
+
+On a shared card, sending a message that mentions someone who can't open the link yet asks first (the user's choice:
+never granted silently). `useMentionSend` (`components/MentionAsk.tsx`, `lib/use-mention-ask.ts`) holds the message
+and shows one line above the box, "Give @x access to this shared thread?" with **Give access & send** and **Send
+without**; yes grants them `via: "mention"` with the message as the email's note, then sends; the line then says who
+got an email and who needs the link. A declined name isn't asked again that session. An unshared card's mentions are
+plain text; the People field suggests the repo's people when it's shared later.
+
 ## Live
 
 Visitors aren't workspace members, so they can't use Realtime under RLS. The viewer polls `/api/s/<id>/live?after=<seq>`
@@ -189,6 +231,9 @@ Member (or the first role the viewer may hand out); members who can't manage the
 out, it asks you to sign in first, like Share…. A workspace switcher shows when you're in more than one.
 
 ## Gaps
+
+- weft.zip's board has no `searchPeople` yet, so "@" there offers nothing and mentions never ask; the desktop's do.
+- A grantee sees nothing on their weft.zip home yet ("Shared with you"), and can't reply in the thread.
 
 - An invitee lands on `/<slug>/team?joined=1` after accepting, not on the board they were shared.
 

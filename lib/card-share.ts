@@ -125,6 +125,14 @@ async function answer(t: Ready, cardId: string): Promise<CardShareState> {
   return t.local ? remember(cardId, state) : state;
 }
 
+// The card's share row and the client that may write beside it, for the People field (lib/card-share-grants.ts):
+// blocked with the same state the dialog shows, else the row's id (null before the first share).
+export async function shareRowFor(cardId: string): Promise<{ kind: "blocked"; state: CardShareState } | { kind: "ready"; client: SupabaseClient; shareId: string | null }> {
+  const t = await target(cardId);
+  if (t.kind === "blocked") return t;
+  return { kind: "ready", client: t.client, shareId: (await readShare(t.client, t.orgId, cardId))?.id ?? null };
+}
+
 export async function getCardShare(cardId: string): Promise<CardShareState> {
   const t = await target(cardId);
   if (t.kind === "blocked") return t.state;

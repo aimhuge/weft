@@ -1018,6 +1018,14 @@ link lives under you, `weft.zip/@you/threads/<slug>` (the card's title by defaul
 unfurls in Slack or iMessage with the card's title, its first ask and its pane capture. **Show the chat** off shares only the
 browser pane; viewers can also hide the chat themselves. More in [docs/architecture/sharing.md](docs/architecture/sharing.md).
 
+**People** in the Share dialog shares the link with anyone on GitHub: type a login (it opens on your repo's
+collaborators and searches GitHub as you type) and they get in once they sign in to weft.zip with that account, past a
+private link, a password or an email gate, with no seat in your workspace. Weft emails them when it knows an address
+(their Weft account, or their public GitHub email); when it doesn't, their chip says so and offers Copy link, and once
+they open it, it says when. Type **@** in a thread's reply box to mention someone (your team, your repo's people, any
+GitHub login); on a shared card, a message that mentions someone who can't open the link yet asks first: **Give access
+& send** lets them in and quotes your message in their email, **Send without** keeps it plain text (docs/architecture/sharing.md#people).
+
 **Share the board** (the share icon beside your avatar, its menu, ⌘K, or **Share** in the weft.zip board's header) shares the whole board: its link is your workspace's web board,
 `weft.zip/<workspace>/board`, with Copy and Open, a list of who can open it (members and pending invites), and an email box.
 An address that already has a Weft account joins the workspace at once; one that doesn't gets an email inviting them to sign

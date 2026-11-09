@@ -11,6 +11,7 @@ import type { PageUpdate, ThreadTransport } from "@weft/client";
 import { api } from "./client";
 import { firstNow, otherFirstNow, stopNow, waitNow } from "./optimistic-cards";
 import { filesApi } from "./client-files";
+import { localSearchPeople } from "./people-search";
 import { THREAD_PAGE_SIZE } from "./cloud-sync-types";
 import type { FindMatch } from "./thread-find";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
@@ -75,6 +76,7 @@ export const localTransport: ThreadTransport = {
   schedule: (cardId, text, at) => api.schedule(cardId, text, at),
   unschedule: (cardId, messageId) => api.unschedule(cardId, messageId),
   upload: (file, name, onProgress) => api.uploadAttachment(file, name, onProgress),
+  searchPeople: localSearchPeople,
   cardEdits: true,
   desktop: true,
 };

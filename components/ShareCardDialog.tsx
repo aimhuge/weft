@@ -9,6 +9,7 @@ import { useAccount } from "@/lib/use-account";
 import Icon, { Spinner } from "./Icon";
 import { errorText, NoWorkspace, SHARE_BUTTON, ShareNote, SignedOut } from "./ShareParts";
 import { ShareCardOptions } from "./ShareCardOptions";
+import { SharePeople } from "./SharePeople";
 import WeftShareDialog from "./WeftShareDialog";
 
 // Share… (the card's right-click menu): one weft.zip link that shows this thread and its browser pane, live,
@@ -95,7 +96,14 @@ export default function ShareCardDialog({ card, onClose }: { card: Card; onClose
           access={access}
           account={account}
           onSyncOn={turnOnSync}
-          options={state.kind === "ok" ? <ShareCardOptions cardId={card.id} state={state} setState={setState} setError={setError} /> : null}
+          options={
+            state.kind === "ok" ? (
+              <>
+                <ShareCardOptions cardId={card.id} state={state} setState={setState} setError={setError} />
+                {state.id && <SharePeople cardId={card.id} url={state.url} />}
+              </>
+            ) : null
+          }
         />
       )}
     </WeftShareDialog>
