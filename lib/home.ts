@@ -123,6 +123,42 @@ export function downloadLink(release: Release | null): { label: string; href: st
   };
 }
 
+// One of the hero's download buttons: Mac (the dmg), Windows (app/download/windows, with an ARM link beside it) and
+// iPhone (the phone app's public TestFlight link). href null renders a "coming soon" chip instead of a link.
+export interface PlatformLink {
+  platform: "mac" | "windows" | "ios";
+  label: string;
+  sub: string;
+  href: string | null;
+  track: string;
+  alt?: { label: string; href: string; track: string };
+}
+
+// The hero's buttons. Windows waits for a release like the dmg; iPhone waits for TESTFLIGHT_PUBLIC_URL.
+export function platformLinks(release: Release | null, testflightUrl: string | null): PlatformLink[] {
+  const mac = downloadLink(release);
+  const v = release?.version ?? "github";
+  const links: PlatformLink[] = [
+    { platform: "mac", label: release ? "Download for Mac" : mac.label, sub: release ? `${release.version} · Apple silicon` : "Clone and run", href: mac.href, track: v },
+  ];
+  if (release) {
+    links.push({
+      platform: "windows",
+      label: "Download for Windows",
+      sub: `${release.version} · x64`,
+      href: "/download/windows",
+      track: `${v}-windows`,
+      alt: { label: "ARM", href: "/download/windows?arch=arm64", track: `${v}-windows-arm64` },
+    });
+  }
+  links.push(
+    testflightUrl
+      ? { platform: "ios", label: "Get it on iPhone", sub: "TestFlight beta", href: testflightUrl, track: "ios-testflight" }
+      : { platform: "ios", label: "iPhone app", sub: "Coming soon", href: null, track: "ios-soon" },
+  );
+  return links;
+}
+
 // The home page component's props (lib/home.ts has no opinions; the call site decides). `unknown` keeps the helper
 // generic without us pretending the home is parametric.
 type HomeComponent = (props: unknown) => unknown;

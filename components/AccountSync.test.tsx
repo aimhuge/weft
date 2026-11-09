@@ -17,6 +17,7 @@ const OK: CloudSyncStatus = { waiting: 0, lastSyncAt: null, uploaded: 0, lastErr
 function fakeSync(over: { folders?: string[]; status?: Partial<CloudSyncStatus> } = {}) {
   return {
     folders: over.folders ?? [],
+    teams: {},
     status: { ...OK, ...over.status },
     error: null,
     reload: vi.fn(() => Promise.resolve()),

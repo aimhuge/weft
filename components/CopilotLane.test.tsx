@@ -22,6 +22,8 @@ vi.mock("./ThreadView", () => ({
 }));
 
 beforeEach(() => {
+  // The copilot is behind a feature flag (lib/features.ts); these tests drive it switched on.
+  vi.stubEnv("NEXT_PUBLIC_WEFT_COPILOT", "1");
   document.cookie = "weft-copilot-read=0; path=/";
   thread.card = makeCard({ id: "copilot", role: "copilot", column: "review", warm: true });
   thread.items = [

@@ -55,3 +55,17 @@ describe("a screenshot in a tool result", () => {
     await vi.waitFor(() => expect(thread("c1").find((i) => i.kind === "tool")).toMatchObject({ images: ["/api/attachments/shot.webp"] }));
   });
 });
+
+describe("a database call in flight", () => {
+  it("is tracked from its tool_use until its tool_result (lib/db-calls.ts)", async () => {
+    const { sessions } = await import("./runner-state");
+    makeCard(h, cwd, { id: "c2" });
+    runner.sendMessage("c2", "hello");
+    await flush();
+    const q = nth(h.queries, -1, "query");
+    q.emit(assistant(toolUse("t2", "mcp__supabase__execute_sql", { query: "drop table t" })));
+    await vi.waitFor(() => expect(sessions.get("c2")?.dbCalls?.get("t2")).toMatchObject({ server: "supabase", sql: "drop table t" }));
+    q.emit({ type: "user", parent_tool_use_id: null, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t2", content: "ok" }] } });
+    await vi.waitFor(() => expect(sessions.get("c2")?.dbCalls?.has("t2")).toBe(false));
+  });
+});

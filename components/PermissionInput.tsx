@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { openFile } from "@/lib/open-file";
 import type { EditPreview } from "@/lib/edit-preview";
 import type { PendingPermission, PromptReason } from "@/lib/types";
 import CardFace, { type Face } from "./CardFace";
+import { DeclineWhy, riskySql } from "./SqlReview";
 import { EditDiff } from "./EditDiff";
 import { useFileLink } from "./file-link-context";
 import { Spinner } from "./Icon";
@@ -34,7 +35,7 @@ export const REASONS: Record<PromptReason["category"], { label: string; tip: str
   "whole-file": { label: "Whole file", tip: `One side rewrites the whole file another busy card is editing. ${SHARED}` },
   mode: { label: "Permission mode", tip: "This card's permission mode asks before this tool. Change it from the thread header." },
   classifier: { label: "Auto mode blocked", tip: "Auto mode's classifier denied this call itself, so it never asked. Allow it once and the thread retries it; Keep denied leaves it." },
-  outside: { label: "Outside project", tip: "This reaches a folder beyond the card's project. Allow it once, for this card, or for every card." },
+  outside: { label: "Outside project", tip: "This reaches a folder beyond the card's project. Allow this call, or grant the folder to this card or every card." },
 };
 
 // A clash shows who is in whose way first: the holder's face, then this thread's.
@@ -63,7 +64,47 @@ function Reason({ why, me }: { why: PromptReason; me?: Face }) {
   );
 }
 
+// The word in a Bash command that read as a path outside the project, with a little of the line around it.
+function Matched({ match }: { match: NonNullable<PromptReason["match"]> }) {
+  return (
+    <div className="min-w-0 truncate text-[12px] text-faint" title={`${match.before}${match.token}${match.after}`}>
+      from <code className="rounded bg-warn px-1 font-mono text-[11px] text-[#1a1410]">{match.token}</code> in{" "}
+      <span className="font-mono text-[11px] text-muted">
+        “{match.before}
+        <b className="text-ink">{match.token}</b>
+        {match.after}”
+      </span>
+    </div>
+  );
+}
+
 const PRE = "max-h-36 overflow-auto rounded bg-panel/70 px-2 py-1.5 font-mono text-[11px]";
+
+// Any other call: its input as JSON. An outside-folder prompt that names its word folds the JSON behind Raw, since the
+// word already says what the prompt is about.
+function CallInput({ reason, match, input }: { reason: ReactNode; match?: PromptReason["match"]; input: Record<string, unknown> }) {
+  const [raw, setRaw] = useState(false);
+  const json = <pre className={`whitespace-pre-wrap text-muted ${PRE}`}>{JSON.stringify(input, null, 2)}</pre>;
+  return (
+    <div className="mt-1.5 flex flex-col gap-1">
+      {reason}
+      {match && (
+        <div className="flex min-w-0 items-center gap-2">
+          <Matched match={match} />
+          <button
+            type="button"
+            onClick={() => setRaw((r) => !r)}
+            aria-pressed={raw}
+            className="ml-auto shrink-0 rounded px-1 text-[11px] text-faint hover:bg-sunken hover:text-ink"
+          >
+            Raw
+          </button>
+        </div>
+      )}
+      {!match || raw ? json : null}
+    </div>
+  );
+}
 
 export default function PermissionInput({
   input,
@@ -121,13 +162,7 @@ export default function PermissionInput({
       </div>
     );
   }
-  if (!edit)
-    return (
-      <div className="mt-1.5 flex flex-col gap-1">
-        {reason}
-        <pre className={`whitespace-pre-wrap text-muted ${PRE}`}>{JSON.stringify(input, null, 2)}</pre>
-      </div>
-    );
+  if (!edit) return <CallInput reason={reason} match={why?.match} input={input} />;
   return (
     <div className="mt-1.5 flex flex-col gap-1">
       {reason}
@@ -185,6 +220,7 @@ export function PermissionActions({
   onOtherFirst,
   onGrant,
   elsewhere,
+  extra,
 }: {
   pending: PendingPermission;
   answered: boolean;
@@ -199,6 +235,8 @@ export function PermissionActions({
   onGrant?: (scope: "card" | "always") => void;
   // The card runs on another machine, so Always means every card there, not on this Mac.
   elsewhere?: boolean;
+  // A button beside Allow / Deny on the plain prompt: a Safe database prompt's "Allow safe SQL on this card".
+  extra?: ReactNode;
 }) {
   const holder = pending.why?.holder;
   const deny = (
@@ -252,11 +290,11 @@ export function PermissionActions({
   if (pending.readScope && onGrant)
     return (
       <div className="mt-2 flex flex-wrap gap-2">
-        <button onClick={() => onAnswer(true)} disabled={answered} className={PRIMARY}>
-          Allow once
+        <button onClick={() => onAnswer(true)} disabled={answered} className={PRIMARY} title="Let this one call through; ask again next time">
+          Allow
         </button>
         <button onClick={() => onGrant("card")} disabled={answered} className={SECONDARY} title={`Let this card use ${pending.readScope.token} from now on`}>
-          This card
+          Grant this card
         </button>
         <button onClick={() => onGrant("always")} disabled={answered} className={SECONDARY} title={`Let every card${elsewhere ? " on the machine running this one" : ""} use ${pending.readScope.token} from now on`}>
           Always
@@ -276,12 +314,20 @@ export function PermissionActions({
         {otherFirst ?? deny}
       </div>
     );
+  return <AllowDeny risky={riskySql(pending.sql)} answered={answered} onAnswer={onAnswer} extra={extra} />;
+}
+
+// The plain Allow / Deny. On flagged SQL the review hasn't called Safe (components/SqlReview.tsx riskySql), Deny leads.
+function AllowDeny({ risky, answered, onAnswer, extra }: { risky?: string; answered: boolean; onAnswer: (allow: boolean) => void; extra?: ReactNode }) {
+  const button = (allow: boolean) => (
+    <button key={String(allow)} onClick={() => onAnswer(allow)} disabled={answered} className={allow !== Boolean(risky) ? PRIMARY : SECONDARY}>
+      {allow ? "Allow" : "Deny"}
+    </button>
+  );
   return (
-    <div className="mt-2 flex gap-2">
-      <button onClick={() => onAnswer(true)} disabled={answered} className={PRIMARY}>
-        Allow
-      </button>
-      {deny}
+    <div className="mt-2 flex flex-wrap gap-2">
+      {risky ? [button(false), button(true)] : [button(true), extra, button(false)]}
+      <DeclineWhy why={risky} />
     </div>
   );
 }

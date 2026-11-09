@@ -21,6 +21,7 @@ const READY: CloudSyncStatus = { waiting: 2, lastSyncAt: 1000, uploaded: 5, last
 
 interface UseCloudSyncApi {
   folders: string[];
+  teams: Record<string, string>;
   status: CloudSyncStatus;
   error: string | null;
   reload: () => Promise<void>;
@@ -34,6 +35,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api = {
     folders: [],
+    teams: {},
     status: EMPTY,
     error: null,
     reload: vi.fn(() => Promise.resolve()),
@@ -128,6 +130,14 @@ describe("SyncSettings", () => {
   it("warns that thread text is uploaded unencrypted", () => {
     render(<SyncSettings recentProjects={["/sync"]} />);
     expect(screen.getByText(/thread text is uploaded unencrypted/i)).toBeInTheDocument();
+  });
+
+  it("names the team in place of a switch for a project a team linked, listed even when it isn't a recent project", () => {
+    api.teams = { "/team-repo": "Acme" };
+    render(<SyncSettings recentProjects={["/mine"]} />);
+    expect(screen.getByText("Synced with Acme")).toBeInTheDocument();
+    expect(screen.getByText("/team-repo")).toBeInTheDocument();
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
   });
 
   it("shows a project's switch on when its folder is syncing", () => {

@@ -1,6 +1,7 @@
 "use client";
 
-// "People on your projects": the GitHub collaborators of the team's linked repos, each with an Invite button.
+// "People on your projects": the GitHub collaborators of the team's linked repos, and the members of its GitHub org
+// when it was made from one, each with an Invite button.
 // A known public email invites straight away (the server adds an existing Weft account or emails an invite);
 // otherwise a small email field comes first. Short by design: five rows, then "Show all N".
 import { useEffect, useState, useTransition } from "react";
@@ -11,7 +12,7 @@ import type { RoleOption, TeamClientActions } from "@/lib/team-types";
 
 type Message = { ok: boolean; text: string };
 
-function PersonRow({ person, actions, roleOptions }: { person: GithubPerson; actions: TeamClientActions; roleOptions: RoleOption[] }) {
+function PersonRow({ person, org, actions, roleOptions }: { person: GithubPerson; org?: string; actions: TeamClientActions; roleOptions: RoleOption[] }) {
   const [asking, setAsking] = useState(false);
   const [typed, setTyped] = useState("");
   const [message, setMessage] = useState<Message | null>(null);
@@ -38,7 +39,7 @@ function PersonRow({ person, actions, roleOptions }: { person: GithubPerson; act
       ) : null}
       <span style={{ fontWeight: 500 }}>{person.login}</span>
       <span style={{ opacity: 0.6, fontSize: 12, flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {person.repos.join(", ")}
+        {person.repos.length > 0 ? person.repos.join(", ") : org ? `in ${org}` : ""}
       </span>
       {asking ? (
         <form
@@ -77,13 +78,15 @@ function PersonRow({ person, actions, roleOptions }: { person: GithubPerson; act
 
 export function ProjectPeople({
   repos,
+  org,
   members,
   pending,
   actions,
   roleOptions,
 }: {
   repos: string[];
-  members: { email: string | null }[];
+  org?: string;
+  members: { email: string | null; login?: string | null }[];
   pending: { email: string }[];
   actions: TeamClientActions;
   roleOptions: RoleOption[];
@@ -91,19 +94,20 @@ export function ProjectPeople({
   const [result, setResult] = useState<CollaboratorsResult | null>(null);
   const [showAll, setShowAll] = useState(false);
   const key = repos.join(",");
+  const query = `repos=${encodeURIComponent(key)}${org ? `&org=${encodeURIComponent(org)}` : ""}`;
 
   useEffect(() => {
-    if (!key) return;
+    if (!key && !org) return;
     let live = true;
-    call<CollaboratorsResult>("GET", `/api/github/collaborators?repos=${encodeURIComponent(key)}`)
+    call<CollaboratorsResult>("GET", `/api/github/collaborators?${query}`)
       .then((r) => live && setResult(r))
       .catch((err: unknown) => live && setResult({ people: [], error: (err as Error).message }));
     return () => {
       live = false;
     };
-  }, [key]);
+  }, [key, org, query]);
 
-  if (!key || !result) return null;
+  if ((!key && !org) || !result) return null;
   if (result.error && result.people.length === 0) {
     return <p style={{ opacity: 0.6, fontSize: 12 }}>Couldn&apos;t list GitHub collaborators: {result.error}</p>;
   }
@@ -112,11 +116,11 @@ export function ProjectPeople({
   const { shown, hidden } = visiblePeople(people, showAll);
 
   return (
-    <section aria-label="People on your projects">
-      <h3 style={{ fontSize: 13, margin: "8px 0 4px" }}>People on your projects</h3>
+    <section aria-label="Suggested from GitHub">
+      <h3 style={{ fontSize: 13, margin: "8px 0 4px" }}>Suggested from GitHub</h3>
       <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
         {shown.map((p) => (
-          <PersonRow key={p.login} person={p} actions={actions} roleOptions={roleOptions} />
+          <PersonRow key={p.login} person={p} org={org} actions={actions} roleOptions={roleOptions} />
         ))}
       </ul>
       {hidden > 0 ? (

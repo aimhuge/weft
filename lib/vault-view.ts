@@ -1,6 +1,6 @@
 import type { KeychainBridge } from "./keychain-audit-types";
 import type { MenuItem } from "./card-menu";
-import type { VaultDeviceRequest, VaultJoin, VaultJoinHint, VaultOrg, VaultShared } from "./vault-shared";
+import type { RepoShareResult, VaultDeviceRequest, VaultJoin, VaultJoinHint, VaultLinked, VaultOrg, VaultShared } from "./vault-shared";
 import type { ImportScan } from "./vault-import";
 
 export type { VaultDeviceRequest, VaultJoin, VaultJoinHint, VaultOrg, VaultShared };
@@ -61,6 +61,8 @@ export interface VaultSummary {
   joinHint?: VaultJoinHint;
   // Teammates' Macs waiting for an admin to approve them.
   requests?: VaultDeviceRequest[];
+  // The team that linked this repo as a project: its vault is that team's (docs/architecture/teams-vault.md).
+  linked?: VaultLinked;
 }
 
 export interface VaultOverview {
@@ -128,6 +130,8 @@ export interface VaultBridge extends KeychainBridge {
   writeBack?(folder: string): Promise<WriteBackResult>;
   // Shares a local vault with a workspace for the first time. Missing in older shells.
   share?(folder: string, orgId: string, repo: string, label?: string): Promise<{ vaultId: string; repo: string; keyVersion: number; orgId: string; keptLocal?: string[] }>;
+  // A team linked this repo: share this Mac's vault for it with the team, after Touch ID. Missing in older shells.
+  shareRepo?(orgId: string, orgName: string, repo: string): Promise<RepoShareResult>;
   // A teammate's Mac joining a shared vault: this Mac asks, an admin approves or declines, this Mac opens it.
   requestJoin?(vaultId: string): Promise<{ pendingId: string }>;
   deviceGrant?(pendingId: string): Promise<{ denied?: boolean }>;

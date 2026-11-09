@@ -168,6 +168,101 @@
   transform: translateY(-1px);
 }
 
+/* The download row (components/home/Downloads.tsx): Mac in clay, Windows and iPhone outlined beside it. */
+.wz-downloads {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.wz-dlGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wz-root .wz-dl {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 20px 8px 16px;
+  border-radius: 999px;
+}
+
+.wz-dlIcon {
+  width: 20px;
+  height: 20px;
+  flex: none;
+}
+
+.wz-dlText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  text-align: left;
+}
+
+.wz-dlLabel {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.wz-dlSub {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 400;
+  opacity: 0.75;
+}
+
+.wz-root .wz-dlGhost {
+  color: var(--thread);
+  background: rgb(21 26 41 / 0.45);
+  border: 1px solid rgb(236 229 216 / 0.28);
+  backdrop-filter: blur(6px);
+  transition:
+    transform 0.25s cubic-bezier(0.2, 0.7, 0.2, 1),
+    border-color 0.2s,
+    background 0.2s;
+}
+
+.wz-root a.wz-dlGhost:hover {
+  color: var(--thread);
+  border-color: rgb(236 229 216 / 0.55);
+  background: rgb(21 26 41 / 0.65);
+  transform: translateY(-1px);
+}
+
+.wz-root .wz-dlSoon {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.wz-root .wz-dlAlt {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--thread-2);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 600px) {
+  .wz-downloads {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .wz-dlGroup {
+    width: 100%;
+  }
+
+  .wz-dlGroup .wz-dl,
+  .wz-dlSoon {
+    flex: 1;
+  }
+}
+
 .wz-note {
   margin: 14px 0 0;
   font-family: var(--mono);

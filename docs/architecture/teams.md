@@ -1,5 +1,29 @@
 # Teams
 
+## Shared projects
+
+The model in one line: **a project is either yours or the team's.** A team that links a project's GitHub repo
+(Settings → Teams → Projects) shares everything in it:
+
+- **Cards.** Every member's desktop syncs the project's cards to the team, with no Sync switch of their own:
+  `lib/cloud-sync-team.ts` checks each minute (and when a project opens) which local folders have a repo one of your
+  teams linked, the outbox and the inbox treat those as synced beside settings `syncFolders`, and a newly linked
+  folder has its existing cards queued. `lib/cloud-sync-route.ts` sends them to the team's workspace. Unlinking drops
+  the folder on the next check and the person's own switch decides again. Teammates' cards stay read-only on your
+  board ([cloud-sync.md](cloud-sync.md#team-projects)).
+- **Secrets.** The project's 🔐 vault is the team's, with no Share… step: linking the repo shares the linking
+  admin's vault for it (one Touch ID), and any member may start it when the admin's Mac has none. Every member can add
+  and change keys. A teammate's Mac asks to join on its own; an admin approves each Mac **once for the team** (a
+  notification says one is waiting), and from then on it gets every linked project's vault, new ones included, sealed
+  by whichever teammate's Mac holds the key. The drawer says "Shared with <team>". Unlinking stops new Macs joining,
+  but keys already on a Mac stay there until the vault is rotated
+  ([teams-vault.md](teams-vault.md#a-linked-repo-shares-its-vault)).
+- **Workers** (later): a team worker can run the project's cards.
+
+Names follow GitHub. A team is a GitHub org by default (Exitingcom → "Exiting.com" at weft.zip/exitingcom), members
+are GitHub logins (@yozulker9), your personal workspace is your GitHub username (weft.zip/fotoflo). Only the defaults
+and suggestions come from GitHub: the display name stays editable, and a team doesn't have to be an org.
+
 Status: phase 1 (workspaces, members, roles, email invites on weft.zip) built 2026-10-13. Phase 2, the shared 🔐
 vault, is designed in [teams-vault.md](teams-vault.md).
 
@@ -75,8 +99,8 @@ a gate (/s, /a, /u) call `connection()` themselves (`lib/prerender-check.ts` fla
 - `lib/web-session.ts`: the weft.zip visitor's cookie session (`webClient`, `webUser` from the JWT claims) and the
   service-role client (`serviceClient`, from `SUPABASE_SECRET_KEY`, set on the deployment only).
 - `proxy.ts`: refreshes the session cookie before the team pages render (Server Components can't write cookies).
-  Deployed only; matches `/login`, `/app`, `/team`, `/invite/*`, `/<slug>/team/*` and `/<slug>/billing/*`.
-- `lib/web-auth.ts` + `app/auth/{sign-in,callback,sign-out}`: GitHub (or Google) sign-in on weft.zip with PKCE in a
+  Deployed only; matches `/login`, `/app`, `/team`, `/invite/*`, `/<slug>/team/*`, `/<slug>/board/*` and `/<slug>/billing/*`.
+- `lib/web-auth.ts` + `app/auth/{sign-in,callback,sign-out}`: GitHub sign-in on weft.zip (any other `provider` is a 400) with PKCE in a
   cookie. The callback stamps `last_login_at` and `login_count`. `/login` uses it when deployed.
 - `lib/teams.ts`: the gate. `teamAccess(slug)` answers ok / signed-out / denied / unconfigured (a missing workspace and
   a non-member get the same "denied", so membership can't be probed); `requireTeam(slug)` redirects to `/login` or
@@ -98,8 +122,28 @@ a gate (/s, /a, /u) call `connection()` themselves (`lib/prerender-check.ts` fla
 ## In the desktop's Settings
 
 Settings → Teams (`components/TeamSettings.tsx`) opens on **Your teams** (`components/team/TeamList.tsx`), every
-workspace you're in with your role, and below it the one you picked (`components/team/TeamPanel.tsx`): the same
-projects, roster, invite form and pending invites as weft.zip. `lib/use-managed-team.ts` remembers the pick and keeps
+workspace you're in with your role, and below it the one you picked (`components/team/TeamPanel.tsx`), in the order
+a team is used:
+
+1. **Projects** (`components/team/Projects.tsx`): each linked repo with how many of this board's cards it has
+   (`useBoardProjects` in `lib/use-board-repos.ts`, counted by folder in `cardsPerRepo`, `lib/team-view.ts`), Remove,
+   and Add project, whose typeahead suggests the team's GitHub org's repos and the board's. A secrets count isn't
+   shown: the vault lives in Electron main and the count isn't cheap from here.
+2. **People** (`components/team/TeamPeople.tsx`): everyone on one wrapping line by GitHub avatar and @login
+   (`memberLabel`: @login, else name, else email; the login comes from `lib/team-member-logins.ts`), the open invites
+   counted, and **Invite…**, which opens the shared invite form (an email, or an @login whose public email gh looks up
+   through `GET /api/github/collaborators?login=`; the web form takes emails only), the suggestions from the team's
+   GitHub org's members and its repos' collaborators (`components/team/ProjectPeople.tsx`, `?org=`), and the pending
+   invites.
+3. **Advanced**, a `<details>` closed by default: the roster with roles and Remove (`components/team/Roster.tsx`, also by
+   @login), who sees each project (`ProjectAccessList` in `components/team/ProjectAccess.tsx`) and Leave.
+
+Workers get a section once teams have them. **New team** offers your GitHub orgs above the name field
+(`lib/github-orgs.ts` through `GET /api/github/orgs`, kept for the session by `lib/use-github-orgs.ts`): a pick fills
+the name, which stays editable, and is sent as `createTeam(name, slug)`, so `runCreateTeam` slugs the org's login, not
+the name (Exitingcom named "Exiting.com" is still weft.zip/exitingcom). A team whose slug is one of your orgs' logins
+(`orgForTeam`) gets that org's repos (`GET /api/github/orgs?org=`) and members suggested; any other team works the same
+without them. `lib/use-managed-team.ts` remembers the pick and keeps
 the team you switched from while the next one loads, so the list never blinks; hovering a row prefetches it. A team you own has a pencil that
 renames it in place: `{ action: "rename" }` through `runTeamOp` to `runRenameTeam` (`lib/team-create.ts`), owners only,
 1 to 60 characters, name only (the slug is in every link and synced board, so it stays). Its trash deletes it:
@@ -116,16 +160,24 @@ board ── useTeam() ──▶ /api/account/team (local, guarded) ──Bearer
 ```
 
 - `app/api/teams` (weft.zip, no localhost guard; the bearer token is the check, `bearerUser` in `lib/web-session.ts`):
-  GET a `TeamSnapshot`, POST a `TeamOp`. 401 signed out, 404 not a member, 503 not configured.
+  GET a `TeamSnapshot`, POST a `TeamOp`. 401 signed out, 404 not a member (or, signed in, no workspace at all), 503 not
+  configured (no `SUPABASE_KEY` or no service key), so a deployment that isn't set up never reads as "signed out".
 - `lib/team-ops.ts`: one core for that API and the server actions, so both enforce the same rules. `runInvite`
   consults the plan gate (`workspaceCanHaveMembers`) and exports `TEAM_GATE_MESSAGE`; `checkInvite` holds the free
   input checks so the op stays small.
 - `app/api/account/team` + `lib/team-remote.ts`: the desktop's forwarder (`WEFT_TEAMS_URL`, default weft.zip).
 - `lib/use-team.ts`: the board hook; `lib/team-types.ts`: the shapes the board may import. A refresh keeps showing
   the loaded team until the new answer lands (only a workspace switch reads "loading"), so a burst of refreshes
-  can't keep a slow load from finishing. It keeps the last answer per workspace in a module cache, and
-  `useTeamPrefetch` (called by the top bar's `AccountButton`) fills it as soon as you're signed in and clears it on
-  sign-out, so the page opens already loaded and refreshes quietly behind it.
+  can't keep a slow load from finishing.
+- `lib/team-cache.ts`: **opening instantly**. A load is a round trip to weft.zip (~0.2 s for the bare request from
+  Bangkok, a second or two with the token check and the Supabase reads), so the page never waits on one. The last
+  answer per workspace lives in memory and the good ones in localStorage (`weft-team-cache`, each snapshot carrying
+  its user id, so only the signed-in account's come back; another account's are dropped, a signed-out answer drops
+  them all). `useTeamPrefetch` (the top bar's `AccountButton`) calls `warmTeams`: the disk copies back into memory,
+  then a fresh load of the default workspace *and* the one you last picked (`weft-team-org`), since that is the one
+  the page opens on. Once the list is on screen, `TeamSettings` warms the rest (`prefetchTeams`, up to six), hovering
+  a row warms that one, and every open still reloads behind what it shows. `lib/use-board-repos.ts` keeps the board's
+  repos for the Add project picker the same way.
 - `components/team/team-board.css`: the shared components' `wz-*` classes in the board's tokens, scoped under
   `.wz-board` (weft.zip's `team.css` never loads on the board), so the page follows Light, Dark and every scene.
 - `vercel.json` pins weft.zip's functions to `sin1`, next to the Supabase project (ap-southeast-1). From Vercel's
@@ -168,8 +220,24 @@ project and decide who else does; a member sees only the projects granted to the
   ([cloud-sync.md](cloud-sync.md#team-projects)), and each member's desktop board shows the others' cards for it inside
   their own checkout of the repo, read-only, with whose Mac runs each
   ([cloud-sync.md](cloud-sync.md#team-projects-on-the-desktop-board)).
-- What a grant gates today is the team page's project list. Synced cards (`cloud_cards`) and the shared vault aren't
-  scoped by project yet; when they are, they should read `org_project_members` the same way.
+- **A grant gates the project's synced cards and its vault too** (`supabase/migrations/20261108051456_project_scoped_reads.sql`,
+  applied 2026-11-08). One check, `private.can_use_repo(org, repo, user)`: a member of the workspace who is an owner or
+  admin, or the only member (a personal workspace), or granted the repo. Repos compare without case (`org_projects`
+  keeps GitHub's casing; `cloud_cards.repo` is lowercased).
+  - Cards: `cloud_cards` reads for its owner or `private.can_read_card`; `cloud_thread_items`, `cloud_tool_outputs`,
+    `cloud_commands`, `cloud_shares` and `cloud_card_takeovers` read as their card does, through an `EXISTS` on
+    `cloud_cards` written into each policy (a per-row function took ~1 s for a 9,556-item thread; the join takes ~5 ms,
+    faster than the old `is_org_member` policy). A team card with no repo, or one since unlinked, is its owner's and
+    the admins'. Everything that reads as the user follows: the desktop's team board, the web board, the phone,
+    Realtime. Blobs stay per workspace (fetched by sha256, so you need an item that names one).
+  - Routing: `team_orgs_for_repos` names the team only to someone who can use the repo, so a member not granted a
+    project keeps that checkout's cards in their own workspace and their Mac never asks for its vault.
+  - Vault: `trusted_vault_gaps` leaves out Macs whose person can't use the repo; a BEFORE INSERT trigger
+    (`private.vault_grant_access_check`) refuses an ask to join (`pending_device_grants`) with what to do, and drops a
+    key row (`vault_grants`) for such a Mac, so a rotation after a grant is taken away completes without it. Keys
+    already on a Mac stay until the vault is rotated.
+  - Checked on prod in rolled-back transactions: in the one real team, both owners and the granted member read all 156
+    cards; with the grant removed the member reads only their own 154 and routing stops naming the team.
 
 ## Setup on the deployment
 

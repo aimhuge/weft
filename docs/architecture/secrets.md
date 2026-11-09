@@ -5,8 +5,8 @@ injection, redaction) built 2026-10-12 except `request` and values for HTTP requ
 
 Weft keeps two kinds of secrets apart:
 
-- **Weft's own**: the Supabase service-role key, the database password, the GitHub and Google OAuth client
-  secrets. They live only on the server side (Supabase and the host's environment) and never ship in the
+- **Weft's own**: the Supabase service-role key, the database password, the GitHub OAuth client
+  secret. They live only on the server side (Supabase and the host's environment) and never ship in the
   desktop app. The app carries only the publishable key (`lib/account.ts`); row-level security guards the data.
 - **Yours**: your projects' `.env.local` values and their Vercel environments. Weft keeps them in its own
   vault, end-to-end encrypted, so they can be shared with a team later without Weft's servers ever
@@ -709,3 +709,5 @@ with nothing changed. Board side: `components/VaultTokenOffer.tsx`, types in `li
    team webhook (docs/architecture/vercel.md); the drawer's Pull previews them by environment, names the sensitive ones
    it can't read back, and asks one Touch ID (2026-11-05). Still open: "changed" (needs Vercel's values).
 6. **Teams** (built 2026-10-27): invites, fingerprint check, roles, rotate-on-remove, the event log in the panel.
+   A team-linked repo's vault is the team's (built 2026-11-07): linking shares it, any member may add keys, and a Mac
+   is approved once for the team ([teams-vault.md](./teams-vault.md#a-linked-repo-shares-its-vault)).

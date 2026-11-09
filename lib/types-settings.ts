@@ -144,14 +144,15 @@ export interface CliStatus {
 }
 
 // Your Weft account (lib/account.ts): optional, for cloud features.
-export type AccountProvider = "github" | "google";
+// GitHub only: Google sign-in was removed on 2026-11-07 (the phone app's App Review).
+export type AccountProvider = "github";
 
 export interface AccountUser {
   id: string;
   email: string | null;
   name: string | null;
   avatar: string | null;
-  // "github", "google" or "email".
+  // "github" or "email" (older accounts may still read "google").
   provider: string | null;
 }
 

@@ -64,7 +64,22 @@ function StatusCard({ status, busy, onSyncNow, error, syncError, now }: { status
   );
 }
 
-function ProjectsCard({ folders, synced, busy, error, onToggle }: { folders: string[]; synced: string[]; busy: boolean; error: string | null; onToggle: (folder: string, on: boolean) => void }) {
+// A folder a team linked syncs for every member (docs/architecture/teams.md#shared-projects): no switch, the team's name.
+function TeamRow({ folder, team }: { folder: string; team: string }) {
+  return (
+    <section className="flex items-center justify-between gap-4">
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <h3 className="text-[13px] font-medium text-ink">{folderName(folder)}</h3>
+        <p className="truncate text-[12.5px] text-muted">{folder}</p>
+      </div>
+      <span className="shrink-0 text-[12px] text-muted" title="A team linked this project's repo, so its cards sync to the team for every member.">
+        Synced with {team}
+      </span>
+    </section>
+  );
+}
+
+function ProjectsCard({ folders, synced, teams, busy, error, onToggle }: { folders: string[]; synced: string[]; teams: Record<string, string>; busy: boolean; error: string | null; onToggle: (folder: string, on: boolean) => void }) {
   // Only the user's recent projects are listed; the server resolves and 400s anything else.
   return (
     <Section title="Projects">
@@ -79,12 +94,11 @@ function ProjectsCard({ folders, synced, busy, error, onToggle }: { folders: str
         <ul className="flex flex-col gap-3">
           {folders.map((folder) => (
             <li key={folder}>
-              <SwitchRow
-                title={folderName(folder)}
-                hint={folder}
-                on={synced.includes(folder)}
-                onChange={(on) => onToggle(folder, on)}
-              />
+              {teams[folder] ? (
+                <TeamRow folder={folder} team={teams[folder]} />
+              ) : (
+                <SwitchRow title={folderName(folder)} hint={folder} on={synced.includes(folder)} onChange={(on) => onToggle(folder, on)} />
+              )}
             </li>
           ))}
         </ul>
@@ -131,7 +145,7 @@ export default function SyncSettings({ recentProjects }: { recentProjects: strin
   const { state: accountState } = useAccount();
   const signedIn = accountState.kind === "ready" && !!accountState.view.user;
   const signedOut = accountState.kind === "ready" && !accountState.view.user;
-  const { folders, status, error, setFolder, syncNow } = useCloudSync(true);
+  const { folders, teams, status, error, setFolder, syncNow } = useCloudSync(true);
   // useNow ticks once a second so "Last sync" reads stay fresh; Date.now() during render is impure.
   const now = useNow();
   const [busy, setBusy] = useState<"sync" | "folder" | null>(null);
@@ -140,7 +154,7 @@ export default function SyncSettings({ recentProjects }: { recentProjects: strin
 
   // The server only knows the opt-in folders; the page shows the user's recent projects so a folder
   // can be turned on before it ships a card.
-  const listed = Array.from(new Set([...folders, ...recentProjects])).sort((a, b) => a.localeCompare(b));
+  const listed = Array.from(new Set([...folders, ...Object.keys(teams), ...recentProjects])).sort((a, b) => a.localeCompare(b));
 
   async function onToggle(folder: string, on: boolean) {
     setBusy("folder");
@@ -175,7 +189,7 @@ export default function SyncSettings({ recentProjects }: { recentProjects: strin
       ) : (
         <StatusCard status={status} busy={busy === "sync"} onSyncNow={() => void onSyncNow()} error={error} syncError={failed.sync ?? null} now={now} />
       )}
-      <ProjectsCard folders={listed} synced={folders} busy={busy === "folder"} error={failed.folder ?? null} onToggle={(folder, on) => void onToggle(folder, on)} />
+      <ProjectsCard folders={listed} synced={folders} teams={teams} busy={busy === "folder"} error={failed.folder ?? null} onToggle={(folder, on) => void onToggle(folder, on)} />
       {signedIn && <PhoneSettings />}
       {signedIn && <PairDevices />}
       {signedIn && <WorkerSettings />}

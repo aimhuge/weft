@@ -9,8 +9,8 @@ import { act, cleanup, renderHook } from "@testing-library/react";
 const fetchMock = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>();
 vi.mock("./api-client", () => ({ API_HEADERS: {}, apiFetch: (url: string, init?: RequestInit) => fetchMock(url, init) }));
 // Teammates' cards have their own hook and tests (lib/use-team-board.test.ts); here they're whatever the test sets.
-const teamCards = vi.hoisted(() => ({ cards: [] as Card[] }));
-vi.mock("./use-team-board", () => ({ useTeamBoard: () => ({ signedIn: true, cards: teamCards.cards }) }));
+const teamCards = vi.hoisted(() => ({ cards: [] as Card[], error: undefined as string | undefined }));
+vi.mock("./use-team-board", () => ({ useTeamBoard: () => ({ signedIn: true, cards: teamCards.cards, error: teamCards.error }) }));
 
 const sendWorkerAction = vi.fn<(body: unknown) => Promise<{ commandId: string }>>();
 vi.mock("./worker-transport", () => ({ sendWorkerAction: (body: unknown) => sendWorkerAction(body) }));
@@ -283,7 +283,15 @@ describe("useBoardWorkers", () => {
     });
     expect(result.current.boardCards.map((c) => c.id)).toEqual(["m1", "c1", "t1"]);
     expect(result.current.workers.team.map((c) => c.id)).toEqual(["t1"]);
+    expect(result.current.workers.teamError).toBeUndefined();
     teamCards.cards = [];
+  });
+
+  it("hands on why teammates' cards failed to load", () => {
+    teamCards.error = "401 signed out";
+    const { result } = renderHook(() => useBoardWorkers([]));
+    expect(result.current.workers.teamError).toBe("401 signed out");
+    teamCards.error = undefined;
   });
 
   it("lays this board's marks only on the projects they name", () => {

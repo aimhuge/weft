@@ -34,9 +34,19 @@ export async function SharedCardPage({ id, here, toSlug = false }: { id: string;
   if (access.kind === "missing") notFound();
   if (access.kind === "login") redirect(`/login?next=${encodeURIComponent(here)}`);
   if (access.kind === "denied") {
-    return <Notice title="This thread is private">This thread is private to its workspace. Sign in with an account in that workspace to see it.</Notice>;
+    return <Notice title="This thread is private">This thread is private. Sign in with an account in its workspace, or with the GitHub account it was shared with.</Notice>;
   }
-  if (access.kind === "gate") return <ShareGateForm title="Shared thread" mode={access.mode} unlockUrl={`/api/s/${id}/unlock`} noun="thread" />;
+  if (access.kind === "gate") {
+    // Someone the owner named by GitHub has no password to give: signing in lets them past (lib/share-grant-gate.ts).
+    return (
+      <>
+        <ShareGateForm title="Shared thread" mode={access.mode} unlockUrl={`/api/s/${id}/unlock`} noun="thread" />
+        <p className="wz-authSub" style={{ textAlign: "center" }}>
+          Shared with your GitHub account? <a href={`/login?next=${encodeURIComponent(here)}`}>Sign in with GitHub</a>
+        </p>
+      </>
+    );
+  }
   const service = serviceClient();
   if (!service) return <Unconfigured />;
   const { share, card } = access.share;

@@ -1,4 +1,25 @@
 {
+  "0.8.0": {
+    "lines": [
+      "Share an agent with your team, and choose who on the team can reach each project’s cards and vault.",
+      "Before your AI runs SQL that could delete data, a second model reads it and tells you what it does.",
+      "Sharing a card from your team’s project no longer stalls on uploading, so your link is ready in a few clicks."
+    ]
+  },
+  "0.7.8": {
+    "lines": [
+      "Linking a big project to a team no longer stalls sync, so every card reaches your team.",
+      "Sign in to Weft with GitHub. Your Google account still connects Gmail, Drive and Calendar in Settings.",
+      "The phone app now offers Sign in with email, and its TestFlight link reopens once Apple approves it."
+    ]
+  },
+  "0.7.7": {
+    "lines": [
+      "Link a repo to your team, so your teammates’ cards show up on your board and your vault is shared securely.",
+      "Fold your AI’s question down with the chevron, so you can read the reply above it before you answer.",
+      "The copilot is off now, so Weft spends nothing in the background on a copilot you don’t use."
+    ]
+  },
   "0.7.6": {
     "lines": [
       "Weft runs on Windows now, on Intel or ARM: install it once and it updates itself, like on the Mac.",

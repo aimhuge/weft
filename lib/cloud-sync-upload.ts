@@ -80,9 +80,14 @@ function sealsFor(ctx: UploadCtx): (orgId: string) => Promise<Sealer | null> {
 }
 
 // A card that now goes to a team leaves the copy it had at home, so the personal board doesn't keep a stale one.
+// The ids ride in the URL (`card_id=in.(…)`), so they go a chunk at a time: linking a project with 1,600 cards
+// once made a 61 KB URL the gateway answered with a 520 page, and the flush retried it forever.
 async function leaveHome(client: SupabaseClient, home: string, cardIds: string[], now: number) {
-  if (!cardIds.length) return;
-  check(await client.from("cloud_cards").update({ deleted: true, updated_at: new Date(now).toISOString() }).eq("org_id", home).in("card_id", cardIds).eq("deleted", false));
+  const at = new Date(now).toISOString();
+  for (let i = 0; i < cardIds.length; i += ITEM_CHUNK) {
+    const some = cardIds.slice(i, i + ITEM_CHUNK);
+    check(await client.from("cloud_cards").update({ deleted: true, updated_at: at }).eq("org_id", home).in("card_id", some).eq("deleted", false));
+  }
 }
 
 // A chunk of cards. When the WAF still blocks it escaped, each card goes alone so only the one it matches

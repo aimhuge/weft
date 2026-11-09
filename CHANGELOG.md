@@ -8,9 +8,64 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **Share a thread with anyone on GitHub, and @mention people in the chat.** The Share dialog has a **People** field: type a GitHub login (it starts with your repo's collaborators and searches GitHub as you type), and that person can open the link once they sign in to weft.zip with GitHub, even if the link is private or has a password, and without joining your workspace. Weft emails them when it knows their address. When it doesn't, their name says so and gives you Copy link. Once they open it, you see when. Type **@** in the reply box to mention a teammate or any GitHub user. If the card is shared, sending a mention of someone who can't open it yet asks you first, and their email quotes your message (`components/SharePeople.tsx`, `lib/card-share-grants.ts`, `lib/share-grant-notify.ts`, `lib/use-mention-ask.ts`, `cloud_share_grants`).
+
 ### Changed
 
 - **The browser pane stops asking for localhost and well-known sites.** Threads now open localhost, file pages and the public top 1000 sites (Tranco) without a Touch ID prompt. Sites you'd be signed into (mail, banks, shopping, social, code hosts) and anything off the list still ask once. A yes now holds for every card and across restarts, and Settings → Security lists those sites so you can add or remove one. A card's first page no longer gets a free pass on the ask (`electron/pane-sites.cjs`, `electron/pane-origins.cjs`, `components/PaneSites.tsx`).
+- **Share… gives you a link straight away.** Opening Share on a card that's never been shared now makes it a live link anyone can open, with no password and the chat hidden (viewers see the browser pane only), so Copy link works at once. A card you set back to Private stays private (`components/ShareCardDialog.tsx`, `FIRST_SHARE` in `lib/share-types.ts`).
+- **Moving a card to Done wraps up faster.** `/weft:done` no longer starts three Opus agents on every card. The thread runs the related tests and writes the docs itself. The refactor scout runs only after a big change, as one agent: on the Puku gateway when `puku-agent` is installed, on Sonnet otherwise. The test script no longer falls back to an unguarded whole-suite run (`plugin/skills/done/SKILL.md`, `plugin/skills/done/tests.sh`).
+
+### Fixed
+
+- **Clicking the uncommitted +/- numbers no longer starts a card.** The badge only opens its bubble on hover now; just the bubble's Commit them / Review N cards button starts the commit walk-through. Files: `components/PileBadge.tsx`.
+
+## [0.8.0] - 2026-11-08
+
+### Fixed
+
+- **Share no longer hangs on "Uploading this card…" for team projects.** A card in a folder a team linked syncs to the team's workspace, but the Share dialog looked for it in your personal one and waited forever. It now looks where sync actually put it (`lib/card-share.ts`).
+
+## [0.7.8] - 2026-11-07
+
+### Fixed
+
+- **The phone app's TestFlight link works again once Apple approves build 5.** The link said "This beta isn't accepting any new testers" because Beta App Review rejected build 4: the app only offered GitHub sign-in, so the reviewer had no account. The phone app now has a "Sign in with email" link, there's an App Review demo account with seeded cards, and build 5 is in review. Doc: docs/architecture/mobile.md.
+- **Sync no longer gets stuck after you link a big project to a team.** When a project's cards moved to a team, Weft removed their old copies from your personal board in one request, with every card id in its URL. With 1,600 cards that made a 61 KB URL, which Supabase's gateway refused with a 520 page. The sync then showed "Sync failed: The server answered with an HTML page" and sent the same request every 20 seconds. Those copies are now removed 100 ids at a time (`lib/cloud-sync-upload.ts`).
+
+### Removed
+
+- **GitHub is the only way to sign in.** Settings → Weft account and weft.zip's sign-in no longer offer Google, and `/auth/sign-in?provider=google` now answers 400 without reaching Supabase. Connecting a Google account for Gmail, Drive and Calendar (Settings → Connectors) still works as before. Files: lib/account.ts, lib/web-auth.ts, app/auth/sign-in/route.ts, lib/auth/login-form.tsx, lib/use-account.ts.
+
+## [0.7.7] - 2026-11-07
+
+### Added
+
+- **A teammate's Mac can join a shared vault from the 🔐 drawer.** Your team sees **Ask to join** on a repo the workspace already shares. An admin sees that Mac and its fingerprint, and approves with Touch ID. Your teammate opens the vault with Touch ID and keeps the values already on that Mac. Sharing the same repo twice is now refused, and the shared vault's event log records writes, which it was silently dropping. (`electron/vault-share.cjs`, `electron/vault-team.cjs`, `electron/vault-store-shared.cjs`, `components/VaultShared.tsx`)
+- **Teammates' cards on your desktop board.** When a team links a GitHub repo, your teammates' cards for it now show up on your own board, inside your project for that repo. Each tile shows their picture and "Zulker's Mac", and opens to the thread and its pages, read-only. Only the person whose Mac runs a card can reply to it, stop it or move it. Synced cards now record their repo (`cloud_cards.repo`), so each card lands under your folder whatever path it has on their Mac. Built in `lib/team-board.ts`, `app/api/team-board`, `lib/use-team-board.ts` and `lib/team-host.ts`.
+- **Minimize an agent's question to read the thread.** A chevron at the top right of the question picker folds it down to its title and the question, so the reply above it has room. Clicking the chevron or the question line opens it again, and so does any picker key (↑↓, a number, ⏎). Files: `components/QuestionParts.tsx`, `components/QuestionForm.tsx`.
+- **🌏 Simplified Chinese for the board, Settings and new-thread forms.** Pick it in Settings → General → Interface language, or let Weft follow a Simplified Chinese browser (Traditional Chinese stays in English for now). Settings search finds sections by their Chinese names and keywords too. Contributed by @dayuechina (`lib/ui-language.ts`, `lib/ui-language-zh.ts`, `components/UiLanguagePicker.tsx`, `lib/settings-search.ts`).
+- **🔐 A team's linked project shares its secrets.** Linking a repo in Settings → Teams → Projects now shares your 🔐 vault for it with the team in one Touch ID, with no Share… step, and anyone on the team can add keys. A teammate's Mac asks to join by itself; you get a notification and approve that Mac once, and from then on it gets every project the team links. The drawer says "Shared with <team>". Unlinking stops new Macs from joining; to take keys back from someone, remove them with Rotate shared vaults (`electron/vault-team-link.cjs`, `lib/team-vault-link.ts`, `supabase/migrations/20261107101344_team_link_vault.sql`).
+
+### Changed
+
+- **The copilot is off by default.** The round launcher in the corner, the top bar's ✨ button, the `c` key, the palette command and Electron's copilot window, menu items and ⌃⌥Space are gone, and the copilot no longer runs check-ins or refreshes its chips in the background, so nothing spends tokens on a copilot you don't use. The code stays, behind a feature flag: start Weft with `WEFT_COPILOT=1` to bring it all back. Files: `lib/features.ts`, `electron/features.cjs`, `components/CopilotLane.tsx`, `components/CopilotButton.tsx`, `lib/copilot.ts`, `lib/copilot-lane.ts`, `electron/menus.cjs`, `electron/main.cjs`.
+- **⚡ Settings → Teams opens instantly.** Weft used to warm only your default team, so the team you'd last picked (say Exiting.com) waited a second or two on weft.zip every time. Now Weft warms that team too when you sign in. It keeps the last answers on disk so a restart opens on them, and once the list is up it loads your other teams in the background, so switching teams is instant as well. Every open still checks weft.zip quietly behind what it shows. `lib/team-cache.ts`, `lib/use-team.ts`, `components/TeamSettings.tsx`, `lib/use-board-repos.ts`.
+- **weft.zip offers Mac, Windows and iPhone side by side.** The home page hero now has three download buttons: Download for Mac (the dmg), Download for Windows (with an ARM link beside it) and Get it on iPhone (the phone app's TestFlight beta, shown as "coming soon" until its public link is set). On a phone they stack full width. `components/home/Downloads.tsx`, `lib/home.ts`.
+- **🧑‍🤝‍🧑 A team-linked project syncs for every member.** Linking a repo in Settings → Teams → Projects now turns card sync on for each member who has a checkout of it, older cards included, within a minute and with no per-person Sync switch. Unlinking hands the project back to each person's own setting. Teammates' cards stay read-only. The shared-project model (cards, 🔐 vault and later workers; names follow GitHub) is written down in docs/architecture/teams.md (`lib/cloud-sync-team.ts`).
+- **🧭 One simple team page, named after GitHub.** Settings → Teams now shows a team the way you use it: its projects first (each repo with how many cards it has on your board), then its people by GitHub avatar and @login, with **Invite…** taking an email or an @login and suggesting the team's GitHub org members and its repos' collaborators. Roles, Remove, project Access and Leave fold under a closed **Advanced**. **New team** offers your GitHub orgs: pick one and the team takes its name (still editable) and its weft.zip address, and its repos come up as projects; a team without an org still works (`components/team/TeamPanel.tsx`, `components/team/TeamPeople.tsx`, `components/team/NewTeamForm.tsx`, `lib/github-orgs.ts`).
+
+### Fixed
+
+- **A Worker thread can send a card to one of two Macs with the same folder.** If two of your Macs both have `/Users/you/dev/weft`, `create_card` on a Weft Worker used to fail with two identical "Mac (/Users/you/dev/weft)" choices and no way to pick one. Now a thread names the Mac as `mac://<Mac name or id>/<path>`, using the name each Mac already shows in Settings → Sync → Workers. `list_cards` files each Mac card under that address, and an ambiguous folder lists every choice as the exact string to pass. A Mac folder with no cards yet works the same way. (`lib/worker-board-macs.ts`, `lib/worker-board-link.ts`, `lib/worker-board-tools.ts`, `supabase/migrations/20261105150000_worker_board_macs.sql`)
+- **Sharing a vault with your team can work, and "Last seen" is real.** The desktop's calls to share a vault and make its recovery key could never reach the database, and sharing or accepting a grant had no device id to send, so no vault could be shared. Public wrappers and `registeredDevice` fix both, and this Mac now reports in every 5 minutes, so the team's Devices page shows when a Mac was actually last around. This is the groundwork for team asks (docs/architecture/team-asks.md).
+- **Teammates no longer show up as people to invite.** "People on your projects" in Settings → Teams now matches a repo's GitHub collaborators to the team's members by their GitHub login, not just by email. Someone already on the team is no longer offered an invite or asked for their email just because GitHub hides it. (lib/team-people.ts, lib/team-member-logins.ts, lib/team-ops.ts)
+
+### Security
+
+- **✍️ Allows on Worker cards are signed.** An Allow you give a Worker card from the desktop board is now signed by your Mac after Touch ID, over the Worker's own names, and a Worker that pins your Mac or a passkey refuses an unsigned Allow with a clear message (the request keeps waiting, so Deny or a signed Allow still answers it). On weft.zip, an endorsed passkey signs it. Deny and question answers need no signature. (`lib/answer-signer.ts`, `lib/worker-approve.ts`, `electron/approval-sign.cjs`, `lib/worker-ask-read.ts`)
 
 ## [0.7.6] - 2026-11-05
 

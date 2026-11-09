@@ -104,7 +104,12 @@ export function weftMcpServer(
         {
           prompt: z.string(),
           title: z.string().optional(),
-          folder: z.string().optional().describe("Project folder, or a worker:// project on one of the user's Weft Workers; defaults to this thread's own folder"),
+          folder: z
+            .string()
+            .optional()
+            .describe(
+              "Project folder, or a worker:// project on one of the user's Weft Workers; defaults to this thread's own folder. From a Weft Worker, mac://<Mac name or id>/<path> names one of the user's Macs (list_cards shows each card's).",
+            ),
           start: z.boolean().optional().describe("Run it now (default true); false leaves it in Backlog"),
           tags: TAGS,
           agent: agentParam(),

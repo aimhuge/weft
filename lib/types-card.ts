@@ -215,6 +215,7 @@ export interface SkillSetView {
 
 // The pending ask (a permission prompt, a question or an MCP form) and why it came up are @weft/client's.
 export type { PendingPermission, PromptReason };
+export type { PendingSql, SqlReview, SqlVerdict } from "@weft/client";
 
 // Card and CardIssue live in lib/types-card-detail.ts to keep this file under the line limit.
 // Re-exported here so `./types` and direct importers keep working.

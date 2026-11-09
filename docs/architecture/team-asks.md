@@ -33,7 +33,7 @@ It goes to whoever last wrote the key (`vault_secrets.updated_by`), otherwise an
 
 - **Synced means the team sees the cards.** A team project's cards go to the team workspace, not the personal one
   (`docs/architecture/cloud-sync.md`). So scoping cards and the vault by `org_project_members` is required, not a later
-  step. A project already synced stays personal until its owner opts in, with a clear warning. Old cards don't move.
+  step (built 2026-11-08, teams.md#project-access). A project already synced stays personal until its owner opts in, with a clear warning. Old cards don't move.
 - **Every ask sends an email and shows a modal.** The email links back with `weft://`, because acting needs the Mac.
 - **Touch ID on every accept.** Declining or sending needs none: neither touches a secret or the Mac.
 - **The modal waits for a pause.** It never lands while someone is typing. Several asks show as one modal to step
@@ -66,7 +66,8 @@ GitHub access stays a separate gate: `join` must check it and say so, because We
    - Built: the heartbeat (`electron/device-beat.cjs`) moves `devices.last_seen_at` every 5 minutes.
    - Built: joining a shared vault from the 🔐 drawer (teams-vault.md, "Joining a shared vault"), with
      `supabase/migrations/20261031094535_vault_device_requests.sql`, applied 2026-10-31.
-   - To do: team sync, and scoping cards and the vault by project access.
+   - Built: scoping cards and the vault by project access (teams.md#project-access), applied 2026-11-08.
+   - To do: team sync.
 2. **Roster and grid.** A record of member × device × repo, reported by each Mac.
 3. **Asks for keys**, including the agent tool `mcp__secrets__request` from the roadmap: a card that needs a key parks in
    Needs you and resumes once the key arrives.

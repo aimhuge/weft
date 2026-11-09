@@ -4,16 +4,22 @@ import type { GithubPerson } from "./github-collaborators";
 
 export const PEOPLE_SHOWN = 5;
 
-// Drop anyone already a member or invited (by email, case-insensitive); people with no known email stay.
+// Drop anyone already a member (by GitHub login or email) or invited (by email), case-insensitive. The login matters:
+// most people hide their email on GitHub, so a teammate would otherwise be offered an invite they don't need.
 export function suggestPeople(
   people: GithubPerson[],
-  members: { email: string | null }[],
+  members: { email: string | null; login?: string | null }[],
   pending: { email: string }[],
 ): GithubPerson[] {
+  const norm = (s: string) => s.trim().toLowerCase();
   const taken = new Set<string>();
-  for (const m of members) if (m.email) taken.add(m.email.trim().toLowerCase());
-  for (const p of pending) taken.add(p.email.trim().toLowerCase());
-  return people.filter((p) => !p.email || !taken.has(p.email.trim().toLowerCase()));
+  const logins = new Set<string>();
+  for (const m of members) {
+    if (m.email) taken.add(norm(m.email));
+    if (m.login) logins.add(norm(m.login));
+  }
+  for (const p of pending) taken.add(norm(p.email));
+  return people.filter((p) => !logins.has(norm(p.login)) && (!p.email || !taken.has(norm(p.email))));
 }
 
 export function visiblePeople<T>(people: T[], showAll: boolean): { shown: T[]; hidden: number } {

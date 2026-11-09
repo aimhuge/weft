@@ -172,4 +172,26 @@ describe("Roster", () => {
     await waitFor(() => expect(actions.changeRole).toHaveBeenCalled());
     expect(actions.changeRole).toHaveBeenCalledWith("u2", "member");
   });
+
+  it("shows a GitHub member by @login with their avatar, and their name underneath", () => {
+    const hopper: TeamMember = { ...grace, userId: "u4", login: "ghopper", name: "Grace Hopper", email: "gh@b.co" };
+    const { container } = render(<Roster members={[hopper]} canManage={false} roleOptions={options} currentUserId="u1" actions={actions} />);
+    expect(container.querySelector(".wz-rosterNamePrimary")).toHaveTextContent("@ghopper");
+    expect(container.querySelector(".wz-rosterNameSecondary")).toHaveTextContent("Grace Hopper");
+    expect(container.querySelector(".wz-rosterAvatar img")).toHaveAttribute("src", "https://github.com/ghopper.png?size=68");
+  });
+
+  it("puts a GitHub member's email underneath when they have no name", () => {
+    const hopper: TeamMember = { ...grace, userId: "u4", login: "ghopper", name: null, email: "gh@b.co" };
+    const { container } = render(<Roster members={[hopper]} canManage roleOptions={options} currentUserId="u1" actions={actions} />);
+    expect(container.querySelector(".wz-rosterNamePrimary")).toHaveTextContent("@ghopper");
+    expect(container.querySelector(".wz-rosterNameSecondary")).toHaveTextContent("gh@b.co");
+    expect(screen.getByRole("combobox", { name: "Role for @ghopper" })).toBeInTheDocument();
+  });
+
+  it("shows an initial, not an avatar, for a member without a login", () => {
+    const { container } = render(<Roster members={[grace]} canManage={false} roleOptions={options} currentUserId="u1" actions={actions} />);
+    expect(container.querySelector(".wz-rosterAvatar img")).toBeNull();
+    expect(container.querySelector(".wz-rosterAvatar")).toHaveTextContent("G");
+  });
 });

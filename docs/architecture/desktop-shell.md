@@ -29,9 +29,10 @@ lives in `electron/server.cjs`.
   "hiddenInset"`, mounts a `WebContentsView` (`appView`) as its child, and reveals
   the window on `did-finish-load`. On macOS, `win.on("close", …)` hides instead of
   quits; `quitting` is set in `before-quit`, so ⌘Q actually closes.
-- `createCopilot()` creates a second `BrowserWindow` (note: not a `BaseWindow` with a
-  child view — it has its own webContents) that loads `${server.url}/copilot`. Same
-  close-to-hide behavior so the conversation survives.
+- `createCopilotWindow()` (`electron/copilot-window.cjs`) owns the copilot's second `BrowserWindow`
+  (note: not a `BaseWindow` with a child view — it has its own webContents) that loads
+  `${server.url}/copilot`, with the same close-to-hide behavior so the conversation survives. main.cjs
+  wires its `show`/`toggle` only when `COPILOT_ENABLED` (`electron/features.cjs`, `WEFT_COPILOT=1`) is on.
 - `followThemeChoice()` runs before any window opens. It reads the board's
   `weft-theme` cookie (set from Settings → Appearance; see `lib/theme.ts`) from the
   default session and sets `nativeTheme.themeSource` to match (`electron/theme-source.cjs`: a scene follows

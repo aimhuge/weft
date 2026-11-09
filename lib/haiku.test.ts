@@ -32,6 +32,12 @@ describe("complete", () => {
     ]);
   });
 
+  it("passes a stronger model through to the query when asked", async () => {
+    sdk.messages = [{ type: "result", subtype: "success", result: "ok" }];
+    await complete("x", "sonnet");
+    expect((sdk.calls[0] as { options: { model: string } }).options.model).toBe("sonnet");
+  });
+
   it("returns the successful result's text, ignoring other messages", async () => {
     sdk.messages = [
       { type: "system", subtype: "init" },

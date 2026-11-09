@@ -161,5 +161,6 @@ describe("config.matcher", () => {
     expect(config.matcher).toContain("/billing");
     expect(config.matcher).toContain("/invite/:token*");
     expect(config.matcher).toContain("/:orgSlug/team/:path*");
+    expect(config.matcher).toContain("/:orgSlug/board/:path*");
   });
 });

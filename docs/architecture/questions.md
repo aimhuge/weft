@@ -137,6 +137,13 @@ question."), both through `onDecline`, which `ThreadView` turns into
 sent with the answers as a note on all of them (`lib/question-answers.ts`
 `buildReply`'s `general`), never as `chat`.
 
+### Minimizing
+
+A chevron at the end of the tab row (`QuestionTabs` in `components/QuestionParts.tsx`)
+folds the form to its title row plus the shown question (`Minimized`), so the thread
+above can be read. `QuestionForm`'s `collapsed` state resets on any tab change, a
+picker key or `enter()`, so a key that acts also opens the form again.
+
 ### The hold and the retry
 
 A send, a number key or a tick, or a click on an option in the first

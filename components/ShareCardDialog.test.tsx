@@ -18,7 +18,10 @@ vi.mock("./board-palette", () => ({ openTeamPage }));
 
 const { default: ShareCardDialog } = await import("./ShareCardDialog");
 
-const OK: CardShareState = { kind: "ok", id: null, url: null, mode: "private", hasPassword: false, slug: null, showChat: true };
+// A card set back to private keeps its row (and id), so the dialog leaves it private.
+const OK: CardShareState = { kind: "ok", id: "s0", url: null, mode: "private", hasPassword: false, slug: null, showChat: true };
+const NEVER: CardShareState = { ...OK, id: null };
+const FIRST: CardShareState = { kind: "ok", id: "s1", url: "https://weft.zip/s/s1", mode: "public", hasPassword: false, slug: null, showChat: false };
 const SHARED: CardShareState = { kind: "ok", id: "s1", url: "https://weft.zip/s/s1", mode: "email", hasPassword: false, slug: null, showChat: true };
 
 function setup(...answers: CardShareState[]) {
@@ -111,10 +114,23 @@ describe("ShareCardDialog", () => {
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
   });
 
-  it("draws private fields at once when the card remembers no share", () => {
+  it("draws the first-share default at once when the card remembers no share", () => {
     api.getShare.mockReturnValueOnce(new Promise(() => {}));
     render(<ShareCardDialog card={makeCard()} onClose={vi.fn()} />);
-    expect(screen.getByRole("combobox", { name: "Who can open this thread" })).toHaveValue("private");
+    expect(screen.getByRole("combobox", { name: "Who can open this thread" })).toHaveValue("link");
+  });
+
+  it("shares a never-shared card on open: anyone with the link, chat hidden", async () => {
+    api.setShare.mockResolvedValueOnce(FIRST);
+    setup(NEVER);
+    expect(await screen.findAllByRole("button", { name: /Copy link/ })).toHaveLength(2);
+    expect(api.setShare).toHaveBeenCalledWith("c1", { mode: "public", showChat: false });
+  });
+
+  it("leaves a card set back to private alone", async () => {
+    setup(OK);
+    expect(await screen.findByRole("combobox", { name: "Who can open this thread" })).toHaveValue("private");
+    expect(api.setShare).not.toHaveBeenCalled();
   });
 
   it("draws the sign-in at once when signed out", () => {

@@ -2,6 +2,7 @@
 // cloud_cards row through the service client; shareAccess runs the verdict for one id.
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { cardRow, fakeGate, fromTable, grants, serviceWith, shareRow } from "./share-access.harness";
 
 const { serviceClient: serviceClientMock, webUser: webUserMock, cookies } = vi.hoisted(() => ({
   serviceClient: vi.fn(),
@@ -16,14 +17,6 @@ vi.mock("@/lib/web-session", () => ({
 
 vi.mock("next/headers", () => ({ cookies }));
 
-const fakeGate = {
-  cookieName: (id: string) => `weft_share_${id.slice(0, 4)}`,
-  sign: (id: string) => `signed:${id}`,
-  verify: (id: string, v?: string) => Boolean(v) && v === `signed:${id}`,
-  cookieOptions: () => ({ httpOnly: true, secure: false, sameSite: "lax" as const, path: "/", maxAge: 60 }),
-  ttlMs: 60_000,
-};
-
 vi.mock("@/lib/share-gate", () => ({
   getShareGate: () => fakeGate,
 }));
@@ -35,56 +28,13 @@ async function load() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  grants.admit = false;
+  grants.calls = [];
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
-
-function shareRow(over: Partial<{ id: string; org_id: string; card_id: string; mode: string; password_hash: string | null }> = {}) {
-  return {
-    id: "sh1",
-    org_id: "org-1",
-    card_id: "c1",
-    mode: "public",
-    password_hash: null,
-    created_by: "u1",
-    created_at: "2026-10-17T00:00:00.000Z",
-    updated_at: "2026-10-17T00:00:00.000Z",
-    ...over,
-  };
-}
-
-function cardRow(over: Partial<{ card_id: string; card: unknown; deleted: boolean; updated_at: string }> = {}) {
-  return { card_id: "c1", card: { id: "c1", title: "T" }, deleted: false, updated_at: "2026-10-17T00:00:00.000Z", ...over };
-}
-
-// A query builder bound to a single table; chains like `.select().eq().maybeSingle()` resolve to
-// whatever the test set on `from` for that table. Each call to `builder()` returns a fresh chain.
-function fromTable(table: string, rows: { share?: unknown; card?: unknown; membership?: unknown; profile?: unknown; slugShare?: unknown }, errors: Record<string, { message: string }> = {}) {
-  const make = (): Record<string, unknown> => {
-    const builder: Record<string, unknown> = {};
-    const chainMethods = ["select", "eq", "order", "limit", "lt", "gt"];
-    for (const m of chainMethods) builder[m] = vi.fn(() => make());
-    builder.maybeSingle = vi.fn(() => {
-      if (table === "cloud_shares") return Promise.resolve({ data: rows.share ?? rows.slugShare ?? null, error: errors.cloud_shares ?? null });
-      if (table === "cloud_cards") return Promise.resolve({ data: rows.card ?? null, error: errors.cloud_cards ?? null });
-      if (table === "org_memberships") return Promise.resolve({ data: rows.membership ?? null, error: errors.org_memberships ?? null });
-      if (table === "profiles") return Promise.resolve({ data: rows.profile ?? null, error: errors.profiles ?? null });
-      return Promise.resolve({ data: null, error: null });
-    });
-    builder.insert = vi.fn(() => Promise.resolve(({ error: null })));
-    return builder;
-  };
-  return make();
-}
-
-// A service-client stub: one .from() per table, each returning its own chainable.
-function serviceWith(tables: Record<string, ReturnType<typeof fromTable>>) {
-  return {
-    from: (table: string) => tables[table] ?? fromTable(table, {}),
-  };
-}
 
 describe("loadShare", () => {
   it("returns null for an id that fails SHARE_ID_RE", async () => {

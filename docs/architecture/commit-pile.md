@@ -6,9 +6,10 @@ that asks the agent to commit that pile one Review card at a time, using only ea
 
 ## Where it shows up
 
-- **Pile counter (`components/PileBadge.tsx`).** The header's "+N/-N" button beside the code quality badge
-  — lines added and removed in the project in view's repo. Clicking it starts the walk-through card for
-  that repo.
+- **Pile counter (`components/PileBadge.tsx`).** The header's "+N/-N" text beside the code quality badge
+  — lines added and removed in the project in view's repo. Hovering opens a bubble; only the bubble's
+  button ("Commit them" / "Review N cards") starts the walk-through card for that repo. Clicking the
+  numbers themselves starts nothing.
 - **"Review all" (`components/ColumnHeader.tsx`).** A button on the Review column's header, shown when
   the column has cards. Starts the same walk-through card for the project's repo and opens it right away
   (`startPileReview` in `lib/pile-review.ts`, which `Board.tsx` hands `improveQuality` and `select`), so the

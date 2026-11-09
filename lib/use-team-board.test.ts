@@ -6,7 +6,7 @@ import type { Card } from "./types";
 const fetchMock = vi.hoisted(() => vi.fn<(url: string) => Promise<Response>>());
 vi.mock("./api-client", () => ({ apiFetch: (url: string) => fetchMock(url) }));
 
-import { TEAM_IDLE_POLL_MS, TEAM_POLL_MS, teamPollDelay, useTeamBoard } from "./use-team-board";
+import { loadTeamBoard, TEAM_IDLE_POLL_MS, TEAM_POLL_MS, teamPollDelay, useTeamBoard } from "./use-team-board";
 import { FULL_READ_EVERY_MS } from "./worker-board-merge";
 
 const card = (id: string) => ({ id, title: id }) as Card;
@@ -62,6 +62,26 @@ describe("useTeamBoard", () => {
     unmount();
   });
 
+  it("says why a read failed beside the cards it kept, and clears it on the next good read", async () => {
+    fetchMock.mockReturnValueOnce(json({ signedIn: true, cards: [card("a")], asOf: "t1" }));
+    const { result, unmount } = renderHook(() => useTeamBoard());
+    await settle();
+    expect(result.current.error).toBeUndefined();
+    fetchMock.mockReturnValueOnce(json({ error: "signed out" }, 401));
+    await act(async () => vi.advanceTimersByTimeAsync(TEAM_POLL_MS));
+    expect(result.current.error).toBe("401 signed out");
+    expect(result.current.cards.map((c) => c.id)).toEqual(["a"]);
+    const kept = result.current;
+    fetchMock.mockReturnValueOnce(json({ error: "signed out" }, 401));
+    await act(async () => vi.advanceTimersByTimeAsync(TEAM_POLL_MS));
+    expect(result.current).toBe(kept);
+    fetchMock.mockReturnValueOnce(json({ signedIn: true, cards: [], delta: true, asOf: "t2" }));
+    await act(async () => vi.advanceTimersByTimeAsync(TEAM_POLL_MS));
+    expect(result.current.error).toBeUndefined();
+    expect(result.current.cards.map((c) => c.id)).toEqual(["a"]);
+    unmount();
+  });
+
   it("looks once a minute with nothing to show, and at once when the board comes back on screen", async () => {
     fetchMock.mockReturnValue(json({ signedIn: false, cards: [] }));
     const { unmount } = renderHook(() => useTeamBoard());
@@ -88,5 +108,23 @@ describe("useTeamBoard", () => {
     land(new Response(JSON.stringify({ signedIn: true, cards: [card("a")] })));
     await settle();
     expect(result.current.cards).toEqual([]);
+  });
+});
+
+describe("loadTeamBoard", () => {
+  it("names the failure: the server's error, else the status text, else the thrown message", async () => {
+    fetchMock.mockReturnValueOnce(json({ signedIn: true, cards: [] }));
+    expect(await loadTeamBoard()).toEqual({ board: { signedIn: true, cards: [] } });
+    fetchMock.mockReturnValueOnce(json({ error: "boom" }, 500));
+    expect(await loadTeamBoard("t1")).toEqual({ error: "500 boom" });
+    expect(fetchMock).toHaveBeenLastCalledWith("/api/team-board?since=t1");
+    fetchMock.mockReturnValueOnce(Promise.resolve(new Response("<html>", { status: 502, statusText: "Bad Gateway" })));
+    expect(await loadTeamBoard()).toEqual({ error: "502 Bad Gateway" });
+    fetchMock.mockReturnValueOnce(Promise.resolve(new Response("", { status: 503 })));
+    expect(await loadTeamBoard()).toEqual({ error: "503 failed" });
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    expect(await loadTeamBoard()).toEqual({ error: "offline" });
+    fetchMock.mockRejectedValueOnce("nope");
+    expect(await loadTeamBoard()).toEqual({ error: "nope" });
   });
 });

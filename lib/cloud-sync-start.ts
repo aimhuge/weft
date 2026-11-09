@@ -9,8 +9,10 @@ import { startPreviewRefresh } from "./app-preview-refresh";
 import { createBlobStore, type BlobStoreBundle } from "./blob-store";
 import type { BlobStore } from "./cloud-sync-types";
 import { startCloudInbox } from "./cloud-inbox";
-import { startCloudSync } from "./cloud-sync";
+import { queueFolder, startCloudSync } from "./cloud-sync";
 import { startSyncRepos } from "./cloud-sync-repos";
+import { startTeamSync } from "./cloud-sync-team";
+import { startTeamAgentsSync } from "./team-agents";
 
 export function startAccountCloudSync(): () => void {
   let store: BlobStoreBundle | null = null;
@@ -26,10 +28,16 @@ export function startAccountCloudSync(): () => void {
   const stopPreviews = startPreviewRefresh();
   // Turn sync on for projects you sync from another Mac (lib/cloud-sync-repos.ts).
   const stopRepos = startSyncRepos();
+  // A team's linked project syncs for every member (lib/cloud-sync-team.ts).
+  const stopTeam = startTeamSync(queueFolder);
   // Your account's settings to your workers (lib/account-settings.ts); a save pushes again.
   const stopSettings = startAccountSettingsPush();
+  // Your teams' agents in, and your shared ones out after each edit (lib/team-agents.ts).
+  const stopTeamAgents = startTeamAgentsSync();
   return () => {
+    stopTeamAgents();
     stopSettings();
+    stopTeam();
     stopRepos();
     stopPreviews();
     stopInbox();

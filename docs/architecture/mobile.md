@@ -32,7 +32,7 @@ No chat on the main screen; each card is the page its agent last showed, full sc
   localhost). It also reads `card.page` when the phone-readable-pages work adds it.
 - **What it writes**: only `cloud_commands` rows (`reply`, `answer`, `stop`, `new_card`) in `lib/cloud-commands.ts`'s
   shapes, and its own `push_devices` row. An `answer` with `allow: false` and `reply.chat` is "Chat about this".
-- **Sign-in**: Supabase OAuth (GitHub, Google) with PKCE in the system auth sheet, redirect `weft://auth/callback`,
+- **Sign-in**: Supabase OAuth (GitHub only) with PKCE in the system auth sheet, redirect `weft://auth/callback`,
   which must be in the project's Auth redirect allow list.
 - **Bearer routes**: `lib/web-session.ts` `requestSession(req)` gives a route the caller's RLS-scoped client from
   `Authorization: Bearer <jwt>` (the phone) or the cookie (weft.zip). `/api/web-board/[orgId]/page/[sha]` and
@@ -66,7 +66,15 @@ PhonePrompt (HeaderBadges)  ──GET/POST──▶ /api/account/testflight (loc
   (the .p8, newlines or `\n` escapes), `TESTFLIGHT_GROUP_ID`, `TESTFLIGHT_PUBLIC_URL` (`https://testflight.apple.com/join/…`
   only). The key needs the App Manager or Admin role; a Developer key (the notarization one may be) can't add testers.
 - **Apple's side**: the group must be external with a build that passed Beta App Review, or invites wait for one.
-  External testing caps at 10,000 testers.
+  External testing caps at 10,000 testers. "This beta isn't accepting any new testers" on the join link means the group has
+  no approved build: Beta App Review rejected build 4 under Guideline 2.1(a) because the app only offered GitHub OAuth,
+  so the reviewer had no way in.
+- **App Review account**: the phone's sign-in screen has a small "Sign in with email" link (`signInWithEmail` in
+  weft-mobile `src/lib/auth.ts`) for accounts made by hand. `appreview@weft.zip` is such a user in the prod Supabase
+  project, with its own "App Review" workspace and four seeded `cloud_cards` (and their `cloud_thread_items`) so the feed
+  isn't empty. Its credentials live in the 🔐 vault as `APP_REVIEW_EMAIL` and `APP_REVIEW_PASSWORD` (production) and in
+  App Store Connect → TestFlight → Test Information → Sign-in required, with Review Notes that point at the email link.
+  A build needs that filled in before it goes to Beta App Review.
 
 ## Push
 

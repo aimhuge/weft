@@ -87,9 +87,7 @@ export function WebTeam({
           canManage={snapshot.canManage}
           actions={actions}
           boardRepos={[]}
-          roleOptions={roleOptions}
-          members={snapshot.members}
-          pending={snapshot.pending}
+          members={snapshot.members.length}
           org={snapshot.org}
         />
       </section>

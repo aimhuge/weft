@@ -8,13 +8,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fake = vi.hoisted(() => ({
   client: null as { rpc: ReturnType<typeof vi.fn> } | null,
+  main: null as { rows?: unknown } | Error | null,
 }));
 
 vi.mock("./web-session", () => ({
   serviceClient: () => fake.client,
 }));
 
-const { growthEvents, growthOverview } = await import("./growth-read");
+// Electron main reads the numbers with the vault's key when the server has none (electron/growth-read.cjs).
+vi.mock("./browser-shell", () => ({
+  shell: vi.fn(() => {
+    if (fake.main instanceof Error) return Promise.reject(fake.main);
+    if (!fake.main) return Promise.reject(new Error("The browser pane only exists in the desktop app."));
+    return Promise.resolve(fake.main);
+  }),
+}));
+
+const { growthEvents, growthOverview, growthOverviewResult } = await import("./growth-read");
 
 // A client whose rpc answers with the given data (or error).
 const answering = (data: unknown, error: unknown = null) => {
@@ -24,6 +34,7 @@ const answering = (data: unknown, error: unknown = null) => {
 
 beforeEach(() => {
   fake.client = null;
+  fake.main = null;
 });
 
 describe("growthEvents", () => {
@@ -157,5 +168,89 @@ describe("growthOverview", () => {
     expect(overview?.accounts).toBe(12);
     expect(overview?.new_30d).toBe(0);
     expect(overview?.paying_workspaces).toBe(0);
+  });
+});
+
+// With no key in the environment, the numbers come from Electron main, which opens the vault. The packaged
+// app's server has no key of its own, so this is the path the daily summary actually takes.
+describe("growthOverview without a key in the environment", () => {
+  const numbers = {
+    accounts: 12,
+    new_7d: 3,
+    new_30d: 9,
+    signed_in_7d: 5,
+    signed_in_30d: 8,
+    never_signed_in: 2,
+    workspaces: 6,
+    invites_pending: 1,
+    syncing_accounts: 4,
+    synced_cards: 21,
+    paying_workspaces: 2,
+  };
+
+  it("reads the numbers from Electron main", async () => {
+    fake.client = null;
+    fake.main = { rows: numbers };
+    expect(await growthOverview({ SUPABASE_SECRET_KEY: undefined })).toEqual(numbers);
+  });
+
+  it("asks main for the overview function", async () => {
+    fake.client = null;
+    fake.main = { rows: numbers };
+    await growthOverview({ SUPABASE_SECRET_KEY: undefined });
+    const { shell } = await import("./browser-shell");
+    expect(shell).toHaveBeenCalledWith("/growth/read", { fn: "growth_overview", args: {}, environment: "production" });
+  });
+
+  it("names the environment it asks for", async () => {
+    fake.client = null;
+    fake.main = { rows: numbers };
+    await growthOverview({ SUPABASE_SECRET_KEY: undefined, WEFT_GROWTH_ENV: "preview" });
+    const { shell } = await import("./browser-shell");
+    expect(shell).toHaveBeenCalledWith("/growth/read", { fn: "growth_overview", args: {}, environment: "preview" });
+  });
+
+  it("says the key was missing when main isn't there to ask", async () => {
+    fake.client = null;
+    fake.main = new Error("The browser pane only exists in the desktop app.");
+    const result = await growthOverviewResult({ SUPABASE_SECRET_KEY: undefined });
+    expect(result.overview).toBeNull();
+    expect(result.failure).toBe("no_service_key");
+    expect(result.source).toBeNull();
+  });
+
+  it("says the numbers came from main's vault", async () => {
+    // Where the numbers came from is the question the packaged app raises every time: the key was in the
+    // environment, or Electron main opened the vault for it.
+    fake.client = null;
+    fake.main = { rows: numbers };
+    const result = await growthOverviewResult({ SUPABASE_SECRET_KEY: undefined });
+    expect(result.source).toBe("electron");
+  });
+});
+
+// The reason the numbers are missing, so a broken read doesn't look like a quiet day.
+describe("growthOverviewResult", () => {
+  it("names a failed read", async () => {
+    answering(null, { message: "boom" });
+    const result = await growthOverviewResult({ SUPABASE_SECRET_KEY: "key" });
+    expect(result.overview).toBeNull();
+    expect(result.failure).toBe("read_failed");
+    expect(result.source).toBe("environment");
+  });
+
+  it("names an empty answer", async () => {
+    answering(null);
+    const result = await growthOverviewResult({ SUPABASE_SECRET_KEY: "key" });
+    expect(result.overview).toBeNull();
+    expect(result.failure).toBe("empty_answer");
+  });
+
+  it("names no failure when the numbers are there", async () => {
+    answering({ accounts: 1 });
+    const result = await growthOverviewResult({ SUPABASE_SECRET_KEY: "key" });
+    expect(result.failure).toBeNull();
+    expect(result.overview?.accounts).toBe(1);
+    expect(result.source).toBe("environment");
   });
 });

@@ -9,10 +9,9 @@ import { isDeployed, isWebEnabled } from "./home";
 import { safeNextPath } from "./auth/next-path";
 import { serviceClient, webClient, webUser, type WebUser } from "./web-session";
 
-// The providers the /auth/sign-in route accepts. Mirrors what the deployed
-// /login page exposes today; "google" is wired up too so the seam matches
-// lib/account.ts's provider list.
-export const WEB_PROVIDERS = ["github", "google"] as const;
+// The providers the /auth/sign-in route accepts: GitHub only, matching
+// lib/account.ts's provider list. Anything else is refused with a 400.
+export const WEB_PROVIDERS = ["github"] as const;
 export type WebProvider = (typeof WEB_PROVIDERS)[number];
 
 export type WebAuthEnv = Record<string, string | undefined>;

@@ -173,6 +173,13 @@ describe("the api methods", () => {
     expect(bodyOf()).toEqual({ readScope: "/x" });
   });
 
+  it("allows safe SQL on a card", async () => {
+    await api.allowSafeSql("c1");
+    expect(callOf().url).toBe("/api/cards/c1");
+    expect(callOf().init?.method).toBe("PATCH");
+    expect(bodyOf()).toEqual({ safeSql: true });
+  });
+
   it("removes a card", async () => {
     await api.remove("c1");
     expect(callOf().url).toBe("/api/cards/c1");

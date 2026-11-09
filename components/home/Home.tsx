@@ -1,8 +1,10 @@
 import Image from "next/image";
 import twinSuns from "@/electron/assets/splash-speeder.jpg";
-import { TAGLINE, downloadLink } from "@/lib/home";
+import { TAGLINE, downloadLink, platformLinks } from "@/lib/home";
 import { latestRelease } from "@/lib/home-release";
+import { testflightPublicUrl } from "@/lib/testflight";
 import board from "@/public/brand/board.png";
+import Downloads from "./Downloads";
 import FaqTeaser from "./FaqTeaser";
 import { HomeFooter, HomeNav } from "./HomeChrome";
 import Pillars from "./Pillars";
@@ -32,29 +34,8 @@ export default async function Home() {
             <p className="wz-lede wz-rise wz-d1">
               A Mac kanban board where every card is a Claude Code thread. You bring the idea; Weft plans it, builds it and shows it to you.
             </p>
-            <div className="wz-ctas wz-rise wz-d2">
-              {/* download_clicked in GA and PostHog (lib/analytics.ts trackClick); "github" before the first release. */}
-              <a className="wz-btn wz-btnPrimary" href={download.href} data-track="download_clicked" data-track-version={release?.version ?? "github"}>
-                {download.label}
-              </a>
-            </div>
-            <p className="wz-note wz-rise wz-d2">
-              {download.note}
-              {release && (
-                <>
-                  {" "}
-                  {/* app/download/windows: the newest unsigned Weft-Setup-X.exe (docs/architecture/windows.md). */}
-                  {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a route handler's 302 to a file, not a page */}
-                  <a href="/download/windows" data-track="download_clicked" data-track-version={`${release.version}-windows`}>
-                    On Windows?
-                  </a>{" "}
-                  {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- a route handler's 302 to a file, not a page */}
-                  <a href="/download/windows?arch=arm64" data-track="download_clicked" data-track-version={`${release.version}-windows-arm64`}>
-                    (ARM)
-                  </a>
-                </>
-              )}
-            </p>
+            <Downloads links={platformLinks(release, testflightPublicUrl())} />
+            <p className="wz-note wz-rise wz-d2">{download.note}</p>
           </div>
         </header>
 

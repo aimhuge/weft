@@ -23,6 +23,8 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_APP_COMMIT: commit,
     NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL || "https://weft.zip",
+    // Feature flags (lib/features.ts): WEFT_COPILOT=1 hooks the copilot back up.
+    NEXT_PUBLIC_WEFT_COPILOT: process.env.WEFT_COPILOT === "1" ? "1" : "",
     ...(process.env.WEFT_GOOGLE_CLIENT_ID ? { WEFT_GOOGLE_CLIENT_ID: process.env.WEFT_GOOGLE_CLIENT_ID } : {}),
     ...(process.env.WEFT_GOOGLE_CLIENT_SECRET ? { WEFT_GOOGLE_CLIENT_SECRET: process.env.WEFT_GOOGLE_CLIENT_SECRET } : {}),
   },

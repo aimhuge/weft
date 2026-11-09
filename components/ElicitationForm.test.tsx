@@ -64,3 +64,25 @@ describe("ElicitationForm", () => {
     expect(screen.getByRole("button", { name: "Accept" })).toBeDisabled();
   });
 });
+
+describe("ElicitationForm on flagged SQL", () => {
+  it("leads with Decline as the primary button when risky", () => {
+    render(<ElicitationForm elicitation={confirm} answered={false} readOnly={false} risky="Suggested: Decline. It deletes data." onAnswer={() => {}} />);
+    expect(screen.getByText("Suggested: Decline. It deletes data.")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Decline" }).className).toContain("bg-accent");
+    expect(screen.getByRole("button", { name: "Accept" }).className).not.toContain("bg-accent");
+  });
+
+  it("puts the extra button after Accept, and leaves it out while risky", () => {
+    const extra = <button>Allow safe SQL on this card</button>;
+    const { rerender } = render(<ElicitationForm elicitation={confirm} answered={false} readOnly={false} extra={extra} onAnswer={() => {}} />);
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Accept", "Allow safe SQL on this card", "Decline"]);
+    rerender(<ElicitationForm elicitation={confirm} answered={false} readOnly={false} risky="Suggested: Decline." extra={extra} onAnswer={() => {}} />);
+    expect(screen.queryByRole("button", { name: "Allow safe SQL on this card" })).toBeNull();
+  });
+
+  it("keeps Accept primary otherwise", () => {
+    render(<ElicitationForm elicitation={confirm} answered={false} readOnly={false} onAnswer={() => {}} />);
+    expect(screen.getByRole("button", { name: "Accept" }).className).toContain("bg-accent");
+  });
+});

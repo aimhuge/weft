@@ -24,14 +24,25 @@ export type RoleOption = RoleOptionBase;
 
 export type InviteActionState = { ok: boolean; message?: string };
 
+// "@ada" or "ada" (no @ sign of an email) is a GitHub login, when the page can look one up.
+export function typedLogin(value: string): string | null {
+  const v = value.trim();
+  if (!v || v.includes(" ")) return null;
+  if (v.startsWith("@")) return v.slice(1) || null;
+  return v.includes("@") ? null : v;
+}
+
 export function InviteForm({
   roleOptions,
   defaultRole,
   actions,
+  resolveLogin,
 }: {
   roleOptions: RoleOption[];
   defaultRole?: TeamRole;
   actions: TeamClientActions;
+  // The desktop looks a GitHub login's public email up through gh, so you can invite by @login; the web can't.
+  resolveLogin?: (login: string) => Promise<string | null>;
 }) {
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<TeamRole>(defaultRole ?? roleOptions[0]?.role ?? "member");
@@ -42,8 +53,14 @@ export function InviteForm({
     e.preventDefault();
     const trimmed = email.trim();
     if (!trimmed) return;
+    const login = resolveLogin ? typedLogin(trimmed) : null;
     startTransition(async () => {
-      const result = await actions.invite(trimmed, role);
+      const to = login && resolveLogin ? await resolveLogin(login) : trimmed;
+      if (!to) {
+        setMessage({ ok: false, message: `@${login} hides their email on GitHub. Type their email instead.` });
+        return;
+      }
+      const result = await actions.invite(to, role);
       setMessage({ ok: result.ok, message: result.message });
       if (result.ok) {
         track("team_invite_sent", { role });
@@ -59,15 +76,15 @@ export function InviteForm({
     <form onSubmit={handleSubmit} className="wz-inviteForm" noValidate>
       <div className="wz-inviteRow">
         <div className="wz-inviteField">
-          <label htmlFor="invite-email">Email</label>
+          <label htmlFor="invite-email">{resolveLogin ? "Email or @GitHub login" : "Email"}</label>
           <input
             id="invite-email"
             name="email"
-            type="email"
+            type={resolveLogin ? "text" : "email"}
             className="wz-inviteInput"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            placeholder="teammate@example.com"
+            placeholder={resolveLogin ? "@login or teammate@example.com" : "teammate@example.com"}
             autoComplete="email"
             required
             disabled={pending}

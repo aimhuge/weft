@@ -61,7 +61,7 @@ export function workerToolsPrompt(table = WORKER_TOOLS): string {
       return `- ${name}: ${why}`;
     });
   });
-  return `On this Weft Worker some of Weft's tools don't work yet; each answers with why if you call it, so don't:\n${lines.join("\n")}\nThe board tools (mcp__board__*) work on the user's real board: list_cards reads it, create_card starts a card here for this worker's projects or sends it to the user's Mac or another worker for theirs, crons and webhooks you make here run here and show in the user's drawers. create_agent can't save from a worker. Changelog entries land in this checkout's CHANGELOG.md with your commit, as on the Mac.`;
+  return `On this Weft Worker some of Weft's tools don't work yet; each answers with why if you call it, so don't:\n${lines.join("\n")}\nThe board tools (mcp__board__*) work on the user's real board: list_cards reads it, create_card starts a card here for this worker's projects or sends it to the user's Mac or another worker for theirs (name one by the folder list_cards shows: mac://<Mac name>/<path>, worker://<id>/<name>), crons and webhooks you make here run here and show in the user's drawers. create_agent can't save from a worker. Changelog entries land in this checkout's CHANGELOG.md with your commit, as on the Mac.`;
 }
 
 const gate: HookCallback = (input) => {

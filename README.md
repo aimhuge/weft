@@ -9,6 +9,10 @@ cloth.
 
 ## Run it
 
+Weft offers Simplified Chinese for the board, the main Settings controls, and the new-thread form. It follows a
+Simplified Chinese browser or system language by default. Choose **Settings → General → Interface language**
+on desktop, or use the language picker in the web board's toolbar, to switch between English and 简体中文.
+
 ```bash
 git clone https://github.com/aimhuge/weft.git && cd weft
 pnpm install
@@ -364,7 +368,12 @@ clones it into `~/dev`, with a progress bar that follows git (receiving objects,
 prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
 approves safe calls and blocks risky ones, and a blocked call comes to Needs you with the classifier's reason and
 **Allow once and retry** / **Keep denied**; an MCP server that asks you to confirm something, like the Supabase MCP before
-destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy), or one of your own. **Settings → Agents** (or **Manage agents…** at the bottom of that menu) is where you make them: an emoji, a name, a line saying what it's for, its soul (the start of every system prompt its threads get) and the skills it turns off. Built-ins can be edited too, and **Reset** pulls a built-in's latest text from Weft's repo on GitHub. Pick a default agent for each project there, and new threads in that project start as it. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and the agent's emoji in the card's footer says who it is (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
+destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for. A database prompt shows the
+SQL behind it, folded with its destructive lines marked, and a second model's verdict above the buttons: **Safe**,
+**Changes access**, **Deletes data** or **Can't tell**, each destructive statement in plain words, what's lost and what
+looks wrong; until it says Safe, **Decline** is the primary button, with a line saying why. SQL a Bash command runs
+through `psql` or `prisma db execute` gets the same review. **Allow safe SQL on this card** beside Accept does it for
+one card, and **Auto on this card** on a Bash prompt switches that card to Auto, so safe commands run without asking. **Settings → Security → Database changes** can let a Safe one through without asking; the thread notes it); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy), or one of your own. **Settings → Agents** (or **Manage agents…** at the bottom of that menu) is where you make them: an emoji, a name, a line saying what it's for, its soul (the start of every system prompt its threads get) and the skills it turns off. Built-ins can be edited too, and **Reset** pulls a built-in's latest text from Weft's repo on GitHub. Pick a default agent for each project there, and new threads in that project start as it. Share one of yours with a Weft team (**Share with…** under it), and every teammate's pickers offer it with your team's name beside it; they can duplicate it to make their own copy. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and the agent's emoji in the card's footer says who it is (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
@@ -854,7 +863,7 @@ Review or Done without you keeps an accent tint and a pulsing dot until you open
 
 **Sign in** in the top bar (right of Copilot) signs you in with GitHub; once you're in it shows your
 avatar, which opens a small menu headed by your current team, its plan and one button: **Upgrade to Pro** on Free,
-Open Source and Education, **Manage billing** on Pro and Team (`components/AccountPlan.tsx`). Settings → Accounts → Weft account also offers Google and an email link, and Sign out. Settings → Accounts also has a **Sign-in expiry** row, so a lapsing sign-in is something you find in Settings rather than when a thread trips over it: BlastCP's 30-day grant is the one that runs out and speaks up in its last week, while Vercel, Supabase and Cloudflare tokens don't expire and say so. Only the expiry crosses from Electron main — tokens stay in the Keychain — and nothing re-consents on your behalf (`components/TokenExpiry.tsx`). The board works the same
+Open Source and Education, **Manage billing** on Pro and Team (`components/AccountPlan.tsx`). Settings → Accounts → Weft account also offers an email link, and Sign out; GitHub is the only sign-in provider (Google sign-in was removed on 2026-11-07, and `/auth/sign-in?provider=google` answers 400). Settings → Accounts also has a **Sign-in expiry** row, so a lapsing sign-in is something you find in Settings rather than when a thread trips over it: BlastCP's 30-day grant is the one that runs out and speaks up in its last week, while Vercel, Supabase and Cloudflare tokens don't expire and say so. Only the expiry crosses from Electron main — tokens stay in the Keychain — and nothing re-consents on your behalf (`components/TokenExpiry.tsx`). The board works the same
 signed out; the account is for cloud features (page sync, share links) as they land. Sign-in opens
 your default browser and comes back to Weft through a `weft://account-callback` link, so the board
 shows you signed in a moment later. The session is kept in `~/.weft/account.json`, readable only by you
@@ -869,12 +878,22 @@ invite link joins whichever account opens it. Billing and the shared 🔐 vault 
 (docs/architecture/teams.md).
 
 You can be in many teams. **Settings → Teams** lists every one with your role in it, the one you're viewing lit;
-click another to manage its projects, members and invites below the list, or **New team** to make one you own.
-Owners and admins choose who sees each project: **Access** on a project's row ticks the members who get it. Owners
-and admins see every project; a member sees only the ones they've been given.
+click another to see it below the list: its **projects** first (each repo with how many cards it has on your board),
+then its **people** by GitHub avatar and @login, with **Invite…** taking an email or an @login and suggesting the
+team's GitHub org members and its repos' collaborators. **New team** offers your GitHub orgs: pick one and the team
+takes its name (still editable) and its address (weft.zip/exitingcom), and its repos are suggested as projects; a
+team doesn't need an org. Roles, Remove and who sees each project sit under **Advanced**, closed until you need them:
+**Access** on a project ticks the members who get it. Owners and admins see every project; a member sees only the
+ones they've been given.
 A linked project's synced cards go to the team instead of each member's own workspace, so `weft.zip/<team>/board`
-shows everyone's cards for it. A folder syncs only once its owner switches Sync on; turning Sync off and on again moves
-its older cards into the team (docs/architecture/cloud-sync.md#team-projects).
+shows everyone's cards for it. Every member's desktop syncs it on its own, with no Sync switch to turn on: within a minute
+of the link, each Mac with a checkout of the repo sends that project's cards, older ones included, to the team. Unlinking
+it hands the project back to each person's own Sync switch (docs/architecture/teams.md#shared-projects).
+A linked project's 🔐 secrets are the team's too: linking it shares your vault for it (one Touch ID), and everyone on
+the team can add keys. A teammate's Mac asks to join by itself; you get a notification and approve that Mac once in the
+🔐 drawer, and from then on it gets every project the team links. The drawer says "Shared with <team>". Unlinking stops
+new Macs from joining, but a Mac that has the keys keeps them: to cut someone off, remove them with **Rotate shared
+vaults** and change the values at the providers (docs/architecture/teams-vault.md#a-linked-repo-shares-its-vault).
 Your teammates' cards for it show on your desktop board too, inside your own project of the same repo: each with their
 picture and "Zulker's Mac" on the tile. They're read-only: open one to read its thread and pane, but only its owner
 can reply, stop or move it. To pick one up yourself, open it: **Ask Zulker** shows them your ask on their card, and
@@ -999,6 +1018,14 @@ link lives under you, `weft.zip/@you/threads/<slug>` (the card's title by defaul
 unfurls in Slack or iMessage with the card's title, its first ask and its pane capture. **Show the chat** off shares only the
 browser pane; viewers can also hide the chat themselves. More in [docs/architecture/sharing.md](docs/architecture/sharing.md).
 
+**People** in the Share dialog shares the link with anyone on GitHub: type a login (it opens on your repo's
+collaborators and searches GitHub as you type) and they get in once they sign in to weft.zip with that account, past a
+private link, a password or an email gate, with no seat in your workspace. Weft emails them when it knows an address
+(their Weft account, or their public GitHub email); when it doesn't, their chip says so and offers Copy link, and once
+they open it, it says when. Type **@** in a thread's reply box to mention someone (your team, your repo's people, any
+GitHub login); on a shared card, a message that mentions someone who can't open the link yet asks first: **Give access
+& send** lets them in and quotes your message in their email, **Send without** keeps it plain text (docs/architecture/sharing.md#people).
+
 **Share the board** (the share icon beside your avatar, its menu, ⌘K, or **Share** in the weft.zip board's header) shares the whole board: its link is your workspace's web board,
 `weft.zip/<workspace>/board`, with Copy and Open, a list of who can open it (members and pending invites), and an email box.
 An address that already has a Weft account joins the workspace at once; one that doesn't gets an email inviting them to sign
@@ -1092,7 +1119,7 @@ If you'd rather a worker kept a project's development or preview secrets itself,
 A worker's card has the mode picker in its thread (Ask me, Accept edits or Auto; YOLO stays local), and when a thread watches a simulator or emulator on the worker, its screen streams to the pane, where you can tap and swipe it from the desktop.
 A worker's card opens like any card, with the show rail beside its pane, and you work it the same way: rename it, tag, star or archive it, drag it to another column, pick its model or CLI, stop it, continue or restart it, edit your last message, and answer Wait, This first or Others first, from the tile, its right-click menu or the open thread. Each change shows at once and goes back if the worker refuses it. A new thread in a worker project shows on the board the moment you press Start, reading "Sending to your worker…" until the worker's own card takes its place; if the worker refuses it (offline, say), it goes again and the dialog says why. A worker's card can't be deleted, shared, given another agent or folder, or run a "!" shell command from here yet.
 A worker's project shows the header's code quality, uncommitted pile and Backlog counts too, from what the worker last measured; when that's stale or the worker is offline, the header says how old it is ("12m ago, m1mini offline"). A worker card's editor opens, edits and saves the worker's files, and file names in its thread link there (over the direct line an open file reloads when the worker's copy changes, keeping your unsaved edits behind the same conflict banner as a local file; the worker won't open credentials such as `.ssh` or `.npmrc`, won't take a save into `.git`, an agent's settings, hook managers or `package.json`, and logs every remote read and save).
-A thread on a worker works on your real board: `list_cards` lists your cards from every Mac and worker (titles and columns, never their threads), `create_card` starts a card on that worker or sends it to your Mac or another worker, and the crons and webhooks it makes run on the worker and show in your ⏰ and 🪝 drawers, where you can pause, edit, run or delete them like your Mac's (a worker project's drawers show only that worker's). Its `list_crons` shows your Mac's crons too, read-only. A card a worker sends your Mac waits in Backlog, tagged `from-worker`, for you to start; one it sends another worker starts in Ask me mode. A worker can send at most 30 cards an hour.
+A thread on a worker works on your real board: `list_cards` lists your cards from every Mac and worker (titles and columns, never their threads), `create_card` starts a card on that worker or sends it to your Mac or another worker, and the crons and webhooks it makes run on the worker and show in your ⏰ and 🪝 drawers, where you can pause, edit, run or delete them like your Mac's (a worker project's drawers show only that worker's). Its `list_crons` shows your Mac's crons too, read-only. A card a worker sends your Mac waits in Backlog, tagged `from-worker`, for you to start; one it sends another worker starts in Ask me mode. A worker can send at most 30 cards an hour. Each Mac card is listed as `mac://<your Mac's name>/<path>`, and that's how a thread names one Mac when two of yours hold the same folder.
 A new thread in a worker project keeps everything the dialog picked: tags, CLI, model, effort, mode and **Isolated** (a worktree from the worker's own pool, landed on Done). **Add to Backlog** puts it in the worker's Backlog, where you can reorder it. A worker's cards chime, notify and count on the dock badge like yours, and the header counts, ⌘K, Archive all Done, Resume all, Switch all and the 🏷 drawer include them. A worker project's right-click menu pins, hides, archives its Done cards and stops its running ones.
 A worker's card shows its pages in the browser pane too, on this board and on weft.zip: it writes a page, opens it, and Weft uploads it with its images. Only web files from the card's project and show folder can leave the box. In the desktop app those pages, and the sites a worker's card opens, load in the same browser pane a local card uses, with its address bar, tabs, zoom, find and Save as app; the page keeps the worker's sandbox, so it can't reach Weft or follow a weft:// link.
 Your Mac's automations, /weft:done's model and effort, push on done, the subagent and backup models and the thread instructions sync to your workers, so a worker card behaves as you set it up here. Settings → **Threads** → **On a worker** sets a worker's own threads at once, keep-alive, worktree pool and default CLI; its folders and modes are only ever set on that machine. A worker card's 5hr and 7d chart is the worker's own week, and work on your workers counts toward your streak and XP, on every day a worker card's turns ran.
@@ -1352,6 +1379,10 @@ a card in that channel's project (or your default one), and **@Weft** in a card'
 [docs/architecture/slack.md](docs/architecture/slack.md).
 
 ## Copilot
+
+The copilot is switched off by default: no launcher, no ✨ button, no `c` key or palette command, no copilot window,
+menu items or ⌃⌥Space, and none of its background check-ins or chip refreshes. Its code is all still here, behind a
+feature flag (`lib/features.ts`, `electron/features.cjs`): start Weft with `WEFT_COPILOT=1 pnpm desktop` to bring it back.
 
 Press ⌘J (or the Copilot button) to open the copilot, your product partner: it helps you decide what to build next,
 shapes an idea into cards, answers anything about your projects, and keeps an eye on refactors and your analytics. It

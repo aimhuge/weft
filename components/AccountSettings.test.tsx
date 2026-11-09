@@ -64,10 +64,10 @@ describe("AccountSettings", () => {
 
   it("shows a sign-in error", async () => {
     api.account.mockResolvedValue({ configured: true, user: null });
-    api.signIn.mockRejectedValueOnce(new Error("Google is off"));
+    api.signIn.mockRejectedValueOnce(new Error("GitHub is off"));
     setup();
-    await userEvent.click(await screen.findByRole("button", { name: "Continue with Google" }));
-    expect(await screen.findByText("Google is off")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Continue with GitHub" }));
+    expect(await screen.findByText("GitHub is off")).toBeInTheDocument();
     expect(openExternal).not.toHaveBeenCalled();
   });
 

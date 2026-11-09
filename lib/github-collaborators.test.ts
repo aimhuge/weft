@@ -11,7 +11,7 @@ vi.mock("node:child_process", () => ({
   },
 }));
 
-const { githubCollaborators, clearGithubEmails } = await import("./github-collaborators");
+const { githubCollaborators, githubEmail, clearGithubEmails } = await import("./github-collaborators");
 
 beforeEach(() => {
   calls.length = 0;
@@ -22,6 +22,7 @@ beforeEach(() => {
     if (path === "repos/a/one/collaborators") return "me\thttp://me\nBob\thttp://bob\nada\thttp://ada\n";
     if (path === "repos/a/two/collaborators") return "ada\thttp://ada\n";
     if (path === "users/ada") return "ada@x.co\n";
+    if (path === "orgs/acme/members") return "ME\thttp://me\nada\thttp://ada2\ncy\thttp://cy\n";
     return "null\n";
   };
 });
@@ -69,5 +70,50 @@ describe("githubCollaborators", () => {
     const ok = await githubCollaborators(["a/one", "a/zzz"]);
     expect(ok.error).toBeNull();
     expect(ok.people[0]?.email).toBeNull();
+  });
+});
+
+describe("githubCollaborators with an org", () => {
+  it("adds org members with no repos, skipping you and people already found", async () => {
+    const r = await githubCollaborators(["a/one"], Date.now(), "acme");
+    expect(r.error).toBeNull();
+    expect(r.people).toEqual([
+      { login: "ada", avatarUrl: "http://ada", email: "ada@x.co", repos: ["a/one"] },
+      { login: "Bob", avatarUrl: "http://bob", email: null, repos: ["a/one"] },
+      { login: "cy", avatarUrl: "http://cy", email: null, repos: [] },
+    ]);
+  });
+
+  it("works with no repos when an org is given", async () => {
+    const r = await githubCollaborators([], Date.now(), "acme");
+    expect(r).toEqual({
+      people: [
+        { login: "ada", avatarUrl: "http://ada2", email: "ada@x.co", repos: [] },
+        { login: "cy", avatarUrl: "http://cy", email: null, repos: [] },
+      ],
+      error: null,
+    });
+  });
+
+  it("tolerates an org failure", async () => {
+    const base = responder;
+    responder = (args) => (args[1] === "orgs/acme/members" ? new Error("HTTP 403") : base(args));
+    const r = await githubCollaborators(["a/two"], Date.now(), "acme");
+    expect(r.error).toBeNull();
+    expect(r.people.map((p) => p.login)).toEqual(["ada"]);
+  });
+});
+
+describe("githubEmail", () => {
+  it("looks up a typed @login's public email", async () => {
+    expect(await githubEmail(" @ada ")).toBe("ada@x.co");
+    expect(calls.at(-1)?.[1]).toBe("users/ada");
+  });
+
+  it("is null for a hidden email or a login that isn't one", async () => {
+    expect(await githubEmail("bob")).toBeNull();
+    calls.length = 0;
+    expect(await githubEmail("not a login")).toBeNull();
+    expect(calls).toHaveLength(0);
   });
 });

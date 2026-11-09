@@ -8,6 +8,8 @@
 //   requestJoin   a teammate's Mac asks for a vault its workspace already shares.
 //   grantPending  an admin approves it: this vault's key sealed to that Mac (electron/vault-share.cjs).
 //   join          the teammate's Mac opens the grant and adopts the shared key.
+//   shareRepo     a team linked the repo: share this Mac's vault for it, if there is one (one Touch ID).
+//   sealTrusted   seal the vaults this Mac holds to the team's Macs an admin approved once (no Touch ID).
 //
 // The key is read from the vault store, passed to the wrap, and dropped. It is never written to a
 // file, a log, a request or an IPC payload. The server only ever sees the sealed box.
@@ -15,8 +17,8 @@
 // Everything the sync engine does is injected, not required: electron/vault-sync.cjs may not exist
 // yet, and this file has to work without it. When it is there, a granted device pulls the server's
 // rows into its local shadow right after the key opens.
-const { grantPendingDevice, shareLocalVault, readPending } = require("./vault-share.cjs");
-const { openGrant } = require("./vault-grant.cjs");
+const { grantPendingDevice, shareLocalVault, readPending, existingVault, holdsGrant } = require("./vault-share.cjs");
+const { openGrant, wrapForDevice, cryptoReady } = require("./vault-grant.cjs");
 const { rotateForMember, writeRotate } = require("./vault-rotate.cjs");
 
 /** @typedef {{ name: string, environment: string, ciphertext?: string, nonce?: string, keyVersion?: number, hint?: string }} Secret */
@@ -28,10 +30,76 @@ const { rotateForMember, writeRotate } = require("./vault-rotate.cjs");
  *   readServerVault?: (vaultId: string) => Promise<{ localId?: string, key: string, keyVersion: number, label: string }>,
  *   device: { id?: string, publicKey: string, privateKey?: string }, sodium?: any, prompt?: (reason: string) => Promise<boolean>,
  *   adopt?: (folder: string, grant: { key: string, keyVersion: number, wrappedKey: string }, shared: { orgId: string, vaultId: string, repo: string, keyVersion: number }) => Promise<unknown>,
+ *   readRepoVault?: (repo: string) => Promise<{ id: string, label: string, key: string, keyVersion: number, secrets: Secret[], shared?: boolean } | null>,
  *   sync?: any, checkRepo?: (repo: string) => Promise<boolean> }} deps
  */
-function createSharedApi({ readVault, readServerVault, device, sodium, prompt = async () => true, adopt, sync = null, checkRepo }) {
+function createSharedApi({ readVault, readServerVault, readRepoVault, device, sodium, prompt = async () => true, adopt, sync = null, checkRepo }) {
+  /**
+   * Seal every team vault this Mac holds to the team's Macs an admin approved once (public.trusted_vault_gaps):
+   * a new linked project, or a teammate's Mac that hasn't opened this one yet. No Touch ID: the admin's approval was
+   * the decision, and the server checks the Mac's key is still the one approved. One gap failing doesn't stop the rest.
+   *
+   * @param {{ accountClient: any }} opts
+   * @returns {Promise<{ sealed: number }>}
+   */
+  async function sealTrusted({ accountClient }) {
+    const db = accountClient?.supabase;
+    if (!db || !readServerVault) return { sealed: 0 };
+    const { data, error } = await db.rpc("trusted_vault_gaps");
+    if (error || !Array.isArray(data) || !data.length) return { sealed: 0 };
+    // The wrap needs libsodium ready; a readServerVault that doesn't ready it would otherwise seal nothing, silently.
+    await cryptoReady(sodium);
+    let sealed = 0;
+    for (const gap of data) {
+      try {
+        const vault = await readServerVault(gap.vault_id);
+        if (Number(vault.keyVersion) !== Number(gap.key_version)) continue;
+        const { wrappedKey } = wrapForDevice({ vault, granterDevice: device, newDevice: { id: gap.device_id, publicKey: gap.public_key } });
+        const res = await db.rpc("grant_trusted_vault_device", { p_vault_id: gap.vault_id, p_device_id: gap.device_id, p_wrapped_key: wrappedKey, p_key_version: Number(gap.key_version) });
+        if (!res.error) sealed += 1;
+      } catch {
+        // Not on this Mac, or its key has moved on: another Mac that holds it fills this gap.
+      }
+    }
+    return { sealed };
+  }
+
   return {
+    sealTrusted,
+
+    /**
+     * A team linked this repo (Settings → Teams → Projects): this Mac's vault for it becomes the team's. Nothing
+     * happens when this Mac has no vault for the repo, it is already shared, or the team's vault exists and this Mac
+     * isn't in it yet (it asks to join by itself, electron/vault-team-link.cjs). One Touch ID, since every secret in
+     * it goes to the team.
+     */
+    /** @param {{ orgId: string, orgName?: string, repo: string, accountClient: any }} opts */
+    async shareRepo({ orgId, orgName, repo, accountClient }) {
+      const name = String(repo ?? "").trim().toLowerCase();
+      const vault = readRepoVault ? await readRepoVault(name) : null;
+      if (!vault) return { skipped: "none" };
+      if (vault.shared) return { skipped: "shared" };
+      const found = await existingVault(accountClient, orgId, name);
+      if (found && !(await holdsGrant(accountClient, found.id, device.id))) return { skipped: "exists" };
+      const secrets = vault.secrets.filter((s) => s?.ciphertext).length;
+      if (!(await prompt(`share ${secrets} secret${secrets === 1 ? "" : "s"} in ${vault.label} with ${orgName || "your team"}`))) return { denied: true };
+      const result = await shareLocalVault({
+        accountClient,
+        orgId,
+        repo: name,
+        label: vault.label,
+        device,
+        vault: { id: vault.id, key: vault.key, keyVersion: vault.keyVersion, secrets: vault.secrets },
+        checkRepo,
+        markShared: (localId, value) => sync?.markShared?.(localId, value),
+        sodium,
+      });
+      await sync?.pull?.(vault.id).catch(() => null);
+      // Teammates' Macs the team already trusts get it right away.
+      const { sealed } = await sealTrusted({ accountClient }).catch(() => ({ sealed: 0 }));
+      return { ...result, secrets, sealed };
+    },
+
     /**
      * The granter seals this vault's key to the device that accepted the pending grant.
      *
@@ -52,6 +120,8 @@ function createSharedApi({ readVault, readServerVault, device, sodium, prompt = 
         device,
         sodium,
       });
+      // Approved once for the team: the Mac gets the team's other vaults this Mac holds now, without another Approve.
+      await sealTrusted({ accountClient }).catch(() => null);
       return granted;
     },
 
@@ -139,6 +209,8 @@ function sharedHandlers(shared, token) {
     requestJoin: call("requestJoin"),
     join: call("join"),
     shareLocal: call("shareLocal"),
+    shareRepo: call("shareRepo"),
+    sealTrusted: call("sealTrusted"),
     rotate: call("rotate", () => ({ token: token() })),
   };
 }

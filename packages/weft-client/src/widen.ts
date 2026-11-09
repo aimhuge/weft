@@ -26,6 +26,8 @@ export interface WidenChange {
   permissionMode?: "bypassPermissions";
   // card.update: a folder the card may read from ("Read from" on a question).
   readScope?: unknown;
+  // card.update: accept the SQL a review calls Safe without asking ("Allow safe SQL on this card").
+  safeSql?: true;
   // card.shell: the command a "!" line runs.
   shell?: string;
   // card.schedule: a "!" line left to send later.
@@ -51,6 +53,7 @@ function updateChange(body: Record<string, unknown>): WidenChange {
   if (body.agent !== undefined) change.agent = typeof body.agent === "string" ? body.agent : null;
   if (body.permissionMode === "bypassPermissions") change.permissionMode = "bypassPermissions";
   if (body.readScope !== undefined) change.readScope = body.readScope;
+  if (body.safeSql === true) change.safeSql = true;
   return change;
 }
 
@@ -165,6 +168,7 @@ export function widenLabel(change: WidenChange): string {
   if (change.agent !== undefined) parts.push(change.agent ? `give it the agent ${cut(change.agent, 60)}` : "clear its agent");
   if (change.permissionMode) parts.push("let it skip permission prompts");
   if (change.readScope !== undefined) parts.push(`let it read from ${cut(typeof change.readScope === "string" ? change.readScope : canonical(change.readScope))}`);
+  if (change.safeSql) parts.push("let it run SQL a review calls Safe without asking");
   if (change.shell !== undefined) parts.push(`run the shell command ${cut(change.shell)}`);
   if (change.schedule !== undefined) parts.push(`schedule the shell line ${cut(change.schedule)}`);
   if (change.terminal !== undefined) parts.push(`open a terminal in ${cut(change.terminal, 60)}`);

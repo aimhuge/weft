@@ -26,8 +26,9 @@ function useSharedSync(given: ReturnType<typeof useCloudSync> | undefined, signe
 // The top bar's account control, right of Copilot. Signed out: "Sign in" with GitHub, which finishes in
 // your browser. Signed in: a share icon (Share the board) and your avatar, which opens a tiny menu
 // (components/AccountMenu.tsx), with a dot on it while board sync uploads (amber) or has failed (red). Hidden while
-// loading, on errors, and in builds without a Supabase key, so it never costs header room for nothing.
-export default function AccountButton({ onOpenSettings, onShareBoard, project = null, sync: given }: { onOpenSettings: () => void; onShareBoard?: () => void; project?: string | null; sync?: ReturnType<typeof useCloudSync> }) {
+// loading, on errors, and in builds without a Supabase key, so it never costs header room for nothing. `teamError` is why
+// the last read of teammates' cards failed (lib/use-team-board.ts); it rides on the avatar's tooltip, no new chip.
+export default function AccountButton({ onOpenSettings, onShareBoard, project = null, sync: given, teamError }: { onOpenSettings: () => void; onShareBoard?: () => void; project?: string | null; sync?: ReturnType<typeof useCloudSync>; teamError?: string }) {
   const { state, busy, waiting, error, signIn } = useAccount();
   const [menuOpen, setMenuOpen] = useState(false);
   const signedIn = !!signedInId(state);
@@ -50,7 +51,7 @@ export default function AccountButton({ onOpenSettings, onShareBoard, project = 
 
   const user = state.view.user;
   if (user) {
-    const who = user.name ?? user.email ?? "your account";
+    const title = avatarTitle(user.name ?? user.email ?? "your account", teamError);
     return (
       <div ref={menuRef} className="relative flex shrink-0 items-center gap-1">
         <ShareBoardIcon onShareBoard={onShareBoard} />
@@ -59,8 +60,8 @@ export default function AccountButton({ onOpenSettings, onShareBoard, project = 
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-controls={menuOpen ? menuId : undefined}
-          title={`Signed in as ${who}`}
-          aria-label={`Signed in as ${who}`}
+          title={title}
+          aria-label={title}
           className="relative rounded-full p-0.5 hover:bg-sunken"
         >
           <Avatar user={user} size={24} />
@@ -86,6 +87,11 @@ export default function AccountButton({ onOpenSettings, onShareBoard, project = 
       {waiting ? "Signing in…" : "Sign in"}
     </button>
   );
+}
+
+// The avatar's tooltip: who you're signed in as, then why teammates' cards failed to load, if they did.
+function avatarTitle(who: string, teamError?: string) {
+  return `Signed in as ${who}${teamError ? `. Teammates' cards couldn't load: ${teamError}` : ""}`;
 }
 
 // One click to Share the board, beside the avatar; nothing when the board doesn't offer it.

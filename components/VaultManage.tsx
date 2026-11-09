@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { VaultActions } from "@/lib/use-vault-actions";
 import { useShareAsked } from "@/lib/vault-ask";
-import { repoOf, shareTargets, type VaultOrg } from "@/lib/vault-shared";
+import { repoOf, shareOfferOrg, type VaultOrg } from "@/lib/vault-shared";
 import { offersShare } from "@/lib/vault-status";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
 import { vaultEventsBridge } from "@/lib/vault-events";
@@ -100,19 +100,18 @@ export function VaultManage({
 
 type SharingProps = { vault: VaultSummary; repo: string; bridge: VaultBridge | null; orgs: VaultOrg[]; onChanged: () => void; notify: (err: unknown) => void; startOpen: boolean };
 
-// Shared: the recovery key and the Macs asking. Shared elsewhere: Ask to join. Local: Share…, or why there's no join.
+// Shared (the header's badge names who with): the recovery key and the Macs asking. Shared elsewhere: Ask to join. Local: Share…, or why there's no join.
 function Sharing({ vault: v, repo, bridge, orgs, onChanged, notify, startOpen }: SharingProps) {
   return (
     <div className={ROW}>
       <span className={LABEL}>Sharing</span>
-      {v.shared ? <span className="text-[12px] text-ink">Shared with {v.shared.org.name || "a workspace"}</span> : null}
       {v.shared ? <VaultRecoveryButton vault={v} /> : null}
       {offersShare(v) ? (
         <>
           <span className="text-[12px] text-muted">{repo ? "On this Mac only" : "No GitHub repo, so it stays on this Mac"}</span>
           <ShareOffer
             folder={v.folder}
-            org={shareTargets(orgs, repo)[0] ?? null}
+            org={shareOfferOrg(orgs, repo, v.linked)}
             orgs={orgs}
             bridge={bridge}
             label={v.label}

@@ -91,18 +91,8 @@ export async function findDevice(service: SupabaseClient, deviceId: string): Pro
   return data ?? null;
 }
 
-// The vault ids of an org, for the grant form's vault picker.
+// The vaults an org shares, for the Devices page's "Shared vaults" count.
 export async function listOrgVaults(service: SupabaseClient, orgId: string): Promise<{ id: string; label: string; repo: string }[]> {
   const { data }: { data: { id: string; label: string; repo: string }[] | null } = await service.from("vaults").select("id,label,repo").eq("org_id", orgId).order("label");
   return data ?? [];
-}
-
-// The workspace's members, for the grant form's "whose machine" picker. A grant to somebody outside the
-// workspace would never be heard about, so the picker only offers people who are in it.
-export async function listOrgMembersForGrant(service: SupabaseClient, orgId: string): Promise<{ id: string; name: string; email: string | null }[]> {
-  const { data } = await service.from("org_memberships").select("user_id").eq("org_id", orgId).order("created_at");
-  const rows = (data ?? []) as { user_id: string }[];
-  const ids = rows.map((r) => r.user_id);
-  const profiles = await profileInfo(service, ids);
-  return rows.map((r) => ({ id: r.user_id, name: profiles[r.user_id]?.name ?? r.user_id, email: profiles[r.user_id]?.email ?? null }));
 }

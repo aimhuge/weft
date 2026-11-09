@@ -26,6 +26,14 @@ export interface AgentInfo {
   builtIn?: boolean;
   // A built-in whose text isn't the one that shipped: "you" edited it, or a reset brought "github"'s newer one.
   changed?: "you" | "github";
+  // Shared with you by a teammate (lib/team-agent-cache.ts): read-only here, Duplicate makes your own copy.
+  team?: TeamRef;
+}
+
+// A Weft team you're in: who a team agent came from, and where Settings → Agents can share one of yours.
+export interface TeamRef {
+  id: string;
+  name: string;
 }
 
 // The built-ins as they ship. The same file on GitHub is what Reset pulls (lib/agent-store.ts resetAgent).
@@ -58,6 +66,9 @@ export function mergeAgents(saved: AgentInfo[] = []): AgentInfo[] {
   });
   return [...builtIns, ...saved.filter((a) => !isBuiltIn(a.id)).map((a) => ({ ...a, builtIn: undefined, changed: undefined }))];
 }
+
+// How the pickers name an agent: its emoji and name, and the team a teammate shared it from.
+export const agentLabel = (a: AgentInfo) => `${a.emoji} ${a.name}${a.team ? ` · ${a.team.name}` : ""}`;
 
 export function findAgent(id: string | undefined, agents: AgentInfo[] = BUILT_IN_AGENTS): AgentInfo | undefined {
   return id === undefined ? undefined : agents.find((a) => a.id === id);

@@ -111,6 +111,13 @@ describe("AccountButton", () => {
     expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
+  it("says on the avatar's tooltip why teammates' cards couldn't load", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    render(<AccountButton onOpenSettings={vi.fn()} teamError="401 signed out" />);
+    const avatar = await screen.findByRole("button", { name: /^Signed in as Ada/ });
+    expect(avatar).toHaveAttribute("title", "Signed in as Ada. Teammates' cards couldn't load: 401 signed out");
+  });
+
   it("replays the welcome from the menu and closes it", async () => {
     api.account.mockResolvedValue({ configured: true, user: ada });
     const onReplay = vi.fn();

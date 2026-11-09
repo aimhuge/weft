@@ -78,6 +78,36 @@ again (`readAgentsSnapshot`), and `mirrorAgents` replaces the worker's saved age
   the row's cap to 400 KB. It has to be applied before a Mac that sends `agents` ships: the worker's read drops keys not on
   the list before it checks the signature.
 
+## Team agents
+
+Share one of your agents with a Weft team, and every member's Weft offers it: the New thread dialog, the card menu
+(named `🔍 Reviewer · Acme`), project defaults and Settings → Agents, where it's read-only for them (View, Duplicate).
+
+- `supabase/migrations/20261107123926_team_agents.sql`: `public.team_agents` (`org_id`, `agent_id`, name, emoji,
+  tagline, soul, `skills_off`, `created_by`), primary key `(org_id, agent_id)`. Same shape as `cloud_app_shares`: members
+  read (`private.is_org_member`), the sharer inserts and updates their own rows, the sharer or a team admin
+  (`private.is_org_role(org, 'admin')`) deletes. Grants are column-level and leave `created_by` out, so it's always
+  `auth.uid()`. Because update is granted on the words alone, a write is update-then-insert, never an upsert (whose
+  `DO UPDATE` sets `org_id` and `agent_id` too, so Postgres refuses the whole statement; docs/bug-fixes/020).
+- `lib/team-agent-cache.ts` (fs only, so `lib/agent-store.ts` can read it without the network side):
+  `~/.weft/team-agents.json` `{ me, teams, rows }`, the last pull. `teamAgents()` (everyone's rows but yours, id
+  `t-<org8>-<agent id>`, carrying `team`), `myShares()` (your agent id → the teams it's shared with), `teamCacheHash()`.
+- `lib/team-agents.ts`: `pullTeamAgents` (as you, through `accountClient()`; RLS decides: your memberships, then every
+  `team_agents` row you can read; a workspace of one is left out of the teams to share with, by its
+  `org_memberships(count)`, unless one of yours is already there; signed out clears the cache, offline keeps it, a database without the table reads as
+  none), `syncTeamAgentsSoon` (at most once a minute, from `GET /api/agents`), `shareAgent` / `unshareAgent` (yours only;
+  a built-in shares as a duplicate; `writeShare` updates the team's copy, or inserts it when there's none), `pushMyShares` (after a save, your shared copies follow, or go when you delete one; a failed push is
+  owed, and the ten-minute tick, `teamAgentsTick`, pushes again before it pulls),
+  `startTeamAgentsSync` (from `lib/cloud-sync-start.ts`: a pull at start and every ten minutes, pushes 1.5 s after a save).
+- `lib/agent-store.ts`: `listAgents()` ends with `teamAgents()`; `savedAgentsHash()` includes `teamCacheHash()`, so a
+  teammate's edit reaches idle threads; `requireOwn` refuses to edit, delete or change the skills of a team's agent; a
+  team agent's name never blocks yours.
+- `POST` / `DELETE /api/agents/:id/share { org }` (`elevated`: a thread can't share a soul with your team);
+  `GET /api/agents` adds `teams` and `shares`. `components/SettingsAgentRow.tsx` draws each row: the team's badge, and
+  for one you made, "Shared with Acme ✕" and a **Share with…** menu. `lib/agents.ts` `agentLabel` names it in pickers.
+- A card or project default on a team agent that's later unshared falls back to Builder, like a deleted agent. Team
+  agents don't go to your Weft Workers yet (`lib/agent-sync.ts` mirrors only `savedAgents()`).
+
 ## Patterns
 
 - The CLI reads its system prompt only when it starts, which is why a switch ends the CLI and a card with an agent skips
@@ -88,4 +118,5 @@ again (`readAgentsSnapshot`), and `mirrorAgents` replaces the worker's saved age
 - The copywriter's soul is the style guide: Weft as the subject, "your AI", "so" clauses with the payoff, reassurance where
   trust matters, names in full, no plumbing in marketing copy, no hype words, commit/push/deploy (never "save"), and the
   forms for changelog entries, intros and UI copy. The user's own copy-edits win over it.
-- Still open: sharing agents with a team (its own card), and agents for the copilot to pick per card it starts.
+- Still open: team agents on your Weft Workers, live updates (Realtime) instead of the ten-minute pull, and agents for
+  the copilot to pick per card it starts.

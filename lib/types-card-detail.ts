@@ -189,6 +189,8 @@ export interface Card {
   // additionalDirectories. A run-time `/add-dir` slash command isn't enough on its own — the path
   // has to be a subdirectory of cwd or another already-granted directory at session launch.
   readScope?: string[];
+  // "Allow safe SQL on this card": its database prompts the review calls Safe go through unasked (lib/db-calls.ts).
+  safeSql?: true;
   // This card's changes to its project's skill set (lib/skill-sets.ts): skill names or plugin ids
   // ("posthog@posthog") turned on or off here only. Read when its CLI starts.
   skillsOn?: string[];

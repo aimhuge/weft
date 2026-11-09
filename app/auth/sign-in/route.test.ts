@@ -159,13 +159,12 @@ describe("/auth/sign-in", () => {
     expect(redirectTo(client)).toBe("https://weft.zip/auth/callback?next=%2Fteam");
   });
 
-  it("redirects to /login?error=provider for an unknown provider", async () => {
+  it.each(["google", "twitter", ""])("refuses provider=%j with a 400 and never asks Supabase", async (provider) => {
     const client = buildClient();
     webClient.mockResolvedValue(client);
     const { GET } = await load();
-    const res = await GET(makeRequest("http://127.0.0.1:1024/auth/sign-in?provider=twitter"));
-    expect(res.status).toBe(303);
-    expect(res.headers.get("location")).toBe("http://127.0.0.1:1024/login?error=provider");
+    const res = await GET(makeRequest(`http://127.0.0.1:1024/auth/sign-in?provider=${provider}`));
+    expect(res.status).toBe(400);
     expect(client.auth.signInWithOAuth).not.toHaveBeenCalled();
   });
 

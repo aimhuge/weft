@@ -4,13 +4,21 @@
 // lib/worker-transport.ts, components/web-board/useCloudTransport.ts); `useLive` and `useView` are hooks there, but
 // only function types here. Plus the pure pieces a polling transport needs.
 import type { UploadedAttachment } from "./attachment";
-import type { SkillInfo } from "./card";
+import type { PermissionMode, SkillInfo } from "./card";
 import type { FindMatch } from "./thread-find";
 import type { ThreadItem } from "./thread-items";
 import { applyThreadEvent, type ThreadPage } from "./thread-page";
 
 // A change to the loaded window, applied to whatever it holds when it lands.
 export type PageUpdate = (prev: ThreadPage) => ThreadPage;
+
+// One person the "@" picker offers: in the card's workspace, on its repo, or a GitHub search hit.
+export interface MentionPerson {
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+  kind: "team" | "repo" | "github";
+}
 
 export interface ThreadTransport {
   // One page of the thread: the newest (before omitted) or the one ending at index `before`. Null when it can't be read.
@@ -34,6 +42,10 @@ export interface ThreadTransport {
   fresh?: (cardId: string, message: string) => Promise<void>;
   // An outside-folder prompt's "This card" (and the question form's "Read from"); "always" adds it to every card.
   grantFolder?: (cardId: string, directory: string, scope: "card" | "always") => Promise<void>;
+  // A database prompt's "Allow safe SQL on this card" (the app's lib/db-calls.ts).
+  allowSafeSql?: (cardId: string) => Promise<void>;
+  // A Bash prompt's "Auto on this card": the card's permission mode, applied to its running CLI.
+  setMode?: (cardId: string, mode: PermissionMode) => Promise<void>;
   waitPermission?: (cardId: string, pendingId: string) => Promise<void>;
   // This first on a held edit: it goes ahead and the card holding the code yields the file (the app's lib/precedence.ts).
   putFirst?: (cardId: string, pendingId: string) => Promise<void>;
@@ -45,6 +57,9 @@ export interface ThreadTransport {
   // The composer's "/" list: the skills of the card's folder on the machine that runs it (the skills.list verb). Off
   // a card (the New thread dialog) there's no cardId, and cwd names the folder. Left out, "/" offers nothing.
   listSkills?: (cardId: string | undefined, cwd: string | undefined) => Promise<SkillInfo[]>;
+  // The composer's "@" list: people by GitHub login, the card's workspace and repo first (the app's lib/people-search.ts).
+  // Left out, "@" offers nothing.
+  searchPeople?: (cardId: string | undefined, query: string) => Promise<MentionPerson[]>;
   // Send later: the machine that runs the card holds the message until its time (card.schedule, card.unschedule).
   schedule?: (cardId: string, text: string, at: number) => Promise<unknown>;
   unschedule?: (cardId: string, messageId: string) => Promise<unknown>;

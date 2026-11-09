@@ -19,7 +19,7 @@ export { SUPABASE_KEY, SUPABASE_URL };
 export const CALLBACK_PATH = "/api/auth/callback";
 const SESSION_FILE = path.join(DATA_DIR, "account.json");
 
-export const PROVIDERS: AccountProvider[] = ["github", "google"];
+export const PROVIDERS: AccountProvider[] = ["github"];
 
 // supabase-js storage backed by one JSON file, readable only by you: it holds the refresh token.
 export const fileStorage = {

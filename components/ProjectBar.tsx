@@ -1,5 +1,6 @@
 "use client";
 
+import { useUiText } from "@/lib/ui-language";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { keyLabel, useShortcutHint, useShortcutList } from "@/lib/hotkeys";
 import { useEscape } from "@/lib/use-escape";
@@ -65,6 +66,7 @@ export default function ProjectBar({
   // filesystem is out of reach) and the sort's dropdown is styled dark so it isn't light-on-dark.
   variant?: "desktop" | "web";
 }) {
+  const t = useUiText();
   const [open, setOpen] = useState(false);
   useEscape(open, () => setOpen(false));
   const menuRef = useRef<HTMLDivElement>(null);
@@ -106,7 +108,7 @@ export default function ProjectBar({
           aria-controls={open ? menuId : undefined}
           className={`${CHIP} ${open ? CHIP_ON : CHIP_OFF}`}
         >
-          More
+          {t("More")}
           <Icon name="chevronDown" size={13} className={`transition-transform ${open ? "rotate-180" : ""}`} />
         </button>
 
@@ -142,8 +144,8 @@ export default function ProjectBar({
           <select
             value={sort}
             onChange={(e) => onSort(e.target.value as SortKey)}
-            aria-label="Sort cards"
-            title={hint("sort", "Sort cards")}
+            aria-label={t("Sort cards")}
+            title={hint("sort", t("Sort cards"))}
             // On weft.zip the page is dark but the browser's dropdown is not, so the opened list would
             // be light-on-dark. The desktop app is always dark, so it doesn't need the hint.
             style={variant === "web" ? { colorScheme: "dark" } : undefined}
@@ -151,7 +153,7 @@ export default function ProjectBar({
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
-                {s.label}
+                {t(s.label)}
               </option>
             ))}
           </select>

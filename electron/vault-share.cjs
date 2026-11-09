@@ -139,7 +139,7 @@ async function shareLocalVault({ accountClient, orgId, repo, label, device, vaul
 
   // From here on the local file is a shadow of the server.
   markShared?.(vault.id, { orgId, vaultId, repo: name, keyVersion });
-  const kept = [...new Set(secrets.filter((s) => !SERVER_NAME.test(s?.name ?? "")).map((s) => s.name))];
+  const kept = [...new Set(secrets.filter((s) => s && !SERVER_NAME.test(s.name ?? "")).map((s) => s.name))];
   return { vaultId, repo: name, keyVersion, orgId, keptLocal: kept };
 }
 
@@ -164,4 +164,4 @@ async function importSecrets({ accountClient, vaultId, secrets, keyVersion, user
   return rows.length;
 }
 
-module.exports = { grantPendingDevice, shareLocalVault, readPending, importSecrets, actorId };
+module.exports = { grantPendingDevice, shareLocalVault, readPending, importSecrets, actorId, existingVault, holdsGrant };

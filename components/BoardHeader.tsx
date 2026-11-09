@@ -3,10 +3,12 @@
 // The board's top bar: logo, "N running / M need you" status, restart chip, header badges, the
 // browser / terminal / settings / new-thread buttons, and the account button. Each button gets
 // the keyboard hint that lives in the hotkeys registry.
+import { useUiText } from "@/lib/ui-language";
 import type { ReactNode } from "react";
 import { usePasskeySync } from "@/lib/use-passkey-sync";
 import { useRegularMode } from "@/lib/use-regular-mode";
 import Icon from "./Icon";
+import UiLanguagePicker from "./UiLanguagePicker";
 
 export interface BoardHeaderProps {
   mac: boolean;
@@ -39,6 +41,7 @@ export default function BoardHeader({
   slots,
   variant = "desktop",
 }: BoardHeaderProps) {
+  const t = useUiText();
   // On weft.zip the browser and terminal panes and the Mac's Settings are on the Mac, so the web
   // header leaves those three out and shares the board with the host's own share control.
   const web = variant === "web";
@@ -53,8 +56,8 @@ export default function BoardHeader({
         Weft
       </h1>
       <span className="text-[12px] text-muted">
-        {running} running
-        {waiting > 0 && <span className="text-warn"> · {waiting} need{waiting === 1 ? "s" : ""} you</span>}
+        {running} {t("running")}
+        {waiting > 0 && <span className="text-warn"> · {waiting} {t(waiting === 1 ? "needs you" : "need you")}</span>}
       </span>
       {slots.restart}
       {slots.badges}
@@ -65,8 +68,8 @@ export default function BoardHeader({
         <>
           <button
             onClick={onToggleBrowser}
-            title={hint("browser", "Browser")}
-            aria-label="Browser"
+            title={hint("browser", t("Browser"))}
+            aria-label={t("Browser")}
             className={`rounded-md border p-1.5 ${browserOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-ink hover:bg-sunken"}`}
           >
             <Icon name="globe" size={15} />
@@ -74,8 +77,8 @@ export default function BoardHeader({
           {!regular && (
             <button
               onClick={onToggleTerminal}
-              title={hint("terminal", "Terminal")}
-              aria-label="Terminal"
+              title={hint("terminal", t("Terminal"))}
+              aria-label={t("Terminal")}
               className={`rounded-md border p-1.5 ${terminalOpen ? "border-accent bg-accent-soft text-accent" : "border-line-strong text-muted hover:bg-sunken hover:text-ink"}`}
             >
               <Icon name="terminal" size={15} />
@@ -84,21 +87,22 @@ export default function BoardHeader({
         </>
       )}
       {web && slots.share}
+      {web && <UiLanguagePicker />}
       {!web && !regular && (
         <button
           onClick={onShareBoard}
-          title={hint("share-board", "Share the board")}
-          aria-label="Share the board"
+          title={hint("share-board", t("Share the board"))}
+          aria-label={t("Share the board")}
           className="rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
         >
           <Icon name="share" size={15} />
         </button>
       )}
-      {!web && <SettingsButton title={hint("settings", "Settings")} onOpen={onOpenSettings} />}
+      {!web && <SettingsButton title={hint("settings", t("Settings"))} onOpen={onOpenSettings} />}
       <button
         onClick={onOpenNew}
-        title={hint("new-thread", "New thread")}
-        aria-label="New thread"
+        title={hint("new-thread", t("New thread"))}
+        aria-label={t("New thread")}
         className="flex items-center gap-1 rounded-md bg-accent px-2 py-1.5 text-on-accent hover:opacity-90"
       >
         <Icon name="plus" size={15} />
@@ -111,13 +115,14 @@ export default function BoardHeader({
 // Settings, marked while a worker hasn't taken this Mac's latest passkey set (a revoke that hasn't landed). The desktop
 // board keeps them in step from here (lib/use-passkey-sync.ts); Settings → Devices names them.
 function SettingsButton({ title, onOpen }: { title: string; onOpen: () => void }) {
+  const t = useUiText();
   const untaken = usePasskeySync();
   const waiting = untaken.length === 1 ? "a worker hasn't" : `${untaken.length} workers haven't`;
   return (
     <button
       onClick={onOpen}
       title={untaken.length ? `${title}: ${waiting} taken your passkey change yet (Devices)` : title}
-      aria-label="Settings"
+      aria-label={t("Settings")}
       className="relative rounded-md border border-line-strong p-1.5 text-muted hover:bg-sunken hover:text-ink"
     >
       <Icon name="sliders" size={15} />

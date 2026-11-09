@@ -25,6 +25,17 @@ describe("useTeam workspace actions", () => {
     await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(before));
   });
 
+  it("createTeam posts a slug only when given one", async () => {
+    const { result } = renderHook(() => useTeam("acme"));
+    await waitFor(() => expect(result.current.state.kind).toBe("ok"));
+    fetchMock.mockImplementation((_url, init) =>
+      Promise.resolve(init?.method === "POST" ? jsonResponse(200, { ok: true, slug: "acme-hq" }) : jsonResponse(200, team)),
+    );
+    await act(() => result.current.actions.createTeam("Acme", "acme-hq"));
+    const post = fetchMock.mock.calls.find(([, i]) => i?.method === "POST");
+    expect(post?.[1]?.body).toBe(JSON.stringify({ action: "create", name: "Acme", slug: "acme-hq" }));
+  });
+
   it("renameTeam posts the slug it's given and forgets the cached teams", async () => {
     const { result } = renderHook(() => useTeam("acme"));
     await waitFor(() => expect(result.current.state.kind).toBe("ok"));

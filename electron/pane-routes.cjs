@@ -11,6 +11,7 @@ const { sharedSnapshot, snapshotRoutes } = require("./page-snapshot.cjs");
 const { gooseRoutes } = require("./goose-ipc.cjs");
 const { appSecretsRoutes } = require("./app-secrets-push.cjs");
 const { slackRoutes } = require("./slack.cjs");
+const { growthRoutes } = require("./growth-read.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { desktopSignerFor, settingsSignRoutes } = require("./settings-sign.cjs");
 const { lanLineRoutes } = require("./lan-line-sign.cjs");
@@ -108,6 +109,9 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
     ...snapshotRoutes(sharedSnapshot),
     // The server asks main to post to Slack, and how the socket is doing (electron/slack.cjs).
     ...slackRoutes(slackApi),
+    // The growth numbers, read with the service key in the vault (electron/growth-read.cjs). The server has no
+    // key of its own in the packaged app, so it asks main and main answers with rows.
+    ...growthRoutes(vault),
     // Your account's settings for your workers, signed with this Mac's device key on each push (electron/settings-sign.cjs).
     ...settingsSignRoutes(deviceKey),
     // A worker's pinned keys and this Mac's signature over a line offered to it over the LAN (electron/lan-line-sign.cjs).

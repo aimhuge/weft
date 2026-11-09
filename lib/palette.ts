@@ -18,6 +18,9 @@ export type PaletteItem = {
   root?: string;
   // Extra words that match the search without being shown.
   keywords?: string;
+  // Words that only mention the item (a card's last line of output): they match, but rank below keywords,
+  // so a card that names another card doesn't outrank it.
+  mentions?: string;
   icon: IconName;
   // A line of the prompt that matched, with the matched words between \u0001 and \u0002.
   snippet?: string;
@@ -39,15 +42,27 @@ export const RECENT_MOVE_LIMIT = 30;
 // The row that opens the rest of the recent moves in place, instead of running and closing.
 export const RECENT_MORE_ID = "recent-more";
 
-// Every word typed must appear somewhere; earlier and label matches rank higher. null means no match.
+// The words of a query, lowercased, with emoji and punctuation trimmed off each end: a title pasted with its
+// "🧭" or a "4:" still finds the card. A word with no letter or digit (an emoji alone) is dropped.
+export function queryWords(query: string): string[] {
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .map((w) => w.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, ""))
+    .filter(Boolean);
+}
+
+// Every word typed must appear somewhere; earlier and label matches rank higher, mentions lowest. null means no match.
 export function score(item: PaletteItem, words: string[]): number | null {
   const label = item.label.toLowerCase();
   const rest = `${item.detail ?? ""} ${item.keywords ?? ""}`.toLowerCase();
+  const mentions = (item.mentions ?? "").toLowerCase();
   let total = 0;
   for (const word of words) {
     const at = label.indexOf(word);
-    if (at >= 0) total += at === 0 || label[at - 1] === " " ? 0 : 1;
+    if (at >= 0) total += at === 0 || /[^\p{L}\p{N}]/u.test(label.charAt(at - 1)) ? 0 : 1;
     else if (rest.includes(word)) total += 3;
+    else if (mentions.includes(word)) total += 5;
     else return null;
   }
   return total;
@@ -66,7 +81,7 @@ export function paletteResults(
   scope: string | null,
   allRecent = false,
 ): PaletteItem[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  const words = queryWords(query);
   const inScope = (i: PaletteItem) => !scope || i.root === undefined || i.root === scope;
   const byGroup = (group: PaletteItem["group"]) => items.filter((i) => i.group === group && inScope(i));
   if (words.length === 0) {

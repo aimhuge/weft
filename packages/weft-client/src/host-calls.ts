@@ -18,6 +18,8 @@ export type CardPatch = {
   // read scope (Card.readScope) so the live session's folder guard allows it
   // and the next session starts with it as additionalDirectories.
   readScope?: unknown;
+  // "Allow safe SQL on this card" (the app's lib/db-calls.ts): true turns it on, false off.
+  safeSql?: unknown;
   // The backlog's drop-onto-card gesture: place this card before `before` (a sibling id)
   // in the card's own column, or at the end when null.
   before?: string | null;
@@ -28,9 +30,10 @@ export type CardPatch = {
 
 export type CardUpdateArgs = { id: string; body: CardPatch };
 
-// A mode change or a read grant widens what the thread may do: only Weft's own window, not a thread's curl (lib/guard.ts).
+// A mode change, a read grant or safe SQL widens what the thread may do: only Weft's own window, not a thread's curl
+// (lib/guard.ts).
 export function widens(body: CardPatch): boolean {
-  return body.permissionMode !== undefined || body.readScope !== undefined;
+  return body.permissionMode !== undefined || body.readScope !== undefined || body.safeSql !== undefined;
 }
 
 export type MessageBody = { text?: string; edit?: boolean; restart?: boolean };

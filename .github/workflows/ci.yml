@@ -31,7 +31,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: node scripts/lint-shard.mjs --check 3
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: .eslintcache-${{ matrix.shard }}
           key: eslint-${{ runner.os }}-${{ matrix.shard }}-${{ hashFiles('pnpm-lock.yaml', 'eslint.config.mjs') }}-${{ github.sha }}
@@ -51,7 +51,7 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       # tsc's incremental info and Next's type cache: a warm restore makes the check a delta.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: |
             tsconfig.tsbuildinfo

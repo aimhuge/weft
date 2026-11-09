@@ -4,11 +4,15 @@ const { BaseWindow, Menu, Tray, app, clipboard, dialog, nativeImage, shell, webC
 const fs = require("node:fs");
 const path = require("node:path");
 const { showAboutWindow } = require("./about.cjs");
+const { COPILOT_ENABLED } = require("./features.cjs");
 const { READ_HEADERS } = require("./server-read.cjs");
 const { createKeepWorking } = require("./keep-working.cjs");
 const { armRestart } = require("./restart-when-idle.cjs");
 const { createAppUpdater } = require("./updater.cjs");
 const { pushUpdateState, registerUpdateBridge, showUpdateWindow } = require("./update-window.cjs");
+
+// A menu item only when the copilot's feature flag is on (lib/features.ts), spread into a menu template.
+const copilotItem = (item) => (COPILOT_ENABLED ? [item] : []);
 
 function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, getAppView, getServer, showMain, sendMenu, showCopilot, toggleCopilot, dataDir }) {
   let tray;
@@ -146,7 +150,7 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
       {
         label: "View",
         submenu: [
-          { label: "Copilot", accelerator: "CmdOrCtrl+J", click: toggleCopilot },
+          ...copilotItem({ label: "Copilot", accelerator: "CmdOrCtrl+J", click: toggleCopilot }),
           { label: "Browser", accelerator: "CmdOrCtrl+Shift+B", click: () => pane.setVisible(!pane.isVisible()) },
           {
             label: "Terminal",
@@ -183,7 +187,7 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
           { label: "Zoom", click: () => getWin()?.maximize() },
           { type: "separator" },
           { label: "Board", accelerator: "CmdOrCtrl+1", click: showMain },
-          { label: "Copilot", accelerator: "CmdOrCtrl+2", click: showCopilot },
+          ...copilotItem({ label: "Copilot", accelerator: "CmdOrCtrl+2", click: showCopilot }),
         ],
       },
       {
@@ -253,7 +257,7 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
         { type: "separator" },
         ...(keepWorking ? [keepWorking.menu(), { type: "separator" }] : []),
         { label: `Open ${APP_NAME}`, click: showMain },
-        { label: "Copilot", accelerator: COPILOT_SHORTCUT, click: showCopilot },
+        ...copilotItem({ label: "Copilot", accelerator: COPILOT_SHORTCUT, click: showCopilot }),
         {
           label: "New Thread",
           click: () => {
@@ -290,7 +294,7 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
             sendMenu("new-thread");
           },
         },
-        { label: "Copilot", click: showCopilot },
+        ...copilotItem({ label: "Copilot", click: showCopilot }),
       ]),
     );
   }

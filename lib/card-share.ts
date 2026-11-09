@@ -9,7 +9,8 @@ import { hashSharePassword } from "@aimhuge/share/server";
 import { accountClient } from "./account";
 import { syncNow, syncOrgId } from "./cloud-sync";
 import { recordExplore } from "./explore";
-import { syncFolders } from "./settings";
+import { orgForFolder } from "./cloud-sync-route";
+import { syncedFolders } from "./cloud-sync-team";
 import { decorateCard, getCard } from "./store";
 import { workerShareCard } from "./card-share-worker";
 import { cardShareLink, isCardShareMode, newShareId, type CardShareMode, type CardShareState, type CardShareUpdate } from "./share-types";
@@ -60,9 +61,11 @@ async function target(cardId: string): Promise<Target> {
   const userId = data.session?.user.id;
   if (!card) return workerTarget(client, userId, cardId);
   if (!client || !userId) return { kind: "blocked", state: { kind: "signed-out" } };
-  const orgId = await syncOrgId(client, userId);
-  if (!orgId) return { kind: "blocked", state: { kind: "no-workspace" } };
-  if (!syncFolders().includes(card.cwd)) return { kind: "blocked", state: { kind: "not-synced", folder: card.cwd } };
+  const home = await syncOrgId(client, userId);
+  if (!home) return { kind: "blocked", state: { kind: "no-workspace" } };
+  // A folder a team linked syncs for you with no switch of your own, and its cards go to the team's workspace, not home.
+  if (!syncedFolders().includes(card.cwd)) return { kind: "blocked", state: { kind: "not-synced", folder: card.cwd } };
+  const orgId = await orgForFolder(client, home, card.cwd);
   // The share's foreign key needs the card's row; nudge the outbox and let the dialog ask again.
   const row = await client.from("cloud_cards").select("card_id").eq("org_id", orgId).eq("card_id", cardId).maybeSingle();
   check(row.error);
@@ -120,6 +123,14 @@ async function answer(t: Ready, cardId: string): Promise<CardShareState> {
   const [row, username] = await Promise.all([readWithSlug(t, cardId), sharerUsername(t.client, t.userId)]);
   const state = stateOf(row, username);
   return t.local ? remember(cardId, state) : state;
+}
+
+// The card's share row and the client that may write beside it, for the People field (lib/card-share-grants.ts):
+// blocked with the same state the dialog shows, else the row's id (null before the first share).
+export async function shareRowFor(cardId: string): Promise<{ kind: "blocked"; state: CardShareState } | { kind: "ready"; client: SupabaseClient; shareId: string | null }> {
+  const t = await target(cardId);
+  if (t.kind === "blocked") return t;
+  return { kind: "ready", client: t.client, shareId: (await readShare(t.client, t.orgId, cardId))?.id ?? null };
 }
 
 export async function getCardShare(cardId: string): Promise<CardShareState> {

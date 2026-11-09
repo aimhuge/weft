@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import type { ElicitField, PendingElicitation } from "@/lib/types";
+import { DeclineWhy } from "./SqlReview";
 import { BUTTON_PRIMARY_SMALL as PRIMARY, BUTTON_SECONDARY_SMALL as SECONDARY } from "./button-styles";
 
 // An MCP server asking you something mid-call (lib/elicitation.ts): its message, the URL it sends you to,
@@ -77,11 +78,17 @@ export default function ElicitationForm({
   elicitation,
   answered,
   readOnly,
+  risky,
+  extra,
   onAnswer,
 }: {
   elicitation: PendingElicitation;
   answered: boolean;
   readOnly: boolean;
+  // Flagged SQL the review hasn't called Safe (components/SqlReview.tsx riskySql): Decline leads, and this says why.
+  risky?: string;
+  // A button beside Accept when the review says Safe: "Allow safe SQL on this card".
+  extra?: ReactNode;
   onAnswer: (allow: boolean, answers?: Record<string, string>) => void;
 }) {
   const [answers, setAnswers] = useState(() => initialAnswers(elicitation.fields));
@@ -100,11 +107,13 @@ export default function ElicitationForm({
         <Field key={f.name} field={f} value={answers[f.name] ?? ""} onChange={(v) => setAnswers((a) => ({ ...a, [f.name]: v }))} />
       ))}
       {!readOnly && (
-        <div className="flex gap-2">
-          <button onClick={() => onAnswer(true, fields.length ? answers : undefined)} disabled={answered} className={PRIMARY}>
+        <div className={`flex flex-wrap gap-2 ${risky ? "flex-row-reverse justify-end" : ""}`}>
+          <DeclineWhy why={risky} />
+          <button onClick={() => onAnswer(true, fields.length ? answers : undefined)} disabled={answered} className={risky ? SECONDARY : PRIMARY}>
             {fields.length ? "Submit" : "Accept"}
           </button>
-          <button onClick={() => onAnswer(false)} disabled={answered} className={SECONDARY}>
+          {!risky && extra}
+          <button onClick={() => onAnswer(false)} disabled={answered} className={risky ? PRIMARY : SECONDARY}>
             Decline
           </button>
         </div>

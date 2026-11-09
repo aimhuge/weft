@@ -126,6 +126,8 @@ contextBridge.exposeInMainWorld("weft", {
     requestJoin: (vaultId) => ipcRenderer.invoke("vault:join-request", vaultId),
     join: (folder, details) => ipcRenderer.invoke("vault:join", folder, details),
     share: (folder, orgId, repo, label) => ipcRenderer.invoke("vault:share", folder, orgId, repo, label),
+    // A team linked this repo: share this Mac's vault for it with the team (docs/architecture/teams-vault.md).
+    shareRepo: (orgId, orgName, repo) => ipcRenderer.invoke("vault:share-repo", orgId, orgName, repo),
     // A shared vault's rotate (docs/architecture/teams-vault.md, "Removal and rotation"): the new key
     // is made in main, because that is the only place a vault key exists. The board asks for it and
     // gets back the names to change at their providers — names, never a value.

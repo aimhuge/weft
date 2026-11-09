@@ -8,9 +8,11 @@ import "./test-utils";
 import TeamSettings from "./TeamSettings";
 
 const useTeamMock = vi.hoisted(() => vi.fn<(_org?: string) => TeamHook>());
+const prefetchTeamsMock = vi.hoisted(() => vi.fn());
 
-vi.mock("@/lib/use-team", () => ({ useTeam: useTeamMock, prefetchTeam: vi.fn() }));
-vi.mock("@/lib/use-board-repos", () => ({ useBoardRepos: () => ["aimhuge/weft", "aimhuge/other"] }));
+vi.mock("@/lib/use-team", () => ({ useTeam: useTeamMock, prefetchTeam: vi.fn(), prefetchTeams: prefetchTeamsMock }));
+vi.mock("@/lib/use-board-repos", () => ({ useBoardProjects: () => ({ repos: ["aimhuge/weft", "aimhuge/other"], cards: { "aimhuge/weft": 3 } }) }));
+vi.mock("@/lib/use-github-orgs", () => ({ useGithubOrgs: () => [], useOrgRepos: () => [] }));
 vi.mock("./team/ProjectPeople", () => ({ ProjectPeople: () => null }));
 
 const ada = { id: "u1", email: "ada@b.co", name: "Ada", avatar: null };
@@ -89,26 +91,36 @@ describe("TeamSettings", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
-  it("renders the workspace, roster, invite form, pending invites, and Open on weft.zip", () => {
-    setHook({ kind: "ok", team });
-    render(<TeamSettings />);
+  it("orders the team projects first, then people, then a closed Advanced", async () => {
+    setHook({ kind: "ok", team: { ...team, members: [...team.members, { userId: "u3", email: null, name: null, login: "yozulker9", role: "member", joinedAt: "2026-10-02T00:00:00.000Z" }] } });
+    const { container } = render(<TeamSettings />);
     // The picked team heads its own sections, below the list of every team.
     expect(screen.getByRole("heading", { name: "Acme" })).toBeInTheDocument();
-    expect(screen.getByText("Ada")).toBeInTheDocument();
-    expect(screen.getByText("grace@b.co")).toBeInTheDocument();
-    expect(screen.getByText("linus@b.co")).toBeInTheDocument();
-    // The invite form, the pending list, the Open-on-weft.zip link.
+    expect(screen.getByText("1 project · 3 people")).toBeInTheDocument();
+    const titles = [...container.querySelectorAll("h4")].map((h) => h.textContent);
+    expect(titles.slice(1)).toEqual(["Projects", "People"]);
+    // Each project carries its cards on this board.
+    expect(screen.getByText("3 cards")).toBeInTheDocument();
+    // People by @login when they signed in with GitHub, and a count of open invites.
+    const people = within(screen.getByRole("list", { name: "People" }));
+    expect(people.getByText("@yozulker9")).toBeInTheDocument();
+    expect(people.getByText("Grace")).toBeInTheDocument();
+    expect(screen.getByText("1 invited")).toBeInTheDocument();
+    // The form and the pending list wait behind Invite…; roles behind a closed Advanced.
+    expect(screen.queryByRole("button", { name: "Send invite" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Invite…" }));
     expect(screen.getByRole("button", { name: "Send invite" })).toBeInTheDocument();
+    expect(screen.getByText("linus@b.co")).toBeInTheDocument();
+    expect(container.querySelector("details")).not.toHaveAttribute("open");
+    expect(screen.getByText(/Advanced: roles, project access/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open on weft.zip" })).toBeInTheDocument();
-    // The heading counts the people, the invites and the projects.
-    expect(screen.getByText("2 members · 1 invited · 1 project")).toBeInTheDocument();
   });
 
   it("hides the invite form and pending list when the user can't manage", () => {
     const member = { ...team, canManage: false, pending: [] };
     setHook({ kind: "ok", team: member });
     render(<TeamSettings />);
-    expect(screen.queryByRole("button", { name: "Send invite" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Invite…" })).not.toBeInTheDocument();
     expect(screen.queryByText("linus@b.co")).not.toBeInTheDocument();
   });
 
@@ -172,9 +184,10 @@ describe("TeamSettings", () => {
     expect(refresh).toHaveBeenCalled();
   });
 
-  it("describes the invite roles in Weft's words, not the package's", () => {
+  it("describes the invite roles in Weft's words, not the package's", async () => {
     setHook({ kind: "ok", team });
     render(<TeamSettings />);
+    await userEvent.click(screen.getByRole("button", { name: "Invite…" }));
     expect(screen.getByText(/Sees the team's projects, synced boards and people/)).toBeInTheDocument();
     expect(screen.queryByText("View and publish.")).not.toBeInTheDocument();
   });
@@ -186,6 +199,12 @@ describe("TeamSettings", () => {
     expect(useTeamMock).toHaveBeenCalledWith("gone");
     await waitFor(() => expect(useTeamMock).toHaveBeenLastCalledWith(undefined));
     expect(window.localStorage.getItem("weft-team-org")).toBeNull();
+  });
+
+  it("warms every team in the list once it's loaded, so a switch opens instantly", () => {
+    setHook({ kind: "ok", team });
+    render(<TeamSettings />);
+    expect(prefetchTeamsMock).toHaveBeenCalledWith(team.orgs.map((o) => o.slug));
   });
 
   it("falls back to the default when the remembered team is not found", async () => {
@@ -200,7 +219,7 @@ describe("TeamSettings", () => {
     useTeamMock.mockReturnValue({ state: { kind: "ok", team }, refresh: vi.fn(), actions: a });
     const { unmount } = render(<TeamSettings />);
     expect(screen.getByRole("link", { name: "aimhuge/weft" })).toHaveAttribute("href", "https://github.com/aimhuge/weft");
-    await userEvent.selectOptions(screen.getByLabelText("Project from your board"), "aimhuge/other");
+    await userEvent.type(screen.getByLabelText("GitHub repo"), "aimhuge/other");
     await userEvent.click(screen.getByRole("button", { name: "Add project" }));
     await waitFor(() => expect(a.addProject).toHaveBeenCalledWith("aimhuge/other"));
     unmount();
@@ -215,7 +234,8 @@ describe("TeamSettings", () => {
     const a = actions();
     useTeamMock.mockReturnValue({ state: { kind: "ok", team }, refresh: vi.fn(), actions: a });
     render(<TeamSettings />);
-    await userEvent.type(screen.getByLabelText("Email"), "linus@b.co");
+    await userEvent.click(screen.getByRole("button", { name: "Invite…" }));
+    await userEvent.type(screen.getByLabelText("Email or @GitHub login"), "linus@b.co");
     await userEvent.click(screen.getByRole("button", { name: "Send invite" }));
     await waitFor(() => expect(a.invite).toHaveBeenCalledWith("linus@b.co", "member"));
   });

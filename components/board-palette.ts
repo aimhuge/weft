@@ -3,6 +3,7 @@ import { openChangelog } from "@/lib/changelog-open";
 import { openInPane } from "@/lib/open-in-pane";
 import { activeAt, recentMoves, SORTERS, type ProjectSummary, type SortKey } from "@/lib/board-view";
 import { timeAgo } from "@/lib/format";
+import { copilotEnabled } from "@/lib/features";
 import { SCENES, setTheme, THEMES } from "@/lib/theme";
 import { replayWelcome } from "@/lib/welcome-client";
 import { replayLastAchievement } from "@/lib/achievement-replay";
@@ -102,7 +103,7 @@ function commandItems(s: PaletteState, a: PaletteActions): PaletteItem[] {
   const commands: PaletteItem[] = [
     command("new", "New thread", "plus", a.openNew, "n"),
     command("filter", "Filter cards", "search", a.focusFilter, "/"),
-    command("copilot", "Open or close the copilot", "sparkles", a.toggleCopilot, "c"),
+    ...(copilotEnabled() ? [command("copilot", "Open or close the copilot", "sparkles", a.toggleCopilot, "c")] : []),
     command("browser", "Toggle the browser", "globe", a.toggleBrowser, "b"),
     command("terminal", "Toggle the terminal", "terminal", a.toggleTerminal, "t", "shell console command line"),
     command("settings", "Open settings", "sliders", a.openSettings, ","),
@@ -162,7 +163,9 @@ export function boardPaletteItems(s: PaletteState, a: PaletteActions): PaletteIt
     project: folderName(card.cwd),
     column: card.column,
     root: s.rootOf(card.cwd),
-    keywords: [card.prompt, card.lastLine, card.stage, card.remaining, folderName(card.cwd)].filter(Boolean).join(" "),
+    // The id too, so a card named by its short id ("42c9805c") in another card's reply is found by it.
+    keywords: [card.id, card.prompt, card.stage, card.remaining, folderName(card.cwd)].filter(Boolean).join(" "),
+    mentions: card.lastLine,
     preview: (card.error || card.lastLine)?.replace(/\s+/g, " ").trim() || undefined,
     when: timeAgo(activeAt(card), now),
     icon: "file",

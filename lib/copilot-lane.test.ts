@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { columnMinWidth, hasUnread, LANE_CYCLE, laneStateFromPrefs, lastReply, lastReplyAt } from "./copilot-lane";
 import type { ThreadItem } from "./types";
 
@@ -12,10 +12,17 @@ describe("columnMinWidth", () => {
 
 describe("laneStateFromPrefs", () => {
   it("is hidden when both cookies are off, peek when peek is on, open when open is on", () => {
-    expect(laneStateFromPrefs(false, false)).toBe("hidden");
-    expect(laneStateFromPrefs(false, true)).toBe("peek");
-    expect(laneStateFromPrefs(true, false)).toBe("open");
-    expect(laneStateFromPrefs(true, true)).toBe("open");
+    expect(laneStateFromPrefs(false, false, true)).toBe("hidden");
+    expect(laneStateFromPrefs(false, true, true)).toBe("peek");
+    expect(laneStateFromPrefs(true, false, true)).toBe("open");
+    expect(laneStateFromPrefs(true, true, true)).toBe("open");
+  });
+
+  it("is always hidden with the copilot flagged off", () => {
+    expect(laneStateFromPrefs(true, true, false)).toBe("hidden");
+    vi.stubEnv("NEXT_PUBLIC_WEFT_COPILOT", "");
+    expect(laneStateFromPrefs(true, false)).toBe("hidden");
+    vi.unstubAllEnvs();
   });
 });
 

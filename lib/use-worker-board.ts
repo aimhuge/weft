@@ -135,10 +135,11 @@ export function useWorkerBoard(): WorkerBoard {
 // to a worker is drawn among them (lib/worker-pending-cards.ts).
 const NO_PENDING: Card[] = [];
 // Your teammates' cards for your projects (lib/use-team-board.ts) are drawn here too, filed under your own folders, and
-// ride along in `workers.team` so the open one finds its thread (openWorkerThread).
+// ride along in `workers.team` so the open one finds its thread (openWorkerThread); `workers.teamError` is why the last
+// read of them failed, shown on the avatar's tooltip (components/AccountButton.tsx).
 export function useBoardWorkers(cards: Card[]) {
   const read = useWorkerBoard();
-  const team = useTeamBoard().cards;
+  const { cards: team, error: teamError } = useTeamBoard();
   const marks = useSyncExternalStore(subscribeWorkerMarks, workerMarksSnapshot, () => "{}");
   const pending = useSyncExternalStore(subscribePending, pendingSnapshot, () => NO_PENDING);
   const workers = useMemo(() => {
@@ -146,7 +147,7 @@ export function useBoardWorkers(cards: Card[]) {
     return pending.length ? { ...marked, cards: withPending(marked.cards, pending) } : marked;
   }, [read, marks, pending]);
   const boardCards = useMemo(() => [...cards, ...workers.cards, ...team], [cards, workers.cards, team]);
-  return { workers: { ...workers, team }, boardCards };
+  return { workers: { ...workers, team, teamError }, boardCards };
 }
 
 export function withMarks(board: WorkerBoard, marks: Record<string, WorkerMarks>): WorkerBoard {

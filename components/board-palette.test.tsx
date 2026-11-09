@@ -61,6 +61,14 @@ describe("boardPaletteItems", () => {
     expect(ids(items)).not.toContain("cmd-toggle-archived");
   });
 
+  it("offers the copilot command only when its feature flag is on (lib/features.ts)", () => {
+    vi.stubEnv("NEXT_PUBLIC_WEFT_COPILOT", "");
+    expect(ids(boardPaletteItems(state(), actions()))).not.toContain("cmd-copilot");
+    vi.stubEnv("NEXT_PUBLIC_WEFT_COPILOT", "1");
+    expect(ids(boardPaletteItems(state(), actions()))).toContain("cmd-copilot");
+    vi.unstubAllEnvs();
+  });
+
   it("offers Your team, which opens the team page via the shared helper", () => {
     const byId = new Map(boardPaletteItems(state(), actions()).map((i) => [i.id, i]));
     const team = byId.get("cmd-team");
@@ -153,7 +161,8 @@ describe("boardPaletteItems", () => {
     expect(byId.get("project-/Users/me/dev/app")?.detail).toBe("~/dev/app");
     expect(byId.get("project-/srv/site")?.detail).toBe("/srv/site");
     expect(byId.has("card-cp")).toBe(false);
-    expect(byId.get("card-c1")?.keywords).toContain("done it");
+    expect(byId.get("card-c1")?.mentions).toBe("done it");
+    expect(byId.get("card-c1")?.keywords).toContain("c1");
     byId.get("project-all")?.run();
     byId.get("card-c1")?.run();
     expect(a.chooseProject).toHaveBeenCalledWith(null);

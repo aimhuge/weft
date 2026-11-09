@@ -18,8 +18,10 @@ const runTeamOp = vi.hoisted(() => vi.fn());
 // A mutable "env" read through a getter: the route checks SUPABASE_KEY at
 // request time, so the test can flip it off to assert 503.
 const supabaseKey = vi.hoisted(() => ({ value: "sb_test" }));
+// The service client is only checked for presence; null is a deployment without SUPABASE_SECRET_KEY.
+const service = vi.hoisted((): { client: object | null } => ({ client: {} }));
 
-vi.mock("@/lib/web-session", () => ({ bearerUser }));
+vi.mock("@/lib/web-session", () => ({ bearerUser, serviceClient: () => service.client }));
 vi.mock("@/lib/teams", () => ({ currentWorkspaceFor, teamAccessFor }));
 const runCreateTeam = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/team-ops", () => ({ teamSnapshot, runTeamOp }));
@@ -52,6 +54,7 @@ function req({ method = "GET", org, body, auth = "Bearer jwt.tok.en" }: { method
 beforeEach(() => {
   vi.clearAllMocks();
   bearerUser.mockResolvedValue(USER);
+  service.client = {};
   teamAccessFor.mockResolvedValue({ kind: "ok", ctx: CTX });
   currentWorkspaceFor.mockResolvedValue({ kind: "ok", slug: "acme" });
   teamSnapshot.mockResolvedValue(SNAPSHOT);
@@ -98,12 +101,26 @@ describe("GET /api/teams", () => {
     expect(await res.json()).toEqual({ error: "not-found" });
   });
 
-  it("is 401 signed-out when the user has no current workspace and ?org is omitted", async () => {
+  it("is 404 not-found, not signed-out, when a signed-in user has no current workspace and ?org is omitted", async () => {
     currentWorkspaceFor.mockResolvedValueOnce({ kind: "none" });
     const res = await route.GET(req());
-    expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "signed-out" });
+    expect(res.status).toBe(404);
+    expect(await res.json()).toEqual({ error: "not-found" });
     expect(teamAccessFor).not.toHaveBeenCalled();
+  });
+
+  it("is 503 unconfigured, not signed-out, when the deployment has no service key", async () => {
+    service.client = null;
+    const res = await route.GET(req());
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: "unconfigured" });
+    expect(bearerUser).not.toHaveBeenCalled();
+  });
+
+  it("is 503 when the access check itself says unconfigured", async () => {
+    teamAccessFor.mockResolvedValueOnce({ kind: "unconfigured" });
+    const res = await route.GET(req({ org: "acme" }));
+    expect(res.status).toBe(503);
   });
 
   it("is 503 unconfigured when SUPABASE_KEY is missing", async () => {
@@ -216,8 +233,14 @@ describe("POST /api/teams project and create ops", () => {
     runCreateTeam.mockResolvedValue({ ok: true, message: "Created", slug: "new" });
     const res = await route.POST(req({ method: "POST", body: { action: "create", name: "New" } }));
     expect(await res.json()).toEqual({ ok: true, message: "Created", slug: "new" });
-    expect(runCreateTeam).toHaveBeenCalledWith(USER, "New");
+    expect(runCreateTeam).toHaveBeenCalledWith(USER, "New", undefined);
     expect(teamAccessFor).not.toHaveBeenCalled();
+  });
+
+  it("passes a create op's slug hint through", async () => {
+    runCreateTeam.mockResolvedValue({ ok: true, message: "Created", slug: "acme" });
+    await route.POST(req({ method: "POST", body: { action: "create", name: "Acme Inc", slug: "acme" } }));
+    expect(runCreateTeam).toHaveBeenCalledWith(USER, "Acme Inc", "acme");
   });
 
   it("create is 401 when signed out, 503 unconfigured, 400 without a name", async () => {

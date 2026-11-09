@@ -107,6 +107,16 @@ describe("uploadPending with a route", () => {
     expect(left).toEqual([]);
   });
 
+  // 1,600 ids in one `card_id=in.(…)` made a 61 KB URL the gateway answered with a 520 page, every flush.
+  it("leaves the home copies a chunk of ids at a time, so the URL stays short", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `t${i}`);
+    for (const id of ids) addCard(id, 0);
+    const { client, writes } = recorder();
+    await upload(ids.map((cardId) => ({ op: "card", cardId, at: 1 })), client);
+    const leaves = writes.filter((w) => w[1] === "update").map((w) => w[3]!.replace("card_id in ", "").split(",").length);
+    expect(leaves).toEqual([100, 100, 50]);
+  });
+
   it("marks a deleted card gone in every workspace, and truncates in the card's own", async () => {
     addCard("t1", 1);
     const { client, writes } = recorder();

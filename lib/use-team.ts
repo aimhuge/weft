@@ -2,9 +2,11 @@
 
 import { upgradeOnGate } from "./use-upgrade";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { API_HEADERS, apiFetch } from "./api-client";
+import { API_HEADERS } from "./api-client";
 import { ACCOUNT_EVENT } from "./auth/hooks";
+import { cachedTeam, clearTeamCache, loadTeam, warmTeams } from "./team-cache";
 import { vaultBridge } from "./vault-view";
+import { linkNote, shareLinkedRepo } from "./team-vault-link";
 import type { NewTeamOp, NewTeamResult, TeamActionResult, TeamClientActions, TeamOp, TeamSnapshot, VaultRotateResult } from "./team-types";
 
 // The board's view of one workspace on the deployed weft.zip (docs/architecture/teams.md). The desktop's
@@ -18,6 +20,8 @@ export type TeamHookState =
   | { kind: "error"; message: string }
   | { kind: "ok"; team: TeamSnapshot };
 
+export { clearTeamCache, prefetchTeam, prefetchTeams } from "./team-cache";
+
 export type TeamHook = {
   state: TeamHookState;
   refresh: () => void;
@@ -26,32 +30,6 @@ export type TeamHook = {
 
 // The headers the local route needs; x-weft-token is what lib/guard.ts checks on writes.
 const WRITE_HEADERS = { ...API_HEADERS, "content-type": "application/json" };
-
-// We can't read the status from the typed `api` client (it throws on non-2xx), so the hook asks the
-// server directly and maps the status to a state. The forwarder has already turned a fetch error into
-// a 502 { error: "offline" } reply, so a 502 here is "we couldn't reach weft.zip".
-async function fetchTeam(org: string | undefined): Promise<{ state: Exclude<TeamHookState, { kind: "loading" }> }> {
-  const query = org ? `?org=${encodeURIComponent(org)}` : "";
-  let res: Response;
-  try {
-    res = await apiFetch(`/api/account/team${query}`, { method: "GET" });
-  } catch {
-    return { state: { kind: "error", message: "Couldn't reach weft.zip." } };
-  }
-  const body = (await res.json().catch(() => ({}))) as { error?: unknown } & Partial<TeamSnapshot>;
-  if (res.status === 401) return { state: { kind: "signed-out" } };
-  if (res.status === 404) return { state: { kind: "error", message: "No workspace found." } };
-  if (res.status === 502) return { state: { kind: "error", message: "Couldn't reach weft.zip." } };
-  if (!res.ok) {
-    const message = typeof body.error === "string" ? body.error : `Weft's team API answered ${res.status}.`;
-    return { state: { kind: "error", message } };
-  }
-  // The 2xx path: weft.zip's /api/teams is the only producer of TeamSnapshot the board reads, so a
-  // structurally wrong reply is the deployer's problem; we still try to render what we got.
-  return { state: { kind: "ok", team: body as TeamSnapshot } };
-}
-
-type Loaded = Exclude<TeamHookState, { kind: "loading" }>;
 
 // The desktop's rotate call, when there is a main to make the key in.
 //
@@ -64,46 +42,13 @@ function rotateVaults(org: string, userId: string): Promise<VaultRotateResult> |
   return bridge.rotate(org, userId);
 }
 
-// The last answer per workspace ("" is your default one), so Settings → Team opens on it while a fresh one
-// loads. prefetchTeam fills it before the page is ever opened: the top bar calls it once you're signed in.
-const cache = new Map<string, Loaded>();
-const inflight = new Map<string, Promise<Loaded>>();
-
-// A fetch that lands in the cache. A first load joins a prefetch already on its way; a refresh (after an
-// action, a sign-in) always asks again, so it can't come back with an answer from before the change.
-function load(org: string | undefined, fresh: boolean): Promise<Loaded> {
-  const key = org ?? "";
-  const running = inflight.get(key);
-  if (running && !fresh) return running;
-  const next = fetchTeam(org).then(({ state }) => {
-    cache.set(key, state);
-    return state;
-  });
-  inflight.set(key, next);
-  void next.finally(() => {
-    if (inflight.get(key) === next) inflight.delete(key);
-  });
-  return next;
-}
-
-// Load a workspace's team ahead of time, unless it's already loaded or loading.
-export function prefetchTeam(org?: string): void {
-  if (cache.get(org ?? "")?.kind === "ok") return;
-  void load(org, false);
-}
-
-// Forget every loaded team: on sign-out, or a switch to another account.
-export function clearTeamCache(): void {
-  cache.clear();
-  inflight.clear();
-}
-
-// Have the signed-in account's team ready before anyone opens Settings → Team: prefetch it for this
-// user id, and forget the cache on sign-out or a switch to another account. The top bar calls it.
+// Have the signed-in account's team ready before anyone opens Settings → Team: the snapshots on disk, then a
+// fresh load of the default and the last-picked workspace (lib/team-cache.ts). Signing out or switching account
+// forgets the loaded teams. The top bar calls it.
 export function useTeamPrefetch(userId: string | undefined): void {
   useEffect(() => {
-    clearTeamCache();
-    if (userId) prefetchTeam();
+    clearTeamCache(false);
+    if (userId) warmTeams(userId);
   }, [userId]);
 }
 
@@ -147,7 +92,7 @@ export function useTeam(org?: string): TeamHook {
   // a burst of refreshes (sign-in events, actions) can't keep a slow load from ever finishing.
   const orgKey = org ?? "";
   const [loaded, setLoaded] = useState<{ org: string; state: TeamHookState } | null>(null);
-  const state: TeamHookState = loaded?.org === orgKey ? loaded.state : (cache.get(orgKey) ?? { kind: "loading" });
+  const state: TeamHookState = loaded?.org === orgKey ? loaded.state : (cachedTeam(orgKey) ?? { kind: "loading" });
 
   const current = useRef(orgKey);
   useEffect(() => {
@@ -155,7 +100,7 @@ export function useTeam(org?: string): TeamHook {
   }, [orgKey]);
 
   useEffect(() => {
-    void load(org, reload > 0).then((next) => {
+    void loadTeam(org, reload > 0).then((next) => {
       // An answer for a workspace you've since switched away from is dropped; any answer for this one is kept.
       if (current.current === orgKey) setLoaded({ org: orgKey, state: next });
     });
@@ -217,11 +162,17 @@ export function useTeam(org?: string): TeamHook {
       return result.ok && namesToRotate.length ? { ok: true, message: `Removed. Turn these at their providers: ${namesToRotate.join(", ")}` } : result;
     },
     revoke: (inviteId) => onTeam((org) => ({ org, action: "revoke", inviteId })),
-    addProject: (repo) => onTeam((org) => ({ org, action: "link-project", repo })),
+    // A linked repo's 🔐 vault is the team's: once the link is in, this Mac's vault for it is shared (lib/team-vault-link.ts).
+    addProject: async (repo) => {
+      const result = await onTeam((org) => ({ org, action: "link-project", repo }));
+      if (!result.ok || state.kind !== "ok" || result.message === "Already linked.") return result;
+      const { id, name } = state.team.org;
+      return { ...result, message: linkNote(repo, name, await shareLinkedRepo(id, name, repo)) };
+    },
     removeProject: (repo) => onTeam((org) => ({ org, action: "unlink-project", repo })),
     setProjectAccess: (repo, userId, grant) => onTeam((org) => ({ org, action: "project-access", repo, userId, grant })),
     // A new, renamed or deleted workspace changes every cached snapshot's `orgs` list, so forget them all before the refresh.
-    createTeam: (name) => postOp({ action: "create", name }).then(refreshAll),
+    createTeam: (name, slug) => postOp(slug ? { action: "create", name, slug } : { action: "create", name }).then(refreshAll),
     renameTeam: (slug, name) => postOp({ org: slug, action: "rename", name }).then(refreshAll),
     deleteTeam: (slug, confirm) => postOp({ org: slug, action: "delete", confirm }).then(refreshAll),
   };

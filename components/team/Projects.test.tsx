@@ -6,8 +6,6 @@ import type { TeamClientActions } from "@/lib/team-types";
 import "../test-utils";
 import { Projects } from "./Projects";
 
-vi.mock("./ProjectPeople", () => ({ ProjectPeople: () => <div>people</div> }));
-
 const projects = [{ repo: "aimhuge/weft", addedAt: "2026-10-01T00:00:00.000Z", addedBy: null, access: [] }];
 
 function actions(over: Partial<TeamClientActions> = {}): TeamClientActions {
@@ -20,19 +18,21 @@ function actions(over: Partial<TeamClientActions> = {}): TeamClientActions {
 
 function view(a: TeamClientActions, props: Partial<Parameters<typeof Projects>[0]> = {}) {
   return render(
-    <Projects projects={projects} canManage actions={a} boardRepos={["aimhuge/weft", "aimhuge/other"]} roleOptions={[]} members={[]} pending={[]} {...props} />,
+    <Projects projects={projects} canManage actions={a} boardRepos={["aimhuge/weft", "aimhuge/other"]} {...props} />,
   );
 }
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("Projects", () => {
-  it("offers only board repos not yet linked and adds the pick", async () => {
+  it("suggests only board repos not yet linked and adds the pick", async () => {
     const a = actions();
-    view(a);
-    const select = screen.getByLabelText("Project from your board");
-    expect(screen.queryByRole("option", { name: "aimhuge/weft" })).not.toBeInTheDocument();
-    await userEvent.selectOptions(select, "aimhuge/other");
+    const { container } = view(a);
+    const suggestions = [...container.querySelectorAll("datalist option")].map((o) => o.getAttribute("value"));
+    expect(suggestions).toEqual(["aimhuge/other"]);
+    const field = screen.getByLabelText("GitHub repo");
+    expect(field).toHaveAttribute("placeholder", "aimhuge/other, or any owner/name");
+    await userEvent.type(field, "aimhuge/other");
     await userEvent.click(screen.getByRole("button", { name: "Add project" }));
     await waitFor(() => expect(a.addProject).toHaveBeenCalledWith("aimhuge/other"));
     expect(await screen.findByRole("status")).toHaveTextContent("Added aimhuge/other.");
@@ -41,7 +41,7 @@ describe("Projects", () => {
   it("validates a typed repo and accepts a GitHub URL", async () => {
     const a = actions();
     view(a, { boardRepos: [] });
-    expect(screen.queryByLabelText("Project from your board")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("GitHub repo")).toHaveAttribute("placeholder", "owner/name, like aimhuge/weft");
     await userEvent.type(screen.getByLabelText("GitHub repo"), "nope");
     await userEvent.click(screen.getByRole("button", { name: "Add project" }));
     expect(screen.getByRole("alert")).toHaveTextContent("owner/name");
@@ -68,6 +68,8 @@ describe("Projects", () => {
     await userEvent.click(screen.getByRole("button", { name: "Remove" }));
     await waitFor(() => expect(a.removeProject).toHaveBeenCalledWith("aimhuge/weft"));
     expect(confirm).toHaveBeenCalledTimes(2);
+    // Unlinking stops new Macs joining the vault but can't take keys back: the confirm says so, and how to.
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/keep its keys.*Rotate shared vaults/));
   });
 
   it("shows a failed remove's message", async () => {
@@ -81,7 +83,6 @@ describe("Projects", () => {
     view(actions(), { canManage: false });
     expect(screen.getByRole("link", { name: "aimhuge/weft" })).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByText("people")).not.toBeInTheDocument();
   });
 
   it("tells a member with no granted projects so", () => {
@@ -89,14 +90,15 @@ describe("Projects", () => {
     expect(screen.getByText("No projects shared with you yet.")).toBeInTheDocument();
   });
 
-  it("empty list for managers invites an add, and has no people suggestions", () => {
+  it("empty list for managers invites an add", () => {
     view(actions(), { projects: [] });
     expect(screen.getByText(/No projects yet/)).toBeInTheDocument();
-    expect(screen.queryByText("people")).not.toBeInTheDocument();
   });
 
-  it("managers with projects get the people suggestions", () => {
-    view(actions());
-    expect(screen.getByText("people")).toBeInTheDocument();
+  it("shows each project's cards on this board, and nothing for none", () => {
+    view(actions(), { projects: [...projects, { ...projects[0]!, repo: "a/b" }, { ...projects[0]!, repo: "a/c" }], cards: { "aimhuge/weft": 12, "a/b": 1 } });
+    expect(screen.getByText("12 cards")).toBeInTheDocument();
+    expect(screen.getByText("1 card")).toBeInTheDocument();
+    expect(screen.getAllByText(/cards?$/)).toHaveLength(2);
   });
 });

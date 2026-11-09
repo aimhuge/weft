@@ -1,7 +1,8 @@
 "use client";
 
 // The Teams page inside the desktop's Settings: "Your teams", every team
-// you're in, and below it the one you picked (components/team/TeamPanel.tsx).
+// you're in, and below it the one you picked (components/team/TeamPanel.tsx):
+// its projects, then its people, then a closed "Advanced".
 // The desktop can't use weft.zip's cookie session or the service key, so
 // `useTeam(org?)` from lib/use-team.ts posts TeamOp bodies to
 // /api/account/team, which forwards them to weft.zip with the desktop's
@@ -10,9 +11,10 @@
 // The dialog page header ("Teams / Every Weft team you're in…") is rendered
 // by SettingsDialog from lib/settings-nav.ts, so this component opens
 // straight on its own cards. The default team is usually there already: the
-// top bar prefetches it once you're signed in (prefetchTeam in
-// lib/use-team.ts), and hovering a row in the list prefetches that one, so
-// "Loading" shows only on a cold start. While a switch loads, the list stays
+// top bar prefetches it and the one you last picked once you're signed in
+// (warmTeams in lib/team-cache.ts, which also keeps the last answers on disk
+// for a cold start), the page then warms the rest of your teams, and hovering
+// a row prefetches that one, so "Loading" shows only the first time ever. While a switch loads, the list stays
 // up from the team you switched from (`last` in lib/use-managed-team.ts).
 // The shared components' wz-* classes take the board's tokens from
 // team/team-board.css under .wz-board.
@@ -22,9 +24,11 @@ import { Spinner } from "./Icon";
 import { Section, SUBTLE, BUTTON } from "./team/SettingsSection";
 import { TeamList } from "./team/TeamList";
 import { TeamPanel } from "./team/TeamPanel";
-import { useBoardRepos } from "@/lib/use-board-repos";
+import { useBoardProjects } from "@/lib/use-board-repos";
+import { useGithubOrgs } from "@/lib/use-github-orgs";
 import { useManagedTeam } from "@/lib/use-managed-team";
-import { prefetchTeam } from "@/lib/use-team";
+import { prefetchTeam, prefetchTeams } from "@/lib/use-team";
+import { useEffect } from "react";
 
 function Loading({ name }: { name?: string }) {
   return (
@@ -53,7 +57,14 @@ function LoadError({ message, onRetry }: { message: string; onRetry: () => void 
 
 export default function TeamSettings() {
   const { state, refresh, actions, setOrg, selected, last } = useManagedTeam();
-  const boardRepos = useBoardRepos(state.kind === "ok");
+  const board = useBoardProjects(state.kind === "ok");
+  // Your GitHub orgs: New team offers them as names, and a team made from one gets its repos suggested.
+  const githubOrgs = useGithubOrgs(state.kind !== "signed-out");
+  // Your other teams, loaded behind the one on screen, so a switch opens instantly too.
+  const slugs = last?.orgs.map((o) => o.slug).join(" ") ?? "";
+  useEffect(() => {
+    if (slugs) prefetchTeams(slugs.split(" "));
+  }, [slugs]);
 
   if (state.kind === "signed-out") {
     return (
@@ -92,10 +103,11 @@ export default function TeamSettings() {
           actions={actions}
           onSwitch={setOrg}
           onHover={prefetchTeam}
+          githubOrgs={githubOrgs}
         />
       </Section>
 
-      {state.kind === "ok" ? <TeamPanel team={state.team} actions={actions} boardRepos={boardRepos} /> : null}
+      {state.kind === "ok" ? <TeamPanel team={state.team} actions={actions} board={board} githubOrgs={githubOrgs} /> : null}
       {state.kind === "loading" ? <Loading name={switching} /> : null}
       {state.kind === "error" ? <LoadError message={state.message} onRetry={refresh} /> : null}
     </div>

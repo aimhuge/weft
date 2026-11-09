@@ -24,7 +24,7 @@ import { globalSingleton } from "./global-singleton";
 import { createBeat } from "./host/beat";
 import { sessionLine } from "./host/identity";
 import { createInbox, newInboxState, startPolling, type Connection } from "./host/inbox";
-import { syncFolders } from "./settings";
+import { syncedFolders } from "./cloud-sync-team";
 import { hasQaGrant } from "./qa-grants";
 
 export { syncFolderFor } from "./cloud-inbox-cards";
@@ -97,7 +97,7 @@ export async function refreshCloudInbox() {
   if (!client) return;
   try {
     // Local Simulator needs the Mac listening, and showing as present, even with no folder synced.
-    const uid = syncFolders().length || hasQaGrant() ? await signedInUser(client) : null;
+    const uid = syncedFolders().length || hasQaGrant() ? await signedInUser(client) : null;
     if (!uid) {
       await stopListening(client);
       return;

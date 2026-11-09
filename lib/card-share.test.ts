@@ -100,7 +100,10 @@ vi.mock("./cloud-sync", () => ({
   },
   syncOrgId: () => Promise.resolve(db.org),
 }));
-vi.mock("./settings", () => ({ syncFolders: () => db.folders }));
+vi.mock("./cloud-sync-team", () => ({ syncedFolders: () => db.folders }));
+// A folder a team linked syncs to the team's workspace (lib/cloud-sync-route.ts); any other goes home.
+const teamOrgs = vi.hoisted(() => new Map<string, string>());
+vi.mock("./cloud-sync-route", () => ({ orgForFolder: (_c: unknown, home: string, folder: string) => Promise.resolve(teamOrgs.get(folder) ?? home) }));
 const cards = vi.hoisted(() => new Map<string, { id: string; cwd: string; title?: string; share?: object }>());
 const decorateCard = vi.hoisted(() => vi.fn((id: string, patch: object) => Object.assign(cards.get(id)!, patch)));
 vi.mock("./store", () => ({ getCard: (id: string) => cards.get(id), decorateCard }));
@@ -114,6 +117,7 @@ const { CardShareError, getCardShare, setCardShare } = await import("./card-shar
 beforeEach(() => {
   Object.assign(db, { user: "u1", org: "o1", folders: ["/w"], cards: new Set(["c1"]), share: null, username: "fo", slugTaken: null, error: null, configured: true, queries: [], writes: [] });
   syncNow.mockClear();
+  teamOrgs.clear();
   cards.clear();
   for (const id of ["c1", "c2"]) cards.set(id, { id, cwd: "/w", title: "Fix the login bug" });
   decorateCard.mockClear();
@@ -144,6 +148,13 @@ describe("getCardShare", () => {
   it("nudges the outbox and answers pending while the card's row hasn't uploaded", async () => {
     expect(await getCardShare("c2")).toEqual({ kind: "pending" });
     expect(syncNow).toHaveBeenCalledTimes(1);
+  });
+
+  it("looks for a team-linked folder's card in the team's workspace, not home", async () => {
+    teamOrgs.set("/w", "team1");
+    expect(await getCardShare("c1")).toMatchObject({ kind: "ok", mode: "private" });
+    expect(db.queries.find((q) => q.table === "cloud_cards")?.filters).toEqual({ org_id: "team1", card_id: "c1" });
+    expect(db.queries.filter((q) => q.table === "cloud_shares").at(-1)?.filters).toEqual({ org_id: "team1", card_id: "c1" });
   });
 
   it("reads an unshared card as private with no link", async () => {

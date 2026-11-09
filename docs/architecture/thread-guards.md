@@ -136,6 +136,15 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
 
 The mode's hint in `MODE_OPTIONS` (`lib/types-card.ts`) says this: "A classifier approves or blocks; Weft asks you about blocks".
 
+## Auto on this card
+
+A Bash prompt the card's own mode raised (`why.category === "mode"`, a Claude Code or puku card in Default or Accept
+edits) offers **Auto on this card** beside Allow (`components/AutoForCard.tsx`): the transport's `setMode` puts the card
+in Auto (applied to the running CLI; `card.update` on a worker) and the command is allowed. From then on Claude Code's
+classifier passes safe commands and stops risky ones, which come to Needs you as classifier denials (below). Prompts
+from Weft's own guards (an outside folder, a claim) aren't the mode's and don't offer it; Codex keeps its mode for the
+session.
+
 ## MCP elicitations
 
 An MCP server can stop mid-call and ask the user something (an MCP *elicitation*): the Supabase MCP confirms an
@@ -162,6 +171,8 @@ it's the server asking, not a tool call.
   fit, so the board gets a 409 and you can answer again. `elicitationResult` turns the settled prompt into the server's
   answer: `accept` (with the typed `content` when there was a form), `decline` for Decline, and `cancel` when the call
   was stopped before anyone answered.
+- A database server's elicitation names no SQL ("Run it on project X?"). `lib/db-calls.ts` puts the SQL of the call
+  that triggered it on the prompt, with a second model's review: docs/architecture/sql-review.md.
 - Codex (`codex exec`, no interactive approvals) and Goose have no channel for an MCP server's prompt mid-call, so this
   is Claude Code and puku-cli only. (Weft's own guards do ask on them: the guard route holds the hook, above.)
 
@@ -177,7 +188,11 @@ symlinks, a file not created yet by its nearest folder). A path only named in pr
 message, a PR's `--title` or `--body`, a sentence `echo` prints, a heredoc written to a page (`proseOf` in
 `lib/shell-text.ts`, the same words the secret guard skips). A `$(cat ~/x)` folded into a message still reaches `~/x`,
 so its own paths stay. Before this, a marketing card stalled on "Outside the project: use ~/.weftn", which was
-`~/.weft\n` inside a quoted string. A path with a glob in it (`* ? [ {`: a Bash token, or a Glob
+`~/.weft\n` inside a quoted string. An agent CLI's prompt or a tool's message is prose too (2026-11-08): a sentence (a space in it, not
+starting like a path) after `-p`, `-m`, `--prompt` or `--message` on any command (`promptWords`), so `puku-cli -p "…"`
+no longer reads its own brief as paths, while `mkdir -p "/Users/me/My Drive/x"` and `ssh -p 22` stay words. And a glob
+one level under the root (`/*`, `/U*`, `ROOT_GLOB`) never counts for Bash: a prompt saying "-- and /* */ comments"
+expanded to `/Users` and `/Volumes` and stalled cards on "Outside the project: use /Volumes". `/Users/*/x` still expands. A path with a glob in it (`* ? [ {`: a Bash token, or a Glob
 tool's absolute pattern) is expanded with `fs.globSync` (walk capped at 5,000 entries, 300 matches) and each match is
 checked: the first one outside is the one asked about, granting its real project (`~/dev/*weft*/node_modules` from
 the weft project asks about `~/dev/weft-build`, not a literal `~/dev/*weft*` that granting would never match). A glob
@@ -186,11 +201,14 @@ with no matches stands for its fixed start, the folder before the first glob cha
 - **Never asked about**: the project (an isolated card's worktree, for it), `card.readScope`, `settings.allowedFolders`, Weft's data folder (`~/.weft`, but not `~/.weft/worktrees`: another card's worktree asks like any other folder),
   the card's own memory folder (`~/.claude/projects/<project>/memory`, `memoryDir`; nothing else in `~/.claude`), temp
   dirs, `/dev`, `/tmp` and the system's tool and library paths.
-- **The prompt** reads "Outside the project: read ~/Downloads" with an **Outside project** chip. The folder is the call's
+- **The prompt** reads "Outside the project: read ~/Downloads" with an **Outside project** chip. For Bash it also names
+  the word that read as a path, with ~28 characters of the line each side (`tokenContext` → `why.match`, rendered by
+  `Matched` in `components/PermissionInput.tsx`), and folds the call's JSON behind **Raw**, since the word already says
+  what the prompt is about. The folder is the call's
   project root (nearest ancestor with a `.git`, `package.json`…, below home), else the file's folder, never home itself
   (`grantRoot`). `folderAsk` carries the question, reason and folder from the hook to `canUseTool`
   (`lib/runner-session.ts`), whose `askUser` puts the folder on the pending request as `readScope`.
-- **Buttons** (`PermissionActions`): **Allow once**; **This card** (`PATCH /api/cards/:id { readScope }`, the card's
+- **Buttons** (`PermissionActions`): **Allow** (this one call); **Grant this card** (`PATCH /api/cards/:id { readScope }`, the card's
   `additionalDirectories` from the next session, and the folder guard reads it live for the current one: no `/add-dir`
   turn, which the SDK CLI refuses); **Always** (`POST /api/folders`
   → `settings.allowedFolders`, which every new session also gets as `additionalDirectories`); Deny.

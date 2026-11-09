@@ -957,6 +957,20 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   Mac's synced folder, a worker's work root. `start: false` travels in the payload (`NewCardPayload.start`,
   `newCardBody`, `runBody`). No agent travels: the target starts it as that project's default
   ([Agents across hosts](#agents-across-hosts)).
+- **Which Mac.** Two Macs can both hold `/Users/me/dev/weft`, so a folder alone can't name one. `mac://<Mac>/<path>`
+  does, beside `worker://<id>/<name>` (`lib/worker-board-macs.ts`): the Mac by its device id, the first 8 or more
+  characters of it, or its name, case aside and unique among the owner's Macs. The name is the one it already beats
+  with (`desktopName`, its host name, in its `desktop` row of `cloud_workers`, what Settings → Sync → Workers shows the
+  workspace), read through `worker_board_macs` (key-checked, the owner's unrevoked Macs in the worker's workspace, only
+  device id and name; `supabase/migrations/20261105150000_worker_board_macs.sql`, which also lets `worker_new_card` take a
+  Mac that beats here with no cards yet and refuse one whose host row was revoked). `list_cards` on a worker files each
+  Mac card under `mac://<label>/<path>`, the label being the Mac's name, or the first 12 characters of its id when
+  another Mac shares the name or none is known (an older wiring or database, where `boardMacs` reads as none). So the
+  folder a thread sees is the one it passes back, and an ambiguous folder's error lists each choice as that exact
+  string. After the Mac, a path with a slash is absolute and goes as written, so a synced folder with no cards yet works
+  (the Mac checks it's switched on in Settings → Sync); a bare name is that Mac's one card folder of that name (two is an
+  error listing both), else goes for the Mac to resolve (`syncFolderFor`). This Mac's own `create_card` never had the problem: its ambiguity error
+  already lists `worker://` paths, and it doesn't send cards to another Mac at all.
 - **A worker's card never runs unasked elsewhere.** A worker key belongs to a box, and a thread's prompt can be injected,
   so `worker_new_card` treats both as untrusted: it rebuilds the payload from `prompt`, `title`, `tags` and
   `start: false` alone (no mode, agent, model, repo or attachments) and stamps it `fromWorker: <id>`, which only the
@@ -992,7 +1006,7 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   PreToolUse hook in `guardHooks`, denies a call to one of those with the same why, so Claude Code, Codex and Goose
   all hear it before the tool runs. Landing a tool on workers is flipping its entry to `true`.
 - **Migration** `supabase/migrations/20261102210000_worker_board_tools.sql`: `worker_board_cards`, `worker_new_card`,
-  `cloud_worker_lists` and `worker_set_lists`. Applied.
+  `cloud_worker_lists` and `worker_set_lists`. Applied. `20261105150000_worker_board_macs.sql` (`worker_board_macs`). Applied 2026-11-06.
 - **Changing a Mac's cron from a worker** is refused by design (below).
 - **The other way, built and landing (PR #83).** This Mac's board tools reach worker cards: `list_cards` merges the
   workers' boards and `read_thread` reads a worker thread from its synced pages (`lib/board-tools-hosts.ts`,

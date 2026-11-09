@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
-import { repoOf, shareTargets, type VaultOrg } from "@/lib/vault-shared";
+import { repoOf, sharedLabel, shareOfferOrg, shareTargets, type VaultOrg } from "@/lib/vault-shared";
 import "./test-utils";
 import { ShareOffer, SharedBadge } from "./VaultParts";
 
@@ -49,7 +49,7 @@ function bridge(over: Partial<VaultBridge> = {}): VaultBridge {
 describe("SharedBadge", () => {
   it("shows the workspace's name and the vault key's version", () => {
     render(<SharedBadge vault={vault({ shared })} />);
-    expect(screen.getByText("Acme")).toBeInTheDocument();
+    expect(screen.getByText("Shared with Acme")).toBeInTheDocument();
     expect(screen.getByText("v3")).toBeInTheDocument();
   });
 
@@ -184,5 +184,31 @@ describe("repoOf", () => {
 
   it("has no repo for a folder-only vault", () => {
     expect(repoOf("folder:/dev/notes")).toBe("");
+  });
+});
+
+describe("shareOfferOrg", () => {
+  const mine = org({ id: "me", slug: "fotoflo", name: "Mine", members: 1 });
+  const team = org({ id: "t", slug: "team", name: "Team", members: 4, admin: false });
+
+  it("offers the team that linked the repo, even where the user isn't an admin", () => {
+    expect(shareOfferOrg([mine, team], "o/web", { orgId: "t", name: "Team" })).toBe(team);
+  });
+
+  it("falls back to the best share target when nothing linked it, or the linked team isn't the user's", () => {
+    expect(shareOfferOrg([team, mine], "o/web")).toBe(mine);
+    expect(shareOfferOrg([team, mine], "o/web", { orgId: "gone", name: "Gone" })).toBe(mine);
+  });
+
+  it("offers nothing when there is nowhere to share", () => {
+    expect(shareOfferOrg([team], "o/web")).toBeNull();
+    expect(shareOfferOrg([], "o/web", { orgId: "t", name: "Team" })).toBeNull();
+  });
+});
+
+describe("sharedLabel", () => {
+  it("names the workspace, or just says Shared without one", () => {
+    expect(sharedLabel(shared)).toBe("Shared with Acme");
+    expect(sharedLabel({ ...shared, org: { ...shared.org, name: "" } })).toBe("Shared");
   });
 });

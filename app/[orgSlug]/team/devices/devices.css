@@ -1,5 +1,5 @@
-/* The team's Devices page: the machine table, the fingerprint, and the pending-grant rows.
-   It leans on team.css for the page shell (wz-teamPage, wz-teamHeader, wz-roster, wz-inviteForm) and
+/* The team's Devices page: the machine table, and the fingerprint.
+   It leans on team.css for the page shell (wz-teamPage, wz-teamHeader, wz-roster) and
    adds only what the device list needs. The fingerprint is monospaced so the two sides of a TOFU
    comparison line up character for character. */
 
@@ -45,11 +45,6 @@
   white-space: nowrap;
 }
 
-.wz-deviceFingerprintInput {
-  font-family: var(--mono);
-  font-size: 13.5px;
-  letter-spacing: 0.03em;
-}
 
 .wz-deviceRowRevoked .wz-deviceName,
 .wz-deviceRowRevoked .wz-deviceFingerprint {
@@ -57,35 +52,10 @@
   opacity: 0.55;
 }
 
-.wz-deviceFormTitle {
-  margin: 0;
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: 17px;
-  letter-spacing: -0.01em;
-  color: var(--thread);
-}
 
-.wz-devicePendingRow {
-  align-items: flex-start;
-}
 
-.wz-devicePendingWho {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-width: 0;
-}
 
-.wz-devicePendingHeadline {
-  font-size: 14.5px;
-  color: var(--thread);
-}
 
-.wz-devicePendingWhen {
-  font-size: 12.5px;
-  color: var(--thread-3);
-}
 
 @media (max-width: 720px) {
   .wz-deviceFingerprint {

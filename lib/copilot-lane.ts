@@ -1,4 +1,5 @@
 import type { ThreadItem } from "./types";
+import { copilotEnabled } from "./features";
 
 // The copilot floats in the window's bottom-right corner (components/CopilotLane.tsx, placed by
 // lib/copilot-float.ts). It has three states, like Intercom's messenger:
@@ -13,7 +14,9 @@ export type LaneState = "hidden" | "peek" | "open";
 export const LANE_CYCLE: Record<LaneState, LaneState> = { hidden: "peek", peek: "open", open: "hidden" };
 
 // Resolve the current lane state from the two cookies (lib/board-prefs.ts). `open` wins over `peek`.
-export function laneStateFromPrefs(open: boolean, peek: boolean): LaneState {
+// With the copilot flagged off (lib/features.ts) it's always hidden, so a saved cookie can't narrow the columns.
+export function laneStateFromPrefs(open: boolean, peek: boolean, enabled = copilotEnabled()): LaneState {
+  if (!enabled) return "hidden";
   return open ? "open" : peek ? "peek" : "hidden";
 }
 

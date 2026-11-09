@@ -2,6 +2,7 @@
 
 import { isAnswered, summary, type AnswerState } from "@/lib/question-answers";
 import type { PendingPermission, Question } from "@/lib/types";
+import type { ReactNode } from "react";
 import Icon from "./Icon";
 
 // The pieces components/QuestionForm.tsx draws: the tabs, the options and the Submit tab's review.
@@ -9,7 +10,20 @@ import Icon from "./Icon";
 const tabClass = (on: boolean) => `rounded px-1.5 py-px ${on ? "bg-accent text-on-accent" : "text-muted hover:bg-panel hover:text-ink"}`;
 
 // A tab per question, ticked once answered, and Submit; one question gets a plain title instead.
-export function QuestionTabs({ questions, state, onTab }: { questions: Question[]; state: AnswerState; onTab: (tab: number) => void }) {
+// The chevron at the end minimizes the form to this row, so the thread above it can be read.
+export function QuestionTabs({
+  questions,
+  state,
+  onTab,
+  collapsed,
+  onCollapse,
+}: {
+  questions: Question[];
+  state: AnswerState;
+  onTab: (tab: number) => void;
+  collapsed: boolean;
+  onCollapse: (collapsed: boolean) => void;
+}) {
   const only = questions.length === 1 ? questions[0] : undefined;
   return (
     <div className="flex shrink-0 items-center gap-1.5 text-[12px]">
@@ -19,6 +33,8 @@ export function QuestionTabs({ questions, state, onTab }: { questions: Question[
           {only.header && <span className="mr-1.5 rounded bg-panel px-1.5 py-px font-normal text-muted">{only.header}</span>}
           The agent has a question
         </span>
+      ) : collapsed ? (
+        <span className="font-medium text-ink">The agent has {questions.length} questions</span>
       ) : (
         <div className="flex min-w-0 flex-wrap items-center gap-1">
           {questions.map((question, i) => (
@@ -32,7 +48,26 @@ export function QuestionTabs({ questions, state, onTab }: { questions: Question[
           </button>
         </div>
       )}
+      <button
+        onClick={() => onCollapse(!collapsed)}
+        aria-label={collapsed ? "Show the question" : "Minimize the question"}
+        aria-expanded={!collapsed}
+        title={collapsed ? "Show the question" : "Minimize, to read the thread"}
+        className="ml-auto shrink-0 rounded p-0.5 text-muted hover:bg-panel hover:text-ink"
+      >
+        <Icon name="chevronDown" size={13} className={collapsed ? "rotate-180" : ""} />
+      </button>
     </div>
+  );
+}
+
+// The form's body, or once minimized just one line: the shown question, a click away from opening again.
+export function Minimized({ collapsed, q, onOpen, children }: { collapsed: boolean; q?: Question; onOpen: () => void; children: ReactNode }) {
+  if (!collapsed) return children;
+  return (
+    <button onClick={onOpen} className="mt-1 truncate text-left text-[12.5px] text-muted hover:text-ink">
+      {q?.question ?? "Review your answers"}
+    </button>
   );
 }
 

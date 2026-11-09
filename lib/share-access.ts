@@ -12,6 +12,7 @@ import { hasGatePass, type ShareGateKit } from "@aimhuge/share/server";
 import { isCardShareMode, type CloudShareRow, SHARE_ID_RE } from "./share-types";
 import { serviceClient, webUser } from "./web-session";
 import { getShareGate } from "./share-gate";
+import { grantAdmits, grantCanAnswer } from "./share-grant-gate";
 
 export interface LoadedShare {
   share: CloudShareRow;
@@ -112,7 +113,10 @@ export async function shareAccessFor(
   if (!loaded) return { kind: "unconfigured" };
   if (!loaded.card) return { kind: "missing" };
   const verdict = await gateVerdict(id, loaded.share, opts);
-  return verdict.kind === "ok" ? { kind: "ok", share: loaded } : verdict;
+  if (verdict.kind === "ok") return { kind: "ok", share: loaded };
+  // Someone the owner named by GitHub gets in whatever the mode (lib/share-grant-gate.ts).
+  if (grantCanAnswer(verdict.kind) && (await grantAdmits(serviceClient(), id, await webUser()))) return { kind: "ok", share: loaded };
+  return verdict;
 }
 
 async function memberVerdict(orgId: string): Promise<GateVerdict> {

@@ -8,6 +8,7 @@
 // started (lib/list-tree.ts). The Backlog and Running bands end in a quick add you just type into
 // (components/SheetQuickAdd.tsx). Start typing and it searches titles; Space then B or R goes to a quick add
 // (lib/list-keys.ts). Backlog rows drag into order. The headers and the bands stay put while you scroll.
+import { useUiText } from "@/lib/ui-language";
 import { useMemo, useRef, useState } from "react";
 import type { Card, Column } from "@/lib/types";
 import { listGroups } from "@/lib/board-view";
@@ -44,6 +45,8 @@ export interface BoardListProps {
 }
 
 export default function BoardList({ byColumn, renderRow, onNew, notify, onReorder, archive }: BoardListProps) {
+  const t = useUiText();
+  const spec = useMemo(() => ({ ...BOARD_SHEET, columns: BOARD_SHEET.columns.map((column) => ({ ...column, label: t(column.label) })) }), [t]);
   const now = useNow();
   const sheet = useListSheet();
   const crons = useCrons();
@@ -112,20 +115,20 @@ export default function BoardList({ byColumn, renderRow, onNew, notify, onReorde
               <button
                 onClick={sheet.clearFilters}
                 title={`Showing ${shown} of ${total}. Clear ${filters === 1 ? "the filter" : `${filters} filters`}`}
-                aria-label="Clear filters"
+                aria-label={t("Clear filters")}
                 className="flex items-center gap-0.5 rounded px-1 text-accent hover:bg-sunken"
               >
                 <FunnelGlyph />×
               </button>
             )}
             {filters === 0 && (
-              <button onClick={onNew} title="New thread, with every option" aria-label="New thread" className="sheet-corner-new">
+              <button onClick={onNew} title={t("New thread, with every option")} aria-label={t("New thread")} className="sheet-corner-new">
                 +
               </button>
             )}
           </span>
           <div className="min-w-0 flex-1">
-            <SheetHeader spec={BOARD_SHEET} grid={LIST_GRID} state={sheet.state} rows={all} shown={shown} now={now} actions={sheet} menu={menu} setMenu={setMenu} trailing={1} />
+            <SheetHeader spec={spec} grid={LIST_GRID} state={sheet.state} rows={all} shown={shown} now={now} actions={sheet} menu={menu} setMenu={setMenu} trailing={1} />
           </div>
         </div>
         {bandsToDraw(groups, sheet.state.collapsed, Boolean(archive?.count)).map((group) => {
@@ -163,9 +166,9 @@ export default function BoardList({ byColumn, renderRow, onNew, notify, onReorde
         />
         {filters > 0 && shown === 0 && (
           <div className="flex flex-col items-center justify-center gap-2 py-10 text-[13px] text-muted">
-            No cards match these filters.
+            {t("No cards match these filters.")}
             <button onClick={sheet.clearFilters} className="text-accent hover:underline">
-              Clear filters
+              {t("Clear filters")}
             </button>
           </div>
         )}

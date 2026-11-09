@@ -286,4 +286,16 @@ describe("QuestionForm", () => {
     expect(second.box.text).toBe("draft");
     expect(second.onAnswer).not.toHaveBeenCalled();
   });
+
+  it("minimizes to its title row so the thread can be read, and a key opens it again", () => {
+    const { key } = setup(ONE);
+    fireEvent.click(screen.getByRole("button", { name: "Minimize the question" }));
+    expect(screen.queryAllByRole("option")).toHaveLength(0);
+    expect(screen.getByText("Which layout?")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Show the question" }));
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Minimize the question" }));
+    expect(key("ArrowDown")).toBe(true);
+    expect(screen.getAllByRole("option")).toHaveLength(2);
+  });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { type PaletteItem, paletteResults, RECENT_MORE_ID, score } from "./palette";
+import { type PaletteItem, paletteResults, queryWords, RECENT_MORE_ID, score } from "./palette";
 
 const item = (id: string, group: PaletteItem["group"], label: string, extra: Partial<PaletteItem> = {}): PaletteItem => ({
   id,
@@ -19,6 +19,29 @@ describe("score", () => {
     expect(score(item("1", "Cards", "x", { detail: "alpha", keywords: "beta" }), ["beta"])).toBe(3);
   });
   it("is null when any word is missing", () => expect(score(item("1", "Cards", "a"), ["a", "zzz"])).toBeNull());
+  it("ranks a mention below a keyword", () => {
+    expect(score(item("1", "Cards", "x", { mentions: "beta" }), ["beta"])).toBe(5);
+    expect(score(item("1", "Cards", "x", { keywords: "beta", mentions: "beta" }), ["beta"])).toBe(3);
+  });
+  it("counts a word after an emoji or quote as a word start", () =>
+    expect(score(item("1", "Cards", "🧭 \"teams 4\""), ["teams"])).toBe(0));
+});
+
+describe("queryWords", () => {
+  it("trims emoji and punctuation off each word and drops emoji-only words", () =>
+    expect(queryWords(" 🧭 Teams 4: team page ")).toEqual(["teams", "4", "team", "page"]));
+  it("keeps punctuation inside a word", () => expect(queryWords("lib/palette.ts")).toEqual(["lib/palette.ts"]));
+});
+
+describe("paletteResults ranking", () => {
+  it("puts the card itself above cards that only mention it", () => {
+    const items = [
+      item("cron", "Cards", "Release after the Teams cards land", { mentions: "42c9805c \"🧭 Teams 4: team page\" is in Review" }),
+      item("real", "Cards", "Settings page reordered", { keywords: "42c9805c Teams 4: team page" }),
+    ];
+    expect(paletteResults(items, "🧭 Teams 4: team page", none, null).map((i) => i.id)).toEqual(["real", "cron"]);
+    expect(paletteResults(items, "42c9805c", none, null).map((i) => i.id)).toEqual(["real", "cron"]);
+  });
 });
 
 describe("paletteResults", () => {

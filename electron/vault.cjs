@@ -19,10 +19,11 @@ const { createVaultSync } = require("./vault-sync.cjs");
 const { writeValue } = require("./vault-conflict.cjs");
 const { createManagedEnv } = require("./vault-managed-env.cjs");
 const { createSharedApi, sharedHandlers } = require("./vault-shared-api.cjs");
-const { readLocalVault } = require("./vault-local.cjs");
+const { readLocalVault, readVaultFile } = require("./vault-local.cjs");
 const { show: showRecovery, recoveryStatus } = require("./vault-recovery.cjs");
 const { listOrgs, sharedBlock } = require("./vault-shared-meta.cjs");
-const { joinHintFor, teamVaults } = require("./vault-team.cjs");
+const { createTeamUpkeep } = require("./vault-team-link.cjs");
+const { vaultRow, showNotice, teamContext, linkAndUpkeep } = require("./vault-overview.cjs");
 const { accessToken } = require("./vault-rotate.cjs");
 const { deviceMethods } = require("./device-standing.cjs");
 
@@ -33,7 +34,7 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 // audit records one line per use of a value or write (electron/keychain-audit.cjs); grants are threads' standing
 // access (electron/vault-grants.cjs).
-function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = git, now = Date.now, setTimer = setTimeout, onChange = (folder) => void folder, watch = fs.watch, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), grants = createGrants({ now }), sync = null, accountClient = null, pickFile = /** @type {import("./env-sources.cjs").PickFile} */ (async () => null) }) {
+function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = git, now = Date.now, setTimer = setTimeout, onChange = (folder) => void folder, watch = fs.watch, audit = /** @type {(entry: Record<string, unknown>) => unknown} */ ((entry) => entry), grants = createGrants({ now }), sync = null, accountClient = null, pickFile = /** @type {import("./env-sources.cjs").PickFile} */ (async () => null), notifyUser = /** @type {(notice: { title: string, body: string }) => void} */ (() => {}) }) {
   // .env.local files Weft writes from the vault; a hand edit tells the board to look again (onChange).
   const watcher = createEnvWatcher({ onEdit: onChange, watch });
   // Where the vault's files live: <hash>.json, <hash>.shared.json, <hash>.sync.json.
@@ -81,8 +82,18 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const { id, label } = await idOf(folder);
       return (await storeReady()).adopt(id, label, grant, shared);
     };
-    return createSharedApi({ readVault, readServerVault, adopt, device, sodium, sync, prompt });
+    // A team-linked repo's vault on this Mac, found by the repo alone (the team page knows no folder).
+    const readRepoVault = async (repo) => {
+      const id = `github:${repo}`;
+      if (!readVaultFile({ dir: vaultDir, id })) return null;
+      const vault = await readLocalVault({ dir: vaultDir, id, device, sodium });
+      return { ...vault, shared: Boolean(sharedBlock({ dir: vaultDir, id })) };
+    };
+    return createSharedApi({ readVault, readServerVault, readRepoVault, adopt, device, sodium, sync, prompt });
   }
+
+  // Linked repos' chores after each overview: ask to join, seal to approved Macs, tell an admin who's waiting.
+  const upkeep = createTeamUpkeep({ dir: vaultDir, accountClient, sharedApi, notifyUser, onChange });
 
   // A shared vault's recovery key (electron/vault-recovery.cjs). The vault's key is read from this
   // device's file and unwrapped here, in main; the words are made here too. A re-show is a fresh key:
@@ -193,10 +204,9 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       // vault's header. Signed out, or a shell that doesn't know teams: an empty list.
       const orgs = await listOrgs({ accountClient });
       await sodium.ready();
-      // Asked even with no workspaces, so the drawer can say why there's no "Ask to join" (joinHint below).
-      // Standing first: a signed-in Mac with no device row registers here, so the team lookup reads its key's row.
-      const device = await mac.standing();
-      const team = await teamVaults({ accountClient, publicKey: () => loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium }).publicKey });
+      // This Mac's standing and the team's vaults, asked even with no workspaces so the drawer can say why there's no
+      // "Ask to join" (joinHint).
+      const { device, team } = await teamContext({ mac, accountClient, publicKey: () => loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium }).publicKey });
       for (const folder of folders) {
         const { id, label } = await idOf(folder);
         const found = seen.get(id);
@@ -206,16 +216,10 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
         }
         const s = await existing();
         await fresh(s, id);
-        const secrets = s?.exists(id) ? s.list(id) : [];
-        // shared: the vault is shared with a workspace (the drawer's badge and the Share offer).
-        const shared = sharedBlock({ dir: vaultDir, id, orgs });
-        // queued: writes to a shared vault made offline, waiting in <hash>.queue.jsonl (the drawer's chip).
-        // join: the workspace already shares this repo and this Mac isn't in it. requests: Macs waiting to be.
-        const join = !shared && team.joins.get(id.replace(/^github:/, ""));
-        const requests = shared && team.requests.get(shared.vaultId);
-        const joinHint = joinHintFor({ id, shared, join, reason: team.reason, secrets, device: device.state });
-        seen.set(id, { id, label, folder, folders: [folder], secrets, nudge: nudge(folder, id, s, filesOf(folder, id)), managed: watchManaged(folder), ...(shared && { shared }), ...(join && { join }), ...(joinHint && { joinHint }), ...(requests && { requests }), ...(s?.isShared(id) && { queued: s.queued(id) }) });
+        seen.set(id, vaultRow({ id, label, folder, store: s, dir: vaultDir, orgs, team, device: device.state, nudge: nudge(folder, id, s, filesOf(folder, id)), managed: watchManaged(folder) }));
       }
+      // A repo a team linked is that team's: "Shared with <team>" in the drawer, and the share offered to any member.
+      await linkAndUpkeep({ accountClient, vaults: [...seen.values()], orgs, team, upkeep, folder: folders[0] });
       return { vaults: [...seen.values()], unlocked: unlock.unlocked(), orgs, device };
     },
 
@@ -407,7 +411,7 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
 // Wires the vault into Electron main for the board window (board() is its webContents).
 // accountClient (electron/account-client.cjs) syncs shared vaults through Supabase; without it every vault is local.
 function setupVault({ ipcMain, dataDir, window, board, accountClient = null }) {
-  const { clipboard, dialog, systemPreferences } = require("electron");
+  const { clipboard, dialog, systemPreferences, Notification } = require("electron");
   // Every Keychain open and vault use is a line in ~/.weft/vault/audit.jsonl from here on.
   configureAudit({ dataDir });
   // The board window, and the only one the vault answers.
@@ -417,7 +421,7 @@ function setupVault({ ipcMain, dataDir, window, board, accountClient = null }) {
     const contents = board();
     if (contents && !contents.isDestroyed()) contents.send("vault:changed", folder);
   };
-  const vault = createVault({ dataDir, safeStorage: keychainFor("vault key"), sodium: require("./vault-crypto.cjs"), clipboard, prompt: touchIdPrompt({ systemPreferences, dialog, window }), onChange, audit, accountClient, sync: accountClient && createVaultSync({ accountClient, dir: path.join(dataDir, "vault") }), pickFile: openEnvDialog(dialog, window) });
+  const vault = createVault({ dataDir, safeStorage: keychainFor("vault key"), sodium: require("./vault-crypto.cjs"), clipboard, prompt: touchIdPrompt({ systemPreferences, dialog, window }), onChange, audit, accountClient, sync: accountClient && createVaultSync({ accountClient, dir: path.join(dataDir, "vault") }), pickFile: openEnvDialog(dialog, window), notifyUser: (notice) => showNotice(Notification, notice, window) });
   // The shared vault's calls need the account client (they talk to Supabase as the signed-in user)
   // and the device keypair (the wrap and the unwrap). Without a signed-in desktop there is no shared
   // vault, so those handlers aren't registered at all.

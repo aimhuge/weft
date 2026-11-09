@@ -5,10 +5,11 @@ import { SETTINGS_PAGES, type SettingsPage } from "./settings-nav";
 // dialog can find it on the page; `words` are what people might type instead. A section that isn't drawn right now
 // (signed out, nothing set up yet) simply has no chip, and a search for it still opens its page. `hint` is the one line
 // the search list shows under the title, so you know what a hit is before you open it; it's searched too.
-export type SettingsSection = { page: SettingsPage; title: string; words?: string; hint: string };
+export type SettingsSection = { page: SettingsPage; title: string; words: string; hint: string };
 
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { page: "general", title: "Appearance", words: "theme dark mode light mode scene wallpaper colors palette", hint: "Light, dark or system, and the scene behind the board." },
+  { page: "general", title: "Interface language", words: "locale English Chinese translation", hint: "English or Simplified Chinese for the board and Settings." },
   { page: "general", title: "Advanced mode", words: "regular mode simple basic chrome minimal clean", hint: "The full board: tool rail, badges, list view and card details." },
   { page: "general", title: "Show backlog", words: "column", hint: "A column for threads you add without starting them." },
   { page: "general", title: "Show progress", words: "streak level xp badges quiet mode", hint: "Your streak and level in the header, with badges as toasts." },
@@ -81,19 +82,20 @@ function score(query: string[], title: string, extra: string): number {
 }
 
 // The sections and pages that match, best first; a tie keeps the order Settings draws them in.
-export function searchSettings(query: string, limit = 8): SettingsHit[] {
+export function searchSettings(query: string, limit = 8, translate = (text: string) => text): SettingsHit[] {
   const words = norm(query).split(" ").filter(Boolean);
   if (!words.length) return [];
   const label = (page: SettingsPage) => SETTINGS_PAGES.find((p) => p.id === page)?.label ?? page;
   const scored: { hit: SettingsHit; score: number; order: number }[] = [];
   SETTINGS_PAGES.forEach((p, i) => {
-    const s = score(words, p.label, p.hint);
+    const s = score(words, p.label, p.hint) || score(words, translate(p.label), translate(p.hint));
     // A page ties below its own sections: a hit that lands on the setting beats one that only opens its page.
     if (s) scored.push({ hit: { page: p.id, title: null, pageLabel: p.label, hint: p.hint }, score: s, order: i * 100 + 99 });
   });
   SETTINGS_SECTIONS.forEach((sec, i) => {
     const pageIndex = SETTINGS_PAGES.findIndex((p) => p.id === sec.page);
-    const s = score(words, sec.title, `${sec.words ?? ""} ${sec.hint} ${label(sec.page)}`);
+    const s = score(words, sec.title, `${sec.words} ${sec.hint} ${label(sec.page)}`) ||
+      score(words, translate(sec.title), `${translate(sec.words)} ${translate(label(sec.page))}`);
     if (s) scored.push({ hit: { page: sec.page, title: sec.title, pageLabel: label(sec.page), hint: sec.hint }, score: s, order: pageIndex * 100 + i + 1 });
   });
   return scored

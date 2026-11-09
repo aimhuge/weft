@@ -91,6 +91,8 @@ export type ThreadItem =
       decision?: "allow" | "deny";
       // The user's answers, when the agent asked questions.
       answer?: string;
+      // Why Weft allowed it without asking (lib/db-calls.ts: Settings → Security → Accept harmless SQL).
+      auto?: string;
       at: number;
     }
   | { kind: "result"; text: string; costUsd?: number; isError: boolean; at: number }

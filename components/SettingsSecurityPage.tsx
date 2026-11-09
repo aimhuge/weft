@@ -4,6 +4,7 @@
 import DeleteConfirmSwitch from "./DeleteConfirmSwitch";
 import ModePicker from "./ModePicker";
 import PaneSites from "./PaneSites";
+import { SqlAutoAcceptSwitch } from "./SqlAutoAcceptSwitch";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
 import { SiteNotesSwitch } from "./SiteNotesSwitch";
 import { StatsSwitch } from "./StatsSwitch";
@@ -46,6 +47,10 @@ export default function SettingsSecurityPage({
       </SettingsCard>
       <SettingsCard>
         <PaneSites />
+        </SettingsCard>
+        <SettingsCard>
+        <SettingsSectionHeader title="Database changes" hint="A second model reviews the SQL behind every destructive database prompt; you still decide." />
+        <SqlAutoAcceptSwitch />
       </SettingsCard>
       <SettingsCard>
         <DeleteConfirmSwitch />

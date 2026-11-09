@@ -3,6 +3,7 @@
 // A column's band in the list view: its name, its count and its colour across the sheet's width. A click
 // folds it or opens it; the Backlog and Running bands carry a + that opens them with the cursor in the
 // quick add (components/SheetQuickAdd.tsx).
+import { useUiText } from "@/lib/ui-language";
 import { COLUMN_TONE } from "@/lib/column-tone";
 import type { SheetGroup } from "@/lib/list-tree";
 import { Chevron } from "./CardRowCells";
@@ -15,6 +16,7 @@ export interface BandArchive {
 }
 
 export default function SheetBand({ group, onFold, onAdd, archive }: { group: SheetGroup; onFold: () => void; onAdd?: () => void; archive?: BandArchive }) {
+  const t = useUiText();
   const tone = COLUMN_TONE[group.column];
   return (
     <div className={`sheet-band sticky z-10 flex items-center text-[11px] font-semibold uppercase tracking-[0.08em] ${tone.text}`}>
@@ -23,23 +25,23 @@ export default function SheetBand({ group, onFold, onAdd, archive }: { group: Sh
           <Chevron open={!group.collapsed} />
         </span>
         <span className={`size-1.5 rounded-full ${tone.dot}`} aria-hidden />
-        {group.label}
+        {t(group.label)}
         <span className="font-normal tabular-nums text-faint">{group.shown === group.total ? group.total : `${group.shown} of ${group.total}`}</span>
-        {group.collapsed && <span className="ml-auto font-normal normal-case tracking-normal text-faint">folded · click to show</span>}
+        {group.collapsed && <span className="ml-auto font-normal normal-case tracking-normal text-faint">{t("folded · click to show")}</span>}
       </button>
       {onAdd && (
         <button
           onClick={onAdd}
-          aria-label={group.column === "backlog" ? "Add a card to the Backlog" : "Start a thread in Running"}
-          title={group.column === "backlog" ? "Add a card: just type its title" : "Start a thread"}
+          aria-label={group.column === "backlog" ? t("Add a card to the Backlog") : t("Start a thread in Running")}
+          title={group.column === "backlog" ? t("Add a card: just type its title") : t("Start a thread")}
           className="sheet-band-add"
         >
-          + {group.column === "backlog" ? "Add" : "Start"}
+          + {group.column === "backlog" ? t("Add") : t("Start")}
         </button>
       )}
       {archive && archive.count > 0 && (
-        <button onClick={archive.onToggle} aria-pressed={archive.shown} title="Archived cards show in every band" className="sheet-band-add">
-          {archive.shown ? "Hide archived" : `Show ${archive.count} archived`}
+        <button onClick={archive.onToggle} aria-pressed={archive.shown} title={t("Archived cards show in every band")} className="sheet-band-add">
+          {archive.shown ? t("Hide archived") : `Show ${archive.count} archived`}
         </button>
       )}
     </div>
