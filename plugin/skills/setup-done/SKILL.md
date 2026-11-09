@@ -93,7 +93,7 @@ and a `lint` script, same rules.)
 ## Step 5: Helper scripts
 
 `/done` calls `lint.sh`, `tests.sh`, `scout-facts.sh`, `scout-save.mjs` (plus `session-stats.sh`,
-`gather-context.sh`, `commit.sh`) through its own `${CLAUDE_SKILL_DIR}`. The audit checks they sit
+`commit.sh`, `push.sh`, `deploy.mjs`, `scratch.sh`) through its own `${CLAUDE_SKILL_DIR}`. The audit checks they sit
 beside `/done`: normally `../done/` in this plugin, or `.claude/skills/done/` in the project.
 
 - Scripts present: nothing to do.
