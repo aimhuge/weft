@@ -9,7 +9,7 @@ import VaultDrawer from "./VaultDrawer";
 // The recovery menu reads the router; these tests don't mount an app router.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-// A blank's hint in the 🔐 drawer: shown in full, its links open in the browser pane.
+// A blank's hint in the 🔐 drawer: wrapped to two lines with the whole hint in its tooltip, its links open in the browser pane.
 const NAME = "STRIPE_PRICE_PRO_MONTHLY_ID_FOR_THE_TEAM_PLAN";
 
 const overview: VaultOverview = {
@@ -32,11 +32,13 @@ function setup() {
 }
 
 describe("VaultDrawer blank hints", () => {
-  it("shows the whole name and hint, wrapped rather than cut off", () => {
+  it("shows the whole name, and the hint wrapped to two lines with all of it in the tooltip", () => {
     setup();
     expect(screen.getByTitle(/has no value yet/)).toHaveTextContent(NAME);
     expect(screen.getByTitle(/has no value yet/)).not.toHaveClass("truncate");
-    expect(screen.getByText("Stripe → Products → Pro:", { exact: false }).closest("p")).not.toHaveClass("truncate");
+    const hint = screen.getByText("Stripe → Products → Pro:", { exact: false }).closest("p");
+    expect(hint).toHaveClass("line-clamp-2");
+    expect(hint).toHaveAttribute("title", "Stripe → Products → Pro: https://dashboard.stripe.com/products.");
   });
 
   it("opens a hint's link in the browser pane", async () => {

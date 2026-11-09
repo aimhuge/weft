@@ -24,6 +24,7 @@ export type { RowAction };
 // banner under the name: who wrote it, and the two ways out.
 export function SecretRow({
   secret: s,
+  note,
   value,
   spread,
   onAct,
@@ -33,6 +34,8 @@ export function SecretRow({
   onKeepTheirs,
 }: {
   secret: VaultSecret;
+  // A blank's few words beside its name: "set in production", or its environment (lib/vault-blanks.ts).
+  note?: string | null;
   value: string | undefined;
   spread: boolean;
   onAct: (action: RowAction) => void;
@@ -50,7 +53,7 @@ export function SecretRow({
         <span className="min-w-0 flex-1 font-mono text-ink [overflow-wrap:anywhere]" title={s.missing ? blankTitle(s) : s.source ? `${s.name} · from ${s.source}` : s.name}>
           <WrapName name={s.name} />
         </span>
-        {s.missing ? <Tag tone="warn">blank</Tag> : <span className="font-mono text-[10.5px] text-faint group-hover:hidden">{masked(s)}</span>}
+        {s.missing ? note && <Tag>{note}</Tag> : <span className="font-mono text-[10.5px] text-faint group-hover:hidden">{masked(s)}</span>}
         {left !== null ? (
           <CountdownButton
             left={left}
@@ -96,16 +99,19 @@ export function SecretRow({
                 />
               </span>
             )}
-            {spread ? (
-              <TrashButton name={s.name} title="Remove from one or more of its environments…" onArm={() => onAct("choose-remove")} />
-            ) : (
-              <TrashButton name={s.name} onArm={arm} onRemove={() => onAct("remove")} />
-            )}
+            {/* Like the other actions, 🗑 shows on hover only: the riskiest button needn't sit on every row. */}
+            <span className="hidden group-hover:flex group-focus-within:flex">
+              {spread ? (
+                <TrashButton name={s.name} title="Remove from one or more of its environments…" onArm={() => onAct("choose-remove")} />
+              ) : (
+                <TrashButton name={s.name} onArm={arm} onRemove={() => onAct("remove")} />
+              )}
+            </span>
           </span>
         )}
       </div>
       {conflict && <ConflictBanner conflict={conflict} onKeepMine={onKeepMine} onKeepTheirs={onKeepTheirs} />}
-      {s.missing && s.hint && <HintText hint={s.hint} />}
+      {s.missing && s.hint && <HintText hint={s.hint} clamp />}
       {/* data-secret: the board view (electron/board-view.cjs) reads this as ‹secret› and blanks it in screenshots. */}
       {value !== undefined && (
         <div data-secret className="mt-0.5 select-text break-all font-mono text-[10.5px] text-ink">
@@ -164,9 +170,11 @@ function WrapName({ name }: { name: string }) {
 
 // A blank's hint in full, wrapped and never cut off; its links open in the browser pane, where you're signed in.
 // onOpen runs first, for a dialog that has to close so the pane shows (components/IntakeDialog.tsx).
-export function HintText({ hint, onOpen }: { hint: string; onOpen?: () => void }) {
+// clamp: two lines at most, wrapped (so a link stays in view), the whole hint in its tooltip: the drawer's rows, where
+// twenty long hints in full were a wall of text.
+export function HintText({ hint, onOpen, clamp = false }: { hint: string; onOpen?: () => void; clamp?: boolean }) {
   return (
-    <p className="mt-0.5 break-words text-[10.5px] leading-snug text-faint">
+    <p title={clamp ? hint : undefined} className={`mt-0.5 text-[10.5px] leading-snug text-faint break-words ${clamp ? "line-clamp-2" : ""}`}>
       {hintParts(hint).map((p, i) =>
         "url" in p ? (
           <a

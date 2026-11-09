@@ -28,27 +28,50 @@ function requestsFrom(rows) {
 }
 
 /**
- * Anything failing answers nothing, so the drawer still opens offline.
+ * Anything failing answers nothing, so the drawer still opens offline, with a reason the drawer can show
+ * for there being no "Ask to join": signed-out (this Mac isn't signed in to a Weft account), error (the
+ * lookup failed: offline, an RLS error) or no-account (a shell with no account client, so nothing to say). No reason means the lookup ran, so a repo missing from joins has
+ * no shared vault in any workspace the account sees. publicKey may be a function, so a signed-out Mac
+ * never loads its device key.
  *
- * @param {{ accountClient?: any, publicKey?: string }} deps
- * @returns {Promise<{ joins: Map<string, import("../lib/vault-shared").VaultJoin>, requests: Map<string, import("../lib/vault-shared").VaultDeviceRequest[]> }>}
+ * @param {{ accountClient?: any, publicKey?: string | (() => string) }} deps
+ * @returns {Promise<{ joins: Map<string, import("../lib/vault-shared").VaultJoin>, requests: Map<string, import("../lib/vault-shared").VaultDeviceRequest[]>, reason?: "signed-out" | "error" | "no-account" }>}
  */
-async function teamVaults({ accountClient, publicKey }) {
-  const none = { joins: new Map(), requests: new Map() };
+async function teamVaults({ accountClient, publicKey: keyOf }) {
+  const none = (reason) => ({ joins: new Map(), requests: new Map(), ...(reason && { reason }) });
   const db = accountClient?.supabase;
-  if (!db || !publicKey || accountClient?.signedIn?.() === false) return none;
+  if (!db) return none("no-account");
+  if (accountClient.signedIn?.() === false) return none("signed-out");
   try {
+    const publicKey = typeof keyOf === "function" ? keyOf() : keyOf;
+    if (!publicKey) return none("error");
     const [vaults, grants, asked, waiting] = await Promise.all([
       db.from("vaults").select("id, org_id, repo"),
       db.from("vault_grants").select("vault_id, device:devices(public_key)"),
       db.from("pending_device_grants").select("vault_id, target_fingerprint").eq("status", "accepted"),
       db.rpc("pending_vault_devices"),
     ]);
-    if (vaults.error) return none;
+    if (vaults.error) return none("error");
     return { joins: joinsFrom({ vaults: vaults.data ?? [], grants: grants.data ?? [], asked: asked.data ?? [], publicKey }), requests: requestsFrom(waiting.data ?? []) };
   } catch {
-    return none;
+    return none("error");
   }
 }
 
-module.exports = { teamVaults };
+/**
+ * Why a vault's header has no "Ask to join", for the drawer's one line under it: only for a GitHub repo's
+ * local vault this Mac isn't asked into. First, though, this Mac's own standing (electron/device-standing.cjs): a Mac
+ * removed from the account, or one that couldn't register, can't share or join anything, shared vaults included. "none" (nothing shared for the repo) only when the vault holds no
+ * values here, since the Mac that has them is the one to press Share…, and it needn't be told so.
+ *
+ * @param {{ id: string, shared?: unknown, join?: unknown, reason?: "signed-out" | "error" | "no-account", secrets: { missing?: boolean }[], device?: string }} v
+ * @returns {import("../lib/vault-shared").VaultJoinHint | undefined}
+ */
+function joinHintFor({ id, shared, join, reason, secrets, device }) {
+  if ((device === "revoked" || device === "unregistered") && (shared || id.startsWith("github:"))) return device;
+  if (shared || join || !id.startsWith("github:") || reason === "no-account") return undefined;
+  if (reason) return reason;
+  return secrets.some((e) => !e.missing) ? undefined : "none";
+}
+
+module.exports = { joinHintFor, teamVaults };

@@ -242,10 +242,11 @@ function registerCloudflare(ipcMain, { cloudflare, isBoard }) {
 }
 
 // Wires Cloudflare into Electron main for the board window (board() is its webContents).
-function setupCloudflare({ ipcMain, dataDir, board }) {
+function setupCloudflare({ ipcMain, dataDir, board, vault }) {
   const safeStorage = require("./keychain-audit.cjs").keychainFor("Cloudflare token");
   const cloudflare = createCloudflare({ dataDir, safeStorage });
   registerCloudflare(ipcMain, { cloudflare, isBoard: (sender) => Boolean(sender) && sender === board() });
+  require("./provider-vault-token.cjs").wireProviderVaultToken({ ipcMain, vault, board, provider: "cloudflare", service: cloudflare });
   return cloudflare;
 }
 

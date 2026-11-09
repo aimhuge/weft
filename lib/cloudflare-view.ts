@@ -1,5 +1,6 @@
 import { norm, shownFolders as pickFolders, type Tone } from "./db-picker";
 import { folderName } from "./format";
+import type { VaultTokenCandidate, VaultTokenPick, VaultTokenResult } from "./provider-vault-token";
 
 // What the Cloudflare drawer shows, from what Electron main's Cloudflare side (electron/cloudflare.cjs) sends.
 // The token never reaches the board: main keeps it in the Keychain and makes every call.
@@ -72,6 +73,9 @@ export interface CloudflareBridge {
   status(folders: string[]): Promise<CloudflareStatus>;
   setToken(token: string): Promise<TokenSaved>;
   forgetToken(): Promise<{ signedIn: false }>;
+  // A project vault's token, by name (lib/provider-vault-token.ts); missing in an older shell.
+  vaultTokenCandidates?: (folders: string[]) => Promise<VaultTokenCandidate[]>;
+  useVaultToken?: (pick: VaultTokenPick) => Promise<VaultTokenResult<TokenSaved>>;
   projects(): Promise<CloudflareProject[]>;
   link(folder: string, kind: CloudflareKind, accountId: string, name: string): Promise<{ linked: true; name: string }>;
   unlink(folder: string): Promise<{ linked: false }>;

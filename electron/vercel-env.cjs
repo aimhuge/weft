@@ -11,6 +11,8 @@ const { readLink } = require("./vercel-project.cjs");
 
 const ENVIRONMENTS = ["development", "preview", "production"];
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+// What a shared vault's server holds (electron/vault-share.cjs SERVER_NAME): no lower-case letters.
+const SHARED_NAME = /^[A-Z_][A-Z0-9_]*$/;
 // Vercel types whose value its API hands back; "sensitive" and the old "secret" never do, "system" is Vercel's own.
 const PULLABLE = new Set(["plain", "encrypted"]);
 
@@ -29,6 +31,24 @@ function rowsOf({ label, secrets }, { project, envs }) {
   for (const e of envs) for (const t of e.targets) if (ENVIRONMENTS.includes(t) && !known.has(`${t}\n${e.key}`)) rows.push(row(e.key, t, false));
   rows.sort((a, b) => ENVIRONMENTS.indexOf(a.environment) - ENVIRONMENTS.indexOf(b.environment) || a.name.localeCompare(b.name));
   return { label, project, rows };
+}
+
+// What a pull would do, from names and types alone (no value fetched): wanted is each pullable variable and the
+// environments the vault has no value for it in; skipped, sensitive ones; local, lower-case names a shared vault keeps out.
+function planPull(secrets, envs, shared) {
+  const have = new Set(secrets.filter((s) => !s.missing).map((s) => `${s.environment}\n${s.name}`));
+  const wanted = [];
+  const skipped = [];
+  const local = [];
+  for (const e of envs) {
+    const targets = e.targets.filter((t) => ENVIRONMENTS.includes(t) && !have.has(`${t}\n${e.key}`));
+    if (!targets.length || !NAME.test(e.key)) continue;
+    for (const environment of targets) have.add(`${environment}\n${e.key}`);
+    const list = shared && !SHARED_NAME.test(e.key) ? local : PULLABLE.has(e.type) && e.id ? null : skipped;
+    if (list) list.push(...targets.map((environment) => ({ name: e.key, environment })));
+    else wanted.push({ e, targets });
+  }
+  return { wanted, skipped, local };
 }
 
 /** @param {{ vercel: any, vault: any, onDrift?: (folder: string) => void, linked?: (folder: string) => boolean }} deps */
@@ -97,25 +117,26 @@ function createVercelEnv({ vercel, vault, onDrift, linked = (folder) => Boolean(
 
     // Brings down every plain Vercel variable the vault has no value for (absent, or a blank waiting for one), straight
     // into the vault inside main. A value the vault holds is never replaced: the vault stays the source of truth.
-    // skipped: names Vercel has but won't decrypt (sensitive), so you know to add those by hand.
-    async pull(folder) {
-      const [{ label, secrets }, { project, envs }] = await Promise.all([vault.names(folder), vercel.envList(folder)]);
-      const have = new Set(secrets.filter((s) => !s.missing).map((s) => `${s.environment}\n${s.name}`));
+    // skipped: names Vercel has but won't decrypt (sensitive), so you know to add those by hand. local: names with
+    // lower-case letters, which a shared vault's server won't hold (the sharing rule, electron/vault-share.cjs).
+    // confirm (the drawer's Pull): one Touch ID naming the count before any value is fetched; the webhook's pull
+    // (lib/vercel-hooks.ts) runs unattended and asks nothing, as it always has.
+    async pull(folder, { confirm = false } = {}) {
+      const [{ label, secrets, shared }, { project, envs }] = await Promise.all([vault.names(folder), vercel.envList(folder)]);
+      const { wanted, skipped, local } = planPull(secrets, envs, shared);
+      const n = wanted.reduce((sum, w) => sum + w.targets.length, 0);
+      if (confirm && n && !(await vault.confirm(`pull ${n} ${n === 1 ? "variable" : "variables"} from Vercel project ${project} into the ${label} vault`))) return { label, project, denied: true, pulled: [], skipped, local };
       const entries = [];
-      const skipped = [];
-      for (const e of envs) {
-        const targets = e.targets.filter((t) => ENVIRONMENTS.includes(t) && !have.has(`${t}\n${e.key}`));
-        if (!targets.length || !NAME.test(e.key)) continue;
-        const value = PULLABLE.has(e.type) && e.id ? await vercel.envValue(folder, e.id) : null;
+      for (const { e, targets } of wanted) {
+        const value = await vercel.envValue(folder, e.id);
         for (const environment of targets) {
-          have.add(`${environment}\n${e.key}`);
           if (value) entries.push({ name: e.key, environment, value });
           else skipped.push({ name: e.key, environment });
         }
       }
       for (const { name, environment, value } of entries) await vault.setValue(folder, name, environment, value, { source: "Vercel" });
       void cache.listed(folder).catch(() => null);
-      return { label, project, pulled: entries.map(({ name, environment }) => ({ name, environment })), skipped };
+      return { label, project, pulled: entries.map(({ name, environment }) => ({ name, environment })), skipped, ...(local.length && { local }) };
     },
 
     // A team webhook for the env-variable events, and taking it off (lib/vercel-hooks.ts, through the control server).

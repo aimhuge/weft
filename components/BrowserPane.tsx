@@ -8,6 +8,7 @@ import { appFor } from "@/lib/mini-apps";
 import { paneAddress } from "@/lib/app-share-types";
 import { useAnyOverlay, useMenuCover } from "@/lib/overlay";
 import { clearOfMenu } from "@/lib/pane-clear";
+import { onAddressFocus } from "@/lib/pane-new-tab";
 import { useMiniApps } from "@/lib/use-mini-apps";
 import Icon, { Spinner } from "./Icon";
 import { PaneFindField, usePaneFind } from "./PaneFind";
@@ -49,8 +50,9 @@ export default function BrowserPane({
 }) {
   const holder = useRef<HTMLDivElement>(null);
   const [resizing, setResizing] = useState(false);
-  // Bumped by + so the address bar empties and takes focus for the new tab's address.
+  // Bumped by + and ⌘T so the address bar empties and takes focus for the new tab's address.
   const [fresh, setFresh] = useState(0);
+  useEffect(() => onAddressFocus(() => setFresh((n) => n + 1)), []);
   const overlay = useAnyOverlay();
   // A full-window overlay (a dialog, an image opened full size) covers the page, so the page goes.
   // A local menu (this pane's zoom menu, a card's mode picker) covers a small rectangle: the page

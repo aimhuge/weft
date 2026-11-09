@@ -39,7 +39,7 @@ describe("searchSettings", () => {
   });
 
   it("finds a section by its title and names its page", () => {
-    expect(searchSettings("trusted")[0]).toEqual({ page: "security", title: "Trusted folders", pageLabel: "Security" });
+    expect(searchSettings("trusted")[0]).toEqual({ page: "security", title: "Trusted folders", pageLabel: "Security", hint: "Folders outside a project that threads may read." });
   });
 
   it("finds a section by a word it doesn't show", () => {
@@ -53,7 +53,7 @@ describe("searchSettings", () => {
 
   it("finds a page by its own name or hint, sections and all", () => {
     const hits = searchSettings("teams");
-    expect(hits[0]).toEqual({ page: "team", title: null, pageLabel: "Teams" });
+    expect(hits[0]).toEqual({ page: "team", title: null, pageLabel: "Teams", hint: "Every Weft team you're in, and the people in each." });
   });
 
   it("ranks a title that starts with the query above one that only mentions it", () => {
@@ -68,6 +68,11 @@ describe("searchSettings", () => {
 
   it("matches a word in the middle of a title", () => {
     expect(searchSettings("ackup")[0]).toMatchObject({ title: "Backup model" });
+  });
+
+  it("gives every section a one-line hint, and finds it by a word only in its hint", () => {
+    for (const s of SETTINGS_SECTIONS) expect(s.hint.length, s.title).toBeGreaterThan(10);
+    expect(searchSettings("idle").map((h) => h.title)).toContain("Open cards that need you while I'm away");
   });
 
   it("caps the list", () => {

@@ -41,6 +41,9 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
   function sendFind(action) {
     const inPane = pane.owns(focusedContents());
     showMain();
+    // The page keeps the keyboard until the board's own contents take it, so the find field's focus() would
+    // put the caret there while what's typed still went to the page.
+    if (inPane && action === "find") getAppView()?.webContents.focus();
     sendMenu(action, inPane ? "pane" : undefined);
   }
 
@@ -99,6 +102,18 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
             click: () => {
               showMain();
               sendMenu("new-thread");
+            },
+          },
+          {
+            // A blank tab in the browser pane, from wherever the keyboard is (the composer, a page): the board
+            // takes the keyboard back so the tab's address bar can have it.
+            label: "New Tab",
+            accelerator: "CmdOrCtrl+T",
+            click: () => {
+              pane.newTab();
+              showMain();
+              getAppView()?.webContents.focus();
+              sendMenu("new-tab");
             },
           },
           // The app menu's update item again, where people look for it (and the only one off a Mac).

@@ -28,6 +28,23 @@ export interface VaultJoin {
   fingerprint: string;
 }
 
+// Why a local vault's header has no "Ask to join" (electron/vault-team.cjs joinHintFor). signed-out: this
+// Mac isn't signed in to a Weft account. none: no workspace shares this repo yet. error: the lookup failed.
+// revoked: this Mac was removed from the account (Re-add). unregistered: it couldn't register (Try again).
+export type VaultJoinHint = "signed-out" | "none" | "error" | "revoked" | "unregistered";
+
+// The line the drawer shows for each, under the vault's header.
+export const JOIN_HINTS: Record<VaultJoinHint, string> = {
+  "signed-out": "Sign in to see this vault from your other Macs.",
+  none: "Not shared yet: press Share… on the Mac that has these secrets, then Ask to join here.",
+  error: "Couldn't check for a shared vault (offline?). Reopen the drawer to try again.",
+  revoked: "This Mac was removed from your account, so it can't share or join.",
+  unregistered: "This Mac couldn't register with your account, so it can't share or join.",
+};
+
+// The device hints, which stop sharing and joining and come with a button of their own (components/DeviceStanding.tsx).
+export const DEVICE_HINTS: Partial<Record<VaultJoinHint, string>> = { revoked: "Re-add it", unregistered: "Try again" };
+
 // A teammate's Mac waiting for an admin to approve it. Its fingerprint is what the two compare.
 export interface VaultDeviceRequest {
   id: string;

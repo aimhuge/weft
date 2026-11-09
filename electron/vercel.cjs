@@ -246,7 +246,8 @@ function registerVercel(ipcMain, { vercel, env, isBoard }) {
     handle("vercel:env-push", (folder, name, environment) => env.push(String(folder), String(name), String(environment)));
     handle("vercel:env-push-all", (folder, only) => env.pushAll(String(folder), Array.isArray(only) ? only.map((o) => ({ name: String(o?.name), environment: String(o?.environment) })) : undefined));
     handle("vercel:env-drift", (folders) => env.drift(Array.isArray(folders) ? folders.filter((f) => typeof f === "string") : []));
-    handle("vercel:env-pull", (folder) => env.pull(String(folder)));
+    // The drawer's Pull: behind one Touch ID (the webhook's pull through the control server asks nothing).
+    handle("vercel:env-pull", (folder) => env.pull(String(folder), { confirm: true }));
   }
 }
 
@@ -259,6 +260,7 @@ function setupVercel({ ipcMain, dataDir, board, vault }) {
   const onDrift = (folder) => board()?.send("vercel:drift", folder);
   const env = vault ? require("./vercel-env.cjs").createVercelEnv({ vercel, vault, onDrift }) : null;
   registerVercel(ipcMain, { vercel, env, isBoard: (sender) => Boolean(sender) && sender === board() });
+  require("./provider-vault-token.cjs").wireProviderVaultToken({ ipcMain, vault, board, provider: "vercel", service: vercel });
   return { vercel, env };
 }
 

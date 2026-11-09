@@ -321,6 +321,15 @@ compromised server that slipped in its own key would show two different fingerpr
 fails before the wrapped key is even produced. The check is mandatory at the grant — the UI does not let
 the user skip it.
 
+**A Mac that isn't registered, or was removed** (built 2026-11-05, after m5air's row was revoked and m1mini had none, and
+Share… failed on both with nothing said). Each time the 🔐 drawer opens, `electron/device-standing.cjs` works out where
+this Mac stands: a signed-in Mac with no row registers right there, and the overview carries `device` (registered,
+revoked, unregistered with the error, signed-out, unknown). A revoked or unregistered Mac's vaults get `joinHint`
+`revoked` / `unregistered`, which the drawer's status line leads with ("This Mac was removed from your account…  Re-add
+it", or "…couldn't register…  Try again"), and Settings → Secrets shows instead of Share…. `registeredDevice` refuses a
+revoked row with the same words, so a share, a join or a grant never reaches the server under a revoked id. Re-add makes a
+fresh key: [device-registry.md, "Re-adding a Mac"](device-registry.md#re-adding-a-mac).
+
 **Q6: who decides the device name.** Recommend: the user, on first registration, prompted once with a
 sensible default ("Weft on `<hostname>`"). Saved in `~/.weft/device-key.json` next to the keypair, sent
 on every upsert. The `Settings` page lets the user rename later (out of this card's scope).
@@ -414,7 +423,7 @@ in the next section stops at a pending row: its Add form works, but nothing on e
 1. **An admin shares** a local vault from the drawer. The offer lists only workspaces with someone else in
    them where the user is an admin. A repo the workspace already shares refuses a second share: that Mac's
    key is its own, and importing under it would leave rows nobody else can open.
-2. **A teammate on the same repo sees "Ask to join"** (`teamVaults` in `electron/vault-shared-meta.cjs`).
+2. **A teammate on the same repo sees "Ask to join"** (`teamVaults` in `electron/vault-team.cjs`).
    `request_vault_device` writes a pending row for their own Mac, already `accepted`. The drawer then shows
    their fingerprint to read to the admin.
 3. **The admin sees the Mac on the vault, with its fingerprint**, and what approving gives: every key,
@@ -427,6 +436,21 @@ in the next section stops at a pending row: its Add form works, but nothing on e
 
 Names with lower-case letters stay on the sharer's Mac, because `vault_secrets` takes upper case only, and the
 drawer says which.
+
+**When there's no Ask to join, the drawer says why** (added 2026-11-05, after a Mac signed in to nothing showed only
+Share… for a repo another Mac had shared). `teamVaults()` answers a `reason` beside its empty `joins`:
+`signed-out` (`accountClient.signedIn()` is false; the device key isn't even loaded), `error` (the `vaults` read
+failed or threw: offline, RLS) or `no-account` (a shell with no account client, so nothing is said). No reason
+means the lookup ran, so a repo missing from `joins` has no shared vault in any workspace the account sees.
+`joinHintFor()` turns that into the summary's `joinHint`, for a GitHub repo's local vault with no join only, and
+`JoinHint` in `components/VaultShared.tsx` shows one small line under the header (`JOIN_HINTS` in
+`lib/vault-shared.ts`):
+
+- signed out: "Sign in to see this vault from your other Macs." with a Sign in that runs the account menu's
+  GitHub sign-in, and reloads the drawer on the `weft:account` event so Ask to join can appear;
+- `none`: "Not shared yet: press Share… on the Mac that has these secrets, then Ask to join here." Only on a
+  vault holding no values on this Mac: the Mac that has them is the one to press Share…, and needn't be told;
+- `error`: "Couldn't check for a shared vault (offline?)", never "not shared".
 
 ## Granting a teammate's devices
 
@@ -551,6 +575,47 @@ generation is two libsodium calls and one INSERT; the "show words" page is one r
 (opt-in, per-vault) is the kind of footgun that loses vaults when a teammate leaves and the owner is on
 holiday.
 
+## Sharing from the team page
+
+Built 2026-11-05, because the drawer's **Share…** was too hidden: a user who needed a certificate from one Mac's vault on
+another couldn't find why the second Mac showed no Ask to join. Each project row on the team page (Settings → Teams on the
+desktop, `/{orgSlug}/team` on weft.zip, both `components/team/Projects.tsx`) now carries its vault's state and the one
+action that fits.
+
+**What the page knows, and from where.** `teamSnapshot` (`lib/team-ops.ts`) adds `vault` to each project through
+`lib/team-project-vaults.ts`, read with the service client because the rows cross users: the `vaults` row for
+`(org, repo)`, the devices holding the **current** key version's `vault_grants` (not the recovery key, not a revoked
+device), the `accepted`, unexpired `pending_device_grants` whose device doesn't hold the key yet (admins only), and the
+members' Macs whose `devices.local_vaults` names the repo. It selects names, fingerprints and last-seen only: never
+`wrapped_key`, never `vault_secrets`. A failed read leaves `vault` off and the row shows nothing rather than something wrong.
+
+**Where "on m5air" comes from.** Nothing on the server knew about a vault that was never shared, so each signed-in Mac now
+says which repos it keeps an unshared vault with at least one value for: `electron/vault-local-repos.cjs` reads each
+`~/.weft/vault/<hash>.json`'s `id` and whether an entry has ciphertext (nothing is decrypted, no `.shared.json` beside it),
+and `reportLocalVaults` in `electron/device-beat.cjs` writes the sorted `owner/name` list to the Mac's own `devices` row,
+on the first beat and whenever it changes. `supabase/migrations/20261105150000_device_local_vaults.sql` adds the column
+(owner-only writes, by trigger, as with `host_device`). A database without it yet only warns once.
+
+**The chip** (`lib/team-vault-view.ts` `vaultChip`): **Secrets shared · N devices** (the title lists them), **Secrets on
+this Mac only** (the desktop's own overview says this Mac holds values), **Secrets on m5air only** (from
+`local_vaults`), or nothing.
+
+**The offer** (`vaultOffer`), for admins; the key and values never touch the page:
+
+- a shared vault: **Devices…**, the holders with last seen, and each ask with its fingerprint and what approving gives.
+  **Approve** / **Decline** run `deviceGrant` / `deviceDecline` through main's bridge when this Mac holds the shared vault
+  (Touch ID, the same as the drawer). A desktop without the key says which Mac to approve on; a browser links to the
+  desktop's drawer, which lists the ask;
+- an unshared vault on this Mac: **Share secrets**, the drawer's own `ShareOffer` and its consent dialog
+  (`components/VaultShareDialog.tsx`), with this workspace as the target (`lib/use-here-vaults.ts` finds the folder);
+- on another Mac, on the desktop: "Share from m5air";
+- in a browser: **Share secrets** as `weft://secrets?repo=owner/name&share=1`. `electron/board-links.cjs` turns it into the
+  `open-secrets` menu action, and `lib/vault-ask.ts` opens the 🔐 drawer filtered to that repo's vault with its Share…
+  dialog up, waiting for the drawer's overview if it hasn't loaded. Its title names the Mac to do it on.
+
+The drawer's own line for why there's no Ask to join (`JoinHint`, above) is unchanged; the team page is the second place
+to see the same state, with the Mac named.
+
 ## What the 🔐 drawer shows
 
 Today (`components/VaultDrawer.tsx`, `lib/vault-view.ts`): the project filter, a list of vaults, the
@@ -561,6 +626,8 @@ The shared-vault changes are additive, not a rewrite:
   shared (the local id is replaced by the shared one in the header). The current key version is shown
   next to the name, in monospaced font: `v3` (rotating from v2). Tooltip explains "vault key version 3 —
   bumped on `<date>` by `<actor>`".
+- (Since 2026-11-05 the event log, the recovery key, Share…, Ask to join and the Macs asking sit on the vault's card in
+  Settings → Secrets, and the drawer shows one status line for them: secrets.md#the-drawer-and-settings--secrets.)
 - An **Event log tab** (alongside the secrets tab, in the same drawer): the last 100 `vault_events` for
   this vault, in reverse-chronological order. Filtered by what the current user did (default) or "all
   members" (the team's view). The tab is on the drawer, not its own page, so the secret is one click away
@@ -903,4 +970,7 @@ today), `components/SecretRow.test.tsx` and `components/VaultDrawer.conflict.tes
 conflict banner, and the drawer that shows it), and `lib/use-vault-conflicts.test.ts` (the transient
 conflict state). The
 migration is hand-tested against a fresh `supabase db reset`; the route tests in
-`app/api/routes.test.ts` cover the new `app/api/team/devices*` routes.
+`app/api/routes.test.ts` cover the new `app/api/team/devices*` routes. Sharing from the team page:
+`lib/team-project-vaults.test.ts`, `lib/team-vault-view.test.ts`, `lib/vault-ask.test.ts`,
+`lib/use-here-vaults.test.ts`, `components/team/ProjectVault.test.tsx`, `electron/vault-local-repos.test.ts`,
+`electron/board-links.test.ts` and the `reportLocalVaults` cases in `electron/device-beat.test.ts`.

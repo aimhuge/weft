@@ -2,12 +2,17 @@
 
 // A team's projects (GitHub repos, "owner/name") in Settings → Team: the linked list with Remove for those who
 // manage the team, "Access" to pick which members see each one (./ProjectAccess), and "Add project" (a pick from
-// the board's repos not yet linked, or a typed owner/name). Members see only the projects they were granted. The actions come in as a prop like the rest of components/team.
+// the board's repos not yet linked, or a typed owner/name). Members see only the projects they were granted. Each row
+// also shows its 🔐 vault (./ProjectVault): shared or on which Mac, with Share secrets or Devices…. The actions come in
+// as a prop like the rest of components/team.
 import { useState, useTransition, type SubmitEvent } from "react";
 import { REPO_PATTERN, type RoleOption, type TeamClientActions, type TeamMember, type TeamProject } from "@/lib/team-types";
 import { unlinkedRepos } from "@/lib/team-view";
+import { useHereVaults } from "@/lib/use-here-vaults";
+import type { VaultOrg } from "@/lib/vault-shared";
 import { ProjectAccess } from "./ProjectAccess";
 import { ProjectPeople } from "./ProjectPeople";
+import { ProjectVault } from "./ProjectVault";
 
 const FIELD = "rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12.5px] text-ink outline-none focus:border-accent";
 const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
@@ -77,9 +82,10 @@ function AddProject({ linked, boardRepos, actions }: { linked: string[]; boardRe
   );
 }
 
-type RowProps = { project: TeamProject; canManage: boolean; actions: TeamClientActions; members: TeamMember[] };
+// here: this Mac's vaults (desktop only, lib/use-here-vaults.ts), for the row's 🔐 chip and Share secrets.
+type RowProps = { project: TeamProject; canManage: boolean; actions: TeamClientActions; members: TeamMember[]; org: VaultOrg | null; here: ReturnType<typeof useHereVaults> };
 
-function ProjectRow({ project, canManage, actions, members }: RowProps) {
+function ProjectRow({ project, canManage, actions, members, org, here }: RowProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -102,6 +108,15 @@ function ProjectRow({ project, canManage, actions, members }: RowProps) {
         >
           {project.repo}
         </a>
+        <ProjectVault
+          repo={project.repo}
+          vault={project.vault}
+          here={here.byRepo.get(project.repo.toLowerCase())}
+          bridge={here.bridge}
+          org={org}
+          canShare={canManage}
+          onChanged={here.reload}
+        />
         {canManage ? <ProjectAccess project={project} members={members} actions={actions} /> : null}
         {canManage ? (
           <button type="button" onClick={remove} disabled={pending} className={BUTTON}>
@@ -126,6 +141,7 @@ export function Projects({
   roleOptions,
   members,
   pending,
+  org,
 }: {
   projects: TeamProject[];
   canManage: boolean;
@@ -134,8 +150,12 @@ export function Projects({
   roleOptions: RoleOption[];
   members: TeamMember[];
   pending: { email: string }[];
+  // The workspace, for sharing a project's vault with it. Missing: rows show the vault's state but offer no share.
+  org?: { id: string; slug: string; name: string };
 }) {
   const repos = projects.map((p) => p.repo);
+  const here = useHereVaults(projects.length > 0);
+  const target: VaultOrg | null = org ? { ...org, members: members.length, admin: canManage } : null;
   return (
     <>
       {projects.length === 0 ? (
@@ -143,7 +163,7 @@ export function Projects({
       ) : (
         <ul className="divide-y divide-line">
           {projects.map((p) => (
-            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} members={members} />
+            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} members={members} org={target} here={here} />
           ))}
         </ul>
       )}

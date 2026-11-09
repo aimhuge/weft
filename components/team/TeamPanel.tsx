@@ -52,6 +52,7 @@ export function TeamPanel({ team, actions, boardRepos }: { team: TeamSnapshot; a
           roleOptions={roleOptions}
           members={team.members}
           pending={team.pending}
+          org={team.org}
         />
       </Section>
 

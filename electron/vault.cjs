@@ -22,8 +22,9 @@ const { createSharedApi, sharedHandlers } = require("./vault-shared-api.cjs");
 const { readLocalVault } = require("./vault-local.cjs");
 const { show: showRecovery, recoveryStatus } = require("./vault-recovery.cjs");
 const { listOrgs, sharedBlock } = require("./vault-shared-meta.cjs");
-const { teamVaults } = require("./vault-team.cjs");
+const { joinHintFor, teamVaults } = require("./vault-team.cjs");
 const { accessToken } = require("./vault-rotate.cjs");
+const { deviceMethods } = require("./device-standing.cjs");
 
 // A copied value leaves the clipboard after this, if it's still what's there.
 const CLIPBOARD_MS = 60_000;
@@ -38,6 +39,8 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
   // Where the vault's files live: <hash>.json, <hash>.shared.json, <hash>.sync.json.
   const vaultDir = path.join(dataDir, "vault");
   let store;
+  // Where this Mac stands with the account, and Re-add for a removed one (electron/device-standing.cjs).
+  const mac = deviceMethods({ accountClient, dir: dataDir, safeStorage, sodium, prompt, now, reset: () => (store = undefined) });
   const ids = new Map(); // folder -> { id, label }
   const unlock = createUnlock({ prompt, now });
   // Env files you located by hand, per vault; nearby copies are found fresh each time (electron/env-sources.cjs).
@@ -174,6 +177,9 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       return { written: true, file: MANAGED_FILE, gitignoreAdded: !ignored };
     },
 
+    // This Mac's standing, and Re-add: a fresh key, every local vault sealed to it (docs/architecture/device-registry.md).
+    ...mac,
+
     close() {
       watcher.close();
       sync?.close();
@@ -187,7 +193,10 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       // vault's header. Signed out, or a shell that doesn't know teams: an empty list.
       const orgs = await listOrgs({ accountClient });
       await sodium.ready();
-      const team = orgs.length ? await teamVaults({ accountClient, publicKey: loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium }).publicKey }) : null;
+      // Asked even with no workspaces, so the drawer can say why there's no "Ask to join" (joinHint below).
+      // Standing first: a signed-in Mac with no device row registers here, so the team lookup reads its key's row.
+      const device = await mac.standing();
+      const team = await teamVaults({ accountClient, publicKey: () => loadDeviceKey({ dir: dataDir, safeStorage, crypto: sodium }).publicKey });
       for (const folder of folders) {
         const { id, label } = await idOf(folder);
         const found = seen.get(id);
@@ -202,11 +211,12 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
         const shared = sharedBlock({ dir: vaultDir, id, orgs });
         // queued: writes to a shared vault made offline, waiting in <hash>.queue.jsonl (the drawer's chip).
         // join: the workspace already shares this repo and this Mac isn't in it. requests: Macs waiting to be.
-        const join = !shared && team?.joins.get(id.replace(/^github:/, ""));
-        const requests = shared && team?.requests.get(shared.vaultId);
-        seen.set(id, { id, label, folder, folders: [folder], secrets, nudge: nudge(folder, id, s, filesOf(folder, id)), managed: watchManaged(folder), ...(shared && { shared }), ...(join && { join }), ...(requests && { requests }), ...(s?.isShared(id) && { queued: s.queued(id) }) });
+        const join = !shared && team.joins.get(id.replace(/^github:/, ""));
+        const requests = shared && team.requests.get(shared.vaultId);
+        const joinHint = joinHintFor({ id, shared, join, reason: team.reason, secrets, device: device.state });
+        seen.set(id, { id, label, folder, folders: [folder], secrets, nudge: nudge(folder, id, s, filesOf(folder, id)), managed: watchManaged(folder), ...(shared && { shared }), ...(join && { join }), ...(joinHint && { joinHint }), ...(requests && { requests }), ...(s?.isShared(id) && { queued: s.queued(id) }) });
       }
-      return { vaults: [...seen.values()], unlocked: unlock.unlocked(), orgs };
+      return { vaults: [...seen.values()], unlocked: unlock.unlocked(), orgs, device };
     },
 
     // The import preview: every name in the project's .env files against the vault. Tails only.
@@ -343,7 +353,8 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const { id, label } = await idOf(folder);
       const s = await existing();
       const secrets = s?.exists(id) ? s.list(id).map(({ name, environment, missing }) => ({ name, environment, missing })) : [];
-      return { label, secrets };
+      // shared: a team vault, whose server holds upper-case names only (a Vercel pull keeps the rest out).
+      return { label, secrets, ...(s?.isShared(id) && { shared: true }) };
     },
 
     // A value for a thread to use without seeing it: main puts it in (electron/browser-pane.cjs) and only says

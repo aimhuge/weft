@@ -262,6 +262,7 @@ function setupSupabase({ ipcMain, dataDir, board, vault }) {
   const safeStorage = require("./keychain-audit.cjs").keychainFor("Supabase token");
   const supabase = createSupabase({ dataDir, safeStorage, vault });
   registerSupabase(ipcMain, { supabase, isBoard: (sender) => Boolean(sender) && sender === board() });
+  require("./provider-vault-token.cjs").wireProviderVaultToken({ ipcMain, vault, board, provider: "supabase", service: supabase });
   return supabase;
 }
 

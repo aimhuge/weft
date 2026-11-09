@@ -27,6 +27,9 @@ function registerVault(ipcMain, { vault, isBoard, board = null, dataDir = "", ac
   handle("vault:remove", (id, name, env) => vault.remove(String(id), String(name), String(env)));
   handle("vault:write-back", (folder) => vault.writeBack(String(folder)));
   handle("vault:lock", () => vault.lock());
+  // This Mac's standing with the account, and Re-add for a removed one (electron/device-standing.cjs).
+  handle("vault:device-standing", () => vault.standing());
+  handle("vault:device-readd", () => vault.readd());
   // Threads' standing access (vault-grants.cjs) and the audit log (keychain-audit.cjs), for the drawer's Activity and the card menu.
   handle("vault:grants", () => vault.grantList());
   handle("vault:grant", (folder, card, thread) => vault.grant(String(folder), { card: String(card), thread: thread ? String(thread) : undefined, by: "you" }));

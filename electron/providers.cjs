@@ -3,11 +3,11 @@
 // starts them and hands back the APIs main's control-server routes need (electron/pane-routes.cjs).
 
 // board() is the board window's webContents; server() is the Next server's { url, token }, or null before it's up.
-function setupProviders({ ipcMain, dataDir, board, server }) {
+function setupProviders({ ipcMain, dataDir, board, server, vault }) {
   // BlastCP: its sign-in is in the Keychain too, and which property a folder posts as is in the data folder.
   const blastcpApi = require("./blastcp.cjs").setupBlastcp({ ipcMain, dataDir, board });
   // Cloudflare: its token is in the Keychain and which Worker or Pages project a folder is is in the data folder.
-  require("./cloudflare.cjs").setupCloudflare({ ipcMain, dataDir, board });
+  require("./cloudflare.cjs").setupCloudflare({ ipcMain, dataDir, board, vault });
   // Slack: its bot and app tokens are in the Keychain; `/weft` and @mentions come in over Socket Mode, to the server.
   const slackApi = require("./slack.cjs").setupSlack({ ipcMain, dataDir, board, server });
   // Goose: a provider key per provider, in the Keychain; the board never reads one back (electron/goose-ipc.cjs).

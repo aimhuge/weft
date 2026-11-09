@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import SettingsSearch from "./SettingsSearch";
 import "./test-utils";
 
-// The search box in Settings' title bar (components/SettingsSearch.tsx).
+// The search box at the top of Settings' page list (components/SettingsSearch.tsx).
 
 const box = () => screen.getByRole("combobox", { name: "Search settings" });
 
@@ -21,8 +21,9 @@ describe("SettingsSearch", () => {
     await userEvent.type(box(), "trusted");
     const option = screen.getByRole("option", { name: /Trusted folders/ });
     expect(option).toHaveTextContent("Security");
+    expect(option).toHaveTextContent("Folders outside a project that threads may read.");
     fireEvent.mouseDown(option);
-    expect(onPick).toHaveBeenCalledWith({ page: "security", title: "Trusted folders", pageLabel: "Security" });
+    expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ page: "security", title: "Trusted folders", pageLabel: "Security" }));
     expect(box()).toHaveValue("");
   });
 

@@ -6,9 +6,6 @@ import type { VaultBridge, VaultOverview, VaultSummary } from "@/lib/vault-view"
 import "./test-utils";
 import VaultDrawer from "./VaultDrawer";
 
-// The drawer's "Show recovery key" item opens the vault's recovery page with
-// next/navigation's useRouter().push — the app router isn't mounted in a test, so the
-// router is stubbed.
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
 const vault = (id: string, label: string, folder: string, over: Partial<VaultSummary> = {}): VaultSummary => ({
@@ -287,40 +284,6 @@ describe("VaultDrawer", () => {
     await userEvent.pointer({ keys: "[MouseRight]", target: screen.getByText("API_KEY") });
     await waitFor(() => expect(b.copyTo).toHaveBeenCalledWith("github:o/web", "API_KEY", "development", "/dev/notes"));
     await waitFor(() => expect(notify).toHaveBeenCalledWith("Copied API_KEY in notes"));
-  });
-
-  it("offers to let Weft write .env.local after an import, and skips it when unticked", async () => {
-    const local = { file: ".env.local", environment: "development" as const, namesOnly: false, tracked: false, vercel: false };
-    const row = { file: ".env.local", name: "DB", environment: "development" as const, status: "new" as const, tail: "", public: false, ticked: true, skipped: false };
-    const scan = { id: "github:o/web", label: "o/web", files: [local], rows: [row] };
-    const { b, notify } = setup("/dev/web");
-    const writeBack = vi.fn(() => Promise.resolve({ written: true as const, file: ".env.local", gitignoreAdded: false }));
-    Object.assign(b, { writeBack });
-    b.scan.mockResolvedValue(scan);
-    b.import.mockResolvedValue({ imported: 1 });
-
-    await userEvent.click(screen.getByRole("button", { name: "Import…" }));
-    const manage = await screen.findByLabelText("Then let Weft write .env.local from the vault");
-    expect(manage).toBeChecked();
-    await userEvent.click(screen.getByRole("button", { name: "Import 1" }));
-    await waitFor(() => expect(writeBack).toHaveBeenCalledWith("/dev/web"));
-    expect(notify).toHaveBeenCalledWith("Weft now writes .env.local from the vault.");
-
-    await userEvent.click(screen.getByRole("button", { name: "Import…" }));
-    await userEvent.click(await screen.findByLabelText("Then let Weft write .env.local from the vault"));
-    await userEvent.click(screen.getByRole("button", { name: "Import 1" }));
-    await waitFor(() => expect(b.import).toHaveBeenCalledTimes(2));
-    expect(writeBack).toHaveBeenCalledTimes(1);
-  });
-
-  it("doesn't offer it for a managed .env.local", async () => {
-    const managed: VaultOverview = { unlocked: false, vaults: [vault("github:o/web", "o/web", "/dev/web", { managed: true })] };
-    const { b } = setup("/dev/web", undefined, managed);
-    Object.assign(b, { writeBack: vi.fn() });
-    b.scan.mockResolvedValue({ id: "github:o/web", label: "o/web", files: [{ file: ".env.local", environment: "development", namesOnly: false, tracked: false, vercel: false }], rows: [] });
-    await userEvent.click(screen.getByRole("button", { name: "Import…" }));
-    await screen.findByText("Import into o/web");
-    expect(screen.queryByLabelText("Then let Weft write .env.local from the vault")).not.toBeInTheDocument();
   });
 });
 

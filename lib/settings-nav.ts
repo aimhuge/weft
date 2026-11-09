@@ -1,7 +1,7 @@
 import { FIRST_SCENES, SCENES, sceneOf, type Base, type Scene, type SceneId } from "./theme";
 
 // The Settings screen's pages, down the left. Each is one scrolling page of cards; no tabs.
-export type SettingsPage = "general" | "laptop" | "models" | "threads" | "agents" | "security" | "automations" | "shortcuts" | "accounts" | "connectors" | "team" | "devices" | "sync";
+export type SettingsPage = "general" | "laptop" | "models" | "threads" | "agents" | "security" | "automations" | "shortcuts" | "accounts" | "connectors" | "team" | "devices" | "sync" | "secrets";
 
 export const SETTINGS_PAGES: { id: SettingsPage; label: string; hint: string }[] = [
   { id: "general", label: "General", hint: "How the board looks and sounds." },
@@ -10,6 +10,7 @@ export const SETTINGS_PAGES: { id: SettingsPage; label: string; hint: string }[]
   { id: "threads", label: "Threads", hint: "How new threads start and what they're told." },
   { id: "agents", label: "Agents", hint: "Who your threads are: what each one is told, the skills it gets, and each project's default." },
   { id: "security", label: "Security", hint: "What threads may do without asking, and how long your sign-ins last." },
+  { id: "secrets", label: "Secrets", hint: "Each project's 🔐 vault: sharing, its Macs, the recovery key, env files and the event log." },
   { id: "automations", label: "Automations", hint: "Skills that run on their own." },
   { id: "shortcuts", label: "Shortcuts", hint: "Keys for the board's global actions." },
   { id: "accounts", label: "Accounts", hint: "Your Weft account and the CLIs' logins." },

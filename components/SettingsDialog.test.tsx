@@ -85,9 +85,10 @@ describe("SettingsDialog", () => {
     await go("General");
   });
 
-  it("searches every page from the title bar and opens the pick at its section", async () => {
+  it("searches every page from the top of the page list and opens the pick at its section", async () => {
     render(<SettingsDialog onClose={() => {}} />);
-    await userEvent.type(screen.getByRole("combobox", { name: "Search settings" }), "permission");
+    const pages = screen.getByRole("navigation", { name: "Settings pages" });
+    await userEvent.type(within(pages).getByRole("combobox", { name: "Search settings" }), "permission");
     fireEvent.mouseDown(screen.getByRole("option", { name: /Default permission mode/ }));
     expect(screen.getByRole("heading", { name: "Security", level: 2 })).toBeInTheDocument();
     const sections = await screen.findByRole("navigation", { name: "Sections on this page" });
@@ -95,6 +96,23 @@ describe("SettingsDialog", () => {
     await userEvent.click(within(sections).getByRole("button", { name: "Site notes" }));
     expect(within(sections).getByRole("button", { name: "Site notes" })).toHaveAttribute("aria-current", "location");
     await go("General");
+  });
+
+  it("shows the version and its commit under the page list", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_VERSION", "9.8.7");
+    vi.stubEnv("NEXT_PUBLIC_APP_COMMIT", "abcdef1234");
+    render(<SettingsDialog onClose={() => {}} />);
+    const line = within(screen.getByRole("navigation", { name: "Settings pages" })).getByText("Weft v9.8.7", { exact: false });
+    expect(line).toHaveTextContent("Weft v9.8.7abcdef1");
+    expect(line).toHaveAttribute("title", "Built from abcdef1234");
+    vi.unstubAllEnvs();
+  });
+
+  it("leaves the version line out when the build has none", () => {
+    vi.stubEnv("NEXT_PUBLIC_APP_VERSION", "");
+    render(<SettingsDialog onClose={() => {}} />);
+    expect(screen.queryByText(/Weft v/)).not.toBeInTheDocument();
+    vi.unstubAllEnvs();
   });
 
   it("puts a scene behind it and shows one page at a time", async () => {

@@ -28,6 +28,7 @@ import {
   trackedWarning,
   validName,
   vaultBridge,
+  deviceBridge,
   vaultFilter,
   type ImportScan,
   type VaultSecret,
@@ -253,6 +254,14 @@ describe("vault view", () => {
     const bridge = { overview: vi.fn() };
     vi.stubGlobal("window", { weft: { vault: bridge } });
     expect(vaultBridge()).toBe(bridge);
+  });
+
+  it("finds this Mac's devices bridge under the vault's, in shells that have one", () => {
+    vi.stubGlobal("window", { weft: { vault: { overview: vi.fn() } } });
+    expect(deviceBridge()).toBeNull();
+    const devices = { standing: vi.fn() };
+    vi.stubGlobal("window", { weft: { vault: { devices } } });
+    expect(deviceBridge()).toBe(devices);
   });
 
   it("says who changed which secret in which environment", () => {
