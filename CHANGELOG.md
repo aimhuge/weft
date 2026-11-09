@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-09
+
 ### Added
 
 - **Share a thread with anyone on GitHub, and @mention people in the chat.** The Share dialog has a **People** field: type a GitHub login (it starts with your repo's collaborators and searches GitHub as you type), and that person can open the link once they sign in to weft.zip with GitHub, even if the link is private or has a password, and without joining your workspace. Weft emails them when it knows their address. When it doesn't, their name says so and gives you Copy link. Once they open it, you see when. Type **@** in the reply box to mention a teammate or any GitHub user. If the card is shared, sending a mention of someone who can't open it yet asks you first, and their email quotes your message (`components/SharePeople.tsx`, `lib/card-share-grants.ts`, `lib/share-grant-notify.ts`, `lib/use-mention-ask.ts`, `cloud_share_grants`).
