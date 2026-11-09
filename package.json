@@ -138,6 +138,8 @@
       "package.json",
       "!node_modules${/*}",
       "node_modules/@opentelemetry/api/**/*",
+      "node_modules/@opentelemetry/core/**/*",
+      "node_modules/@opentelemetry/semantic-conventions/**/*",
       "node_modules/@supabase/auth-js/**/*",
       "node_modules/@supabase/functions-js/**/*",
       "node_modules/@supabase/phoenix/**/*",
