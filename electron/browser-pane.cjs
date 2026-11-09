@@ -26,7 +26,7 @@ const { addressBarUrl, normalizeUrl, tabState } = require("./pane-url.cjs");
 const { PANE_PARTITION, paneWebPreferences, placeView } = require("./pane-view.cjs");
 
 
-function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {}, askUser }) {
+function createBrowserPane({ getWindow, getAppView, token, onContents, pages, onLink, secrets, secretRun = () => undefined, routes: moreRoutes = {}, askUser, sites }) {
   // Each card (keyed by card id) has its own tabs, so each review keeps its own browser; "board" is the
   // one shown with no card open. Only the active card's current tab is on screen (electron/pane-tabs.cjs).
   const tabs = createPaneTabs();
@@ -35,7 +35,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   // (electron/main.cjs). A thread's control-server POST /browser/open can only navigate within
   // an origin already in the set (L-5 fix: a compromised renderer can't pivot the pane to a
   // brand new host). Same-origin nav inside a loaded page is always allowed — the set only
-  // covers cross-host opens. A host outside the set asks the user with Touch ID first (pane-origins.cjs).
+  // covers cross-host opens. A host outside the set and the site list (pane-sites.cjs) asks with Touch ID first (pane-origins.cjs).
   const authorizedOrigins = new Map();
   const pendingOrigins = new Map();
   const ask = askUser ?? touchIdPrompt({ systemPreferences, dialog, window: getWindow });
@@ -233,9 +233,9 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
   function restore(key) {
     const url = pages?.restoreUrl(key);
     if (!url) return;
-    open(url, key).catch(() => {
+    open(url, key, false, { restore: true }).catch(() => {
       const fallback = pages.fallbackUrl(key);
-      if (fallback && fallback !== url) open(fallback, key).catch(() => {});
+      if (fallback && fallback !== url) open(fallback, key, false, { restore: true }).catch(() => {});
     });
   }
 
@@ -274,7 +274,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
 
   // Loads a page in a card's browser. opts.fromBoard is true on the IPC browser:open path; the
   // IPC sender is checked in main.cjs and the flag is what records the origin so a thread can
-  // navigate within it later.
+  // navigate within it later. opts.restore is a card's own last page coming back after a restart, so it doesn't ask.
   async function open(raw, key, activate, opts = {}) {
     const targetKey = key ?? active;
     const url = opts.fromBoard ? addressBarUrl(raw) : normalizeUrl(raw);
@@ -283,7 +283,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     if (isSelf(url)) throw new Error(`${url} is Weft itself; open the card's own dev server instead`);
     const prior = viewOf(targetKey)?.webContents.getURL();
     const priorOrigin = prior ? originOf(prior) : null;
-    if (!opts.fromBoard && !(await authorizeThreadOpen({ authorized: authorizedOrigins, pending: pendingOrigins, targetKey, origin, priorOrigin, ask }))) {
+    if (!opts.fromBoard && !opts.restore && !(await authorizeThreadOpen({ authorized: authorizedOrigins, pending: pendingOrigins, targetKey, origin, priorOrigin, ask, sites }))) {
       throw new Error(`You didn't allow this thread to open ${origin} in the browser pane. Ask the user to open it there, or to approve it next time.`);
     }
     if (activate) active = targetKey;
@@ -376,6 +376,7 @@ function createBrowserPane({ getWindow, getAppView, token, onContents, pages, on
     setActive,
     prune,
     contentsFor: (key) => viewOf(key)?.webContents,
+    sites,
     webContents: () => viewOf(active)?.webContents,
     back: () => viewOf(active)?.webContents.navigationHistory.goBack(),
     forward: () => viewOf(active)?.webContents.navigationHistory.goForward(),

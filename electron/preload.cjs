@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld("weft", {
     setActive: (key) => ipcRenderer.send("browser:active", key),
     prune: (keys) => ipcRenderer.send("browser:prune", keys),
     getState: () => ipcRenderer.invoke("browser:state"),
+    sites: () => ipcRenderer.invoke("browser:sites"),
+    addSite: (host) => ipcRenderer.invoke("browser:addSite", host),
+    removeSite: (host) => ipcRenderer.invoke("browser:removeSite", host),
     setVisible: (visible, key) => ipcRenderer.send("browser:visible", visible, key),
     setBounds: (rect) => ipcRenderer.send("browser:bounds", rect),
     back: () => ipcRenderer.send("browser:back"),
@@ -110,6 +113,9 @@ contextBridge.exposeInMainWorld("weft", {
       list: () => ipcRenderer.invoke("vault:devices"),
       register: (options) => ipcRenderer.invoke("vault:devices-register", options ?? {}),
       fingerprint: () => ipcRenderer.invoke("vault:devices-fingerprint"),
+      // Registered, removed (revoked) or never registered, and Re-add for a removed Mac: a new key after Touch ID.
+      standing: () => ipcRenderer.invoke("vault:device-standing"),
+      readd: () => ipcRenderer.invoke("vault:device-readd"),
     },
     // The shared vault's cross-device flow (docs/architecture/teams-vault.md, "Granting a teammate's
     // devices"). These are not the thread grants above: `grant` gives a card's thread access to a
@@ -144,6 +150,9 @@ contextBridge.exposeInMainWorld("weft", {
     status: (folders) => ipcRenderer.invoke("vercel:status", folders),
     setToken: (token) => ipcRenderer.invoke("vercel:set-token", token),
     forgetToken: () => ipcRenderer.invoke("vercel:forget-token"),
+    // A token a project vault holds, by name: main asks Touch ID, reads it and keeps it; no value crosses (electron/provider-vault-token.cjs).
+    vaultTokenCandidates: (folders) => ipcRenderer.invoke("vercel:vault-token-candidates", folders),
+    useVaultToken: (pick) => ipcRenderer.invoke("vercel:use-vault-token", pick),
     projects: () => ipcRenderer.invoke("vercel:projects"),
     scopes: () => ipcRenderer.invoke("vercel:scopes"),
     link: (folder, projectId, orgId) => ipcRenderer.invoke("vercel:link", folder, projectId, orgId),
@@ -163,6 +172,9 @@ contextBridge.exposeInMainWorld("weft", {
     status: (folders) => ipcRenderer.invoke("supabase:status", folders),
     setToken: (token) => ipcRenderer.invoke("supabase:set-token", token),
     forgetToken: () => ipcRenderer.invoke("supabase:forget-token"),
+    // A token a project vault holds, by name: main asks Touch ID, reads it and keeps it; no value crosses (electron/provider-vault-token.cjs).
+    vaultTokenCandidates: (folders) => ipcRenderer.invoke("supabase:vault-token-candidates", folders),
+    useVaultToken: (pick) => ipcRenderer.invoke("supabase:use-vault-token", pick),
     projects: () => ipcRenderer.invoke("supabase:projects"),
     orgs: () => ipcRenderer.invoke("supabase:orgs"),
     create: (folder, opts) => ipcRenderer.invoke("supabase:create", folder, opts),
@@ -185,6 +197,9 @@ contextBridge.exposeInMainWorld("weft", {
     status: (folders) => ipcRenderer.invoke("cloudflare:status", folders),
     setToken: (token) => ipcRenderer.invoke("cloudflare:set-token", token),
     forgetToken: () => ipcRenderer.invoke("cloudflare:forget-token"),
+    // A token a project vault holds, by name: main asks Touch ID, reads it and keeps it; no value crosses (electron/provider-vault-token.cjs).
+    vaultTokenCandidates: (folders) => ipcRenderer.invoke("cloudflare:vault-token-candidates", folders),
+    useVaultToken: (pick) => ipcRenderer.invoke("cloudflare:use-vault-token", pick),
     projects: () => ipcRenderer.invoke("cloudflare:projects"),
     link: (folder, kind, accountId, name) => ipcRenderer.invoke("cloudflare:link", folder, kind, accountId, name),
     unlink: (folder) => ipcRenderer.invoke("cloudflare:unlink", folder),

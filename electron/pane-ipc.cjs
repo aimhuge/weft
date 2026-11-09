@@ -8,6 +8,10 @@ function registerPaneIpc(ipcMain, { pane, isBoard }) {
     ? pane.open(url, key || undefined, true, { fromBoard: true }).catch((err) => ({ error: String(err.message || err) }))
     : { error: "Browser pane only answers the board window." });
   ipcMain.handle("browser:state", () => pane.state());
+  // The sites threads open without asking that you added or said yes to (electron/pane-sites.cjs), for Settings → Security.
+  ipcMain.handle("browser:sites", (e) => (isBoard(e.sender) ? pane.sites?.list() ?? [] : []));
+  ipcMain.handle("browser:addSite", (e, host) => (isBoard(e.sender) ? pane.sites?.add(host) ?? null : null));
+  ipcMain.handle("browser:removeSite", (e, host) => (isBoard(e.sender) ? pane.sites?.remove(String(host)) ?? false : false));
   ipcMain.on("browser:visible", (_e, visible, key) => pane.setVisible(Boolean(visible), key));
   ipcMain.on("browser:active", (_e, key) => pane.setActive(key));
   ipcMain.on("browser:prune", (_e, keys) => pane.prune(Array.isArray(keys) ? keys : []));
