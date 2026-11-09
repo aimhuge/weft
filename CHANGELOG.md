@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Changed
+
+- **Share… gives you a link straight away.** Opening Share on a card that's never been shared now makes it a live link anyone can open, with no password and the chat hidden (viewers see the browser pane only), so Copy link works at once. A card you set back to Private stays private (`components/ShareCardDialog.tsx`, `FIRST_SHARE` in `lib/share-types.ts`).
+
 ## [0.8.0] - 2026-11-08
 
 ### Fixed
