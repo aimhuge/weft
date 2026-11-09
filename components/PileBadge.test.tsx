@@ -30,13 +30,13 @@ function setup(cwd: string | null = "/dev/app") {
 describe("PileBadge", () => {
   it("shows the folder's uncommitted lines", async () => {
     setup();
-    expect(await screen.findByRole("button", { name: "+12/-4" })).toBeTruthy();
+    expect(await screen.findByText("+12")).toBeTruthy();
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/pile?cwd=%2Fdev%2Fapp");
   });
 
   it("pitches the review on hover, with the count of cards to review", async () => {
     setup();
-    await userEvent.hover(await screen.findByRole("button", { name: "+12/-4" }));
+    await userEvent.hover(await screen.findByText("+12"));
     const tip = screen.getByRole("tooltip");
     expect(tip.textContent).toContain("Uncommitted: 12 new lines of code, -4 removed");
     expect(tip.textContent).toContain("Review 2 cards");
@@ -53,24 +53,26 @@ describe("PileBadge", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("starts the commit walk-through card on click", async () => {
+  it("starts nothing when the badge itself is clicked", async () => {
     const { onStart } = setup();
-    await userEvent.click(await screen.findByRole("button", { name: "+12/-4" }));
-    await waitFor(() => expect(onStart).toHaveBeenCalledWith("/dev/app", "Walk me through", "Commit the pile"));
+    await userEvent.click(await screen.findByText("+12"));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(onStart).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([url]) => url.includes("prompt=1"))).toBe(false);
   });
 
   it("starts the walk-through from the bubble's own button", async () => {
     const { onStart } = setup();
-    await userEvent.hover(await screen.findByRole("button", { name: "+12/-4" }));
+    await userEvent.hover(await screen.findByText("+12"));
     await userEvent.click(screen.getByRole("button", { name: "Review 2 cards" }));
     await waitFor(() => expect(onStart).toHaveBeenCalledWith("/dev/app", "Walk me through", "Commit the pile"));
   });
 
   it("reports an error when there is no prompt to start", async () => {
     const { onStart, onError } = setup();
-    const button = await screen.findByRole("button", { name: "+12/-4" });
+    await userEvent.hover(await screen.findByText("+12"));
     fetchMock.mockImplementation(() => respond({ error: "boom" }));
-    await userEvent.click(button);
+    await userEvent.click(screen.getByRole("button", { name: "Review 2 cards" }));
     await waitFor(() => expect(onError).toHaveBeenCalledWith(new Error("boom")));
     expect(onStart).not.toHaveBeenCalled();
   });

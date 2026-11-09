@@ -27,7 +27,8 @@ function PileTip({ pile, busy, onStart }: { pile: PileSummary; busy: boolean; on
 }
 
 // "+1211/-806" beside the code quality badge: the uncommitted pile in the project in view's repo.
-// Click to start a card that walks through committing it, one Review card at a time (lib/commit-pile.ts).
+// Hovering opens the bubble; only its button starts the card that walks through committing it, one Review card at a
+// time (lib/commit-pile.ts). The badge itself starts nothing, so a stray click on the numbers can't spawn a card.
 // `refresh` changes when a turn ends somewhere, so the count follows the threads' edits.
 export default function PileBadge({
   cwd,
@@ -80,13 +81,9 @@ export default function PileBadge({
 
   return (
     <Tip text={<PileTip pile={p} busy={busy} onStart={click} />} interactive>
-      <button
-        onClick={click}
-        disabled={busy}
-        className="rounded-md px-1 py-0.5 font-mono text-[11.5px] text-muted hover:bg-hover disabled:opacity-60"
-      >
+      <span tabIndex={0} className="cursor-default rounded-md px-1 py-0.5 font-mono text-[11.5px] text-muted hover:bg-hover">
         <span className="text-ok">+{p.added}</span>/<span className="text-danger">-{p.removed}</span>
-      </button>
+      </span>
     </Tip>
   );
 }
