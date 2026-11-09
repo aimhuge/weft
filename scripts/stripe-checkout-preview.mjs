@@ -30,7 +30,7 @@ const params = new URLSearchParams({
 
 const res = await fetch("https://api.stripe.com/v1/checkout/sessions", {
   method: "POST",
-  headers: { authorization: `Bearer ${key}`, "content-type": "application/x-www-form-urlencoded", "stripe-version": "2026-07-29.dahlia" },
+  headers: { authorization: `Bearer ${key}`, "content-type": "application/x-www-form-urlencoded", "stripe-version": "2026-10-28.endive" },
   body: params.toString(),
 });
 const json = await res.json();
