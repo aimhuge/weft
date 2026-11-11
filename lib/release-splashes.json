@@ -1,4 +1,11 @@
 {
+  "0.8.2": {
+    "lines": [
+      "Deleted a card by mistake? Weft keeps it for 30 days, so you can restore it from the Done column's trash.",
+      "Share a thread with anyone on GitHub by their login, so they can open it without joining your workspace.",
+      "Moving a card to Done wraps up faster, and work you've already pushed goes straight to the archive."
+    ]
+  },
   "0.8.1": {
     "lines": [
       "Share a thread with anyone on GitHub, so they can open it without joining your workspace.",
