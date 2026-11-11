@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld("weft", {
   platform: process.platform,
   // The page's zoom (View > Zoom In/Out); the traffic lights don't zoom, so the title bar scales back.
   zoomFactor: () => webFrame.getZoomFactor(),
+  // A hover tip in its own window, over the browser pane (electron/native-tip.cjs).
+  tip: {
+    show: (text, anchor) => ipcRenderer.send("tip:show", text, anchor),
+    hide: () => ipcRenderer.send("tip:hide"),
+  },
   browser: {
     open: (url, key) => ipcRenderer.invoke("browser:open", url, key),
     setActive: (key) => ipcRenderer.send("browser:active", key),

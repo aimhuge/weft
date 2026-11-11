@@ -297,8 +297,8 @@ const menus = createMenus({
 
 // ---- IPC from the board and copilot ----
 
-// The browser pane's IPC from the board (electron/pane-ipc.cjs).
-registerPaneIpc(ipcMain, { pane, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
+// The browser pane's IPC from the board (electron/pane-ipc.cjs), and hover tips that float over it (electron/native-tip.cjs).
+registerPaneIpc(ipcMain, { pane, getWindow: () => win, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 ipcMain.on("copilot:toggle", () => COPILOT_ENABLED && toggleCopilot());
 const dictation = require("./dictation-setup.cjs").setupDictation({ ipcMain, getServer: () => server, listeners: () => [appView?.webContents, copilot.webContents()] });
 const killTerminals = registerTerminal(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });

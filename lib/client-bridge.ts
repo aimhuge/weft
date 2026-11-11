@@ -58,6 +58,8 @@ export interface ShellBridge {
   platform: string;
   // The page's zoom factor, 1 at Actual Size.
   zoomFactor?(): number;
+  // A hover tip in its own window, over the browser pane (electron/native-tip.cjs); missing on older shells.
+  tip?: { show(text: string, anchor: { x: number; y: number; width: number; height: number }): void; hide(): void };
   browser: {
     // key is the card whose browser to load into; each card has its own, and the open card's is on screen.
     open(url: string, key?: string): Promise<unknown>;

@@ -1,7 +1,9 @@
 // The browser pane's IPC from the board window (electron/preload.cjs's window.weft.browser), moved out of main.cjs.
 // isBoard(sender) says whether a message came from the board window.
 
-function registerPaneIpc(ipcMain, { pane, isBoard }) {
+function registerPaneIpc(ipcMain, { pane, isBoard, getWindow }) {
+  // Hover tips with no room beside the pane float over it in their own window.
+  if (getWindow) require("./native-tip.cjs").registerNativeTip(ipcMain, { getWindow, isBoard });
   // A page that won't load (a dev server that isn't running) is shown in the pane; it isn't an error for the board.
   // (L-5) Only the board may open URLs in the pane; a compromised renderer can't pivot it to a fresh host.
   ipcMain.handle("browser:open", (e, url, key) => isBoard(e.sender)

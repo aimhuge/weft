@@ -2,6 +2,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Tip from "./Tip";
+import { setPaneBox } from "@/lib/float-place";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -53,5 +54,23 @@ describe("Tip", () => {
     expect(bubble()).not.toBeNull();
     await act(() => vi.advanceTimersByTimeAsync(300));
     expect(bubble()).toBeNull();
+  });
+
+  it("hands a tip squeezed beside the browser pane to the shell's own window, and hides it on leave", () => {
+    const show = vi.fn();
+    const hide = vi.fn();
+    (window as unknown as { weft: unknown }).weft = { tip: { show, hide } };
+    setPaneBox({ x: 60, y: 0, width: 900, height: 700 });
+    try {
+      render(<Tip text="Weft repo analysis">trigger</Tip>);
+      fireEvent.mouseEnter(screen.getByText("trigger"));
+      expect(show.mock.calls[0]?.[0]).toBe("Weft repo analysis");
+      expect(document.querySelector<HTMLElement>("[role=tooltip]")?.style.visibility).toBe("hidden");
+      fireEvent.mouseLeave(screen.getByText("trigger"));
+      expect(hide).toHaveBeenCalled();
+    } finally {
+      setPaneBox(null);
+      delete (window as unknown as { weft?: unknown }).weft;
+    }
   });
 });
