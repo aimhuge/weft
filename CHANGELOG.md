@@ -21,6 +21,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Fixed
 
 - **Clicking the uncommitted +/- numbers no longer starts a card.** The badge only opens its bubble on hover now; just the bubble's Commit them / Review N cards button starts the commit walk-through. Files: `components/PileBadge.tsx`.
+- **A thread your Worker turns down no longer vanishes.** A new thread in a Worker project makes nothing on your Mac, so when the Worker refused it (say "This worker trusts no Mac yet"), the card quietly left the board after two minutes and took your prompt with it. Weft now watches each thread it sends. If the Worker refuses one, the thread lands on your board in Needs you, in the project of the same name, tagged `worker-refused`, with the Worker's reason as its last line. Start it on your Mac, or fix the Worker and send it again (`lib/worker-refused.ts`, `app/api/cards/route.ts`).
 
 ## [0.8.0] - 2026-11-08
 
