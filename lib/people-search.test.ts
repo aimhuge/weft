@@ -5,7 +5,7 @@ const h = vi.hoisted(() => ({ loadTeam: vi.fn(), people: vi.fn() }));
 vi.mock("./team-cache", () => ({ loadTeam: h.loadTeam }));
 vi.mock("./share-grant-client", () => ({ grantApi: { people: h.people } }));
 
-import { localSearchPeople, teamPeople } from "./people-search";
+import { localSearchPeople, preloadPeople, teamPeople } from "./people-search";
 import type { TeamLoadState } from "./team-cache";
 
 const ok = (members: { login?: string | null; name?: string | null }[]) => ({ kind: "ok", team: { members } }) as unknown as TeamLoadState;
@@ -59,5 +59,37 @@ describe("localSearchPeople", () => {
     h.loadTeam.mockRejectedValue(new Error("offline"));
     h.people.mockRejectedValue(new Error("403"));
     expect(await localSearchPeople("card-3", "zed")).toEqual([]);
+  });
+
+  it("hands the local people over before GitHub answers", async () => {
+    h.loadTeam.mockResolvedValue(ok([{ login: "kim" }]));
+    let answer: (v: unknown) => void = () => {};
+    h.people.mockImplementation((q: string) => (q ? new Promise((r) => (answer = r)) : Promise.resolve([])));
+    const onLocal = vi.fn();
+    const out = localSearchPeople("card-4", "ki", onLocal);
+    await vi.waitFor(() => expect(onLocal).toHaveBeenCalledWith([expect.objectContaining({ login: "kim" })]));
+    answer([hit("kimberly", "github")]);
+    expect((await out).map((p) => p.login)).toEqual(["kim", "kimberly"]);
+  });
+
+  it("keeps GitHub's answer per query and says nothing early when no one local matches", async () => {
+    h.loadTeam.mockResolvedValue(ok([]));
+    h.people.mockResolvedValue([hit("qq", "github")]);
+    const onLocal = vi.fn();
+    await localSearchPeople(undefined, "QQ", onLocal);
+    await localSearchPeople(undefined, "qq");
+    expect(h.people).toHaveBeenCalledTimes(1);
+    expect(onLocal).not.toHaveBeenCalled();
+  });
+});
+
+describe("preloadPeople", () => {
+  it("warms the team and the card's repo people", () => {
+    h.loadTeam.mockRejectedValue(new Error("offline"));
+    h.people.mockResolvedValue([]);
+    preloadPeople("card-5");
+    preloadPeople(undefined);
+    expect(h.loadTeam).toHaveBeenCalledTimes(2);
+    expect(h.people).toHaveBeenCalledTimes(1);
   });
 });

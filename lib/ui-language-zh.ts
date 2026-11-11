@@ -150,7 +150,7 @@ export const simplifiedChinese: Readonly<Record<string, string>> = {
   "Workers": "工作节点",
   "Phones": "手机",
   "Pair a phone": "配对手机",
-  "What should this thread do? Paste screenshots or videos right where they belong, or hit the mic and talk.": "这个线程要做什么？可以粘贴截图或视频，也可以点击麦克风口述。",
+  "What should this thread do? @ to mention someone, / for skills, paste screenshots or hit the mic and talk.": "这个线程要做什么？@ 提及某人，/ 使用技能，可以粘贴截图，也可以点击麦克风口述。",
   "What should it do?": "要完成什么任务？",
   "Prompt": "提示词",
   "Model": "模型",
