@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **Rail tooltips no longer disappear under the browser pane.** When the pane sits right beside the left rail, a hover tip used to be squeezed into the rail's 50px and cut off by the pane. It now floats over the pane in a small window of its own (`electron/native-tip.cjs`, `components/Tip.tsx`).
+
 ## [0.8.1] - 2026-11-09
 
 ### Added
