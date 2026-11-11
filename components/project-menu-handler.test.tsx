@@ -59,6 +59,7 @@ function setup(pick: string | null, over: Partial<ProjectMenuDeps> = {}, shellOv
     syncStatus: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false },
     // Reads back what the board knows, so a test's `syncFolders` is what the menu sees.
     readSync: vi.fn(() => Promise.resolve({ folders: [], status: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false } })),
+    shareBoard: vi.fn(),
     ...over,
   } satisfies ProjectMenuDeps;
   if (!over.readSync) {
@@ -180,7 +181,7 @@ describe("projectMenuHandler", () => {
     expect(t.deps.toast).toHaveBeenCalledWith("Stopped 1 card in p.");
   });
 
-  it("turns cloud sync on for the project, and off again when it already syncs", async () => {
+  it("turns cloud sync on for the project, and off again; Share… turns it on before sharing the board", async () => {
     let t = setup("sync");
     await t.run();
     expect(api.cloudSyncSetFolder).toHaveBeenCalledWith("/p", true);
@@ -189,6 +190,19 @@ describe("projectMenuHandler", () => {
     await t.run();
     expect(api.cloudSyncSetFolder).toHaveBeenLastCalledWith("/p", false);
     expect(t.deps.toast).toHaveBeenLastCalledWith("p no longer syncs.");
+    // Share… turns sync on first when the project doesn't sync yet, since the web board shows only synced projects.
+    vi.mocked(api.cloudSyncSetFolder).mockClear();
+    t = setup("share");
+    await t.run();
+    expect(api.cloudSyncSetFolder).toHaveBeenCalledWith("/p", true);
+    expect(t.deps.toast).toHaveBeenCalledWith("p now syncs to weft.zip, so it shows on the shared board.");
+    expect(t.deps.shareBoard).toHaveBeenCalled();
+    vi.mocked(api.cloudSyncSetFolder).mockClear();
+    t = setup("share", { syncFolders: ["/p"] });
+    await t.run();
+    expect(api.cloudSyncSetFolder).not.toHaveBeenCalled();
+    expect(t.deps.toast).not.toHaveBeenCalled();
+    expect(t.deps.shareBoard).toHaveBeenCalled();
   });
 
   it("switches the project's new threads to the worker, and back to this machine", async () => {
@@ -264,6 +278,7 @@ describe("projectMenuHandler", () => {
         syncFolders: [],
         syncStatus: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false },
         readSync: vi.fn(() => Promise.resolve({ folders: [], status: { waiting: 0, lastSyncAt: null, uploaded: 0, lastError: null, signedOut: false, noWorkspace: false } })),
+        shareBoard: vi.fn(),
       } satisfies ProjectMenuDeps;
       const onMenu = projectMenuHandler(deps);
       return { deps, popupMenu, run: async () => { const picked = await onMenu(path, event()); await flush(); return picked; } };

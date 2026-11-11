@@ -31,6 +31,8 @@ export interface ProjectMenuDeps {
   syncStatus: CloudSyncStatus;
   // Reads the live state again (the board's last read may be stale) and tells the board about it.
   readSync: () => Promise<{ folders: string[]; status: CloudSyncStatus }>;
+  // Opens Share the board (components/ShareBoardDialog.tsx): the web board's link and invites.
+  shareBoard: () => void;
 }
 
 // Right-clicking a project chip, or a project in "More". The menu is native (lib/project-menu.ts); in a
@@ -160,6 +162,15 @@ function projectActions(path: string, name: string, c: ActionContext): Record<Ex
       await api.cloudSyncSetFolder(path, on);
       await c.readSync();
       c.toast(on ? `${name} now syncs to weft.zip (unencrypted for now).` : `${name} no longer syncs.`);
+    },
+    share: async () => {
+      // The web board only shows synced projects, so sharing one turns its sync on first.
+      if (!c.syncFolders.includes(path)) {
+        await api.cloudSyncSetFolder(path, true);
+        await c.readSync();
+        c.toast(`${name} now syncs to weft.zip, so it shows on the shared board.`);
+      }
+      c.shareBoard();
     },
     "run-here": () => runOn(false),
     "run-worker": () => runOn(true),

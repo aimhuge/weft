@@ -471,7 +471,7 @@ Right-click a project chip in the project bar, or a project under **More**, for 
 thread in it, reveal it in Finder, open it in your editor or terminal (the first one installed: Cursor,
 VS Code, Zed… and Ghostty, iTerm, Warp or Terminal), open it on GitHub, copy its path, **Add Folder…** (a
 project can span several folders, say an app and its API: every thread in it may read and edit the added folders
-with no "Outside project" prompt, and each one gets a **Remove** item), open its 🔐 Secrets, Dev Servers or Changelog, **Pin to Bar** (a pinned project always has a chip, ahead of the recent
+with no "Outside project" prompt, and each one gets a **Remove** item), open its 🔐 Secrets, Dev Servers or Changelog, **Share…** (the weft.zip web board's link and invites, with the project's sync turned on first so it shows there), **Pin to Bar** (a pinned project always has a chip, ahead of the recent
 ones), **Hide from Bar** (its chip goes until you use it again; **More** still lists it), archive its Done
 cards and stop its running ones. (Desktop app only.)
 
@@ -543,7 +543,7 @@ keeps their file dumps out of the thread's context. Settings → Models → Use 
 - **Let the model choose** (the default): the thread picks per subagent, Haiku for searches and lookups,
   Sonnet for most coding, Opus for hard reasoning where a mistake is costly.
 - **Same model as the thread**: every subagent runs on the thread's own model.
-- **Any model any CLI serves**, grouped under Claude (Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5), Puku
+- **Any model any CLI serves**, grouped under Claude (Fable 5.2, Fable 5.1, Opus 5.5, Sonnet 5.5, Haiku 5.5), Puku
   (Opus 4.8, Puku AI 2.8, Puku AI 2.7), Codex and Goose. On a thread whose CLI serves it, the model is forced
   through that CLI's env (`CLAUDE_CODE_SUBAGENT_MODEL` or `PUKU_CLI_SUBAGENT_MODEL`). On the other CLI's
   threads, the thread runs that CLI headless as the subagent (`puku-cli -p … --model opus-4.8`, or

@@ -12,7 +12,7 @@ const item = (id: string, s: Partial<ProjectMenuState> = {}) =>
 describe("projectMenu", () => {
   it("offers every action, named for the project, with keys", () => {
     expect(ids({})).toEqual([
-      "new", "reveal", "editor", "terminal", "github", "copy-path", "add-folder", "secrets", "services", "changelog", "sync", "run-here", "run-worker", "pin", "hide", "archive-done", "stop-running",
+      "new", "reveal", "editor", "terminal", "github", "copy-path", "add-folder", "secrets", "services", "changelog", "share", "sync", "run-here", "run-worker", "pin", "hide", "archive-done", "stop-running",
     ]);
     expect(item("new")).toEqual({ id: "new", label: "New Thread in weft", accelerator: "N" });
   });
@@ -44,6 +44,12 @@ describe("projectMenu", () => {
   it("shows where sync stands beside the Sync item", () => {
     expect(item("sync")).toMatchObject({ label: "Sync weft", detail: "Not Synced" });
     expect(item("sync", { syncStatus: "Synced 7m ago" })).toMatchObject({ detail: "Synced 7m ago" });
+  });
+
+  it("offers Share… with S, greyed out without an account to share from", () => {
+    expect(item("share")).toMatchObject({ label: "Share weft…", enabled: true, accelerator: "S" });
+    expect(item("share", { syncable: false })).toMatchObject({ enabled: false });
+    expect(item("share", { syncable: false, synced: true })).toMatchObject({ enabled: true });
   });
 
   it("greys out Sync when there's no account to sync to", () => {
