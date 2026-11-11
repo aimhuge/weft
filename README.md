@@ -1080,10 +1080,11 @@ It installs the toolchain and Weft, enrols with a one-time token, and starts a l
 Or pair it instead: Settings → **Devices** → **Add a worker** gives a line with a pairing code; the box makes its own key,
 claims the code, prints a check code, and joins once you confirm the same code with Touch ID on the Mac. Settings → Devices
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
-**Re-pair** on a paired worker moves it to another Mac: paste that Mac's code, approve with Touch ID, and run the line it
-shows on the box. A worker never switches Macs without the one it trusts signing off. Its threads come along: a re-paired
-box that keeps its signing key takes its old row's threads in the same step, and a worker that owns threads it can't
-run (revoked or offline) offers **Move threads to…** another worker of yours, as does **Revoke**.
+A worker's row has one button, **Forget**, and a line saying what it does: it turns the worker's key off (the worker stops
+trusting this Mac), and `weft-worker forget` on the box starts it over (its pairing, the Mac it trusts and
+every Mac it stopped trusting go; its signing key and `work/` stay), ready for a new pairing code from this Mac or
+another. Its threads come along: a box that keeps its signing key takes its old row's threads when it pairs again, and a
+worker that owns threads it can't run (revoked or offline) offers **Move threads to…** another worker of yours.
 With two Macs signed in, a worker asks for secrets and the vault only from the Mac it's paired with, and says so when
 that Mac is closed. Revoke a phone, browser or Mac on any of your Macs and it stops being trusted everywhere: the Mac that
 paired a phone or browser unpins it within a minute, its passkeys leave every worker's set, and a worker whose Mac was

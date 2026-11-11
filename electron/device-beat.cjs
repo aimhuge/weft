@@ -58,7 +58,14 @@ async function linkHost({ accountClient, dir, warn = console.warn }) {
     const publicKey = publicKeyIn(dir);
     const host = fs.readFileSync(path.join(dir, "device-id"), "utf8").trim();
     if (typeof userId !== "string" || !publicKey || !/^[0-9a-f]{64}$/.test(host)) return false;
-    const { error } = await accountClient.supabase.from("devices").update({ host_device: host }).eq("user_id", userId).eq("public_key", publicKey);
+    // Never a revoked row: linking one after the fact made the database read this whole Mac as revoked (2026-11-02,
+    // supabase/migrations/20261111161951_forget_revoked_link.sql, which also refuses it there).
+    const { error } = await accountClient.supabase
+      .from("devices")
+      .update({ host_device: host })
+      .eq("user_id", userId)
+      .eq("public_key", publicKey)
+      .is("revoked_at", null);
     if (error) warn(`Device host link: ${error.message}`);
     return !error;
   } catch {

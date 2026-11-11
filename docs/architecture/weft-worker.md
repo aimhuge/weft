@@ -333,25 +333,48 @@ a terminal on the box (`weft-worker enrol wph.… --re-pair --approval wra.…`)
 good for that worker and that code only ([project-hosts.md](project-hosts.md#re-pairing-a-worker-as-built-2026-11-02)).
 
 **A lost Mac, or a box that trusts none** (enrolled by token, after `weft-worker forget-macs`, or once its Mac was
-revoked: the daemon checks every minute and stops trusting a revoked pairing Mac for good,
-[device-registry.md](device-registry.md#revoked-on-one-device-untrusted-on-all)): no Mac can approve, so wipe the box's
-enrolment and enrol it fresh. In a terminal on the box:
+revoked: the daemon checks every minute and stops trusting a revoked pairing Mac,
+[device-registry.md](device-registry.md#revoked-on-one-device-untrusted-on-all)): no Mac can approve, so forget it and
+pair it again. See [Forget a worker](#forget-a-worker).
+
+#### Forget a worker
+
+Built 2026-11-11, after "its way to complicated, we should just have 'forget'". A worker's row in Settings → Devices
+used to carry Connectors, Secrets, Re-pin, Passkeys, Re-pair, Revoke and Seal…, none of them saying what they did, and
+starting a box over took deleting files by hand. Now:
+
+- **On the Mac.** A worker's row has one button, **Forget**, and a line under it saying what it does ("Forget: m1mini
+  stops trusting this Mac; pair it again to use it"), with nothing behind a menu (`components/WorkerActions.tsx`).
+  Connectors, kept secrets and passkeys left the row too ("i dont know what those things mean, we should give sensable
+  defaults for them"): `WorkerConnectors` and `WorkerKeep` stay in the tree for the card that gives them defaults. Forget asks first, shows the lines to run on the box, then revokes
+  the worker's row (`useDevices().forget`, the same `device_revoke` and kept-vault wipe Revoke used). A token-enrolled
+  worker that owns threads can't bring them back on a new pairing, so its Forget offers the move first. Re-pin and
+  Re-pair are gone from the page: a forgotten box pairs again with new keys (so nothing stale stays pinned), with this
+  Mac or another. `weft-worker enrol --re-pair --approval wra.…` still works for a box someone moves by hand.
+- **On the box.** `weft-worker forget` (`lib/worker-forget.ts`) deletes `worker.json`, `mac-keys.json`, `passkeys.json`,
+  `mac-revoked.json` and `kept-vault.json`, and keeps `sign-key.json` (how the server knows it's the same box, so its
+  threads come along), `seal-key.json`, `worker.env` and `work/`. It runs only at a terminal, after the box's name is typed
+  back. Then:
 
 ```sh
-rm ~/.weft-worker/worker.json ~/.weft-worker/mac-keys.json ~/.weft-worker/passkeys.json
-weft-worker enrol <the wph.… code from the new Mac>
+weft-worker forget
+weft-worker enrol <the wph.… code from Add a worker>
 weft-worker restart
 ```
 
-Leave `sign-key.json` where it is: it's how the server knows it's the same box. **Its threads come along.** A re-pair
-makes a new worker row, but when the new claim carries the old row's sign key (and main checked the claim's signature
-with it), `worker_pair_confirm` moves the old row's threads to the new one in the same step, if both are yours and in
-the same workspace ([device-registry.md](device-registry.md#moving-a-workers-threads)). Then **Revoke** the old worker
-row in Settings → Devices. A box that lost its `sign-key.json`, or threads you want on another box, move by hand:
-Settings → Devices → the old worker → **Move threads to…**, or the move Revoke offers.
-`work/` and its checkouts stay. `passkeys.json` goes too: the
-passkeys in it were endorsed by the old Mac, and the new one endorses its own. `mac-revoked.json` stays, so a revoked Mac
-is never trusted on this box again. The secret guard refuses these paths to threads.
+  Then revoke the old row if the Mac's Forget didn't already. `lib/worker-cli-guard.ts` refuses every `weft-worker`
+  command to threads, `forget` included, and the secret guard refuses these files to them.
+- **What Forget gives up.** `mac-revoked.json` used to survive the wipe, so a Mac revoked once was never trusted on that
+  box again. Forget clears it: a stolen Mac's approval key could be paired with the box again. Only through a person at
+  the box's terminal, though, running `enrol` with a code that Mac shows, and never from a revoked Mac's own session:
+  `worker_pair_open` refuses a Mac that's revoked now. The terminal check itself is a speed bump (a thread could fake a
+  pty), so what keeps threads out is the CLI guard, which is a strong default and not a sandbox.
+- **A wrong revocation heals itself.** The worker lifts its own mark when the database takes a revocation back: when
+  `worker_mac_state` names the Mac the box is paired with and says it isn't revoked, the keys the box pinned for it come
+  off `mac-revoked.json` (`lib/worker-mac-revocation.ts`, `macKeysAt().unrevoke`). The database can't un-revoke a row (the
+  keep-revoked triggers), so that only happens when a fix there changes what it reads, as on 2026-11-11
+  ([device-registry.md](device-registry.md#a-revoked-row-linked-later)). It never adds a key: only one the box pinned
+  from its own pairing code comes back.
 
 `weft-worker status` names the Mac it takes secrets from by its key's fingerprint, or says that Mac was revoked. With
 two Macs signed in, the worker's secret and vault asks go only to the one it's paired with (`cloud_workers.paired_mac`,

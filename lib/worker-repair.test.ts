@@ -76,9 +76,9 @@ describe("re-pair approval", () => {
   it("re-pairs an enrolled box only with a pairing code carrying a Mac key, and only if it trusts a Mac to ask", async () => {
     const s = setup();
     const r = await approved(s);
-    expect(s.check(r.approval, { code: "wet_token" })).toMatch(/only with a pairing code.*never a token.*wipe it first/);
+    expect(s.check(r.approval, { code: "wet_token" })).toMatch(/only with a pairing code.*never a token.*weft-worker forget first/);
     expect(s.check(r.approval, { code: pairCode(base) })).toMatch(/carries no Mac key/);
-    expect(s.check(r.approval, { pinned: [] })).toMatch(/trusts no Mac.*Wipe it/);
+    expect(s.check(r.approval, { pinned: [] })).toMatch(/trusts no Mac.*weft-worker forget/);
   });
 
   it("asks Touch ID before signing, and signs nothing when it's refused", async () => {

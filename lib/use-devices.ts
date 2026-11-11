@@ -67,6 +67,9 @@ export function repinOutcome(name: string, r: { forgotten?: boolean; denied?: bo
   return r.forgotten ? `Forgot ${name}'s pinned keys: its next secret ask pins the keys it has now.` : `${name} had no pinned keys on this Mac.`;
 }
 
+export const forgetNote = (name: string) =>
+  `Forgot ${name}. To use it again, run weft-worker forget on it, then Add a worker here and run the line it shows there.`;
+
 export const hostPairingBridge = (): HostPairingBridge | undefined =>
   (window as unknown as { weft?: { hostPairing?: HostPairingBridge } }).weft?.hostPairing;
 
@@ -202,25 +205,39 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
 
   // Revoke, after moving its threads when Revoke's confirm named a worker to take them: a failed move stops the revoke,
   // so the threads never end up under a revoked worker by accident.
+  const revokeNow = async (device: DeviceView, moveTo?: DeviceView): Promise<string | null> => {
+    if (moveTo) await move(device, moveTo);
+    const pinned = new Set((await pairing?.list())?.map((d) => d.id) ?? []);
+    if (revokeRoute(device, pinned) === "pairing") {
+      await pairing?.revoke(device.id);
+      // Every worker that trusted it gets the set without it, until each confirms (lib/passkey-sync.ts).
+      await runPasskeySync();
+    } else {
+      // What this Mac kept on a worker goes first: a signed wipe while its key still works (and the worker wipes itself
+      // once its heartbeat finds the key revoked, lib/worker-kept-vault.ts). Best effort: the revoke goes ahead regardless.
+      if (device.kind === "worker") await workerKeepBridge()?.wipe(device.id).catch(() => null);
+      // A worker's answer can carry what GitHub confirmed about the tokens it held (lib/device-registry.ts).
+      const r = await readJson<{ note?: string }>(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
+      // A worker's key grants go with it (the database drops them); main rotates so it never had what's sealed next.
+      if (device.kind === "worker") await hosts?.dropKeys?.(device.id);
+      await reload();
+      return r.note ? `${device.name}: ${r.note}` : null;
+    }
+    await reload();
+    return null;
+  };
   const revoke = (device: DeviceView, moveTo?: DeviceView) =>
     act(async () => {
-      if (moveTo) await move(device, moveTo);
-      const pinned = new Set((await pairing?.list())?.map((d) => d.id) ?? []);
-      if (revokeRoute(device, pinned) === "pairing") {
-        await pairing?.revoke(device.id);
-        // Every worker that trusted it gets the set without it, until each confirms (lib/passkey-sync.ts).
-        await runPasskeySync();
-      } else {
-        // What this Mac kept on a worker goes first: a signed wipe while its key still works (and the worker wipes itself
-        // once its heartbeat finds the key revoked, lib/worker-kept-vault.ts). Best effort: the revoke goes ahead regardless.
-        if (device.kind === "worker") await workerKeepBridge()?.wipe(device.id).catch(() => null);
-        // A worker's answer can carry what GitHub confirmed about the tokens it held (lib/device-registry.ts).
-        const r = await readJson<{ note?: string }>(await apiFetch(`/api/devices?id=${encodeURIComponent(device.id)}`, { method: "DELETE" }));
-        // A worker's key grants go with it (the database drops them); main rotates so it never had what's sealed next.
-        if (device.kind === "worker") await hosts?.dropKeys?.(device.id);
-        if (r.note && live.current) setNote((moved) => (moveTo && moved ? `${moved} ` : "") + `${device.name}: ${r.note}`);
-      }
-      await reload();
+      const said = await revokeNow(device, moveTo);
+      if (said && live.current) setNote((moved) => (moveTo && moved ? `${moved} ` : "") + said);
+    });
+
+  // Settings → Devices → Forget (docs/architecture/weft-worker.md#forget-a-worker): the worker's revoke, then what to run
+  // on the box. Its threads stay under the old row until the box pairs again with the same sign key, which moves them.
+  const forget = (device: DeviceView) =>
+    act(async () => {
+      const said = await revokeNow(device);
+      if (live.current) setNote(said ? `${forgetNote(device.name)} ${said}` : forgetNote(device.name));
     });
 
   const repin = (device: DeviceView) =>
@@ -255,6 +272,7 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
     canRepin: Boolean(hosts?.forgetPin),
     canRepair: Boolean(hosts?.approveRepair),
     revoke,
+    forget,
     moveThreads,
     repin,
     keys,

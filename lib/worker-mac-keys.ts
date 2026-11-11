@@ -47,7 +47,7 @@ function writeKeys(home: string, file: string, keys: string[]) {
 // `pinned()` is the Macs it trusts now: a key marked revoked (mac-revoked.json, written when the database says the pairing
 // Mac was revoked: lib/worker-mac-revocation.ts) stays out for good, and a revoked list that won't read trusts none.
 // `held()` is every key pinned, revoked or not, for counting who could approve (a revoked Mac mustn't lower the bar).
-export function macKeysAt(home: string): MacKeys & { forget(): void; held(): string[]; revoked(): string[]; revoke(keys: string[]): void } {
+export function macKeysAt(home: string): MacKeys & { forget(): void; held(): string[]; revoked(): string[]; revoke(keys: string[]): void; unrevoke(keys: string[]): void } {
   const file = path.join(home, "mac-keys.json");
   const revokedFile = path.join(home, "mac-revoked.json");
   const read = () => readKeys(file) ?? [];
@@ -64,7 +64,7 @@ export function macKeysAt(home: string): MacKeys & { forget(): void; held(): str
       if (keys.includes(key)) return;
       writeKeys(home, file, [...keys, key]);
     },
-    // Kept across forget() and a re-pair: a revoked Mac's key is never trusted on this box again.
+    // Kept across forget-macs and a re-pair (`weft-worker forget` clears it, lib/worker-forget.ts).
     revoke(keys) {
       const was = revoked();
       // A list that won't read already trusts no Mac: writing over it would trust the rest again.
@@ -74,6 +74,14 @@ export function macKeysAt(home: string): MacKeys & { forget(): void; held(): str
       writeKeys(home, revokedFile, next);
       // What a revoked Mac kept here goes with it (lib/worker-kept-vault.ts already reads it as nothing).
       wipeKept(home);
+    },
+    // Only when the database takes back a revocation it reported (lib/worker-mac-revocation.ts): the keys come off the
+    // list, never onto mac-keys.json, so nothing here can add a Mac the box didn't pin from its pairing code.
+    unrevoke(keys) {
+      const was = revoked();
+      if (!was) return;
+      const next = was.filter((k) => !keys.includes(k));
+      if (next.length !== was.length) writeKeys(home, revokedFile, next);
     },
     forget: () => fs.rmSync(file, { force: true }),
   };
@@ -110,6 +118,6 @@ export function trustPairingMac(home: string, code: string): boolean {
 // lib/worker-cli-guard.ts also keeps threads from running weft-worker at all.
 export function enrolRefusal(enrolled: boolean, rePair: boolean, terminal: boolean): string | null {
   if (!enrolled) return null;
-  if (!rePair) return "This box is already enrolled. To pair it again, approve the re-pair on the Mac it trusts now (Settings → Devices → this worker → Approve re-pair) and run the command that shows, from a terminal on the box.";
+  if (!rePair) return "This box is already enrolled. To pair it again, run weft-worker forget first, then this again.";
   return terminal ? null : "--re-pair only runs from a terminal on the box: it chooses the Mac this worker trusts with secrets.";
 }

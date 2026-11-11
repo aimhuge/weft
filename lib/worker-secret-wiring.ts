@@ -60,7 +60,7 @@ export function keyStatus(home: string): string[] {
   const trusted = macs.pinned();
   const revoked = macs.held().filter((k) => !trusted.includes(k));
   if (trusted.length) lines.push(`Takes secrets from the Mac it was paired with, key ${trusted.map(macFingerprint).join(", ")} (weft-worker forget-macs to stop).`);
-  else if (revoked.length) lines.push(`Takes no secrets: the Mac it was paired with (key ${revoked.map(macFingerprint).join(", ")}) was revoked. Wipe it and enrol it afresh from another Mac.`);
+  else if (revoked.length) lines.push(`Takes no secrets: the Mac it was paired with (key ${revoked.map(macFingerprint).join(", ")}) was revoked. Run weft-worker forget here, then pair it again.`);
   else lines.push("Takes no secrets: enrolled by token. Pair it from Settings → Devices → Add a worker to use secrets.");
   if (fs.existsSync(path.join(home, KEPT_FILE))) lines.push("Keeps secrets your Mac sent it (Keep on this worker), sealed to its box key; each use still needs your Mac's approval.");
   return lines;

@@ -7,6 +7,8 @@
 //   weft-worker login                           sign Claude Code in for the daemon (claude setup-token)
 //   weft-worker start                           run the daemon (what the service runs)
 //   weft-worker status                          say whether this box is enrolled, with its key's fingerprint
+//   weft-worker forget                          start the box over: forget its pairing and every Mac it trusted,
+//                                               keep its sign key and work/, then pair it again (lib/worker-forget.ts)
 //   weft-worker forget-macs                     stop taking secrets from the paired Mac (lib/worker-mac-keys.ts)
 //   weft-worker check                           load the whole engine and exit (lib/worker-update.ts trusts a commit by this)
 //
@@ -29,6 +31,7 @@ import { createUpdater, updatesOn } from "../lib/worker-update";
 import { listenForKeyGrants, listenForPushes, listenForWakes } from "../lib/worker-wake";
 import { joinPresence } from "../lib/worker-presence";
 import { browserSandboxNote } from "../lib/worker-chromium";
+import { askHidden } from "../lib/terminal-ask";
 
 const home = workerHome();
 // Before the engine is imported: lib/store.ts reads WEFT_DATA once, at import.
@@ -320,31 +323,6 @@ async function startCommand() {
   process.on("SIGINT", quit);
 }
 
-// Asks for a line without echoing it, so the token doesn't sit on screen or in the terminal's scrollback.
-function askHidden(question: string): Promise<string> {
-  return new Promise((resolve) => {
-    process.stdout.write(question);
-    const stdin = process.stdin;
-    if (stdin.isTTY) stdin.setRawMode(true);
-    let line = "";
-    const onData = (chunk: Buffer) => {
-      for (const ch of chunk.toString("utf8")) {
-        if (ch === "\r" || ch === "\n") {
-          if (stdin.isTTY) stdin.setRawMode(false);
-          stdin.off("data", onData);
-          stdin.pause();
-          process.stdout.write("\n");
-          resolve(line.trim());
-          return;
-        }
-        if (ch === "\u0003") process.exit(130);
-        line = ch === "\u007f" ? line.slice(0, -1) : line + ch;
-      }
-    };
-    stdin.on("data", onData).resume();
-  });
-}
-
 // Signs Claude Code in for the daemon's CLIs. A background service can't answer the keychain prompt a desktop login
 // raises, so the worker uses a long-lived token from `claude setup-token`, kept in worker.env (mode 600).
 async function loginCommand() {
@@ -371,9 +349,22 @@ async function forgetMacsCommand() {
   console.log("Forgot the Mac this worker took secrets from. Pair it again from Settings → Devices to use secrets on it.");
 }
 
+// Start the box over (lib/worker-forget.ts): its pairing, the Mac it trusts and the Macs it stopped trusting all go;
+// its sign key and work/ stay, so its threads come along when it's paired again. Typed at the box's own terminal.
+async function forgetCommand() {
+  const { forgetBox, forgetDone, forgetRefusal } = await import("../lib/worker-forget");
+  const name = readWorkerConfig(home)?.name ?? os.hostname().replace(/\.local$/, "");
+  const terminal = process.stdin.isTTY && process.stdout.isTTY;
+  console.log(`This box stops trusting every Mac and leaves your workspace until you pair it again. Its threads and work/ stay.`);
+  const typed = terminal ? await askHidden(`Type ${name} to forget it: `) : "";
+  const refused = forgetRefusal(terminal, name, typed);
+  if (refused) throw new Error(refused);
+  console.log(forgetDone(forgetBox(home)));
+}
+
 const [command, arg] = process.argv.slice(2);
-const commands: Record<string, () => unknown> = { enrol: () => enrolCommand(arg), login: loginCommand, start: startCommand, status: statusCommand, check: checkCommand, "forget-macs": forgetMacsCommand };
-Promise.resolve((commands[command ?? ""] ?? (() => console.log("Usage: weft-worker enrol <token> | login | start | status | restart | update")))()).catch((err: unknown) => {
+const commands: Record<string, () => unknown> = { enrol: () => enrolCommand(arg), login: loginCommand, start: startCommand, status: statusCommand, check: checkCommand, forget: forgetCommand, "forget-macs": forgetMacsCommand };
+Promise.resolve((commands[command ?? ""] ?? (() => console.log("Usage: weft-worker enrol <token> | login | start | status | restart | update | forget")))()).catch((err: unknown) => {
   const e = err as Error;
   console.error(process.env.WEFT_WORKER_DEBUG ? e.stack : e.message);
   process.exit(1);

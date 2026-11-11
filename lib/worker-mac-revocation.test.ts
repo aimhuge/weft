@@ -49,6 +49,48 @@ describe("checkMacRevoked", () => {
   });
 });
 
+describe("a revocation the database takes back", () => {
+  // m1mini, 2026-11-06: the database wrongly read the box's pairing Mac as revoked (a key row revoked before it was
+  // linked, then linked). Once it reads "not revoked" for that Mac, the box trusts its pinned key again, on its own.
+  it("lifts the mark from the key the box pinned for its pairing Mac, and says so once", async () => {
+    const h = home();
+    const macs = macKeysAt(h);
+    macs.pin("k1");
+    macs.revoke(["k1", "old-mac"]);
+    const log = vi.fn();
+    const mac = "f2aa".repeat(16);
+    expect(await checkMacRevoked({ read: () => Promise.resolve({ mac, revoked: false }), macs, log })).toBe(false);
+    expect(macs.pinned()).toEqual(["k1"]);
+    // Another Mac's key it stopped trusting stays out.
+    expect(macs.revoked()).toEqual(["old-mac"]);
+    expect(log).toHaveBeenCalledWith(expect.stringMatching(/f2aaf2aaf2aa….*isn't revoked after all/));
+    await checkMacRevoked({ read: () => Promise.resolve({ mac, revoked: false }), macs, log });
+    expect(log).toHaveBeenCalledTimes(1);
+  });
+
+  it("lifts nothing for a box with no pairing Mac, or when the list won't read", async () => {
+    const h = home();
+    const macs = macKeysAt(h);
+    macs.pin("k1");
+    macs.revoke(["k1"]);
+    const log = vi.fn();
+    await checkMacRevoked({ read: () => Promise.resolve({ mac: null, revoked: false }), macs, log });
+    expect(macs.pinned()).toEqual([]);
+    fs.writeFileSync(path.join(h, "mac-revoked.json"), "{");
+    macs.unrevoke(["k1"]);
+    expect(fs.readFileSync(path.join(h, "mac-revoked.json"), "utf8")).toBe("{");
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("never adds a key the box didn't pin", async () => {
+    const macs = macKeysAt(home());
+    macs.revoke(["k9"]);
+    await checkMacRevoked({ read: () => Promise.resolve({ mac: "a".repeat(64), revoked: false }), macs, log: vi.fn() });
+    expect(macs.pinned()).toEqual([]);
+    expect(macs.revoked()).toEqual(["k9"]);
+  });
+});
+
 describe("startMacRevocationWatch", () => {
   it("checks at start and every minute, says a failed read once, and stops", async () => {
     vi.useFakeTimers();

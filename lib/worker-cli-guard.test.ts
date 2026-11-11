@@ -8,6 +8,10 @@ describe("workerCliVerdict", () => {
   it.each([
     `weft-worker enrol ${CODE}`,
     "weft-worker forget-macs",
+    "weft-worker forget",
+    "~/.local/bin/weft-worker forget",
+    "echo m1mini | weft-worker forget",
+    "script -q /dev/null weft-worker forget",
     "~/.weft-worker/bin/weft-worker status",
     "cd ~/.weft-worker/weft && node node_modules/.bin/jiti scripts/weft-worker.ts enrol x",
     "pnpm exec jiti scripts/weft-worker.ts forget-macs",

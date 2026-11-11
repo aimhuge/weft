@@ -33,8 +33,8 @@ afterEach(() => {
   delete (window as unknown as { weft?: unknown }).weft;
 });
 
-describe("DevicesSettings → Secrets", () => {
-  it("opens a paired worker's Secrets, and wipes what this Mac kept there before revoking it", async () => {
+describe("DevicesSettings → Forget and kept secrets", () => {
+  it("wipes what this Mac kept on a worker before it forgets it", async () => {
     const order: string[] = [];
     const workerKeep = {
       list: vi.fn(() => Promise.resolve({ kept: [], repos: [], environments: ["development"] })),
@@ -45,12 +45,8 @@ describe("DevicesSettings → Secrets", () => {
     (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: hosts, workerKeep };
     apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? (order.push("revoke"), ok({ ok: true, kind: "worker" })) : ok({ signedIn: true, devices: DEVICES })));
     render(<DevicesSettings />);
-    expect(screen.queryByRole("button", { name: "Secrets kept on iPhone" })).toBeNull();
-    await userEvent.click(await screen.findByRole("button", { name: "Secrets kept on m1mini" }));
-    expect(await screen.findByText("Nothing kept on m1mini: every secret travels per use.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.queryByText(/every secret travels per use/)).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
     await waitFor(() => expect(order).toEqual(["wipe", "revoke"]));
     expect(workerKeep.wipe).toHaveBeenCalledWith("w1");
   });

@@ -107,7 +107,7 @@ const withHost = (id = HOST) => {
   return dir;
 };
 
-// The host link's query: update, then two eq filters, awaited.
+// The host link's query: update, two eq filters and the revoked_at filter, awaited.
 const linkClient = (error: { message: string } | null = null, sub: unknown = "user-1") => {
   const calls: { patch?: unknown; filters: unknown[][] }[] = [];
   const supabase = {
@@ -118,7 +118,7 @@ const linkClient = (error: { message: string } | null = null, sub: unknown = "us
       const query = {
         update: (patch: unknown) => ((call.patch = patch), query),
         eq: (...f: unknown[]) => (call.filters.push(f), query),
-        is: () => Promise.resolve({ error: null }),
+        is: (...f: unknown[]) => (call.filters.push(["is", ...f]), query),
         then: (done: (r: { error: unknown }) => unknown) => done({ error }),
       };
       return query;
@@ -131,7 +131,15 @@ describe("linkHost", () => {
   it("names this Mac's device id on its own key row", async () => {
     const { calls, accountClient } = linkClient();
     expect(await linkHost({ accountClient, dir: withHost() })).toBe(true);
-    expect(calls[0]).toMatchObject({ patch: { host_device: HOST }, filters: [["user_id", "user-1"], ["public_key", "pub-1"]] });
+    expect(calls[0]).toMatchObject({ patch: { host_device: HOST }, filters: [["user_id", "user-1"], ["public_key", "pub-1"], ["is", "revoked_at", null]] });
+  });
+
+  // 2026-11-02: a key row revoked before it was linked got linked on the next launch, and from then on the database
+  // read the whole Mac as revoked (its heartbeat refused, m1mini told its pairing Mac was revoked).
+  it("never links a revoked key row, so a revocation of that row can't spread to this Mac", async () => {
+    const { calls, accountClient } = linkClient();
+    await linkHost({ accountClient, dir: withHost() });
+    expect(calls[0]?.filters).toContainEqual(["is", "revoked_at", null]);
   });
 
   it("sends nothing signed out, without a device id, or with one that isn't a device id", async () => {

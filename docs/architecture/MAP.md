@@ -581,10 +581,15 @@ When a new doc lands in this folder, add it here on the same change.
   threads to… and Revoke's move-first confirm, through `POST /api/devices` and `worker_move_cards`. `lib/host-pairing.ts` + `lib/worker-pair.ts` (the box: `weft-worker enrol wph.…`) and
   `electron/host-pairing.cjs` + `electron/host-pairing-ipc.cjs` (main: open, check, Touch ID, confirm; IPC `weft.hostPairing.*`,
   registered by `electron/pairing-ipc.cjs`) enrol a worker by pairing it; `lib/worker-repair.ts` (the box's check) +
-  `electron/worker-repair.cjs` (main signs after Touch ID) + `components/WorkerRepair.tsx` (Devices → Re-pair) move an enrolled
-  worker to another Mac only on its trusted Mac's signature, with `lib/worker-clone-guard.ts` keeping threads from editing the
+  `electron/worker-repair.cjs` (main signs after Touch ID) move an enrolled worker to another Mac only on its trusted Mac's
+  signature (`weft-worker enrol --re-pair`; Settings → Devices no longer offers it: **Forget** does, below), with `lib/worker-clone-guard.ts` keeping threads from editing the
   worker's own clone that runs the check (docs/architecture/project-hosts.md#re-pairing-a-worker); `electron/device-beat.cjs` `linkHost` names the Mac's
-  device id on its key row (docs/architecture/device-registry.md). The pairing Mac (`cloud_workers.paired_mac`,
+  device id on its key row, never a revoked one (docs/architecture/device-registry.md#a-revoked-row-linked-later).
+  **Forget** (docs/architecture/weft-worker.md#forget-a-worker): `components/WorkerActions.tsx` (a worker row's one button,
+  Forget, and its line; `useDevices().forget`) and `lib/worker-forget.ts`
+  (`weft-worker forget` on the box, its confirm read by `lib/terminal-ask.ts`); `supabase/migrations/20261111161951_forget_revoked_link.sql`
+  (a revoked row's host stays put, `worker_mac_state` counts only a revocation after the pairing, `worker_pair_open`
+  refuses a revoked Mac). The pairing Mac (`cloud_workers.paired_mac`,
   `supabase/migrations/20261103080000_worker_pairing_mac.sql`) gets a worker's secret and vault asks; a revoked one is marked
   in the worker's `mac-revoked.json` by `lib/worker-mac-revocation.ts` (from `lib/worker-host-services.ts`) and left out of
   `lib/worker-mac-keys.ts` `pinned()`. Passkey heads: `lib/passkey-head.ts` (the worker's check, in `lib/host-signers.ts`

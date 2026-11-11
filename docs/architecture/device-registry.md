@@ -143,16 +143,46 @@ only ever takes trust away from it:
 - **The pairing Mac on its workers.** `worker_mac_state(key)` says whether the worker's `paired_mac` was revoked (its
   heartbeat row, or a key row naming it as `host_device`). The daemon checks at start and every minute
   (`lib/worker-mac-revocation.ts`, from `lib/worker-host-services.ts`) and marks every key it pinned revoked in
-  `mac-revoked.json`, for good: `macKeysAt().pinned()` leaves them out, so no secret answer, synced setting, endorsement,
+  `mac-revoked.json`: `macKeysAt().pinned()` leaves them out, so no secret answer, synced setting, endorsement,
   widening or re-pair approval signed by that Mac counts again, even after a re-pair from it. The passkeys it endorsed
   earlier stay as they are (no newer set can reach them). `held()` still counts the revoked key, so a count of who could
   approve (h7's `approvers()`) must use `held()`, not `pinned()`: a revoked Mac mustn't lower the bar to "nothing paired".
-  The box then takes no secrets until it's wiped and enrolled from another Mac
-  ([weft-worker.md](weft-worker.md#re-pairing-and-a-lost-mac)).
+  The box then takes no secrets until it's forgotten and paired again
+  ([weft-worker.md](weft-worker.md#forget-a-worker)). Since 2026-11-11 only a revocation made after the worker's row was
+  paired counts (its `created_at`: a re-pair makes a new row), and the worker lifts its mark when the database says its
+  pairing Mac isn't revoked after all; see below.
 - **Threats checked.** A stolen session can revoke any of your devices already, so a false "revoked" costs only that
   device, never adds one. It can't un-revoke (the keep-revoked triggers) or write `paired_mac`, and a failed read changes
   nothing. A read that can't see a phone's row leaves it pinned (not fail-closed: an account switch would otherwise unpin
   everything).
+
+## A revoked row linked later
+
+Found 2026-11-11 (`supabase/migrations/20261111161951_forget_revoked_link.sql`, applied). MacBook-Air-3 registered a new
+vault key row at 16:16:36 UTC on 2026-11-02, before `linkHost` had named its host id on it. Unlinked, the registry
+showed it as a second Mac, and it was revoked from Settings → Devices at 16:20:08, two seconds before the old m1mini
+row. `device_revoke` reaches a Mac's heartbeat row only through `host_device`, which was null, so the heartbeat stayed
+live: the revocation was of that key row alone. On the next launch `linkHost` wrote the host id onto the revoked row.
+From then on the database read the whole Mac as revoked: `cloud_workers_refuse_revoked_host` refused its heartbeat, and
+`worker_mac_state` told m1mini (paired at 16:20:29) that its pairing Mac was revoked, so on 2026-11-06 the box put the
+Mac's one key on `mac-revoked.json`. A new code from that Mac carries the same key, so re-enrolling couldn't fix it. The
+enrolment itself revoked nothing.
+
+- **A revoked row's host never changes from a client** (`devices_own_host`), and `linkHost` skips revoked rows
+  (`.is("revoked_at", null)`), so a later link can't widen a revocation.
+- **The migration unlinks rows linked after their revocation:** a revoked desktop row whose host's heartbeat row isn't
+  revoked was revoked unlinked, since `device_revoke` revokes both when they're linked.
+- **`worker_mac_state` counts a revocation only from the worker row's pairing on** (`private.mac_revoked(owner, mac,
+  since)`). A Mac revoked after the pairing still revokes it. One revoked before was a decision the user overrode by
+  pairing at the box's terminal.
+- **`worker_pair_open` refuses a Mac that's revoked now**, so a revoked Mac's session can't open a new pairing.
+- **The worker heals itself.** When `worker_mac_state` names its pairing Mac and says it isn't revoked, the keys it
+  pinned for that Mac come off `mac-revoked.json` (`lib/worker-mac-revocation.ts`). m1mini took this as a Worker update
+  and trusted the Mac again with no one at the box.
+
+Checked on a scratch Postgres 17 over stand-ins: m1mini's rows read not revoked, the bad link unlinked and a properly
+revoked Mac's left alone, a client relink refused, a pairing from a revoked Mac refused, and a revocation after a new
+pairing still counted.
 
 ## Moving a worker's threads
 

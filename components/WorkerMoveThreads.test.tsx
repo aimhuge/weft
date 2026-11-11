@@ -82,7 +82,7 @@ describe("Move threads to…", () => {
 describe("Revoke on a worker that owns threads", () => {
   it("asks first, and moves them before it revokes", async () => {
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Revoke busy box" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget busy box" }));
     expect(deleted()).toEqual([]);
     expect(screen.getByRole("group", { name: "Revoke busy box?" })).toHaveTextContent("busy box owns 1 thread. Move them to");
     await userEvent.click(screen.getByRole("button", { name: "Move and revoke" }));
@@ -92,10 +92,10 @@ describe("Revoke on a worker that owns threads", () => {
 
   it("can leave them, or cancel", async () => {
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Revoke busy box" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget busy box" }));
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("group")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Revoke busy box" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget busy box" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Move busy box's threads to" }), "");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(deleted()).toEqual(["/api/devices?id=busy"]));
@@ -109,7 +109,7 @@ describe("Revoke on a worker that owns threads", () => {
       return ok({ signedIn: true, devices });
     });
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Revoke busy box" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget busy box" }));
     await userEvent.click(screen.getByRole("button", { name: "Move and revoke" }));
     expect(await screen.findByText("Moved 1 thread from busy box to m1mini. busy box: GitHub off")).toBeInTheDocument();
   });
@@ -117,7 +117,7 @@ describe("Revoke on a worker that owns threads", () => {
   it("doesn't revoke when the move fails", async () => {
     apiFetch.mockImplementation((url: string, init?: RequestInit) => (init?.method === "POST" ? ok({ error: "nope" }, 502) : ok({ signedIn: true, devices })));
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Revoke busy box" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget busy box" }));
     await userEvent.click(screen.getByRole("button", { name: "Move and revoke" }));
     expect(await screen.findByText("nope")).toBeInTheDocument();
     expect(deleted()).toEqual([]);
@@ -126,7 +126,7 @@ describe("Revoke on a worker that owns threads", () => {
   it("says the threads stay when there's no other worker to take them", async () => {
     devices = [BUSY];
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Revoke busy box" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget busy box" }));
     expect(screen.getByRole("group")).toHaveTextContent("They stay under it until you move them to another worker.");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(deleted()).toEqual(["/api/devices?id=busy"]));

@@ -58,7 +58,8 @@ describe("a worker's sealing in Settings → Devices", () => {
     expect(await screen.findByText("m1mini now holds key v3: it seals what it publishes from now on.")).toBeInTheDocument();
     expect(await screen.findByText("Worker · paired · Seen 5m ago · Threads sealed (key v3)")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Seal m1mini's threads" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
     await waitFor(() => expect(hosts.dropKeys).toHaveBeenCalledWith("w1"));
   });
 

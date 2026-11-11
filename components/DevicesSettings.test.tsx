@@ -77,74 +77,56 @@ describe("DevicesSettings", () => {
     render(<DevicesSettings />);
     await userEvent.click(await screen.findByRole("button", { name: "Revoke iPhone" }));
     expect(pairing.revoke).toHaveBeenCalledWith("p1");
-    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/devices?id=w1", { method: "DELETE" }));
     expect(pairing.revoke).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a paired worker's Connectors badge, and what GitHub confirmed when it's revoked", async () => {
+  it("says what GitHub confirmed when a worker is forgotten", async () => {
     apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? ok({ ok: true, kind: "worker", note: "GitHub off · 1 token revoked ✓" }) : ok({ signedIn: true, devices: DEVICES })));
     render(<DevicesSettings />);
-    expect(await screen.findByRole("button", { name: "Connectors on m1mini" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Connectors on iPhone" })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Revoke m1mini" }));
-    expect(await screen.findByText("m1mini: GitHub off · 1 token revoked ✓")).toBeInTheDocument();
+    await userEvent.click(await screen.findByRole("button", { name: "Forget m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
+    expect(await screen.findByText("Forgot m1mini. To use it again, run weft-worker forget on it, then Add a worker here and run the line it shows there. m1mini: GitHub off · 1 token revoked ✓")).toBeInTheDocument();
   });
 
   it("drops a revoke's note that lands after it closed", async () => {
     let answer: (r: Response) => void = () => {};
     apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? new Promise<Response>((resolve) => (answer = resolve)) : ok({ signedIn: true, devices: DEVICES })));
     const { unmount } = render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Revoke m1mini" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
     unmount();
     answer(new Response(JSON.stringify({ ok: true, kind: "worker", note: "late note" })));
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.queryByText("m1mini: late note")).toBeNull();
   });
 
-  it("re-pins a worker through main, and offers it only for workers", async () => {
-    const forgetPin = vi.fn(() => Promise.resolve({ forgotten: true }));
-    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, forgetPin } };
+  it("gives a worker only Forget, with what it does said on the page", async () => {
+    const forgetPin = vi.fn();
+    const approveRepair = vi.fn();
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, forgetPin, approveRepair } };
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Re-pin m1mini" }));
-    expect(forgetPin).toHaveBeenCalledWith("w1", "m1mini");
-    expect(await screen.findByText("Forgot m1mini's pinned keys: its next secret ask pins the keys it has now.")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Re-pin iPhone" })).toBeNull();
+    expect(await screen.findByRole("button", { name: "Forget m1mini" })).toBeInTheDocument();
+    expect(screen.getByText("Forget: m1mini stops trusting this Mac; pair it again to use it.")).toBeInTheDocument();
+    for (const gone of ["Re-pin m1mini", "Re-pair m1mini", "Revoke m1mini", "More for m1mini", "Connectors on m1mini", "Secrets kept on m1mini", "Passkeys on m1mini"]) expect(screen.queryByRole("button", { name: gone })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Forget iPhone" })).toBeNull();
   });
 
-  it("approves a paired worker's re-pair through main and shows the line for the box", async () => {
-    const approveRepair = vi.fn().mockResolvedValueOnce({ denied: true }).mockRejectedValueOnce(new Error("Error invoking remote method 'worker-repair:approve': Error: Paste the whole wph.… line")).mockResolvedValueOnce({ approval: "wra.1.a.b", command: "weft-worker enrol wph.y --re-pair --approval wra.1.a.b", fingerprint: "a1b2 c3d4 e5f6 7890" });
-    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: { ...hosts, approveRepair } };
+  it("asks before it forgets, shows the lines for the box, and can be cancelled", async () => {
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Re-pair m1mini" }));
-    expect(screen.queryByRole("button", { name: "Re-pair iPhone" })).toBeNull();
-    const approve = screen.getByRole("button", { name: "Approve" });
-    expect(approve).toBeDisabled();
-    await userEvent.type(screen.getByRole("textbox", { name: "New pairing code for m1mini" }), "wph.y");
-    await userEvent.click(approve);
-    expect(approveRepair).toHaveBeenCalledWith("w1", "wph.y");
-    expect(await screen.findByText("Not approved.")).toBeInTheDocument();
-    await userEvent.click(approve);
-    expect(await screen.findByText("Paste the whole wph.… line")).toBeInTheDocument();
-    await userEvent.click(approve);
-    expect(await screen.findByText("weft-worker enrol wph.y --re-pair --approval wra.1.a.b")).toBeInTheDocument();
-    expect(screen.getByText(/Approved for the Mac a1b2 c3d4 e5f6 7890/)).toBeInTheDocument();
-    const writeText = vi.fn(() => Promise.resolve());
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    await userEvent.click(screen.getByRole("button", { name: "Copy" }));
-    expect(writeText).toHaveBeenCalledWith("weft-worker enrol wph.y --re-pair --approval wra.1.a.b");
-    await userEvent.click(screen.getByRole("button", { name: "Done" }));
-    expect(screen.queryByText(/Approved for the Mac/)).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "Re-pair m1mini" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget m1mini" }));
+    const group = screen.getByRole("group", { name: "Forget m1mini?" });
+    expect(group).toHaveTextContent("weft-worker forget");
+    expect(group).toHaveTextContent("weft-worker restart");
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("textbox")).toBeNull();
-  });
-
-  it("offers no Re-pin without main's bridge for it", async () => {
-    render(<DevicesSettings />);
-    await screen.findByText("m1mini");
-    expect(screen.queryByRole("button", { name: "Re-pin m1mini" })).toBeNull();
-    expect(screen.queryByRole("button", { name: "Re-pair m1mini" })).toBeNull();
+    expect(screen.queryByRole("group")).toBeNull();
+    expect(apiFetch).not.toHaveBeenCalledWith("/api/devices?id=w1", { method: "DELETE" });
+    await userEvent.click(screen.getByRole("button", { name: "Forget m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
+    expect(await screen.findByText("Forgot m1mini. To use it again, run weft-worker forget on it, then Add a worker here and run the line it shows there.")).toBeInTheDocument();
+    expect(apiFetch).toHaveBeenCalledWith("/api/devices?id=w1", { method: "DELETE" });
   });
 
   it("shows why a revoke or a read failed", async () => {
@@ -152,7 +134,8 @@ describe("DevicesSettings", () => {
       url.includes("?id=") ? Promise.resolve(new Response(JSON.stringify({ error: "That isn't one of your devices." }), { status: 502 })) : ok({ signedIn: true, devices: DEVICES }),
     );
     render(<DevicesSettings />);
-    await userEvent.click(await screen.findByRole("button", { name: "Revoke m1mini" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Forget m1mini" }));
+    await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
     expect(await screen.findByText("That isn't one of your devices.")).toBeInTheDocument();
   });
 

@@ -97,7 +97,7 @@ describe("keyStatus", () => {
     ]);
     // Revoked: named, and no longer trusted.
     macKeysAt(h).revoke(["k1"]);
-    expect(keyStatus(h)[2]).toBe(`Takes no secrets: the Mac it was paired with (key ${macFingerprint("k1")}) was revoked. Wipe it and enrol it afresh from another Mac.`);
+    expect(keyStatus(h)[2]).toBe(`Takes no secrets: the Mac it was paired with (key ${macFingerprint("k1")}) was revoked. Run weft-worker forget here, then pair it again.`);
   });
 
   it("says when there's no key yet, no pairing, and no Mac", () => {
