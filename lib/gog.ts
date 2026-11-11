@@ -129,23 +129,30 @@ export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const busy = () => (state.adding ? new Error(`Already signing in ${state.adding.email}; finish that in the browser first.`) : null);
 
-// The client a new sign-in goes through: the user's own when they chose one, else Weft's (stored in gog first).
-async function signInClient(bin: string): Promise<string> {
-  const own = ownClient(await storedClients(bin).catch((): string[] => []));
-  if (own) return own;
+// Which OAuth client a sign-in goes through: Weft's Google app, the user's own client JSON, or (unset) the
+// user's own when they chose one, else Weft's.
+export type SignInVia = "weft" | "own";
+
+// The client a new sign-in goes through; Weft's is stored in gog first.
+async function signInClient(bin: string, via?: SignInVia): Promise<string> {
+  if (via !== "weft") {
+    const own = ownClient(await storedClients(bin).catch((): string[] => []));
+    if (own) return own;
+    if (via === "own") throw new Error("Choose an OAuth client JSON first.");
+  }
   const weft = weftClientJson();
-  if (!weft) throw new Error("Choose an OAuth client JSON first.");
+  if (!weft) throw new Error(via === "weft" ? "This build doesn't carry Weft's Google app." : "Choose an OAuth client JSON first.");
   await run(bin, ["auth", "credentials", "set", "-", "--client", WEFT_CLIENT], weft);
   return WEFT_CLIENT;
 }
 
 // gog opens the browser for Google's consent page and listens on localhost for the redirect; this waits for it.
-export async function addGogAccount(email: string, { readonly = false } = {}): Promise<void> {
+export async function addGogAccount(email: string, { readonly = false, via }: { readonly?: boolean; via?: SignInVia } = {}): Promise<void> {
   if (!EMAIL.test(email)) throw new Error("Enter the Google account's email.");
   const before = busy();
   if (before) throw before;
   const bin = requireGog();
-  const client = await signInClient(bin);
+  const client = await signInClient(bin, via);
   const after = busy();
   if (after) throw after;
   const args = ["auth", "add", email, "--client", client, ...(readonly ? ["--readonly"] : [])];

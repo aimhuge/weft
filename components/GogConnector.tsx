@@ -8,10 +8,12 @@ import Icon, { Spinner } from "./Icon";
 
 const CONSOLE_URL = "https://console.cloud.google.com/apis/credentials";
 const GUIDE_URL = "https://github.com/steipete/gogcli#readme";
+const CLAUDE_CONNECTORS_URL = "https://claude.ai/settings/connectors";
 // How often the card checks back while a browser sign-in is under way.
 const POLL_MS = 2_000;
 
 type Ready = Extract<GogStatus, { installed: true }>;
+type Via = "weft" | "own";
 
 function message(err: unknown) {
   return err instanceof Error ? err.message : String(err);
@@ -35,7 +37,15 @@ function Link({ href, children }: { href: string; children: string }) {
 const BUTTON =
   "flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
 
-// One signed-in Google account, with the OAuth client it signed in through (named when it isn't the default).
+// Which OAuth client an account signed in through: Weft's own Google app, the user's own client JSON
+// (gog's "default"), or another client gog was given by hand.
+export function clientLabel(client: string) {
+  if (client === "weft") return "via Weft's Google app";
+  if (client === "default") return "via your OAuth client";
+  return `via ${client}`;
+}
+
+// One signed-in Google account, with the OAuth client it signed in through.
 function GogAccountRow({
   account,
   busy,
@@ -49,9 +59,7 @@ function GogAccountRow({
     <div className="flex items-center gap-3 rounded-md border border-line px-3 py-2.5">
       <span className="h-2 w-2 shrink-0 rounded-full bg-ok" aria-hidden="true" />
       <span className="min-w-0 flex-1 truncate text-[13px] text-ink">{account.email}</span>
-      {account.client !== "default" && account.client !== "weft" && (
-        <span className="shrink-0 text-[12px] text-faint">{account.client}</span>
-      )}
+      <span className="shrink-0 text-[12px] text-faint">{clientLabel(account.client)}</span>
       <button onClick={onRemove} disabled={busy} className={BUTTON}>
         Remove
       </button>
@@ -66,8 +74,10 @@ function GogAccounts({
   busy,
   email,
   readonly,
+  via,
   onEmail,
   onReadonly,
+  onVia,
   onSignIn,
   onCancel,
   onRemove,
@@ -76,8 +86,10 @@ function GogAccounts({
   busy: boolean;
   email: string;
   readonly: boolean;
+  via: Via;
   onEmail: (value: string) => void;
   onReadonly: (value: boolean) => void;
+  onVia: (value: Via) => void;
   onSignIn: () => void;
   onCancel: () => void;
   onRemove: (account: GogAccount) => void;
@@ -113,6 +125,18 @@ function GogAccounts({
               aria-label="Google account email"
               className="min-w-[180px] flex-1 rounded-md border border-line-strong bg-sunken px-2.5 py-1 text-[12.5px] text-ink"
             />
+            {/* With both clients stored, the user picks which one this sign-in goes through. */}
+            {status.ownClient && status.weftClient && (
+              <select
+                value={via}
+                onChange={(e) => onVia(e.target.value as Via)}
+                aria-label="Sign in through"
+                className="rounded-md border border-line-strong bg-sunken px-2 py-1 text-[12.5px] text-ink"
+              >
+                <option value="weft">via Weft&apos;s Google app</option>
+                <option value="own">via your OAuth client</option>
+              </select>
+            )}
             {!status.outdated && (
               <label className="flex items-center gap-1.5 text-[12.5px] text-muted">
                 <input type="checkbox" checked={readonly} onChange={(e) => onReadonly(e.target.checked)} />
@@ -136,6 +160,7 @@ export default function GogConnector({ titleClass, hintClass }: { titleClass: st
   const [error, setError] = useState<string | null>(null);
   const [email, setEmail] = useState("");
   const [readonly, setReadonly] = useState(false);
+  const [via, setVia] = useState<Via>("weft");
   const file = useRef<HTMLInputElement>(null);
 
   const { load, refresh, accept } = useConnectorStatus<GogStatus>({
@@ -166,7 +191,8 @@ export default function GogConnector({ titleClass, hintClass }: { titleClass: st
   }
 
   async function signIn() {
-    if (await act({ action: "add", email: email.trim(), readonly })) setEmail("");
+    const both = load.kind === "ready" && load.status.installed && load.status.ownClient && load.status.weftClient;
+    if (await act({ action: "add", email: email.trim(), readonly, ...(both ? { via } : {}) })) setEmail("");
   }
 
   function body(s: Ready) {
@@ -189,7 +215,7 @@ export default function GogConnector({ titleClass, hintClass }: { titleClass: st
             <span className={`h-2 w-2 shrink-0 rounded-full ${s.ownClient ? "bg-ok" : "bg-warn"}`} aria-hidden="true" />
             <span className="min-w-0 flex-1 text-[12.5px] text-muted">
               {s.ownClient ? (
-                "Your own OAuth client"
+                "Your own OAuth client, used instead of Weft's Google app"
               ) : (
                 <>
                   First, a Google Cloud OAuth client (Desktop app): <Link href={CONSOLE_URL}>create one</Link>, download its
@@ -208,8 +234,10 @@ export default function GogConnector({ titleClass, hintClass }: { titleClass: st
           busy={busy}
           email={email}
           readonly={readonly}
+          via={via}
           onEmail={setEmail}
           onReadonly={setReadonly}
+          onVia={setVia}
           onSignIn={() => void signIn()}
           onCancel={() => void act({ action: "cancel" })}
           onRemove={(a) => void act({ action: "remove", email: a.email, client: a.client })}
@@ -238,7 +266,11 @@ export default function GogConnector({ titleClass, hintClass }: { titleClass: st
           Refresh
         </button>
       </div>
-      <p className={hintClass}>Gmail, Calendar, Drive, Docs and Sheets for your threads, through the gog CLI.</p>
+      <p className={hintClass}>
+        Weft&apos;s own Google connection: Gmail, Calendar, Drive, Docs and Sheets for your threads, through the gog CLI.
+        Separate from Claude&apos;s Google connectors, which sign in at{" "}
+        <Link href={CLAUDE_CONNECTORS_URL}>claude.ai</Link>.
+      </p>
       {load.kind === "loading" ? (
         <div className="flex items-center gap-2 py-2 text-[12.5px] text-muted">
           <Spinner size={12} /> Checking gog

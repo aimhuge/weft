@@ -70,6 +70,13 @@ describe("GogConnector", () => {
     expect(screen.getByText("brew install gogcli")).toBeInTheDocument();
   });
 
+  it("names this as Weft's connection, apart from Claude's own connectors", async () => {
+    setup(ready({ weftClient: true, accounts: [{ email: "me@gmail.com", client: "weft" }] }));
+    expect(await screen.findByText(/Weft's own Google connection/)).toBeInTheDocument();
+    expect(screen.getByText(/Separate from Claude's Google connectors/)).toBeInTheDocument();
+    expect(screen.getByText("via Weft's Google app")).toBeInTheDocument();
+  });
+
   it("says whether gog is the copy Weft ships or the user's own", async () => {
     setup(ready({ bundled: true }));
     expect(await screen.findByText(/shipped with Weft/)).toBeInTheDocument();
@@ -153,9 +160,9 @@ describe("GogConnector", () => {
       }),
     );
     expect(await screen.findByText("me@gmail.com")).toBeInTheDocument();
-    // Only a non-default OAuth client is named.
-    expect(screen.queryByText("default")).not.toBeInTheDocument();
-    expect(screen.getByText("work")).toBeInTheDocument();
+    // Each account says which OAuth client it signed in through.
+    expect(screen.getByText("via your OAuth client")).toBeInTheDocument();
+    expect(screen.getByText("via work")).toBeInTheDocument();
     expect(screen.getByText("work@gmail.com")).toBeInTheDocument();
     const removes = screen.getAllByRole("button", { name: "Remove" });
     await userEvent.click(removes[0]!);
@@ -216,6 +223,28 @@ describe("GogConnector", () => {
     const { container } = setup(ready({ ownClient: false, weftClient: true }));
     expect(await screen.findByText(/use your own OAuth client/)).toBeInTheDocument();
     expect(fileInput(container)).toBeInTheDocument();
+  });
+
+  it("lets the user pick Weft's app or their own client when both are stored", async () => {
+    api.gog.mockResolvedValue(ready({ ownClient: true, weftClient: true }));
+    setup(ready({ ownClient: true, weftClient: true }));
+    const pick = await screen.findByLabelText<HTMLSelectElement>("Sign in through");
+    // Weft's own app is the default.
+    expect(pick.value).toBe("weft");
+    await userEvent.type(screen.getByLabelText("Google account email"), "me@gmail.com");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with Google" }));
+    await waitFor(() => expect(api.gog).toHaveBeenCalledWith({ action: "add", email: "me@gmail.com", readonly: false, via: "weft" }));
+
+    await userEvent.selectOptions(pick, "own");
+    await userEvent.type(screen.getByLabelText("Google account email"), "me@gmail.com");
+    await userEvent.click(screen.getByRole("button", { name: "Sign in with Google" }));
+    await waitFor(() => expect(api.gog).toHaveBeenLastCalledWith({ action: "add", email: "me@gmail.com", readonly: false, via: "own" }));
+  });
+
+  it("asks nothing about clients when only one is stored", async () => {
+    setup(ready({ ownClient: true, weftClient: false }));
+    await screen.findByRole("button", { name: "Sign in with Google" });
+    expect(screen.queryByLabelText("Sign in through")).not.toBeInTheDocument();
   });
 
   it("still asks for a client when the build has none and the user has none", async () => {
