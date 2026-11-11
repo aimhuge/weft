@@ -15,6 +15,7 @@ project id this sets up.
   safeStorage it refuses rather than writing it in the clear, like the vault's device key.
 - The token never leaves main: every Vercel call is made there, and the board gets back only names, ids, URLs and
   states. `lib/secret-guard.ts` denies threads `vercel-token.json`.
+- No token yet and a project vault holds `VERCEL_TOKEN` (or `VERCEL_API_TOKEN`, `VERCEL_ACCESS_TOKEN`)? The drawer offers "Use VERCEL_TOKEN from <vault>": Touch ID, then main passes the value to `setToken` (docs/architecture/secrets.md).
 - Weft doesn't reuse the Vercel CLI's own login file: reading another tool's credentials is the kind of thing the
   guard is there to stop.
 
@@ -79,39 +80,22 @@ blank waiting for one) and never replaces a value.
   `vercel.envValue`). `sensitive` (and the old `secret`) never decrypt, so they stay **Vercel only** and the pull's
   toast lists them to add by hand; `system` ones are Vercel's own. `status()` marks the rows that can come down
   `pullable`, and those show **Vercel only · pull**, which pulls every pullable row of that project.
-- **No Touch ID.** Unlike a push, a pull writes into your own vault and sends nothing anywhere: `vault.setValue` saves
-  each with source "Vercel", rewrites a managed `.env.local` and tells the board (`vault:changed`). The value
-  goes from Vercel's answer into the vault inside main; the board and threads get names back.
-- **Live pull** (the drawer's "Live pull from Vercel" switch, for a project in a team: account webhooks belong to a
-  team and need Pro or Enterprise). Vercel can't reach a Weft on localhost, so it goes through the deployed Weft, like
-  the GitHub issue webhooks:
-
-  ```
-  Vercel env added ─▶ weft-topaz.vercel.app/api/vercel/webhook?hook=<id>   (lib/vercel-relay.ts: x-vercel-signature,
-                                                                            HMAC-SHA1 of the body with the hook's secret)
-                    ─▶ vercel_events row on Weft's Supabase (project id only; the payload never holds a value)
-                    ─▶ Realtime ─▶ this Weft's server (lib/vercel-hooks.ts, after a 1.5s settle)
-                    ─▶ control server POST /vercel/env-pull for each board folder linked to that project ─▶ main pulls
-  ```
-
-  Turning it on (`POST /api/vercel/hooks`) picks the hook's id, has main create the team webhook
-  (`POST /v1/webhooks`, events `project.env-variable.created` and `.updated`, all the team's projects, since project
-  events need that scope), and inserts the `vercel_hooks` row with Vercel's secret (insert-only; only the relay reads it
-  back with the secret key). Then it pulls the folder once. On each server start and sign-in the listener pulls every
-  board folder on a hooked team once, to catch what changed while Weft wasn't listening. Off deletes the webhook and
-  the row. Migration: `supabase/migrations/20261013155658_vercel_webhooks.sql`. The relay needs `SUPABASE_SECRET_KEY`
-  on the deployment (the GitHub relay already uses it); `WEFT_VERCEL_RELAY_URL` points hooks at another deployment.
-
-## Drift
-
-Each linked project's 🔐 vault and Vercel env are lined up by name, per environment, without anyone opening a drawer:
-which names Vercel has that the vault holds no value for, and which vault values Vercel lacks. Names only, like status.
-
-- **When.** A project landing on the board (`lib/project-open.ts`, never inline on the start-a-card path) asks main once
-  (`lib/vercel-drift-open.ts`, started from `prewarm()`); the rail asks again on focus and when the vault changes.
-- **Cache.** `electron/vercel-env-cache.cjs` keeps each linked folder's Vercel list for 10 minutes. `drift()` answers
-  from it at once; a missing or stale list is fetched behind, and `onDrift` (`window.weft.vercel.onDrift`) tells the
-  board when it lands. Every real listing (status, push, pull) refreshes it. An unlinked folder costs a file read.
+- **One Touch ID from the drawer, none on the webhook.** The drawers' **Pull** (`vercel:env-pull`, `pull(folder,
+  { confirm: true })`) plans first from the names and types alone, then asks one `vault.confirm` naming the count
+  ("pull 12 variables from Vercel project weft into the aimhuge/weft vault") before any value is fetched; a no
+  fetches and writes nothing. Live pull (`POST /vercel/env-pull` on the control server) runs unattended and asks
+  nothing, as before. Either way `vault.setValue` saves each with source "Vercel" (through the sync path for a shared
+  vault), rewrites a managed `.env.local` and tells the board (`vault:changed`). The value goes from Vercel's answer
+  into the vault inside main; the board and threads get names back.
+- **Shared vaults.** A team vault's server holds upper-case names only (the sharing rule, `electron/vault-share.cjs`
+  `SERVER_NAME`; `vault.names()` says `shared`), so a lower-case Vercel name is left out and the toast names it
+  (`local` in the answer).
+- **The preview.** Pull shows whenever a name is on Vercel and not in the vault, even when none can come down: it opens
+  `components/VercelPullPreview.tsx` under the button, by environment, with what will come down and, apart, the
+  sensitive names Vercel never hands back (to add by hand), from the rows alone (`lib/vercel-drift.ts` `pullPlan`).
+  **Pull N** runs it; Cancel or Escape closes it. A project whose Weft-pushed production and preview values went in
+  as sensitive (every push does, see below) shows them here as "add by hand", which is why aimhuge/weft's 41 had no
+  Pull before.
 - **Shown, no new rows.** 🔐 on the rail gets its dot and a hover line ("▲ web: 4 on Vercel not in vault, 2 missing on
   preview"), ▲ a count (`lib/vercel-drift.ts` `driftBadge`, `lib/use-vercel-drift.ts`). The ▲ drawer's 🔐 line and
   the 🔐 drawer's ▲ line say it as questions ("4 on Vercel not in vault: pull? · 2 missing on preview: push?") with
@@ -130,7 +114,7 @@ which names Vercel has that the vault holds no value for, and which vault values
   `vercel.envSet` / `vercel.envValue`, `vault.sendValue` and `vault.setValue`, `drift`, and `envRoutes` for threads and the server.
   `electron/vercel-env-cache.cjs`: the per-folder list cache behind `drift` (see Drift).
 - `lib/vercel-drift.ts` (the drift's sums, lines, badge and copilot gaps), `lib/use-vercel-drift.ts` (the rail's hook),
-  `lib/vercel-drift-open.ts` (the project-open handler), `components/VercelDriftActions.tsx` (Pull and Push N).
+  `lib/vercel-drift-open.ts` (the project-open handler), `components/VercelDriftActions.tsx` (Pull and Push N), `components/VercelPullPreview.tsx` (Pull's preview).
 - `lib/vercel-relay.ts` + `app/api/vercel/webhook/route.ts`: the relay on the deployed Weft. `lib/vercel-hooks.ts` +
   `app/api/vercel/hooks/route.ts`: the switch and the Realtime listener (started from `prewarm()`).
 - `electron/preload.cjs`: `window.weft.vercel`. The token's own read/persist lives in `electron/provider-token.cjs`, which Vercel, Supabase, Cloudflare and BlastCP all share.

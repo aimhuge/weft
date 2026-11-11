@@ -11,6 +11,7 @@ import { useNow } from "@/lib/use-now";
 import { useState } from "react";
 import { ForgetButton, ForgetConfirm, forgetLine } from "./WorkerActions";
 import { Spinner } from "./Icon";
+import { ThisMacStanding } from "./DeviceStanding";
 import { MoveThreads, RevokeConfirm } from "./WorkerMoveThreads";
 import { offersMove, threadsText } from "@/lib/device-move";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
@@ -149,6 +150,8 @@ export default function DevicesSettings() {
   const devices = useDevices();
   const now = useNow();
   const [open, setOpen] = useState<Open | null>(null);
+  // Re-add or Try again failing for this Mac (components/DeviceStanding.tsx).
+  const [fixError, setFixError] = useState<string | null>(null);
   const list = devices.view?.devices ?? [];
   const newest = newestVersion(list.filter((d) => !d.revokedAt).map((d) => d.build));
   return (
@@ -160,6 +163,10 @@ export default function DevicesSettings() {
       {devices.view && !devices.view.signedIn && <p className={`mt-3 ${SUBTLE}`}>Sign in to Weft to see your devices.</p>}
       {devices.note && <p className="mt-3 text-[12.5px] text-ink">{devices.note}</p>}
       {devices.error && <p className="mt-3 text-[12.5px] text-danger">{devices.error}</p>}
+      <div className="mt-3 empty:hidden">
+        <ThisMacStanding onDone={() => setFixError(null)} notify={(err) => setFixError(err instanceof Error ? err.message : String(err))} />
+      </div>
+      {fixError && <p className="mt-2 text-[12.5px] text-danger">{fixError}</p>}
       {list.length > 0 && (
         <ul className="mt-4 flex flex-col gap-3 border-t border-line pt-4">
           {list.map((d) => (

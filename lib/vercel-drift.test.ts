@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { driftBadge, driftCount, driftGaps, driftLine, driftOf, driftParts, missingPairs, shownDrift, vaultKey, type VercelDrift } from "./vercel-drift";
+import { driftBadge, driftCount, driftGaps, driftLine, driftOf, driftParts, missingPairs, pullPlan, shownDrift, vaultKey, type VercelDrift } from "./vercel-drift";
 import type { VercelEnvRow } from "./vercel-view";
 
 // The vault ⇄ Vercel drift: names on Vercel the vault has no value for, vault values Vercel lacks, by environment.
@@ -18,6 +18,14 @@ const rows: VercelEnvRow[] = [
 const drift = (folder: string, r = rows): VercelDrift => ({ folder, label: "o/web", project: "web", rows: r });
 
 describe("vercel-drift", () => {
+  it("plans a pull by environment: what comes down, and what's sensitive", () => {
+    expect(pullPlan(rows)).toEqual([
+      { environment: "preview", pull: ["PLAIN"], sensitive: [] },
+      { environment: "production", pull: ["PLAIN"], sensitive: ["SECRET"] },
+    ]);
+    expect(pullPlan([rows[0]!])).toEqual([]);
+  });
+
   it("sums up what drifted, names once each", () => {
     expect(driftOf(rows)).toEqual({ notInVault: ["PLAIN", "SECRET"], pullable: ["PLAIN"], missing: { preview: ["A", "B"], production: ["A"] } });
     expect(driftCount(driftOf(rows))).toBe(5);

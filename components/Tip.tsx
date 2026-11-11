@@ -4,6 +4,20 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { currentArea, fitWidth, placeAbove } from "@/lib/float-place";
 
+// Narrower than this, the room left of the browser pane can't hold a readable bubble, so the shell draws it.
+const NATIVE_BELOW = 160;
+
+// Squeezed beside the browser pane (a rail icon with the pane right of it), the tip goes to a small
+// window of the shell's that floats over the pane; the bubble stays hidden and only lends its text.
+function showNative(trigger: HTMLElement, bubble: HTMLElement, width: number): (() => void) | undefined {
+  const bridge = window.weft;
+  if (!bridge?.tip || fitWidth(currentArea(), width) >= NATIVE_BELOW) return undefined;
+  const zoom = bridge.zoomFactor?.() ?? 1;
+  const r = trigger.getBoundingClientRect();
+  bridge.tip.show(bubble.innerText || bubble.textContent || "", { x: r.left * zoom, y: r.top * zoom, width: r.width * zoom, height: r.height * zoom });
+  return () => bridge.tip?.hide();
+}
+
 // How long an interactive bubble stays after the mouse leaves its trigger: enough to cross the 6px gap.
 const CLOSE_DELAY = 250;
 
@@ -55,9 +69,15 @@ export default function Tip({
       setPos(null);
       return;
     }
+    // Squeezed beside the pane, the shell draws it and the bubble stays hidden.
+    const native = interactive ? undefined : showNative(trigger.current, bubble.current, width);
+    if (native) {
+      setPos(null);
+      return native;
+    }
     // Inside the window and clear of the browser pane, which no z-index can rise above.
     setPos(placeAbove(trigger.current.getBoundingClientRect(), bubble.current.getBoundingClientRect(), currentArea()));
-  }, [open, text]);
+  }, [open, text, interactive, width]);
 
   return (
     <span

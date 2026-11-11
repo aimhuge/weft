@@ -194,7 +194,7 @@ export function ReviewPanelTour({
               // It stands in for the reply box, so files dropped on this card or thread land here.
               dropTarget={cardId}
               initial={readDraft(feedbackKey(cardId, index))}
-              placeholder="Anything wrong or missing here? Paste a screenshot to show it. (Enter to send)"
+              placeholder="Anything wrong or missing? Paste a screenshot, @ to mention someone, / for skills. Enter sends."
               onSubmit={() => void sendFeedback()}
               onChange={(markdown) => {
                 writeFeedback(cardId, boxStep.current, markdown);

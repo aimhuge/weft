@@ -1,7 +1,10 @@
 import { useEffect, useRef } from "react";
 import type { MenuAction } from "./client";
 import { paneFindFocused, requestThreadFind, stepThreadFind } from "./find-events";
+import { requestAddressFocus } from "./pane-new-tab";
 import type { Card } from "./types";
+import { OPEN_SETTINGS_EVENT } from "./secrets-settings";
+import { askVault, parseVaultAsk } from "./vault-ask";
 import { addWebhookAsk } from "./use-webhooks";
 import { parseWebhookAsk } from "./webhooks-view";
 
@@ -19,7 +22,7 @@ export interface MenuBridge {
   // A thread is open with no dialog over it, so ⌘F finds in it.
   threadOpen?: boolean;
   toggleTerminal: () => void;
-  openDrawer: (panel: "webhooks") => void;
+  openDrawer: (panel: "webhooks" | "vault") => void;
 }
 
 // ⌘F and ⌘G. "pane" means the page had the focus, and the pane's own find field has it now if paneFindFocused:
@@ -53,9 +56,17 @@ export function runMenuAction(action: MenuAction, payload: string | undefined, b
     case "terminal":
       b.toggleTerminal();
       break;
+    // ⌘T: main has opened the blank tab; its address bar takes the keyboard.
+    case "new-tab":
+      requestAddressFocus();
+      break;
     // A thread added a webhook for you to register: the 🪝 drawer opens on its row.
     case "add-webhook":
       addWebhookAsk(b.openDrawer, parseWebhookAsk(payload));
+      break;
+    // weft://secrets?repo=…&share=1, from the team page: the 🔐 drawer opens on that repo, Share… up when asked.
+    case "open-secrets":
+      askVault(b.openDrawer, parseVaultAsk(payload));
       break;
   }
 }
@@ -67,4 +78,10 @@ export function useMenuBridge(bridge: MenuBridge) {
     latest.current = bridge;
   });
   useEffect(() => window.weft?.onMenu((action, payload) => runMenuAction(action, payload, latest.current)), []);
+  // Settings → Secrets asked for from the 🔐 drawer or a weft://secrets link (lib/secrets-settings.ts).
+  useEffect(() => {
+    const open = () => latest.current.openSettings();
+    window.addEventListener(OPEN_SETTINGS_EVENT, open);
+    return () => window.removeEventListener(OPEN_SETTINGS_EVENT, open);
+  }, []);
 }

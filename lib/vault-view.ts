@@ -1,9 +1,9 @@
 import type { KeychainBridge } from "./keychain-audit-types";
 import type { MenuItem } from "./card-menu";
-import type { RepoShareResult, VaultDeviceRequest, VaultJoin, VaultLinked, VaultOrg, VaultShared } from "./vault-shared";
+import type { RepoShareResult, VaultDeviceRequest, VaultJoin, VaultJoinHint, VaultLinked, VaultOrg, VaultShared } from "./vault-shared";
 import type { ImportScan } from "./vault-import";
 
-export type { VaultDeviceRequest, VaultJoin, VaultOrg, VaultShared };
+export type { VaultDeviceRequest, VaultJoin, VaultJoinHint, VaultOrg, VaultShared };
 // The .env import's shape and the preview's rules (lib/vault-import.ts). Re-exported here so the
 // callers keep one import for the vault's types.
 export {
@@ -57,6 +57,8 @@ export interface VaultSummary {
   shared?: VaultShared;
   // Set when the workspace already shares this repo and this Mac isn't in it yet.
   join?: VaultJoin;
+  // Set when there's no join to offer and the drawer should say why (signed out, nothing shared, lookup failed).
+  joinHint?: VaultJoinHint;
   // Teammates' Macs waiting for an admin to approve them.
   requests?: VaultDeviceRequest[];
   // The team that linked this repo as a project: its vault is that team's (docs/architecture/teams-vault.md).
@@ -70,6 +72,16 @@ export interface VaultOverview {
   // The workspaces the user is in, for the drawer's "Share this vault" offer. Missing when the
   // desktop is signed out or its shell is too old to know about teams.
   orgs?: VaultOrg[];
+  // This Mac's standing with the account (electron/device-standing.cjs). Missing in older shells.
+  device?: DeviceStanding;
+}
+
+// registered, revoked (removed in Settings → Devices), unregistered (registering failed, with why), signed-out, or
+// unknown (the read failed). docs/architecture/device-registry.md, "Re-adding a Mac".
+export interface DeviceStanding {
+  state: "signed-out" | "registered" | "revoked" | "unregistered" | "unknown";
+  error?: string;
+  revokedAt?: string;
 }
 
 // null when you cancelled; empty when the file had no NAME=value lines. file is relative to the project.
@@ -126,6 +138,14 @@ export interface VaultBridge extends KeychainBridge {
   deviceDecline?(pendingId: string): Promise<{ declined: boolean }>;
   join?(folder: string, details: VaultJoin): Promise<{ denied?: boolean; joined?: boolean }>;
   onChange?(callback: (folder: string) => void): () => void;
+}
+
+// window.weft.vault.devices: this Mac's own registration. register makes its row (or bumps it); readd gives a removed
+// Mac a new key, after Touch ID. Each is missing in older shells.
+export interface DeviceBridge {
+  register?: (options?: { name?: string }) => Promise<unknown>;
+  standing?: () => Promise<DeviceStanding>;
+  readd?: () => Promise<{ denied?: boolean; resealed?: number }>;
 }
 
 export type WriteBackResult = { written: true; file: string; gitignoreAdded: boolean } | { refused: string };
@@ -295,4 +315,8 @@ export function copiedText(name: string, result: { label: string; replaced: bool
 
 export function vaultBridge(): VaultBridge | null {
   return (typeof window !== "undefined" && window.weft?.vault) || null;
+}
+
+export function deviceBridge(): DeviceBridge | null {
+  return (vaultBridge() as { devices?: DeviceBridge } | null)?.devices ?? null;
 }

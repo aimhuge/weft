@@ -58,7 +58,7 @@ export function TeamPanel({
       </div>
 
       <Section title="Projects">
-        <Projects projects={team.projects} canManage={team.canManage} actions={actions} boardRepos={[...orgRepos, ...board.repos]} cards={board.cards} />
+        <Projects projects={team.projects} canManage={team.canManage} actions={actions} boardRepos={[...orgRepos, ...board.repos]} cards={board.cards} org={team.org} members={team.members.length} />
       </Section>
 
       <Section title="People">

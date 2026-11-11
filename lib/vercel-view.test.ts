@@ -168,5 +168,7 @@ describe("vault → Vercel env", () => {
     expect(pullText({ ...base, pulled: [], skipped: [] })).toBe("Nothing new to pull from weft");
     expect(pullText({ ...base, pulled: [e("A", "production")], skipped: [e("S", "production"), e("S", "preview"), e("T", "preview")] })).toBe("Pulled A into the a/b vault. Sensitive on Vercel, add by hand: S, T");
     expect(pullText({ ...base, pulled: [], skipped: [e("S", "production")] })).toBe("Nothing new to pull from weft. Sensitive on Vercel, add by hand: S");
+    expect(pullText({ ...base, pulled: [], skipped: [e("S", "production")], denied: true })).toBe("Nothing pulled from weft: Touch ID wasn't approved");
+    expect(pullText({ ...base, pulled: [e("A", "development")], skipped: [], local: [e("lower", "development")] })).toBe("Pulled A into the a/b vault. Lower-case, so kept out of the shared vault: lower");
   });
 });

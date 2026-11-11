@@ -20,6 +20,7 @@ import { FolderRow } from "./FolderRow";
 import { SMALL } from "./tone";
 import { TokenForm } from "./TokenForm";
 import { Note } from "./VaultParts";
+import { VaultTokenOffer } from "./VaultTokenOffer";
 
 // The Supabase drawer's body (docs/architecture/supabase.md): your Supabase access token, kept by Electron main
 // in the Keychain, and each board project's link to a Supabase project, written as supabase/.temp/project-ref
@@ -77,23 +78,44 @@ export default function SupabaseDrawer({
 
   if (!status.signedIn || status.error)
     return (
-      <TokenForm
-        error={status.error}
-        busy={busy}
-        provider="Supabase"
-        tokenUrl={TOKEN_URL}
-        placeholder="sbp_…"
-        label="Supabase access token"
-        onSave={(token) =>
-          change(async () => {
-            const { orgs } = await supabase.setToken(token);
-            setProjects(null);
-            setOrgs(null);
-            notify(`Signed in to Supabase${orgs.length ? ` (${orgs.join(", ")})` : ""}`);
-          })
-        }
-        onForget={status.signedIn ? () => void change(() => supabase.forgetToken()) : undefined}
-      />
+      <div className="flex flex-col">
+        <TokenForm
+          error={status.error}
+          busy={busy}
+          provider="Supabase"
+          tokenUrl={TOKEN_URL}
+          placeholder="sbp_…"
+          label="Supabase access token"
+          onSave={(token) =>
+            change(async () => {
+              const { orgs } = await supabase.setToken(token);
+              setProjects(null);
+              setOrgs(null);
+              notify(`Signed in to Supabase${orgs.length ? ` (${orgs.join(", ")})` : ""}`);
+            })
+          }
+          onForget={status.signedIn ? () => void change(() => supabase.forgetToken()) : undefined}
+        />
+        <VaultTokenOffer
+          source={supabase}
+          folders={status.folders.map((f) => f.folder)}
+          busy={busy}
+          onUse={(pick) =>
+            change(async () => {
+              const r = await supabase.useVaultToken?.(pick);
+              if (!r) return;
+              if (!("status" in r)) {
+                notify("denied" in r ? "Touch ID said no, so nothing changed." : "That vault no longer has the value.");
+                return;
+              }
+              const { orgs } = r.status;
+              setProjects(null);
+              setOrgs(null);
+              notify(`Signed in to Supabase${orgs.length ? ` (${orgs.join(", ")})` : ""}`);
+            })
+          }
+        />
+      </div>
     );
 
   async function startPicking(folder: string) {

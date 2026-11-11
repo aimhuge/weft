@@ -1,5 +1,6 @@
 import { norm, shownFolders as pickFolders, type Tone } from "./db-picker";
 import { folderName } from "./format";
+import type { VaultTokenCandidate, VaultTokenPick, VaultTokenResult } from "./provider-vault-token";
 
 // What the ▲ drawer shows, from what Electron main's Vercel side (electron/vercel.cjs) sends. The token
 // never reaches the board: main keeps it in the Keychain and makes every call.
@@ -82,6 +83,9 @@ export interface VercelBridge {
   status(folders: string[]): Promise<VercelStatus>;
   setToken(token: string): Promise<{ username: string }>;
   forgetToken(): Promise<{ signedIn: false }>;
+  // A project vault's token, by name (lib/provider-vault-token.ts); missing in an older shell.
+  vaultTokenCandidates?: (folders: string[]) => Promise<VaultTokenCandidate[]>;
+  useVaultToken?: (pick: VaultTokenPick) => Promise<VaultTokenResult<{ username: string }>>;
   projects(): Promise<VercelProject[]>;
   scopes(): Promise<VercelScopes>;
   link(folder: string, projectId: string, orgId: string): Promise<{ linked: true; name: string }>;
@@ -145,6 +149,10 @@ export interface VercelPullResult {
   pulled: { name: string; environment: VercelEnvironment }[];
   // On Vercel and not in the vault, but sensitive, so Vercel won't hand the value back.
   skipped: { name: string; environment: VercelEnvironment }[];
+  // Lower-case names a shared vault's server won't hold, left out of it.
+  local?: { name: string; environment: VercelEnvironment }[];
+  // The drawer's Pull asks one Touch ID first; a no pulls nothing.
+  denied?: boolean;
 }
 
 export const ENV_SHORT: Record<VercelEnvironment, string> = { development: "dev", preview: "preview", production: "prod" };
@@ -167,8 +175,10 @@ export const toPull = (rows: VercelEnvRow[]) => rows.filter((r) => r.pullable);
 // The toast after a pull: what came down, and what has to be added by hand.
 export function pullText(r: VercelPullResult) {
   const names = (list: { name: string }[]) => [...new Set(list.map((e) => e.name))].join(", ");
+  if (r.denied) return `Nothing pulled from ${r.project}: Touch ID wasn't approved`;
   const got = r.pulled.length ? `Pulled ${names(r.pulled)} into the ${r.label} vault` : `Nothing new to pull from ${r.project}`;
-  return r.skipped.length ? `${got}. Sensitive on Vercel, add by hand: ${names(r.skipped)}` : got;
+  const local = r.local?.length ? `. Lower-case, so kept out of the shared vault: ${names(r.local)}` : "";
+  return `${got}${r.skipped.length ? `. Sensitive on Vercel, add by hand: ${names(r.skipped)}` : ""}${local}`;
 }
 
 // The toast after a push, or why it didn't happen.

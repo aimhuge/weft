@@ -78,7 +78,7 @@ const pane = createBrowserPane({
   secrets: () => vault, secretRun: () => secretRun,
   getWindow: () => win, getAppView: () => appView, token: TOKEN,
   onContents: (contents) => menus.attachContextMenu(contents),
-  pages: createPanePages(dataDir()),
+  pages: createPanePages(dataDir()), sites: require("./pane-sites.cjs").createPaneSites(dataDir()),
   // weft:// links clicked inside a pane page, like a walk-through's buttons.
   onLink: (url, from) => pageLinks.handle(url, from) || handleLink(url),
   // What threads and the server ask main for, over the pane's control server (electron/pane-routes.cjs).
@@ -250,8 +250,8 @@ const toggleCopilot = copilot.toggle;
 
 // ---- weft:// links ----
 // weft://new?prompt=…&folder=…&title=…&cli=puku           create a card (L-3: dialog pre-filled, Start required)
-// weft://card/<id>                                        open a card
 // weft://copilot                                          open the copilot
+// weft://card/… and weft://secrets?… ask the board to show something (board-links.cjs)
 // weft://reply and weft://commit come from a card's own page in the pane (page-links.cjs)
 
 async function handleLink(raw) {
@@ -269,9 +269,9 @@ async function handleLink(raw) {
   const action = url.hostname;
   if (action === "copilot") return COPILOT_ENABLED ? showCopilot() : showMain();
   showMain();
-  if (action === "card") return sendMenu("open-card", url.pathname.replace(/^\/+/, ""));
-  if (action !== "new") return;
-  return handleNewThreadLink(url);
+  const shown = require("./board-links.cjs").boardLink(url);
+  if (shown) return sendMenu(...shown);
+  if (action === "new") return handleNewThreadLink(url);
 }
 
 // weft://new — L-3: the dialog is pre-filled but the user has to click Start; start=1 is ignored.
@@ -297,8 +297,8 @@ const menus = createMenus({
 
 // ---- IPC from the board and copilot ----
 
-// The browser pane's IPC from the board (electron/pane-ipc.cjs).
-registerPaneIpc(ipcMain, { pane, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
+// The browser pane's IPC from the board (electron/pane-ipc.cjs), and hover tips that float over it (electron/native-tip.cjs).
+registerPaneIpc(ipcMain, { pane, getWindow: () => win, isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
 ipcMain.on("copilot:toggle", () => COPILOT_ENABLED && toggleCopilot());
 const dictation = require("./dictation-setup.cjs").setupDictation({ ipcMain, getServer: () => server, listeners: () => [appView?.webContents, copilot.webContents()] });
 const killTerminals = registerTerminal(ipcMain, { isBoard: (sender) => Boolean(sender) && sender === appView?.webContents });
@@ -344,7 +344,7 @@ require("./mini-apps-setup.cjs").setupMiniApps({
   ipcMain, dataDir: dataDir(), shell, app, timer, boot, startup,
   getServer: () => server, getBoardContents: () => appView?.webContents,
   getMenus: () => menus, keepWorking: menus.keepWorking, getHandleLink: () => handleLink,
-  token: TOKEN,
+  token: TOKEN, vault,
 }));
 
 // ---- Lifecycle ----

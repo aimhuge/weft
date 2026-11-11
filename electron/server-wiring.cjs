@@ -27,17 +27,18 @@ const { serverInfo } = require("./server-info.cjs");
  * @param {() => object} opts.keepWorking the Keep Working feature
  * @param {() => object} opts.getHandleLink the handle-link opener
  * @param {string} opts.token the launch token
+ * @param {object} [opts.vault] the 🔐 vault, for "Use VERCEL_TOKEN from <vault>" (electron/provider-vault-token.cjs)
  * @param {Function} [opts.setupProviders] the provider drawers' setup; defaults to
  *   electron/providers.cjs. The seam exists so a test can wire the rest without Electron's app.
  * @returns {{ blastcpApi: object, slackApi: object, gooseApi: object }} the provider APIs
  */
-function setupServerWiring({ ipcMain, dataDir, shell, app, timer, boot, startup, getServer, getBoardContents, getMenus, keepWorking, getHandleLink, token, setupProviders }) {
+function setupServerWiring({ ipcMain, dataDir, shell, app, timer, boot, startup, getServer, getBoardContents, getMenus, keepWorking, getHandleLink, token, vault, setupProviders }) {
   // The server's url and launch token, read fresh (the server may not be up yet).
   const server = serverInfo(getServer, token);
 
   // BlastCP, Cloudflare, Slack and Goose, each with its secret in the Keychain (electron/providers.cjs).
   const providers = (setupProviders ?? require("./providers.cjs").setupProviders)({
-    ipcMain, dataDir, board: getBoardContents, server,
+    ipcMain, dataDir, board: getBoardContents, server, vault,
   });
 
   // Keep Working (electron/keep-working.cjs): the board's Settings → General → Laptop mode card.

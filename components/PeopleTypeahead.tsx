@@ -26,30 +26,35 @@ export default function PeopleTypeahead({
     list.current?.querySelector<HTMLElement>('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
   }, [active]);
   return (
-    <div ref={list} role="listbox" aria-label="People" className={`absolute z-40 max-h-[260px] overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-lg ${className}`}>
-      {people.map((p, i) => (
-        <button
-          key={p.login}
-          type="button"
-          role="option"
-          aria-selected={i === active}
-          onMouseDown={(e) => e.preventDefault()}
-          onMouseEnter={() => onHover(i)}
-          onClick={() => onPick(p)}
-          className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left ${i === active ? "bg-sunken" : ""}`}
-        >
-          {p.avatarUrl ? (
-            <img src={`${p.avatarUrl}${p.avatarUrl.includes("?") ? "&" : "?"}s=40`} alt="" width={18} height={18} className="shrink-0 rounded-full" />
-          ) : (
-            <span className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full bg-sunken text-[10px] text-muted">{p.login[0]?.toUpperCase()}</span>
-          )}
-          <span className="min-w-0 flex-1 truncate font-mono text-[12.5px] text-ink">
-            @{p.login}
-            {p.name && <span className="ml-1.5 font-sans text-muted">{p.name}</span>}
-          </span>
-          <span className="shrink-0 text-[11px] text-muted">{pickHint(p, shared)}</span>
-        </button>
-      ))}
+    <div ref={list} role="listbox" aria-label="People" className={`absolute z-40 max-h-[260px] max-w-[360px] overflow-y-auto rounded-lg border border-line bg-panel p-1 shadow-lg ${className}`}>
+      {people.map((p, i) => {
+        const hint = pickHint(p, shared);
+        return (
+          <button
+            key={p.login}
+            type="button"
+            role="option"
+            aria-selected={i === active}
+            onMouseDown={(e) => e.preventDefault()}
+            onMouseEnter={() => onHover(i)}
+            onClick={() => onPick(p)}
+            className={`flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left ${i === active ? "bg-sunken" : ""}`}
+          >
+            {p.avatarUrl ? (
+              <img src={`${p.avatarUrl}${p.avatarUrl.includes("?") ? "&" : "?"}s=40`} alt="" width={20} height={20} loading="lazy" className="shrink-0 rounded-full bg-sunken" />
+            ) : (
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-sunken text-[10px] font-medium text-muted">{p.login[0]?.toUpperCase()}</span>
+            )}
+            <span className="min-w-0 flex-1 truncate text-[12.5px]">
+              <span className="font-medium text-ink">{p.login}</span>
+              {p.name && <span className="ml-1.5 text-muted">{p.name}</span>}
+            </span>
+            {p.kind === "github" && !shared ? null : (
+              <span className={`shrink-0 truncate rounded px-1.5 py-px text-[10.5px] ${p.kind === "github" ? "text-muted" : "bg-sunken text-muted"}`}>{hint}</span>
+            )}
+          </button>
+        );
+      })}
     </div>
   );
 }

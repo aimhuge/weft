@@ -27,6 +27,7 @@ import CloudflarePicker from "./CloudflarePicker";
 import { FolderRow } from "./FolderRow";
 import { BODY, SMALL, TONE } from "./tone";
 import { Note } from "./VaultParts";
+import { VaultTokenOffer } from "./VaultTokenOffer";
 
 // The Cloudflare drawer's body (docs/architecture/cloudflare.md): your Cloudflare API token, kept by Electron
 // main in the Keychain, and each board project's link to a Worker or Pages project (kept in Weft's data folder;
@@ -74,18 +75,37 @@ export default function CloudflareDrawer({
 
   if (!status.signedIn || status.error)
     return (
-      <TokenForm
-        error={status.error}
-        busy={busy}
-        onSave={(token) =>
-          change(async () => {
-            const saved = await cloudflare.setToken(token);
-            setProjects(null);
-            notify(tokenSavedLine(saved));
-          })
-        }
-        onForget={status.signedIn ? () => void change(() => cloudflare.forgetToken()) : undefined}
-      />
+      <div className="flex flex-col">
+        <TokenForm
+          error={status.error}
+          busy={busy}
+          onSave={(token) =>
+            change(async () => {
+              const saved = await cloudflare.setToken(token);
+              setProjects(null);
+              notify(tokenSavedLine(saved));
+            })
+          }
+          onForget={status.signedIn ? () => void change(() => cloudflare.forgetToken()) : undefined}
+        />
+        <VaultTokenOffer
+          source={cloudflare}
+          folders={status.folders.map((f) => f.folder)}
+          busy={busy}
+          onUse={(pick) =>
+            change(async () => {
+              const r = await cloudflare.useVaultToken?.(pick);
+              if (!r) return;
+              if (!("status" in r)) {
+                notify("denied" in r ? "Touch ID said no, so nothing changed." : "That vault no longer has the value.");
+                return;
+              }
+              setProjects(null);
+              notify(tokenSavedLine(r.status));
+            })
+          }
+        />
+      </div>
     );
 
   async function startPicking(folder: string) {

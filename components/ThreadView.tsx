@@ -75,7 +75,7 @@ export default function ThreadView({
   onSend,
   onAnswer,
   empty,
-  placeholder = "Reply to continue this thread",
+  placeholder = "Reply to continue: @ to mention someone, / for skills, paste screenshots",
   footer,
   replaceReply = false,
   readOnly = false,

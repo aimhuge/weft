@@ -18,6 +18,7 @@ import {
   type VercelStatus,
 } from "@/lib/vercel-view";
 import { Note } from "./VaultParts";
+import { VaultTokenOffer } from "./VaultTokenOffer";
 import { FolderRow } from "./FolderRow";
 import { TokenForm } from "./TokenForm";
 import { SMALL, TONE } from "./tone";
@@ -69,20 +70,40 @@ export default function VercelDrawer({
 
   if (!status.signedIn || status.error)
     return (
-      <TokenForm
-        error={status.error}
-        busy={busy}
-        provider="Vercel"
-        tokenUrl={TOKEN_URL}
-        onSave={(token) =>
-          change(async () => {
-            const { username } = await vercel.setToken(token);
-            setProjects(null);
-            notify(`Signed in to Vercel as ${username}`);
-          })
-        }
-        onForget={status.signedIn ? () => void change(() => vercel.forgetToken()) : undefined}
-      />
+      <div className="flex flex-col">
+        <TokenForm
+          error={status.error}
+          busy={busy}
+          provider="Vercel"
+          tokenUrl={TOKEN_URL}
+          onSave={(token) =>
+            change(async () => {
+              const { username } = await vercel.setToken(token);
+              setProjects(null);
+              notify(`Signed in to Vercel as ${username}`);
+            })
+          }
+          onForget={status.signedIn ? () => void change(() => vercel.forgetToken()) : undefined}
+        />
+        <VaultTokenOffer
+          source={vercel}
+          folders={status.folders.map((f) => f.folder)}
+          busy={busy}
+          onUse={(pick) =>
+            change(async () => {
+              const r = await vercel.useVaultToken?.(pick);
+              if (!r) return;
+              if (!("status" in r)) {
+                notify("denied" in r ? "Touch ID said no, so nothing changed." : "That vault no longer has the value.");
+                return;
+              }
+              const { username } = r.status;
+              setProjects(null);
+              notify(`Signed in to Vercel as ${username}`);
+            })
+          }
+        />
+      </div>
     );
 
   async function startPicking(folder: string) {

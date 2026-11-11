@@ -58,8 +58,9 @@ export interface ThreadTransport {
   // a card (the New thread dialog) there's no cardId, and cwd names the folder. Left out, "/" offers nothing.
   listSkills?: (cardId: string | undefined, cwd: string | undefined) => Promise<SkillInfo[]>;
   // The composer's "@" list: people by GitHub login, the card's workspace and repo first (the app's lib/people-search.ts).
-  // Left out, "@" offers nothing.
-  searchPeople?: (cardId: string | undefined, query: string) => Promise<MentionPerson[]>;
+  // Left out, "@" offers nothing. onLocal, when given, hears the people it already holds (workspace, repo) before the
+  // slower GitHub search answers, so the list shows at once.
+  searchPeople?: (cardId: string | undefined, query: string, onLocal?: (people: MentionPerson[]) => void) => Promise<MentionPerson[]>;
   // Send later: the machine that runs the card holds the message until its time (card.schedule, card.unschedule).
   schedule?: (cardId: string, text: string, at: number) => Promise<unknown>;
   unschedule?: (cardId: string, messageId: string) => Promise<unknown>;

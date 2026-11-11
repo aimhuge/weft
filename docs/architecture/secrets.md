@@ -101,6 +101,28 @@ rail's badge counts the top bar's project only.
 - **The vault's IPC bridge goes only to the board window**, never to browser-pane pages
   (`electron/browser-pane.cjs`): pane pages are agent-driven and can be any site.
 
+## The drawer and Settings → Secrets
+
+Built 2026-11-05, after the drawer had gathered about fifteen features and read as a wall. The split: **the 🔐 drawer
+is for using secrets, Settings → Secrets for managing them.**
+
+- **The drawer** (`components/VaultDrawer.tsx`, `components/VaultSection.tsx`): the project picker and search, each
+  vault's name with **+ Add** and **⚙** (Settings → Secrets on that vault), one status line
+  (`components/VaultStatusLine.tsx`, `lib/vault-status.ts`: "Shared with Acme · key v2", "On this Mac only · Share…",
+  "1 Mac asks to join · Review", "Your team shares this vault · Ask to join", why there's no join), the ▲ Vercel line
+  with **Pull** and **Push** (first-class, `components/VercelDriftActions.tsx`), the `.env` nudge with Import all,
+  **To fill in · N** and the values. The status line's action opens Settings → Secrets on the vault.
+- **Settings → Secrets** (`components/SettingsSecretsPage.tsx`, one `components/VaultManage.tsx` card per board
+  project's vault, read through `lib/use-board-vaults.ts`): counts, **Sharing** (Share… with the consent dialog, Ask
+  to join and Open shared vault, the Macs asking with Approve, why there's no join, the recovery key through
+  `components/VaultRecoveryButton.tsx`), **Env files** (Import… with its preview in place, `components/VaultImportFor.tsx`;
+  Locate…; whether Weft writes `.env.local`), the shared vault's **Event log**, and the **Keychain access** log (moved
+  from Security). Every control is the drawer's old one on the same bridge, so nothing new sees a value.
+- **Getting there**: `openSecretsSettings(vaultId)` in `lib/secrets-settings.ts` remembers the page and the vault and
+  fires `weft:open-settings`, which `useMenuBridge` (`lib/board-menu-bridge.ts`) turns into the board's Open Settings;
+  the page scrolls to that vault. A `weft://secrets?repo=…&share=1` link lands there too, with Share… up
+  (`lib/vault-ask.ts`).
+
 ## Importing `.env` files
 
 Most projects already have their secrets in `.env.local`, so that's how a vault gets started.
@@ -220,9 +242,14 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   when they're ready — a name already filled in keeps its value. Nothing opens; the value never comes back.
   Posts `POST /secrets/add-blank` (`electron/vault-routes.cjs`); main calls `vault.addBlanks(folder, names, [env], { source, hint })`
   (`electron/vault.cjs`). The drawer's `SecretRow` (`components/SecretRow.tsx`) shows a visible **Fill in** button on
-  every blank row with the hint under the name, in full: the name wraps after an underscore (`<wbr>`) instead of
+  every blank row with the hint under the name, wrapped to two lines with all of it in the tooltip: the name wraps after an underscore (`<wbr>`) instead of
   being cut off, and every https link in the hint (`hintParts` in `lib/hint-links.ts`) opens in the browser pane
-  (`lib/open-in-pane.ts`, falling back to the system browser), where the user is signed in; blanks sort first within each environment, the rail's badge counts
+  (`lib/open-in-pane.ts`, falling back to the system browser), where the user is signed in. Every blank in a vault,
+  across environments, sits in one **To fill in · N** list above the values (`components/VaultBlanks.tsx`,
+  `lib/vault-blanks.ts`), folded to its header when the vault has values and more than three blanks, open while
+  searching or filling one in. A blank says where the same name already has a value ("set in production"), or its
+  environment when that isn't development; the Fill in button is its only other mark. A row's 🗑 shows on hover, like
+  change, reveal and copy (2026-11-05, after a vault of 20 blanks opened on a wall of Fill in). The rail's badge counts
   them, and the plain Add form's button reads **Add blank / Add N blanks** with the same flow. Older shells without
   `addBlank` keep the "type a value" form.
 - `mcp__secrets__set_value(name, value, environment?, replace?, project?)` (built): a value the thread generated or got
@@ -595,6 +622,17 @@ One Touch ID lets one card use one project's vault for an hour without being ask
   ends every grant. The drawer's idle lock doesn't (it would end them every three minutes). Every grant, revoke and use
   under a grant is an audit line with `via: "grant"`.
 
+## Provider tokens from a vault ("Use VERCEL_TOKEN from aimhuge/weft")
+
+A provider drawer with no token (Vercel, Supabase, Cloudflare; Slack's bot + app pair doesn't fit one value) offers one line
+under its paste form when a project vault already holds the token: "Use VERCEL_TOKEN from aimhuge/weft 🔐".
+`electron/provider-vault-token.cjs` lists NAMES only (`<provider>:vault-token-candidates`: `VERCEL_TOKEN`, `VERCEL_API_TOKEN`,
+`VERCEL_ACCESS_TOKEN`; `SUPABASE_ACCESS_TOKEN`; `CLOUDFLARE_API_TOKEN`, `CF_API_TOKEN`; development before production, values
+only, one per vault). Clicking calls `<provider>:use-vault-token`: `vault.sendValue` asks Touch ID (and audit-logs a `send`), reads
+the value in main and hands it straight to the provider's own `setToken`, which checks it with the provider and seals it in the
+Keychain. The value never reaches the renderer, a log or a thread; the board gets the provider's status, or `denied`/`missing`
+with nothing changed. Board side: `components/VaultTokenOffer.tsx`, types in `lib/provider-vault-token.ts`.
+
 ## Already exposed today
 
 - Fixed 2026-10-12: the Supabase session, refresh token included, is `~/.weft/account.sealed`, encrypted by
@@ -668,7 +706,8 @@ One Touch ID lets one card use one project's vault for an hour without being ask
    `electron/vault-recovery.cjs` (the 24 words). See [teams-vault.md](./teams-vault.md).
 5. **Vercel push** (built 2026-10-12): names diff per environment, push per name with Touch ID, from the drawer or a
    thread. Pull built 2026-10-13: plain Vercel variables the vault has no value for come down, by hand or live through a
-   team webhook (docs/architecture/vercel.md). Still open: "changed" (needs Vercel's values).
+   team webhook (docs/architecture/vercel.md); the drawer's Pull previews them by environment, names the sensitive ones
+   it can't read back, and asks one Touch ID (2026-11-05). Still open: "changed" (needs Vercel's values).
 6. **Teams** (built 2026-10-27): invites, fingerprint check, roles, rotate-on-remove, the event log in the panel.
    A team-linked repo's vault is the team's (built 2026-11-07): linking shares it, any member may add keys, and a Mac
    is approved once for the team ([teams-vault.md](./teams-vault.md#a-linked-repo-shares-its-vault)).

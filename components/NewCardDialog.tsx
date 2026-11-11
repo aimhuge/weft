@@ -126,7 +126,7 @@ export default function NewCardDialog({
           onChange={dialog.saveDraft}
           onSubmit={() => void submit(true, false)}
           onSubmitAlt={() => void submit(true, true)}
-          placeholder={t("What should this thread do? Paste screenshots or videos right where they belong, or hit the mic and talk.")}
+          placeholder={t("What should this thread do? @ to mention someone, / for skills, paste screenshots or hit the mic and talk.")}
           sizeClass="h-full min-h-[180px]"
           className="flex-1"
         />

@@ -15,11 +15,13 @@ const path = require("node:path");
 const { fingerprint } = require("./device-fingerprint.cjs");
 
 const FILE = "device-key.json";
+// What a revoked Mac says wherever it's asked to share, join or grant (docs/architecture/device-registry.md, "Re-adding a Mac").
+const REMOVED = "This Mac was removed from your account. Re-add it in 🔐 or Settings → Devices, then try again.";
 
 /** @returns {{ publicKey: string, privateKey: string }} */
-function loadDeviceKey({ dir, safeStorage, crypto }) {
+function loadDeviceKey({ dir, safeStorage, crypto, file: name = FILE }) {
   if (!safeStorage.isEncryptionAvailable()) throw new Error("The Keychain isn't available, so the vault can't keep its key safely.");
-  const file = path.join(dir, FILE);
+  const file = path.join(dir, name);
   if (fs.existsSync(file)) {
     /** @type {{ publicKey: string, privateKey: string }} */
     const saved = JSON.parse(fs.readFileSync(file, "utf8"));
@@ -144,7 +146,9 @@ async function registeredDevice({ accountClient, dir, safeStorage, crypto }) {
   const pair = loadDeviceKey({ dir, safeStorage, crypto });
   const lookup = async () => {
     const userId = String(accountClient.getClaims()?.sub ?? "");
-    const { data } = await accountClient.supabase.from("devices").select("id").eq("user_id", userId).eq("public_key", pair.publicKey).maybeSingle();
+    const { data } = await accountClient.supabase.from("devices").select("id, revoked_at").eq("user_id", userId).eq("public_key", pair.publicKey).maybeSingle();
+    // A revoked row is never this Mac's to use: the server refuses it anyway, with a reason nobody could act on.
+    if (data?.revoked_at) throw new Error(REMOVED);
     return data?.id;
   };
   let id = await lookup();
@@ -219,4 +223,4 @@ function registerDeviceHandlers({ ipcMain, accountClient, dataDir, isBoard, safe
   require("./device-beat.cjs").startDeviceBeat({ accountClient, dir: dataDir });
 }
 
-module.exports = { loadDeviceKey, registerDevice, registeredDevice, listDevices, deviceFingerprint, registerDeviceHandlers, defaultDeviceName, DEVICE_KEY_FILE: FILE };
+module.exports = { loadDeviceKey, registerDevice, registeredDevice, listDevices, deviceFingerprint, registerDeviceHandlers, defaultDeviceName, DEVICE_KEY_FILE: FILE, REMOVED };

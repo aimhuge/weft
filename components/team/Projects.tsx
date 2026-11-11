@@ -1,13 +1,17 @@
 "use client";
 
 // A team's projects (GitHub repos, "owner/name") in Settings → Team, first on the page: the linked list, each with
-// how many of this board's cards it has, Remove for those who manage the team, and "Add project" (one owner/name
-// field whose typeahead suggests the board's repos and the team's GitHub org's repos not yet linked). Members see
-// only the projects they were granted; who sees which is under Advanced (./ProjectAccess). The actions come in as a
-// prop like the rest of components/team.
+// how many of this board's cards it has and its 🔐 vault (./ProjectVault: shared or on which Mac, with Share secrets
+// or Devices…), Remove for those who manage the team, and "Add project" (one owner/name field whose typeahead
+// suggests the board's repos and the team's GitHub org's repos not yet linked). Members see only the projects they
+// were granted; who sees which is under Advanced (./ProjectAccess). The actions come in as a prop like the rest of
+// components/team.
 import { useState, useTransition, type SubmitEvent } from "react";
 import { REPO_PATTERN, type TeamClientActions, type TeamProject } from "@/lib/team-types";
 import { unlinkedRepos } from "@/lib/team-view";
+import { useHereVaults } from "@/lib/use-here-vaults";
+import type { VaultOrg } from "@/lib/vault-shared";
+import { ProjectVault } from "./ProjectVault";
 
 const FIELD = "rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12.5px] text-ink outline-none focus:border-accent";
 const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
@@ -66,11 +70,12 @@ function AddProject({ linked, boardRepos, actions }: { linked: string[]; boardRe
   );
 }
 
-type RowProps = { project: TeamProject; canManage: boolean; actions: TeamClientActions; cards?: number };
+// here: this Mac's vaults (desktop only, lib/use-here-vaults.ts), for the row's 🔐 chip and Share secrets.
+type RowProps = { project: TeamProject; canManage: boolean; actions: TeamClientActions; cards?: number; org: VaultOrg | null; here: ReturnType<typeof useHereVaults> };
 
 const plural = (n: number, one: string) => `${n} ${n === 1 ? one : `${one}s`}`;
 
-function ProjectRow({ project, canManage, actions, cards }: RowProps) {
+function ProjectRow({ project, canManage, actions, cards, org, here }: RowProps) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -94,6 +99,15 @@ function ProjectRow({ project, canManage, actions, cards }: RowProps) {
           {project.repo}
         </a>
         {cards ? <span className="text-[12px] text-muted">{plural(cards, "card")}</span> : null}
+        <ProjectVault
+          repo={project.repo}
+          vault={project.vault}
+          here={here.byRepo.get(project.repo.toLowerCase())}
+          bridge={here.bridge}
+          org={org}
+          canShare={canManage}
+          onChanged={here.reload}
+        />
         {canManage ? (
           <button type="button" onClick={remove} disabled={pending} className={BUTTON}>
             {pending ? "Removing…" : "Remove"}
@@ -115,6 +129,8 @@ export function Projects({
   actions,
   boardRepos,
   cards = {},
+  org,
+  members = 0,
 }: {
   projects: TeamProject[];
   canManage: boolean;
@@ -123,8 +139,14 @@ export function Projects({
   boardRepos: string[];
   // This board's cards per repo (lib/use-board-repos.ts).
   cards?: Record<string, number>;
+  // The workspace, for sharing a project's vault with it, and how many people are in it. Missing: rows show the
+  // vault's state but offer no share.
+  org?: { id: string; slug: string; name: string };
+  members?: number;
 }) {
   const repos = projects.map((p) => p.repo);
+  const here = useHereVaults(projects.length > 0);
+  const target: VaultOrg | null = org ? { ...org, members, admin: canManage } : null;
   return (
     <>
       {projects.length === 0 ? (
@@ -132,7 +154,7 @@ export function Projects({
       ) : (
         <ul className="divide-y divide-line">
           {projects.map((p) => (
-            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} cards={cards[p.repo]} />
+            <ProjectRow key={p.repo} project={p} canManage={canManage} actions={actions} cards={cards[p.repo]} org={target} here={here} />
           ))}
         </ul>
       )}

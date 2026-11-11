@@ -6,10 +6,8 @@ import type { ImportScan, VaultBridge, VaultOverview } from "@/lib/vault-view";
 import "./test-utils";
 import VaultDrawer from "./VaultDrawer";
 
-// The drawer's recovery menu item uses next/navigation's useRouter(); the app router isn't mounted in a test.
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 
-// The 🔐 drawer's Import all on the nudge, and Locate… in a vault's header and the import preview.
+// The 🔐 drawer's Import all on the nudge. Locate… lives on Settings → Secrets now (SettingsSecretsPage.test.tsx).
 const AWAY = "../web-build/.env.local";
 
 const overview: VaultOverview = {
@@ -41,7 +39,7 @@ function setup(over: Partial<Record<keyof VaultBridge, unknown>> = {}) {
   return { b, notify, reload };
 }
 
-describe("VaultDrawer Import all and Locate…", () => {
+describe("VaultDrawer Import all", () => {
   it("imports everything the nudge found in one click, and says so", async () => {
     const { b, notify, reload } = setup();
     expect(screen.getByText(`Found 1 secret in ${AWAY}: move it into the vault?`)).toBeInTheDocument();
@@ -49,31 +47,5 @@ describe("VaultDrawer Import all and Locate…", () => {
     await waitFor(() => expect(b.import).toHaveBeenCalledWith("/dev/web", [{ file: AWAY, name: "KEY" }]));
     expect(notify).toHaveBeenCalledWith(`Imported 1 secret from ${AWAY}.`);
     expect(reload).toHaveBeenCalled();
-  });
-
-  it("locates a file, then previews it with Locate… still at hand", async () => {
-    const { b } = setup();
-    await userEvent.click(screen.getByRole("button", { name: "Locate…" }));
-    expect(b.locate).toHaveBeenCalledWith("/dev/web");
-    expect(await screen.findByText("Import into o/web")).toBeInTheDocument();
-    expect(screen.getByText(`${AWAY} · development`)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Locate…" }));
-    expect(b.locate).toHaveBeenCalledTimes(2);
-  });
-
-  it("toasts a file with nothing in it, stays put when you cancel, and toasts a failure", async () => {
-    const locate = vi.fn().mockResolvedValueOnce({ file: "id_rsa", empty: true }).mockResolvedValueOnce(null).mockRejectedValueOnce(new Error("no dialog"));
-    const { b, notify } = setup({ locate });
-    await userEvent.click(screen.getByRole("button", { name: "Locate…" }));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("id_rsa has no NAME=value lines, so Weft didn't keep it."));
-    await userEvent.click(screen.getByRole("button", { name: "Locate…" }));
-    await userEvent.click(screen.getByRole("button", { name: "Locate…" }));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.objectContaining({ message: "no dialog" })));
-    expect(b.scan).not.toHaveBeenCalled();
-  });
-
-  it("hides Locate… in a shell too old to open the dialog", () => {
-    setup({ locate: undefined });
-    expect(screen.queryByRole("button", { name: "Locate…" })).toBeNull();
   });
 });

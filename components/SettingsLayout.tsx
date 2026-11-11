@@ -1,5 +1,5 @@
 // Small layout helpers for the Settings dialog: a frosted card over the scene, a row's title and
-// hint, and the unsaved dot for the page nav.
+// hint, the unsaved dot and the version line for the page nav.
 import { useUiText } from "@/lib/ui-language";
 import type { ReactNode } from "react";
 import { SETTINGS_HINT, SETTINGS_TITLE } from "@/lib/settings-shared";
@@ -33,4 +33,17 @@ export function SettingsCard({ children }: { children: ReactNode }) {
 export function SettingsUnsavedDot() {
   const t = useUiText();
   return <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" aria-label={t("Unsaved changes")} />;
+}
+
+// Which Weft this is, under the page list: the version, and the commit it was built from.
+export function SettingsVersion() {
+  const version = process.env.NEXT_PUBLIC_APP_VERSION;
+  const commit = process.env.NEXT_PUBLIC_APP_COMMIT;
+  if (!version) return null;
+  return (
+    <p className="mt-1.5 select-text border-t border-line px-3 pb-1 pt-2.5 text-[11.5px] text-faint" title={commit ? `Built from ${commit}` : undefined}>
+      Weft v{version}
+      {commit && <span className="ml-1.5 font-mono text-[10.5px]">{commit.slice(0, 7)}</span>}
+    </p>
+  );
 }

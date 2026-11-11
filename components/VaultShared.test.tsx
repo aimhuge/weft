@@ -2,7 +2,10 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
-import { DeviceRequests, JoinOffer, SharedBadge } from "./VaultShared";
+import { DeviceRequests, JoinHint, JoinOffer, SharedBadge } from "./VaultShared";
+
+const signIn = vi.fn();
+vi.mock("@/lib/use-account", () => ({ ACCOUNT_EVENT: "weft:account", useAccount: () => ({ waiting: null, signIn }) }));
 
 afterEach(cleanup);
 
@@ -56,6 +59,29 @@ describe("DeviceRequests", () => {
     await waitFor(() => expect(onDone).toHaveBeenCalledTimes(1));
     fireEvent.click(screen.getByText("Decline"));
     await waitFor(() => expect(deviceDecline).toHaveBeenCalledWith("p1"));
+  });
+});
+
+describe("JoinHint", () => {
+  it("says nothing is shared yet, and where to press Share…", () => {
+    render(<JoinHint hint="none" onDone={vi.fn()} />);
+    expect(screen.getByText(/Not shared yet: press Share… on the Mac that has these secrets/)).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
+  it("says it couldn't check, not that nothing is shared", () => {
+    render(<JoinHint hint="error" onDone={vi.fn()} />);
+    expect(screen.getByText(/Couldn't check for a shared vault/)).toBeTruthy();
+  });
+
+  it("signed out, signs in and reloads the drawer once the account changes", () => {
+    const onDone = vi.fn();
+    render(<JoinHint hint="signed-out" onDone={onDone} />);
+    expect(screen.getByText(/Sign in to see this vault from your other Macs/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Sign in"));
+    expect(signIn).toHaveBeenCalledWith("github");
+    window.dispatchEvent(new Event("weft:account"));
+    expect(onDone).toHaveBeenCalled();
   });
 });
 

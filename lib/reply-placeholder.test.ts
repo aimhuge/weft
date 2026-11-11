@@ -7,7 +7,7 @@ describe("replyPlaceholder", () => {
   });
 
   it("shows the working line when a turn is running", () => {
-    expect(replyPlaceholder(true, "run tests", "Reply…", false)).toBe("Write the next message");
+    expect(replyPlaceholder(true, "run tests", "Reply…", false)).toBe("Write the next message: @ mentions, / skills");
   });
 
   it("shows the suggestion with the Tab cue when idle and a suggestion is given", () => {

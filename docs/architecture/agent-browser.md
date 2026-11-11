@@ -86,7 +86,7 @@ Password fields come out of Chrome already masked.
 
 The routes sit on the pane's token-guarded control server like the rest of `/browser/*`. There's still no route for
 arbitrary JavaScript: each operation is a fixed script with its arguments JSON-encoded in. Navigation stays behind
-the per-card origin allowlist and Touch ID (`electron/pane-origins.cjs`). Snapshot text, titles, console text and
+the origin allowlist and Touch ID (`electron/pane-origins.cjs`, with the site list in `electron/pane-sites.cjs`). Snapshot text, titles, console text and
 failed-request URLs go through `paneSecrets.redact`, so a vault value a thread typed into the page reads back as
 `‹NAME›`. The vault's own fill still uses `electron/pane-actions.cjs` `typeText`, on the same element lookup.
 

@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { ACCOUNT_EVENT, useAccount } from "@/lib/use-account";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
-import { keyVersionTitle, sharedLabel, shareTargets, type VaultDeviceRequest, type VaultJoin, type VaultOrg } from "@/lib/vault-shared";
+import { JOIN_HINTS, keyVersionTitle, sharedLabel, shareTargets, type VaultDeviceRequest, type VaultJoin, type VaultJoinHint, type VaultOrg } from "@/lib/vault-shared";
+import { DeviceStandingLine } from "./DeviceStanding";
 import Icon from "./Icon";
 import { VaultShareDialog } from "./VaultShareDialog";
 
@@ -37,6 +39,8 @@ export function ShareOffer({
   secrets = 0,
   onShared,
   notify,
+  text = "Share…",
+  startOpen = false,
 }: {
   // The project folder whose vault is shared.
   folder: string;
@@ -55,8 +59,18 @@ export function ShareOffer({
   onShared: () => void;
   // Shows an error as a toast.
   notify: (err: unknown) => void;
+  // The button's words: the team page's project rows say "Share secrets".
+  text?: string;
+  // Opens with the dialog up: a weft://secrets?share=1 link (lib/vault-ask.ts) asked for it.
+  startOpen?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(startOpen);
+  // A later weft://secrets?share=1 opens it again: adjust during render, not in an effect.
+  const [askedOpen, setAskedOpen] = useState(startOpen);
+  if (askedOpen !== startOpen) {
+    setAskedOpen(startOpen);
+    if (startOpen) setOpen(true);
+  }
   const [busy, setBusy] = useState(false);
   const [picked, setPicked] = useState(org?.id ?? "");
   const share = bridge?.share?.bind(bridge);
@@ -88,7 +102,7 @@ export function ShareOffer({
         title={`Share this vault with ${chosen.name}`}
         className="flex items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] text-muted hover:bg-sunken hover:text-ink disabled:opacity-50"
       >
-        <Icon name="share" size={11} /> Share…
+        <Icon name="share" size={11} /> {text}
       </button>
       {open && (
         <VaultShareDialog
@@ -178,5 +192,31 @@ export function DeviceRequests({ requests, bridge, onDone, notify }: { requests:
         </div>
       ))}
     </>
+  );
+}
+
+const HINT = "px-1.5 pt-0.5 text-[10.5px] leading-snug text-faint";
+
+// Why there's no "Ask to join": one small line under the header. Signed out, it carries the account's sign-in
+// and reloads the drawer once the account changes, so Ask to join can show up.
+export function JoinHint({ hint, onDone, notify = () => undefined }: { hint: VaultJoinHint; onDone: () => void; notify?: (err: unknown) => void }) {
+  if (hint === "signed-out") return <SignInHint onDone={onDone} />;
+  if (hint === "revoked" || hint === "unregistered") return <DeviceStandingLine state={hint} onDone={onDone} notify={notify} />;
+  return <p className={HINT}>{JOIN_HINTS[hint]}</p>;
+}
+
+function SignInHint({ onDone }: { onDone: () => void }) {
+  const { waiting, signIn } = useAccount();
+  useEffect(() => {
+    window.addEventListener(ACCOUNT_EVENT, onDone);
+    return () => window.removeEventListener(ACCOUNT_EVENT, onDone);
+  }, [onDone]);
+  return (
+    <p className={HINT}>
+      {JOIN_HINTS["signed-out"]}{" "}
+      <button type="button" disabled={Boolean(waiting)} onClick={() => void signIn("github")} className="text-accent hover:underline disabled:opacity-50">
+        {waiting ? "Signing in…" : "Sign in"}
+      </button>
+    </p>
   );
 }

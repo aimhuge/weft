@@ -35,7 +35,7 @@ export interface PaneTab {
 
 // What the app menu, dock, tray, global shortcuts and weft:// links ask a window to do.
 // open-card carries an id.
-export type MenuAction = "new-thread" | "settings" | "open-card" | "find" | "find-next" | "find-previous" | "terminal" | "add-webhook";
+export type MenuAction = "new-thread" | "settings" | "open-card" | "find" | "find-next" | "find-previous" | "terminal" | "add-webhook" | "new-tab" | "open-secrets";
 
 // The board's view of the signed-in user's billing (docs/architecture/billing.md). Mirrors the JSON the local
 // /api/account/billing route returns, kept client-side so React components don't pull in server-only modules.
@@ -58,6 +58,8 @@ export interface ShellBridge {
   platform: string;
   // The page's zoom factor, 1 at Actual Size.
   zoomFactor?(): number;
+  // A hover tip in its own window, over the browser pane (electron/native-tip.cjs); missing on older shells.
+  tip?: { show(text: string, anchor: { x: number; y: number; width: number; height: number }): void; hide(): void };
   browser: {
     // key is the card whose browser to load into; each card has its own, and the open card's is on screen.
     open(url: string, key?: string): Promise<unknown>;
@@ -66,6 +68,10 @@ export interface ShellBridge {
     // Closes the browsers of cards not in keys.
     prune(keys: string[]): void;
     getState(): Promise<BrowserState>;
+    // The hosts threads open without asking that you added or said yes to (electron/pane-sites.cjs); a shell from before it has none.
+    sites?(): Promise<string[]>;
+    addSite?(host: string): Promise<string | null>;
+    removeSite?(host: string): Promise<boolean>;
     // Shows or hides the pane. key is the card the pane is for, when the board knows it: the
     // shell uses it to make the right view, instead of the one that happened to be active.
     setVisible(visible: boolean, key?: string | null): void;

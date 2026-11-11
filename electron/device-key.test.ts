@@ -50,6 +50,13 @@ describe("registeredDevice", () => {
     expect(device).toEqual({ id: "device-1", publicKey: pair.publicKey, privateKey: pair.privateKey });
   });
 
+  it("refuses a revoked row with what to do, instead of a revoked id the server would turn down", async () => {
+    const dir = tmp();
+    const { publicKey } = loadDeviceKey({ dir, safeStorage: safeStorage(), crypto: sodium });
+    const { accountClient } = devicesTable([{ id: "gone", user_id: "user-1", public_key: publicKey, revoked_at: "2026-11-05T00:00:00Z" }]);
+    await expect(registeredDevice({ accountClient, dir, safeStorage: safeStorage(), crypto: sodium })).rejects.toThrow("This Mac was removed from your account. Re-add it");
+  });
+
   it("takes this account's row when two accounts share the Mac", async () => {
     const dir = tmp();
     const { publicKey } = loadDeviceKey({ dir, safeStorage: safeStorage(), crypto: sodium });

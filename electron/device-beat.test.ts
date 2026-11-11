@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { BEAT_MS, FIRST_BEAT_MS, beatDevice, linkHost, startDeviceBeat } from "./device-beat.cjs";
+import { BEAT_MS, FIRST_BEAT_MS, beatDevice, linkHost, reportLocalVaults, startDeviceBeat } from "./device-beat.cjs";
 
 const tmp = (key: unknown = { publicKey: "pub-1", privateKey: "sealed" }) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-beat-"));
@@ -82,7 +82,7 @@ describe("beatDevice", () => {
 });
 
 describe("startDeviceBeat", () => {
-  it("beats soon after launch, then on the interval, until stopped", async () => {
+  it("beats soon after launch, then on the interval, until stopped; the vault list only when it changed", async () => {
     vi.useFakeTimers();
     const { accountClient } = client();
     const from = vi.spyOn(accountClient.supabase, "from");
@@ -90,13 +90,15 @@ describe("startDeviceBeat", () => {
 
     expect(from).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(FIRST_BEAT_MS);
-    expect(from).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(BEAT_MS);
+    // The beat, then the first vault list.
     expect(from).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(BEAT_MS);
+    // The list is the same, so only the beat.
+    expect(from).toHaveBeenCalledTimes(3);
 
     stop();
     await vi.advanceTimersByTimeAsync(BEAT_MS * 3);
-    expect(from).toHaveBeenCalledTimes(2);
+    expect(from).toHaveBeenCalledTimes(3);
   });
 });
 
@@ -107,24 +109,29 @@ const withHost = (id = HOST) => {
   return dir;
 };
 
-// The host link's query: update, two eq filters and the revoked_at filter, awaited.
-const linkClient = (error: { message: string } | null = null, sub: unknown = "user-1") => {
+// The host link's query: update, two eq filters and the revoked_at filter, awaited. Writes land in calls; the link's read of a revoked
+// heartbeat row (cloud_workers) answers `revoked`, and lands in reads.
+const linkClient = (error: { message: string } | null = null, sub: unknown = "user-1", revoked: unknown[] = [], readError: unknown = null) => {
   const calls: { patch?: unknown; filters: unknown[][] }[] = [];
+  const reads: { table: string; filters: unknown[][] }[] = [];
   const supabase = {
-    from: () => {
+    from: (table: string) => {
       const call: { patch?: unknown; filters: unknown[][] } = { filters: [] };
-      calls.push(call);
+      let read = false;
       // Thenable like supabase-js's builder: the link awaits it after its filters, the beat after `is`.
       const query = {
-        update: (patch: unknown) => ((call.patch = patch), query),
+        select: () => ((read = true), reads.push({ table, filters: call.filters }), query),
+        update: (patch: unknown) => ((call.patch = patch), calls.push(call), query),
         eq: (...f: unknown[]) => (call.filters.push(f), query),
+        not: (...f: unknown[]) => (call.filters.push(["not", ...f]), query),
+        limit: () => query,
         is: (...f: unknown[]) => (call.filters.push(["is", ...f]), query),
-        then: (done: (r: { error: unknown }) => unknown) => done({ error }),
+        then: (done: (r: { data?: unknown; error: unknown }) => unknown) => done(read ? { data: revoked, error: readError } : { error }),
       };
       return query;
     },
   };
-  return { calls, accountClient: { getClaims: () => ({ sub }), supabase } };
+  return { calls, reads, accountClient: { getClaims: () => ({ sub }), supabase } };
 };
 
 describe("linkHost", () => {
@@ -147,6 +154,21 @@ describe("linkHost", () => {
     expect(await linkHost({ accountClient: linkClient(null, null).accountClient, dir: withHost() })).toBe(false);
     expect(await linkHost({ accountClient, dir: tmp() })).toBe(false);
     expect(await linkHost({ accountClient, dir: withHost("not-an-id") })).toBe(false);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("leaves a revoked device id unlinked, so a re-added Mac's new key row doesn't read revoked", async () => {
+    const warn = vi.fn();
+    const { calls, reads, accountClient } = linkClient(null, "user-1", [{ id: "w1" }]);
+    expect(await linkHost({ accountClient, dir: withHost(), warn })).toBe(true);
+    expect(reads[0]).toEqual({ table: "cloud_workers", filters: [["kind", "desktop"], ["device", HOST], ["not", "revoked_at", "is", null]] });
+    expect(calls).toHaveLength(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("device id was revoked"));
+  });
+
+  it("tries again later when the revoked check can't be read", async () => {
+    const { calls, accountClient } = linkClient(null, "user-1", [], { message: "offline" });
+    expect(await linkHost({ accountClient, dir: withHost() })).toBe(false);
     expect(calls).toHaveLength(0);
   });
 
@@ -180,5 +202,41 @@ describe("startDeviceBeat's host link", () => {
     stop();
     expect(calls.filter((c) => (c.patch as { host_device?: string }).host_device)).toHaveLength(2);
     expect(warn.mock.calls.filter(([line]) => String(line).startsWith("Device host link"))).toHaveLength(1);
+  });
+});
+
+describe("reportLocalVaults", () => {
+  const withVaults = (vaults: { id: string; secrets: unknown[] }[], shared: number[] = []) => {
+    const dir = tmp();
+    const vdir = path.join(dir, "vault");
+    fs.mkdirSync(vdir);
+    vaults.forEach((v, i) => {
+      const hash = String(i).padStart(16, "0");
+      fs.writeFileSync(path.join(vdir, `${hash}.json`), JSON.stringify(v));
+      if (shared.includes(i)) fs.writeFileSync(path.join(vdir, `${hash}.shared.json`), "{}");
+    });
+    return dir;
+  };
+
+  it("names the repos of this Mac's unshared vaults on its own row", async () => {
+    const { calls, accountClient } = linkClient();
+    const dir = withVaults([
+      { id: "github:aimhuge/weft", secrets: [{ name: "A", ciphertext: "x" }] },
+      { id: "github:aimhuge/shared", secrets: [{ name: "A", ciphertext: "x" }] },
+    ], [1]);
+    expect(await reportLocalVaults({ accountClient, dir })).toEqual(["aimhuge/weft"]);
+    expect(calls[0]).toMatchObject({ patch: { local_vaults: ["aimhuge/weft"] }, filters: [["user_id", "user-1"], ["public_key", "pub-1"]] });
+  });
+
+  it("sends nothing signed out, and null when the server refuses", async () => {
+    const warn = vi.fn();
+    expect(await reportLocalVaults({ accountClient: linkClient(null, null).accountClient, dir: tmp() })).toBeNull();
+    expect(await reportLocalVaults({ accountClient: linkClient({ message: "no column" }).accountClient, dir: tmp(), warn })).toBeNull();
+    expect(warn).toHaveBeenCalledWith("Device vault list: no column");
+  });
+
+  it("never throws", async () => {
+    const accountClient = { getClaims: () => ({ sub: "user-1" }), supabase: { from: () => { throw new Error("boom"); } } };
+    expect(await reportLocalVaults({ accountClient, dir: tmp() })).toBeNull();
   });
 });

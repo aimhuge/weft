@@ -15,6 +15,7 @@ import { runRenameTeam } from "./team-create";
 import { runDeleteTeam } from "./team-delete";
 import { runLinkProject, runUnlinkProject } from "./team-projects";
 import { listVisibleProjects, runSetProjectAccess } from "./team-project-access";
+import { withProjectVaults } from "./team-project-vaults";
 import { workspaceCanHaveMembers } from "./billing/plan-gate";
 import { revokeMemberDevices } from "./team-vault-rotate";
 import { memberLogins } from "./team-member-logins";
@@ -113,7 +114,8 @@ export async function teamSnapshot(ctx: TeamContext): Promise<TeamSnapshot> {
     createdAt: i.created_at,
     expiresAt: i.expires_at,
   }));
-  return { ...core, members: memberRows, pending: inviteRows, projects };
+  // Each project's 🔐 vault (shared, or on which Mac), for the Projects rows' chip and Share secrets.
+  return { ...core, members: memberRows, pending: inviteRows, projects: await withProjectVaults(ctx, projects, memberRows) };
 }
 
 // ─── invite ──────────────────────────────────────────────────────────────

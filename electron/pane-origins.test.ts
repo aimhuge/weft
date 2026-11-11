@@ -1,4 +1,4 @@
-// electron/browser-pane.cjs: the origin policy the L-5 fix introduces. The helpers are pure
+// electron/browser-pane.cjs: the origin policy the L-5 fix introduces, with the site list (pane-sites.cjs) faked. The helpers are pure
 // functions of the (keyed) authorized Map and the call's inputs, so the tests cover the gates
 // without standing up the pane's webContentsView.
 import { describe, expect, it, vi } from "vitest";
@@ -10,8 +10,15 @@ describe("canThreadOpen", () => {
     expect(canThreadOpen(new Map(), "k", "null", "https://x")).toBe(true);
   });
 
-  it("allows the first load (no prior origin) — board's restore call", () => {
-    expect(canThreadOpen(new Map(), "k", "https://x", null)).toBe(true);
+  it("asks on a card's first page too: an empty pane is no free pass", () => {
+    expect(canThreadOpen(new Map(), "k", "https://x", null)).toBe(false);
+  });
+
+  it("allows what the site list allows, by host", () => {
+    const sites = { allows: vi.fn((host: string) => host === "localhost"), add: vi.fn() };
+    expect(canThreadOpen(new Map(), "k", "http://localhost:8080", "null", sites)).toBe(true);
+    expect(sites.allows).toHaveBeenCalledWith("localhost");
+    expect(canThreadOpen(new Map(), "k", "https://mail.google.com", "null", sites)).toBe(false);
   });
 
   it("allows same-origin navigation", () => {
@@ -61,7 +68,7 @@ describe("originOf", () => {
 });
 
 describe("authorizeThreadOpen", () => {
-  const call = (ask: (reason: string) => Promise<boolean>, auth = new Map<string, Set<string>>(), pending = new Map()) =>
+  const call = (ask: (reason: string) => Promise<boolean>, auth = new Map<string, Set<string>>(), pending = new Map<string, Promise<boolean>>()) =>
     authorizeThreadOpen({ authorized: auth, pending, targetKey: "k", origin: "https://www.google.com", priorOrigin: "https://x", ask });
 
   it("doesn't ask when the host is already allowed", async () => {
@@ -74,7 +81,7 @@ describe("authorizeThreadOpen", () => {
     const auth = new Map<string, Set<string>>();
     const ask = vi.fn().mockResolvedValue(true);
     expect(await call(ask, auth)).toBe(true);
-    expect(ask).toHaveBeenCalledWith("open www.google.com in a card's browser pane");
+    expect(ask).toHaveBeenCalledWith("open www.google.com in a card's browser pane, now and from now on");
     expect(auth.get("k")?.has("https://www.google.com")).toBe(true);
     expect(await call(ask, auth)).toBe(true);
     expect(ask).toHaveBeenCalledTimes(1);
@@ -89,6 +96,19 @@ describe("authorizeThreadOpen", () => {
     expect(ask).toHaveBeenCalledTimes(2);
   });
 
+  it("saves a yes to the site list, so every card skips the ask after", async () => {
+    const sites = { allows: vi.fn(() => false), add: vi.fn() };
+    const ask = vi.fn().mockResolvedValue(true);
+    expect(await authorizeThreadOpen({ authorized: new Map(), pending: new Map(), targetKey: "k", origin: "https://mail.google.com", priorOrigin: null, ask, sites })).toBe(true);
+    expect(sites.add).toHaveBeenCalledWith("mail.google.com");
+  });
+
+  it("leaves the site list alone on a no", async () => {
+    const sites = { allows: vi.fn(() => false), add: vi.fn() };
+    await authorizeThreadOpen({ authorized: new Map(), pending: new Map(), targetKey: "k", origin: "https://mail.google.com", priorOrigin: null, ask: vi.fn().mockResolvedValue(false), sites });
+    expect(sites.add).not.toHaveBeenCalled();
+  });
+
   it("treats a failed prompt as a no", async () => {
     expect(await call(vi.fn().mockRejectedValue(new Error("no window")))).toBe(false);
   });
@@ -97,7 +117,7 @@ describe("authorizeThreadOpen", () => {
     let answer: (ok: boolean) => void = () => {};
     const ask = vi.fn(() => new Promise<boolean>((resolve) => (answer = resolve)));
     const auth = new Map<string, Set<string>>();
-    const pending = new Map();
+    const pending = new Map<string, Promise<boolean>>();
     const both = Promise.all([call(ask, auth, pending), call(ask, auth, pending)]);
     await Promise.resolve();
     answer(true);

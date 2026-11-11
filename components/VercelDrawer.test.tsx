@@ -42,8 +42,9 @@ function bridge(): { [K in keyof VercelBridge]: ReturnType<typeof vi.fn> } {
   };
 }
 
-function setup(status: VercelStatus | null, project: string | null = null, error: string | null = null) {
+function setup(status: VercelStatus | null, project: string | null = null, error: string | null = null, tweak: (b: Record<string, unknown>) => void = () => {}) {
   const b = bridge();
+  tweak(b);
   const reload = vi.fn(() => Promise.resolve());
   const notify = vi.fn();
   const onOpenUrl = vi.fn();
@@ -66,6 +67,23 @@ describe("VercelDrawer", () => {
     expect(screen.getByText("Asking Vercel…")).toBeInTheDocument();
     rerender(<VercelDrawer bridge={b} status={null} error="offline" reload={vi.fn()} project={null} onOpenUrl={vi.fn()} notify={vi.fn()} />);
     expect(screen.getByText("offline")).toBeInTheDocument();
+  });
+
+  it("offers a vault's token by name and keeps it after Touch ID, or says nothing changed", async () => {
+    const pick = { folder: "/dev/web", name: "VERCEL_TOKEN", environment: "development" as const };
+    const { b, reload, notify } = setup({ signedIn: false, user: null, error: null, folders: [folder("/dev/web")] }, null, null, (x) => {
+      x.vaultTokenCandidates = vi.fn(() => Promise.resolve([{ ...pick, label: "aimhuge/weft" }]));
+      x.useVaultToken = vi.fn().mockResolvedValueOnce({ denied: true }).mockResolvedValueOnce({ missing: true }).mockResolvedValueOnce({ status: { username: "fotoflo" } });
+    });
+    const offer = await screen.findByRole("button", { name: /Use VERCEL_TOKEN from aimhuge\/weft/ });
+    await userEvent.click(offer);
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Touch ID said no, so nothing changed."));
+    await userEvent.click(offer);
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("That vault no longer has the value."));
+    await userEvent.click(offer);
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Signed in to Vercel as fotoflo"));
+    expect(b.useVaultToken).toHaveBeenCalledWith(expect.objectContaining(pick));
+    expect(reload).toHaveBeenCalledTimes(3);
   });
 
   it("asks for a token, opens the token page, and saves it", async () => {

@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useEditorState, type Editor } from "@tiptap/react";
 import type { MentionPerson } from "@weft/client";
 import { mentionAtCursor } from "./composer-mention";
+import { localSearchPeople, preloadPeople } from "./people-search";
 import { useThreadTransport } from "./thread-transport";
 import type { TypeaheadState } from "./use-composer-keys";
 
@@ -20,10 +21,17 @@ export function useMentionTypeahead(editor: Editor | null, cardId?: string): Typ
   const [highlight, setHighlight] = useState<{ query: string | null; i: number }>({ query: null, i: 0 });
   const [dismissedAt, setDismissedAt] = useState<number | null>(null);
 
+  // The desktop composer's open: fetch the workspace and repo people now, not on the first "@".
+  useEffect(() => {
+    if (editor && searchPeople === localSearchPeople) preloadPeople(cardId);
+  }, [editor, cardId, searchPeople]);
+
   useEffect(() => {
     if (text === null || !searchPeople) return;
     let ignore = false;
-    const run = () => void searchPeople(cardId, text).then((people) => !ignore && setFound({ for: text, people }), () => {});
+    const show = (people: MentionPerson[]) => !ignore && setFound({ for: text, people });
+    // Local people show on the next frame; only GitHub's search waits out the typing pause.
+    const run = () => void searchPeople(cardId, text, show).then(show, () => {});
     const timer = setTimeout(run, text ? MENTION_DEBOUNCE_MS : 0);
     return () => {
       ignore = true;

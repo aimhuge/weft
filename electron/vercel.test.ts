@@ -302,7 +302,8 @@ describe("registerVercel", () => {
     await handlers.get("vercel:env-pull")!({ sender: board }, "/a");
     await expect(handlers.get("vercel:env-pull")!({ sender: {} }, "/a")).rejects.toThrow("board window");
     expect(env.pull).toHaveBeenCalledTimes(1);
-    expect(env.pull).toHaveBeenCalledWith("/a");
+    // The drawer's Pull asks Touch ID; the control server's (the webhook) doesn't.
+    expect(env.pull).toHaveBeenCalledWith("/a", { confirm: true });
     await handlers.get("vercel:env-push")!({ sender: board }, "/a", "KEY", "production");
     await expect(handlers.get("vercel:env-push")!({ sender: {} }, "/a", "KEY", "production")).rejects.toThrow("board window");
     expect(env.status).toHaveBeenCalledWith("/a");

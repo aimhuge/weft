@@ -163,7 +163,7 @@ describe("ReplyBox", () => {
     it("the chip says the next message waits", () => {
       const { box } = setup({ live: true });
       expect(screen.getByText("Queue · after this turn")).toBeInTheDocument();
-      expect(box).toHaveAttribute("placeholder", "Write the next message");
+      expect(box).toHaveAttribute("placeholder", "Write the next message: @ mentions, / skills");
     });
   });
 
@@ -262,7 +262,7 @@ describe("ReplyBox", () => {
 
     it("isn't offered while the thread works", async () => {
       const { box } = setup({ suggestion: "run the tests", live: true });
-      expect(box).toHaveAttribute("placeholder", "Write the next message");
+      expect(box).toHaveAttribute("placeholder", "Write the next message: @ mentions, / skills");
       box.focus();
       await userEvent.keyboard("{Tab}");
       expect(box).toHaveValue("");

@@ -7,6 +7,7 @@ board project to a Supabase project, the same way ▲ links one to Vercel (docs/
 
 ## The token
 
+- With no token saved and a project vault holding `SUPABASE_ACCESS_TOKEN`, the drawer offers "Use SUPABASE_ACCESS_TOKEN from <vault>" (Touch ID in main, value straight to `setToken`; docs/architecture/secrets.md).
 - You paste a personal access token (`sbp_…`) from supabase.com/dashboard/account/tokens into the drawer. Main checks
   it (`GET /v1/organizations`, which also names the orgs shown under the header) before keeping it.
 - Main seals it with Electron's `safeStorage` (Keychain) in `~/.weft/supabase-token.json` (mode 0600), and refuses

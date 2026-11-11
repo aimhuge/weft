@@ -39,6 +39,10 @@ Writing, terminal and app shortcuts (⌘↵, ⌘B, ⌘\\, ⌘J, ⌃⌥Space and 
 
 Buttons and menus that have a shortcut show it: header tooltips, the `N` cap on New thread, the `/` badge in the filter box, "? Shortcuts" in the footer, and the right-click menus. Hold a modifier outside a text field for the cheat card (`ModifierHint`); it renders nothing until first used, since macOS key names differ between server and client.
 
+## ⌘T: a new browser tab
+
+File → New Tab (⌘T) is a menu accelerator, so it works from the composer, a reply box or a page in the pane alike. `electron/menus.cjs` opens a blank tab for the open card (`pane.newTab()`, which also shows the pane), gives the keyboard back to the board's webContents and sends `new-tab`. `lib/board-menu-bridge.ts` passes it to `lib/pane-new-tab.ts`, and `components/BrowserPane.tsx` bumps the same `fresh` counter the toolbar's + does, so the address bar empties and takes focus. The pane may mount only after the ask (it was closed, and loads lazily), so the ask waits up to 3s for a pane to take it, once.
+
 ## ⌘F: find, by where the keyboard is
 
 ⌘F, ⌘G and ⇧⌘G are Edit menu accelerators, so no page ever sees them as keys. `sendFind` in `electron/menus.cjs` reads the focused webContents (only main can tell a page in the pane from the board) and sends the menu action with payload `"pane"` when a pane page holds the focus.

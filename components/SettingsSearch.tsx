@@ -1,6 +1,7 @@
 "use client";
 
-// The search box in Settings' title bar: type, and every page's sections that match drop down under it, best first.
+// The search box at the top of Settings' page list: type, and every page's sections that match drop down under it, best first,
+// each with its page and a line on what it does.
 // ↑/↓ move the highlight, Enter or a click opens that page at that section, Escape clears the box before it closes
 // Settings, and ⌘F (or /) focuses it from anywhere on the screen. What it searches is lib/settings-search.ts.
 
@@ -50,8 +51,8 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
   }
 
   return (
-    <div className="relative w-[260px] max-w-[45vw]" onMouseDown={(e) => e.stopPropagation()}>
-      <label className="flex items-center gap-1.5 rounded-md border border-line-strong bg-card px-2 py-1 text-muted focus-within:border-accent/60">
+    <div className="relative" onMouseDown={(e) => e.stopPropagation()}>
+      <label className="flex items-center gap-1.5 rounded-lg border border-line-strong bg-card px-2.5 py-1.5 text-muted focus-within:border-accent/60">
         <Icon name="search" size={12} />
         <input
           ref={input}
@@ -91,7 +92,7 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
           id={listId}
           role="listbox"
           aria-label={t("Matching settings")}
-          className="absolute left-0 right-0 top-full z-20 mt-1 max-h-[60vh] overflow-y-auto rounded-lg border border-line-strong bg-panel p-1 shadow-lg"
+          className="absolute left-0 top-full z-20 mt-1 max-h-[60vh] w-[320px] max-w-[80vw] overflow-y-auto rounded-lg border border-line-strong bg-panel p-1 shadow-lg"
         >
           {hits.length === 0 && <li className="px-2.5 py-2 text-[12.5px] text-faint">{t("No setting matches")} “{query.trim()}”</li>}
           {hits.map((hit, i) => (
@@ -106,12 +107,15 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
                 pick(hit);
               }}
               onMouseEnter={() => setActive(i)}
-              className={`flex cursor-pointer items-baseline justify-between gap-2 rounded-md px-2.5 py-1.5 text-[12.5px] ${
+              className={`flex cursor-pointer flex-col gap-0.5 rounded-md px-2.5 py-1.5 text-[12.5px] ${
                 i === active ? "bg-accent-soft text-ink" : "text-muted"
               }`}
             >
-              <span className="min-w-0 truncate text-ink">{t(hit.title ?? hit.pageLabel)}</span>
-              <span className="shrink-0 text-[11px] text-faint">{t(hit.title ? hit.pageLabel : "Page")}</span>
+              <span className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate text-ink">{t(hit.title ?? hit.pageLabel)}</span>
+                <span className="shrink-0 text-[11px] text-faint">{t(hit.title ? hit.pageLabel : "Page")}</span>
+              </span>
+              <span className="line-clamp-2 text-[11.5px] leading-snug text-muted">{hit.hint}</span>
             </li>
           ))}
         </ul>

@@ -1,6 +1,7 @@
 import { norm, shownFolders as pickFolders, type Tone } from "./db-picker";
 import { folderName } from "./format";
 import type { Card } from "./types";
+import type { VaultTokenCandidate, VaultTokenPick, VaultTokenResult } from "./provider-vault-token";
 
 // What the Supabase drawer shows, from what Electron main's Supabase side (electron/supabase.cjs) sends. The
 // token never reaches the board: main keeps it in the Keychain and makes every call.
@@ -76,6 +77,9 @@ export interface SupabaseBridge {
   status(folders: string[]): Promise<SupabaseStatus>;
   setToken(token: string): Promise<{ orgs: string[] }>;
   forgetToken(): Promise<{ signedIn: false }>;
+  // A project vault's token, by name (lib/provider-vault-token.ts); missing in an older shell.
+  vaultTokenCandidates?: (folders: string[]) => Promise<VaultTokenCandidate[]>;
+  useVaultToken?: (pick: VaultTokenPick) => Promise<VaultTokenResult<{ orgs: string[] }>>;
   projects(): Promise<SupabaseProject[]>;
   orgs(): Promise<SupabaseOrg[]>;
   // secret: the vault name the database password went under.

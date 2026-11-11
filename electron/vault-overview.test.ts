@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { showNotice, vaultRow } from "./vault-overview.cjs";
+import { linkAndUpkeep, showNotice, teamContext, vaultRow } from "./vault-overview.cjs";
 import { hashOf } from "./vault-sync-files.cjs";
 
 const store = (shared = false) => ({
@@ -67,5 +67,23 @@ describe("showNotice", () => {
       showNotice({ isSupported: () => false }, { title: "t", body: "b" }, () => null);
       showNotice(null, { title: "t", body: "b" }, () => null);
     }).not.toThrow();
+  });
+});
+
+describe("teamContext", () => {
+  it("asks this Mac's standing first, then a signed-out account's team lookup says why", async () => {
+    const mac = { standing: vi.fn(() => Promise.resolve({ state: "ok" })) };
+    const accountClient = { supabase: {}, signedIn: () => false };
+    const context = (await teamContext({ mac, accountClient, publicKey: () => "pk" })) as { device: unknown; team: { reason?: string } };
+    expect(context.device).toEqual({ state: "ok" });
+    expect(context.team.reason).toBe("signed-out");
+  });
+});
+
+describe("linkAndUpkeep", () => {
+  it("does nothing without a workspace", async () => {
+    const upkeep = { run: vi.fn() };
+    await linkAndUpkeep({ accountClient: null, vaults: [], orgs: [], team: null, upkeep, folder: "/repo" });
+    expect(upkeep.run).not.toHaveBeenCalled();
   });
 });

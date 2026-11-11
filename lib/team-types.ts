@@ -12,7 +12,22 @@ export type TeamOrg = { id: string; slug: string; name: string; role?: TeamRole 
 // A GitHub repo ("owner/name") linked to a workspace: a team has many projects. `access` is the members (user ids)
 // granted it; owners and admins always see every project. Filled only for those who manage the team, and a member's
 // snapshot lists only the projects they were granted (lib/team-project-access.ts).
-export type TeamProject = { repo: string; addedAt: string; addedBy: string | null; access: string[] };
+// `vault` is the project's 🔐 vault as the team page sees it (lib/team-project-vaults.ts): metadata only, never a
+// value or a key. Missing when the server couldn't read it.
+export type TeamProject = { repo: string; addedAt: string; addedBy: string | null; access: string[]; vault?: TeamProjectVault };
+
+// A Mac holding the vault key for a shared vault, or keeping an unshared vault for the repo.
+export type TeamVaultDevice = { name: string; person: string; lastSeen: string | null };
+
+// A teammate's Mac asking to join a shared vault, waiting on an admin's Approve (on a Mac that holds the key).
+export type TeamVaultAsk = { id: string; person: string; deviceName: string; fingerprint: string };
+
+// shared: the workspace shares the vault, with the Macs that hold its key and (for admins) the asks waiting.
+// localOn: the members' Macs that keep an unshared vault with values for the repo (devices.local_vaults).
+export type TeamProjectVault = {
+  shared: { vaultId: string; keyVersion: number; devices: TeamVaultDevice[]; asks: TeamVaultAsk[] } | null;
+  localOn: TeamVaultDevice[];
+};
 
 export type TeamUser = { id: string; email: string | null; name: string | null; avatar: string | null };
 

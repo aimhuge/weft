@@ -66,6 +66,33 @@ worker's own key can't bring it back). Remove (delete) still works for workers, 
 Only a device row's own user may change its `host_device` (a `before update` trigger): an org admin can update a device
 row through the "devices: admin revoke" policy, and must not point it at another Mac's host row.
 
+## Re-adding a Mac
+
+Built 2026-11-05. A revoked Mac used to keep showing Share… in 🔐, and Share… died at `share_vault`'s "The device must be
+one of yours" with nothing on screen; a signed-in Mac with no `devices` row (never registered) did the same. Now:
+
+- **Standing.** `electron/device-standing.cjs` `createStanding` reads this Mac's own row for its key (public half from
+  `device-key.json`, no Keychain): `revoked` when it has `revoked_at`, `registered` when live; with no row it registers
+  there and then (`registerDevice`), and says `unregistered` with the error when that fails, retrying after a minute. It
+  runs on every 🔐 overview (`vault.overview` → `device`, and the vaults' `joinHint`), which the board loads at launch.
+  IPC `vault:device-standing`.
+- **Where it's said.** The vault's why-line (`electron/vault-team.cjs` `joinHintFor`, `lib/vault-shared.ts`
+  `JOIN_HINTS`, `lib/vault-status.ts`) leads with it, Settings → Secrets swaps Share… for it (`offersShare`), and
+  Settings → Devices shows it above the list (`components/DeviceStanding.tsx` `ThisMacStanding`). `registeredDevice`
+  throws "This Mac was removed from your account. Re-add it…" for a revoked row, so Share…, Ask to join, Approve and
+  phone pairing say so instead of failing at the server.
+- **Re-add** (`vault:device-readd`, after Touch ID): only for a revoked row (a live key is never replaced; with no row it
+  just registers). A new keypair goes to `device-key.next.json`; every local vault file gets the vault key sealed to it
+  beside the old key's copy, per key version (`resealVaults`, idempotent); the old file is copied to
+  `device-key.revoked-<ms>.json` (sealed as it was; never registered again) and `device-key.json` is replaced in one
+  rename; then `registerDevice` adds the new row and the vault store reopens under the new key. A re-add cut off anywhere
+  picks up from where it stopped. The old row keeps `revoked_at` for good (the keep-revoked trigger).
+- **What it doesn't bring back.** Server grants were to the old device id, so shared vaults need Ask to join again (an
+  admin approves the new fingerprint). The Mac keeps its `lib/device-id.ts` id (cards and commands are filed under it),
+  whose heartbeat row stays revoked: `linkHost` sees the revoked `cloud_workers` row and leaves the new key row unlinked,
+  so the registry shows it as a live Mac rather than merging it with the revoked heartbeat. Its board heartbeat stays
+  refused until it gets a new device id, which is separate work.
+
 ## Enrolling a worker is pairing a host
 
 Settings → Devices → **Add a worker** runs the phone's steps for a box:
@@ -248,7 +275,10 @@ Migration `20261102290000_device_versions.sql`.
 `lib/device-registry.test.ts`, `lib/host-pairing.test.ts` (main's check against the box's claim, every refused field),
 `lib/worker-pair.test.ts`, `lib/use-devices.test.ts`, `components/DevicesSettings.test.tsx`,
 `electron/host-pairing.test.ts`, `electron/host-pairing-ipc.test.ts`, `electron/device-beat.test.ts`,
-`app/api/devices/route.test.ts`, `lib/device-move.test.ts`, `components/WorkerMoveThreads.test.tsx`. The migration was applied to a scratch Postgres 17 over stand-ins for the tables it
+`app/api/devices/route.test.ts`, `lib/device-move.test.ts`, `components/WorkerMoveThreads.test.tsx`. Re-adding a Mac:
+`electron/device-standing.test.ts`, `components/DeviceStanding.test.tsx`, and the revoked cases in
+`electron/device-key.test.ts`, `electron/device-beat.test.ts`, `electron/vault-join-hint.test.ts`, `electron/vault-team.test.ts`
+and `lib/vault-status.test.ts`. The migration was applied to a scratch Postgres 17 over stand-ins for the tables it
 touches (twice, and after H7's `20261102130000_passkey_approvals.sql`), and a 73-assertion SQL script ran every branch of
 the view, `device_revoke`, the keep-revoked trigger, the pairing functions and the phone flow as `anon` and
 `authenticated`.

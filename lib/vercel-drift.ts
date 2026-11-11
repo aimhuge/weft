@@ -70,6 +70,24 @@ export function driftGaps(drifts: VercelDrift[]) {
   });
 }
 
+// Pull's preview, by environment: what will come down (pull) and what Vercel won't hand back (sensitive). Names only,
+// from the rows; main decides again when it pulls (electron/vercel-env.cjs pull), so a stale list only costs a toast.
+export interface PullPlan {
+  environment: VercelEnvironment;
+  pull: string[];
+  sensitive: string[];
+}
+
+const ORDER: VercelEnvironment[] = ["development", "preview", "production"];
+
+export function pullPlan(rows: VercelEnvRow[]): PullPlan[] {
+  const off = rows.filter((r) => !r.inVault && r.onVercel);
+  return ORDER.map((environment) => {
+    const here = off.filter((r) => r.environment === environment);
+    return { environment, pull: here.filter((r) => r.pullable).map((r) => r.name), sensitive: here.filter((r) => !r.pullable).map((r) => r.name) };
+  }).filter((p) => p.pull.length || p.sensitive.length);
+}
+
 // What the Push button sends: every vault value Vercel lacks, by name and environment.
 export const missingPairs = (rows: VercelEnvRow[]) => toPush(rows).map(({ name, environment }) => ({ name, environment }));
 

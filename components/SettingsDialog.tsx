@@ -9,7 +9,7 @@ import { computeDirty, initialSettingsForm, settingsDirtyPages, settingsPatch, t
 import { useSettingsBackdrop } from "@/lib/use-scene";
 import { useSettingsSections } from "@/lib/use-settings-sections";
 import type { SettingsView } from "@/lib/types";
-import { SettingsCard, SettingsUnsavedDot } from "./SettingsLayout";
+import { SettingsCard, SettingsUnsavedDot, SettingsVersion } from "./SettingsLayout";
 import DevicesSettings from "./DevicesSettings";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
@@ -22,6 +22,7 @@ import LaptopModeCard from "./LaptopModeCard";
 import SettingsModelsPage from "./SettingsModelsPage";
 import SettingsSearch from "./SettingsSearch";
 import SettingsSectionNav from "./SettingsSectionNav";
+import SettingsSecretsPage from "./SettingsSecretsPage";
 import SettingsSecurityPage from "./SettingsSecurityPage";
 import SettingsShortcutsPage from "./SettingsShortcutsPage";
 import SettingsThreadsPage from "./SettingsThreadsPage";
@@ -39,6 +40,7 @@ const SELF_DRAWN: Partial<Record<SettingsPage, () => ReactNode>> = {
   // TeamSettings draws its own cards, one per section.
   team: () => <TeamSettings />,
   devices: () => <DevicesSettings />,
+  secrets: () => <SettingsSecretsPage />,
 };
 
 function message(err: unknown) {
@@ -237,14 +239,6 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
           className="flex shrink-0 items-center justify-between border-b border-line bg-panel/80 px-5 py-3 backdrop-blur-xl"
         >
           <h2 className="text-[15px] font-medium text-ink">{t("Settings")}</h2>
-          <div className="ml-auto mr-3">
-            <SettingsSearch
-              onPick={(hit) => {
-                setPage(hit.page);
-                if (hit.title) jump(hit.title);
-              }}
-            />
-          </div>
           <button
             onClick={onClose}
             aria-label={t("Close")}
@@ -260,6 +254,14 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
             onMouseDown={(e) => e.stopPropagation()}
             className="flex w-[200px] shrink-0 flex-col gap-0.5 self-start rounded-xl border border-line-strong bg-panel/80 p-2 shadow-lg backdrop-blur-xl"
           >
+            <div className="mb-1.5">
+              <SettingsSearch
+                onPick={(hit) => {
+                  setPage(hit.page);
+                  if (hit.title) jump(hit.title);
+                }}
+              />
+            </div>
             {SETTINGS_PAGES.map((p) => {
               const active = p.id === page;
               return (
@@ -277,6 +279,7 @@ export default function SettingsDialog({ onClose }: { onClose: () => void }) {
                 </button>
               );
             })}
+            <SettingsVersion />
           </nav>
 
           <div ref={scroller} className="flex h-full min-h-0 min-w-0 max-w-[760px] flex-1 flex-col gap-4 overflow-y-auto pb-4 pr-2">

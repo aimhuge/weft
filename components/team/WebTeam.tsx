@@ -14,6 +14,7 @@ import type { RosterMember } from "./Roster";
 import { InviteForm } from "./InviteForm";
 import { LeaveButton } from "./LeaveButton";
 import { PendingInvites, inviteRow } from "./PendingInvites";
+import { Projects } from "./Projects";
 import { Roster } from "./Roster";
 import { webTeamActions } from "./web-actions";
 
@@ -77,6 +78,20 @@ export function WebTeam({
         />
       </section>
 
+      {/* The projects, each with its 🔐 vault: shared, or which Mac has it, and Share secrets as a weft:// link to the
+          desktop app, since a browser can't hold the vault's key (components/team/ProjectVault.tsx). */}
+      <section className="wz-teamSection">
+        <h2 className="wz-teamSectionTitle">Projects</h2>
+        <Projects
+          projects={snapshot.projects}
+          canManage={snapshot.canManage}
+          actions={actions}
+          boardRepos={[]}
+          members={snapshot.members.length}
+          org={snapshot.org}
+        />
+      </section>
+
       {snapshot.canManage ? (
         <section className="wz-teamSection">
           <h2 className="wz-teamSectionTitle">Invite a teammate</h2>
@@ -102,7 +117,7 @@ export function WebTeam({
       ) : null}
 
       <footer className="wz-teamFooter">
-        Shared vaults for this workspace are coming next: secrets your teammates&apos; Weft can use without ever seeing them on our servers.
+        Shared vaults keep each value sealed to your team&apos;s Macs: our servers hold only ciphertext, never a key.
       </footer>
     </div>
   );

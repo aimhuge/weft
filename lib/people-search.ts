@@ -29,12 +29,33 @@ function repoPeople(cardId: string): Promise<PersonHit[]> {
   return hit;
 }
 
-export async function localSearchPeople(cardId: string | undefined, query: string): Promise<PersonHit[]> {
+// GitHub's answers by query, kept for the session so backspacing over a login doesn't ask again.
+const githubHits = new Map<string, Promise<PersonHit[]>>();
+function githubPeople(q: string): Promise<PersonHit[]> {
+  const key = q.toLowerCase();
+  let hit = githubHits.get(key);
+  if (!hit) {
+    hit = grantApi.people(q).catch(() => {
+      githubHits.delete(key);
+      return [];
+    });
+    githubHits.set(key, hit);
+  }
+  return hit;
+}
+
+// Warm the workspace and repo people before the first "@", so the list opens with them already in hand.
+export function preloadPeople(cardId: string | undefined): void {
+  void loadTeam(undefined, false).catch(() => {});
+  if (cardId) void repoPeople(cardId);
+}
+
+// The local people (workspace, repo) go to onLocal as soon as they're in, then GitHub's hits merge in behind them.
+export async function localSearchPeople(cardId: string | undefined, query: string, onLocal?: (people: PersonHit[]) => void): Promise<PersonHit[]> {
   const q = query.trim();
-  const [team, repo, found] = await Promise.all([
-    loadTeam(undefined, false).then(teamPeople, () => []),
-    cardId ? repoPeople(cardId) : Promise.resolve([]),
-    q ? grantApi.people(q).catch(() => []) : Promise.resolve([]),
-  ]);
-  return mergePeople(q, { team, suggested: repo, found });
+  const found = q ? githubPeople(q) : Promise.resolve([]);
+  const [team, repo] = await Promise.all([loadTeam(undefined, false).then(teamPeople, () => []), cardId ? repoPeople(cardId) : Promise.resolve([])]);
+  const local = mergePeople(q, { team, suggested: repo });
+  if (onLocal && local.length) onLocal(local);
+  return mergePeople(q, { team, suggested: repo, found: await found });
 }

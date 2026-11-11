@@ -1149,7 +1149,8 @@ four characters showing.
   button is **Add blank / Add N blanks**: the name goes in without a value, the user fills it in from 🔐 later.
   The ✎ on a row, or **Change Value…** in its right-click menu, gives a secret a new value; a name still
   missing one gets a visible **Fill in** button (and **Fill In Value…** in the menu) with the hint a thread
-  added under the name. Blanks sort first within each environment so the ones to fill in sit at the top.
+  added under the name. Every blank sits in one **To fill in · N** list above the values, folded when it's long so the
+  vault opens on its secrets; a blank already set in another environment says so ("set in production").
   The 🎲 beside the value field fills in a random 40-character string (letters and digits) for a value you make
   up yourself, like a `CRON_SECRET` or a signing secret.
 - **Copy to <project>** in a secret's right-click menu copies it into another project's vault inside Electron
@@ -1220,8 +1221,25 @@ four characters showing.
 - **Dev servers get the vault's development values.** Starting a card's dev server from its review tour asks the same
   way the first time; the values reach the server only, its log is redacted, and threads' own shells never get them.
   A card that used secrets has them swapped for `‹NAME›` in every tool result Weft stores or indexes.
+- **The 🔐 drawer is for using secrets; Settings → Secrets is for managing them.** The drawer shows each vault's
+  secrets with + Add, one status line ("Shared with AimHuge · key v2", "On this Mac only · Share…", "1 Mac asks to
+  join · Review"), the ▲ Vercel line with Pull and Push, and the To fill in list. ⚙ or the status line opens Settings →
+  Secrets on that vault: sharing, Ask to join, approving Macs, the recovery key, Import…, Locate…, .env.local, the
+  event log and the Keychain log.
+- **Provider drawers use the token you already keep in 🔐.** With no token saved, the ▲ Vercel, Supabase and
+  Cloudflare drawers offer **Use VERCEL_TOKEN from aimhuge/weft** (or `SUPABASE_ACCESS_TOKEN`, `CLOUDFLARE_API_TOKEN`):
+  one Touch ID, and Electron main hands the value to that provider, which checks it and seals it in the Keychain.
+- **Share a project's secrets from the team page.** Each project on a workspace's team page (Settings → Teams, or
+  weft.zip) says where its 🔐 vault is: **Secrets shared · 2 devices**, or **Secrets on m5air only** when it's still on one
+  Mac. **Share secrets** opens the drawer's own share dialog on the Mac that has them; in a browser it opens Weft's 🔐
+  drawer there, or says which Mac to do it on. **Devices…** lists the Macs holding the key and the ones asking, with
+  Approve. The page only ever sees names: the key and the values stay on your Macs.
+- **A Mac that can't share says why.** Opening 🔐 registers a signed-in Mac that isn't registered yet, and says so
+  with **Try again** when that fails. A Mac removed in Settings → Devices reads "This Mac was removed from your account"
+  in 🔐, Settings → Secrets and Settings → Devices, with **Re-add it**: one Touch ID, a new key (the removed one stays
+  distrusted), and every vault on the Mac still opens. Shared vaults need **Ask to join** again from the re-added Mac.
 - **A shared vault has a recovery key: 24 words that open it when every machine is gone.** A vault shared with a
-  workspace offers **Show recovery key** in the drawer, which opens the vault's own page; Touch ID asks, the
+  workspace offers **Show recovery key** on its card in Settings → Secrets, which opens the vault's own page; Touch ID asks, the
   words appear in a grid to write down, and **Copy words** puts them on the clipboard for a minute. Weft keeps no
   copy — not a file, not the server, not the event log — so they are yours to write down. An optional passphrase
   rides on the words (it is never sent anywhere), and asking to see the key again makes a *new* one, so the old
@@ -1264,7 +1282,8 @@ a plain Vercel variable the vault has no value for into it (sensitive ones can't
 Vercel** does it the moment one is added, through a team webhook relayed by the deployed Weft (Pro or Enterprise teams,
 signed in to Weft). When the two drift apart, Weft notices on its own as a project opens: 🔐 and ▲ on the rail light
 up, the drawers say "4 on Vercel not in vault: pull? · 2 missing on preview: push?" with **Pull** and **Push N** beside
-it, and the copilot lists it under what isn't set up yet. More in
+it (Pull first previews what comes down, by environment, and which are sensitive and need adding by hand, then asks one
+Touch ID), and the copilot lists it under what isn't set up yet. More in
 [docs/architecture/vercel.md](docs/architecture/vercel.md).
 
 ## Supabase
