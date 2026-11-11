@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-11
+
 ### Added
 
 - **Share a thread with anyone on GitHub, and @mention people in the chat.** The Share dialog has a **People** field: type a GitHub login (it starts with your repo's collaborators and searches GitHub as you type), and that person can open the link once they sign in to weft.zip with GitHub, even if the link is private or has a password, and without joining your workspace. Weft emails them when it knows their address. When it doesn't, their name says so and gives you Copy link. Once they open it, you see when. Type **@** in the reply box to mention a teammate or any GitHub user. If the card is shared, sending a mention of someone who can't open it yet asks you first, and their email quotes your message (`components/SharePeople.tsx`, `lib/card-share-grants.ts`, `lib/share-grant-notify.ts`, `lib/use-mention-ask.ts`, `cloud_share_grants`).
@@ -21,6 +23,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 - **Moving a card to Done wraps up faster.** `/weft:done` no longer starts three Opus agents on every card. The thread runs the related tests and writes the docs itself. The refactor scout runs only after a big change, as one agent: on the Puku gateway when `puku-agent` is installed, on Sonnet otherwise. The test script no longer falls back to an unguarded whole-suite run (`plugin/skills/done/SKILL.md`, `plugin/skills/done/tests.sh`).
 - **Google Workspace connector says whose connection it is, and lets you go back to Weft's Google app.** Settings → Connectors → Google Workspace now calls itself Weft's own Google connection, separate from Claude's Google connectors at claude.ai. Each signed-in account shows which OAuth client it went through, and once you've loaded your own client, a "Sign in through" picker lets a new sign-in use Weft's Google app (the default) or yours. (`components/GogConnector.tsx`, `lib/gog.ts`)
 - **🧹 One Forget for a Worker.** A worker's row in Settings → Devices now has one button, **Forget**, and a line saying what it does, in place of Connectors, Secrets, Re-pin, Passkeys, Re-pair and Revoke. On the box, `weft-worker forget` starts it over: it clears the pairing and every Mac it trusted, keeps its sign key and `work/`, and the threads come back on the next pairing. Also fixed: a key row revoked before it was linked to its Mac got linked on the next launch, and from then on the whole Mac read as revoked. That's what made m1mini refuse this MacBook. A revoked row now never gets linked, `worker_mac_state` counts only revocations made after the pairing, a revoked Mac can't open a pairing, and a worker lifts its own mark when the database takes a revocation back (`components/WorkerActions.tsx`, `lib/worker-forget.ts`, `lib/worker-mac-revocation.ts`, `supabase/migrations/20261111161951_forget_revoked_link.sql`).
+- **🔐 Pairing a Worker takes one Touch ID, and its settings come with sensible defaults.** Adding a Worker still asks for your fingerprint once, and that prompt now says what the Worker gets. GitHub, secrets and passkeys start with sensible defaults instead of asking you to decide each one (`lib/worker-defaults.ts`, `components/GitHubConnector.tsx`, `electron/host-pairing.cjs`).
 
 ### Fixed
 
