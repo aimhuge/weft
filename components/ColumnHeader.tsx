@@ -10,8 +10,9 @@ import ReviewFilterChips, { type ReviewChips } from "./ReviewFilterChips";
 import SprintsMenu from "./SprintsMenu";
 import { SwitchAllButton } from "./switch-all-button";
 import Tip from "./Tip";
+import TrashMenu from "./TrashMenu";
 
-// A column's name and count. Running and Needs you get "Switch all" to move their threads to the other CLI, once a thread hit its plan limit. Review gets the Errors and Restart filter chips (ReviewFilterChips), "Review all", which starts the commit walk-through card (lib/pile-review.ts), and "▶ Resume N" when turns there were cut off or failed (lib/card-resume.ts). Done also gets "Show N archived" and an archive-all button (Shift+E) for the cards it shows. Backlog's title drops its saved sprints, and it gets Save as sprint and an archive-all that asks first (BacklogActions).
+// A column's name and count. Running and Needs you get "Switch all" to move their threads to the other CLI, once a thread hit its plan limit. Review gets the Errors and Restart filter chips (ReviewFilterChips), "Review all", which starts the commit walk-through card (lib/pile-review.ts), and "▶ Resume N" when turns there were cut off or failed (lib/card-resume.ts). Done also gets "Show N archived", the Recently deleted trash (TrashMenu) and an archive-all button (Shift+E) for the cards it shows. Backlog's title drops its saved sprints, and it gets Save as sprint and an archive-all that asks first (BacklogActions).
 export default function ColumnHeader({
   column,
   count,
@@ -71,6 +72,7 @@ export default function ColumnHeader({
               {showArchived ? "Hide" : "Show"} {archivedCount} archived
             </button>
           )}
+          {done && <TrashMenu />}
         </span>
         {done && toArchive > 0 && (
           <Tip text={archiveTip} className="inline-flex">

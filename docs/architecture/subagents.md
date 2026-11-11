@@ -17,7 +17,7 @@ at once. The copilot is left out (it runs the board, not code).
 
 ## The setting
 
-`SubagentModel` is `"choose"`, `"inherit"`, or a model id from `MODELS` in `lib/new-thread.ts` (Claude: Fable 5.1,
+`SubagentModel` is `"choose"`, `"inherit"`, or a model id from `MODELS` in `lib/new-thread.ts` (Claude: Fable 5.2, Fable 5.1,
 Opus 5.5, Sonnet 5.5, Haiku 5.5; Puku: Opus 4.8, Puku AI 2.8, Puku AI 2.7). The picker groups the ids under Claude and
 Puku, so a new model added to `MODELS` shows up here without another edit. `subagentBackend(id)` says which CLI serves it.
 

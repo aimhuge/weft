@@ -11,7 +11,7 @@ describe("NewThreadDefaults", () => {
   it("shows one CLI-and-model menu and the effort, on the model the CLI runs", () => {
     render(<NewThreadDefaults backend="claude" onBackend={() => {}} />);
     expect(screen.queryByRole("combobox", { name: "Default CLI" })).toBeNull();
-    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Fable 5.1");
+    expect(screen.getByRole("combobox", { name: "Default model" })).toHaveValue("Fable 5.2");
     expect(screen.getByRole("combobox", { name: "Default effort" })).toHaveValue("high");
   });
 

@@ -25,7 +25,10 @@ export async function POST(req: Request) {
         await setGogCredentials(text("json"));
         break;
       case "add":
-        await addGogAccount(text("email"), { readonly: body.readonly === true });
+        await addGogAccount(text("email"), {
+          readonly: body.readonly === true,
+          via: body.via === "weft" || body.via === "own" ? body.via : undefined,
+        });
         break;
       case "cancel":
         cancelGogAdd();

@@ -7,6 +7,7 @@ import { deskClient } from "@/lib/turn-env";
 import { warmHostFacts } from "@/lib/host-facts";
 import { startWorkerThread, type WorkerThreadInput } from "@/lib/worker-new-thread";
 import { isWorkerProject } from "@/lib/worker-project";
+import { watchWorkerRun } from "@/lib/worker-refused";
 
 // The board's cards and worktree roots are the card.list verb (lib/host-api/card-list.ts); home is this Mac's own.
 export async function GET(req: Request) {
@@ -35,7 +36,10 @@ export async function POST(req: Request) {
     if (isWorkerProject(body.cwd as string | undefined)) {
       // Only Weft's own window gets the start signed for the GitHub connector, never a thread's curl (lib/worker-folder-repo.ts).
       const fromBoard = elevated(req) === null;
-      const { worker, cardId } = await startWorkerThread({ ...(body as unknown as WorkerThreadInput), start: body.start === true, signStart: fromBoard });
+      const input = { ...(body as unknown as WorkerThreadInput), start: body.start === true, signStart: fromBoard };
+      const { worker, cardId, commandId } = await startWorkerThread(input);
+      // A run the worker refuses lands on this board instead of vanishing (lib/worker-refused.ts).
+      if (commandId) void watchWorkerRun(commandId, worker, input);
       return Response.json({ card: null, start: { started: false, worker, cardId } });
     }
     // Who asked, for its first turn's <weft-env> block; set here, whatever the body said (lib/turn-client.ts). The id is

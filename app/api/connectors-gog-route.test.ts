@@ -71,6 +71,15 @@ describe("POST /api/connectors/gog", () => {
     expect(gog.addGogAccount).toHaveBeenLastCalledWith("you@example.com", { readonly: false });
   });
 
+  it("passes which OAuth client to sign in through, and drops anything else", async () => {
+    await route.POST(send({ action: "add", email: "me@example.com", via: "weft" }));
+    expect(gog.addGogAccount).toHaveBeenLastCalledWith("me@example.com", { readonly: false, via: "weft" });
+    await route.POST(send({ action: "add", email: "me@example.com", via: "own" }));
+    expect(gog.addGogAccount).toHaveBeenLastCalledWith("me@example.com", { readonly: false, via: "own" });
+    await route.POST(send({ action: "add", email: "me@example.com", via: "other" }));
+    expect(gog.addGogAccount).toHaveBeenLastCalledWith("me@example.com", { readonly: false, via: undefined });
+  });
+
   it("treats a missing or non-string field as empty", async () => {
     await route.POST(send({ action: "add" }));
     expect(gog.addGogAccount).toHaveBeenCalledWith("", { readonly: false });

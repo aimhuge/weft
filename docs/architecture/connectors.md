@@ -38,7 +38,11 @@ How a sign-in works:
 
 The status carries two client flags: `weftClient` (this build carries Weft's own client) and `ownClient`
 (the user chose one of their own). `weftClient && !ownClient` is what puts the user's own client behind a
-quiet link instead of in front of the sign-in form.
+quiet link instead of in front of the sign-in form. With both, the form shows a "Sign in through" picker
+(Weft's Google app by default, or the user's own client) and sends `via: "weft" | "own"` with the `add`;
+`addGogAccount` then uses that client (without `via` it keeps the old rule: the user's own when stored, else Weft's).
+Each account row names its client ("via Weft's Google app", "via your OAuth client"), and the card's intro calls
+this Weft's own Google connection, separate from Claude's Google connectors on claude.ai.
 
 **No Keychain prompts.** Status never opens a token. Accounts come from `gog auth tokens list --json`, which names
 each token (`token:<client>:<email>`) without opening it, and the OAuth client comes from `auth credentials list`.

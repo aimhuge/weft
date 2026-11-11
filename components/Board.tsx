@@ -290,7 +290,7 @@ export default function Board() {
   });
   const onProjectMenu = projectMenuHandler({
     projects: projectSummaries, cards: boardCards, rootOf, openNew, chooseProject, openDrawer: setLibraryOpen, archive: archiveCards, toast: setToast, notify,
-    syncFolders: sync.folders, syncStatus: sync.status, readSync: sync.read,
+    syncFolders: sync.folders, syncStatus: sync.status, readSync: sync.read, shareBoard: () => setSharingBoard(true),
   });
   const onTag = (tag: string) => setRailFilter((f) => toggleTag(f, tag));
   const cardCtx = { openCard, resume, move, onCardMenu, toggleStar, toggleArchive, onTag, notify };

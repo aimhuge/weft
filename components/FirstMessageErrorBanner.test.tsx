@@ -126,7 +126,7 @@ describe("FirstMessageErrorBanner", () => {
   });
 
   it("on a worker's card with no Settings to read (weft.zip), reruns on its own CLI's default", () => {
-    const card = makeCard({ id: "w-card", cwd: "worker://w1/ling", error: "rate limit", backend: "claude", model: "claude-fable-5-1" });
+    const card = makeCard({ id: "w-card", cwd: "worker://w1/ling", error: "rate limit", backend: "claude", model: "claude-fable-5-2" });
     render(<FirstMessageErrorBanner card={card} items={failedThread()} />);
     expect(screen.getByRole("button", { name: "Rerun on Opus 5.5" })).toBeInTheDocument();
     expect(api.settings).not.toHaveBeenCalled();

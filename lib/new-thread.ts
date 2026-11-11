@@ -67,6 +67,7 @@ export const GOOSE_DEFAULT_MODEL = "goose-default";
 // Goose's models are not here: each provider serves its own ids (lib/goose-provider.ts).
 export const MODELS: Record<Backend, { id: string; label: string }[]> = {
   claude: [
+    { id: "claude-fable-5-2", label: "Fable 5.2" },
     { id: "claude-fable-5-1", label: "Fable 5.1" },
     { id: "claude-opus-5-5", label: "Opus 5.5" },
     { id: "claude-sonnet-5-5", label: "Sonnet 5.5" },

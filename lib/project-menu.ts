@@ -13,6 +13,7 @@ export type ProjectAction =
   | "secrets"
   | "services"
   | "changelog"
+  | "share"
   | "sync"
   | "run-here"
   | "run-worker"
@@ -57,6 +58,7 @@ const KEYS: Record<string, string> = {
   secrets: "K",
   services: "D",
   changelog: "L",
+  share: "S",
   sync: "Y",
   "run-here": "M",
   "run-worker": "W",
@@ -84,6 +86,8 @@ export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
     { id: "services", label: "Dev Servers…" },
     { id: "changelog", label: "Changelog…" },
     SEPARATOR,
+    // Share…: the workspace's web board link and invites; the project starts syncing first so it's on that board.
+    { id: "share", label: `Share ${name}…`, enabled: s.syncable || s.synced },
     { id: "sync", label: s.synced ? `Don't Sync ${name}` : `Sync ${name}`, enabled: s.syncable || s.synced, detail: s.syncStatus },
     { id: "run-here", label: "Run on This Machine", checked: !s.onWorker },
     { id: "run-worker", label: "Run on Worker", checked: s.onWorker, enabled: s.syncable || s.onWorker },

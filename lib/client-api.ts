@@ -323,7 +323,7 @@ export const api = {
     call<{ login: LoginView | null }>("POST", "/api/login", { backend, action, text }, signal),
   // Settings → Connectors → Google Workspace (lib/gog.ts).
   gogStatus: () => call<GogStatus>("GET", "/api/connectors/gog"),
-  gog: (body: { action: "credentials"; json: string } | { action: "add"; email: string; readonly?: boolean } | { action: "cancel" } | { action: "remove"; email: string; client?: string }) =>
+  gog: (body: { action: "credentials"; json: string } | { action: "add"; email: string; readonly?: boolean; via?: "weft" | "own" } | { action: "cancel" } | { action: "remove"; email: string; client?: string }) =>
     call<GogStatus>("POST", "/api/connectors/gog", body),
   // Starts a CLI ahead of time: a card's own, or a spare in a project folder.
   warm: (body: { cardId?: string; cwd?: string; backend?: Backend }) => call<{ ok: true }>("POST", "/api/warm", body),

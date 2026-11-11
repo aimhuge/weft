@@ -61,6 +61,33 @@ describe("addGogAccount", () => {
     expect(cp.spawn.mock.calls[0]![1]).toEqual(["auth", "add", "me@example.com", "--client", "weft"]);
   });
 
+  it("signs in through Weft's client when asked, even with the user's own stored", async () => {
+    vi.stubEnv("WEFT_GOOGLE_CLIENT_ID", "abc.apps.googleusercontent.com");
+    vi.stubEnv("WEFT_GOOGLE_CLIENT_SECRET", "shh");
+    await gog.addGogAccount("me@example.com", { via: "weft" });
+    expect(cp.spawn.mock.calls[0]![1]).toEqual(["auth", "add", "me@example.com", "--client", "weft"]);
+  });
+
+  it("refuses Weft's client when this build doesn't carry it", async () => {
+    vi.stubEnv("WEFT_GOOGLE_CLIENT_ID", "");
+    await expect(gog.addGogAccount("me@example.com", { via: "weft" })).rejects.toThrow("This build doesn't carry Weft's Google app.");
+    expect(cp.spawn).not.toHaveBeenCalled();
+  });
+
+  it("signs in through the user's own client when asked", async () => {
+    vi.stubEnv("WEFT_GOOGLE_CLIENT_ID", "abc.apps.googleusercontent.com");
+    vi.stubEnv("WEFT_GOOGLE_CLIENT_SECRET", "shh");
+    await gog.addGogAccount("me@example.com", { via: "own" });
+    expect(cp.spawn.mock.calls[0]![1]).toEqual(["auth", "add", "me@example.com", "--client", "mine"]);
+  });
+
+  it("refuses the user's own client when none is stored", async () => {
+    hasClient(cp, "weft");
+    vi.stubEnv("WEFT_GOOGLE_CLIENT_ID", "abc.apps.googleusercontent.com");
+    vi.stubEnv("WEFT_GOOGLE_CLIENT_SECRET", "shh");
+    await expect(gog.addGogAccount("me@example.com", { via: "own" })).rejects.toThrow("Choose an OAuth client JSON first.");
+  });
+
   it("refuses to sign in when there is no client at all", async () => {
     says(cp, "auth credentials list --json", JSON.stringify({ clients: [] }));
     await expect(gog.addGogAccount("me@example.com")).rejects.toThrow("Choose an OAuth client JSON first.");
