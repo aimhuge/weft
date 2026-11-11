@@ -8,8 +8,13 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Changed
+
+- **A card that already shipped its work is archived straight away on Done.** If a card's files are committed and its branch is pushed, `/weft:done` now skips the tests, docs, scout, deploy check and report page, and the card goes straight to the archive (`plugin/skills/done/settled.sh`, `plugin/skills/done/SKILL.md`).
+
 ### Fixed
 
+- **weft.zip keeps offering the download when GitHub's download path is down.** When `releases/latest/download/update.json` (or `latest.yml`) times out or answers an error, as it did with 504s for many minutes on 2026-11-09, the home page and weft.zip/download ask GitHub's API for the latest release instead and build the same version, dmg and Windows installer links, rather than falling back to "The first release is on its way". (`lib/home-release.ts`)
 - **Rail tooltips no longer disappear under the browser pane.** When the pane sits right beside the left rail, a hover tip used to be squeezed into the rail's 50px and cut off by the pane. It now floats over the pane in a small window of its own (`electron/native-tip.cjs`, `components/Tip.tsx`).
 
 ## [0.8.1] - 2026-11-09
