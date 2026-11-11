@@ -11,7 +11,7 @@ The home's content is split three ways, and the split is the rule worth keeping:
 
 - **`lib/home.ts`** holds the words and links — `TAGLINE`, `DESCRIPTION`, `REPO`, `PILLARS`, `homeMetadata`,
   `downloadLink`, `isDeployed`, `parseFeed` — so `lib/home.test.ts` can read them without rendering.
-- **`lib/home-release.ts`** reads the latest release's `update.json` for the download button.
+- **`lib/home-release.ts`** reads the latest release's `update.json` for the download button, falling back to GitHub's releases API when that download path is down.
 - **`components/home/*`** draws it, as server components with no client JS.
 
 ```

@@ -98,7 +98,7 @@ from Alex Miller's individual membership, not Flexbike Inc's.
 
 weft.zip's download button and `weft.zip/download` (`app/download/route.ts`, a 302 to the newest dmg; the link to
 share) both read the release feed through `latestRelease()` in `lib/home-release.ts`, cached for minutes (Next's "minutes" profile: re-read at most once a minute), so a new release
-reaches the site without a deploy.
+reaches the site without a deploy. When the `/releases/latest/download/` path fails or times out (it answered 504 for minutes on 2026-11-09 while the API was fine), `latestRelease()` and `latestWindowsInstaller()` fall back to `api.github.com/repos/aimhuge/weft/releases/latest` and read the tag and the dmg / `-<arch>.exe` assets from it. The installed apps' updaters have no such fallback: Squirrel downloads the zip from the same failing path, so they retry on their next check.
 
 ## How an installed Weft updates (`electron/updater.cjs`)
 
