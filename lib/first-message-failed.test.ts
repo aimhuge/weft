@@ -2,7 +2,7 @@
 // (components/FirstMessageErrorBanner.tsx). Only the open thread uses this; the inline error
 // banner in ThreadView is gated to be the *not-first* case so they don't both render.
 import { describe, expect, it } from "vitest";
-import { firstMessageFailed, hostRerunModel } from "./first-message-failed";
+import { firstMessageFailed, hostRerunModel, modelFamily } from "./first-message-failed";
 import type { Card, ThreadItem } from "./types";
 
 function card(over: Partial<Card> = {}): Card {
@@ -97,12 +97,23 @@ describe("firstMessageFailed", () => {
 
 describe("hostRerunModel", () => {
   it("is the card's own CLI's default model", () => {
-    expect(hostRerunModel({ backend: "claude" })).toBe("claude-fable-5-1");
+    expect(hostRerunModel({ backend: "claude" })).toBe("claude-fable-5-2");
     expect(hostRerunModel({ backend: "puku", model: "puku-ai-2.7" })).toBe("opus-4.8");
   });
 
   it("is the next model when the card already ran on the default", () => {
+    expect(hostRerunModel({ backend: "claude", model: "claude-fable-5-2" })).toBe("claude-opus-5-5");
+  });
+
+  it("skips another version of the same family, which likely shares the limit", () => {
     expect(hostRerunModel({ backend: "claude", model: "claude-fable-5-1" })).toBe("claude-opus-5-5");
+    expect(hostRerunModel({ backend: "puku", model: "puku-ai-2.8" })).toBe("opus-4.8");
+  });
+
+  it("names a model's family without its version", () => {
+    expect(modelFamily("claude-fable-5-2")).toBe("claude-fable");
+    expect(modelFamily("opus-4.8")).toBe("opus");
+    expect(modelFamily("codex-default")).toBe("codex-default");
   });
 
   it("stays on a one-model CLI's own pick", () => {

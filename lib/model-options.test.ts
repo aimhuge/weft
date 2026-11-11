@@ -10,7 +10,7 @@ import {
 
 describe("the model a CLI runs", () => {
   it("is the first model of the CLI's own list", () => {
-    expect(cliChoiceModel("claude")).toBe("claude-fable-5-1");
+    expect(cliChoiceModel("claude")).toBe("claude-fable-5-2");
     expect(cliChoiceModel("puku")).toBe("opus-4.8");
   });
 
@@ -59,7 +59,7 @@ describe("the rows of a menu", () => {
   it("marks a model that has hit its limit", () => {
     const rows = optionsFor("claude", { atLimit: new Set(["claude-opus-5-5"]) });
     expect(rows.find((r) => r.value === "claude-opus-5-5")?.note).toBe("At its limit");
-    expect(rows.find((r) => r.value === "claude-fable-5-1")?.note).toBeUndefined();
+    expect(rows.find((r) => r.value === "claude-fable-5-2")?.note).toBeUndefined();
   });
 
   it("hides a model the CLI can't serve", () => {
@@ -125,7 +125,7 @@ describe("the label a picked value shows", () => {
 
   it("shows the model the CLI runs for an empty pick, never a 'let it choose' row", () => {
     const groups = modelGroups();
-    expect(labelFor("", groups)).toBe("Fable 5.1");
+    expect(labelFor("", groups)).toBe("Fable 5.2");
     expect(labelFor("", groups)).not.toMatch(/choose/i);
   });
 });
