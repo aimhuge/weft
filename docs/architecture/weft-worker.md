@@ -426,6 +426,13 @@ store (`lib/worker-project.ts`, `lib/worker-board.ts`, `lib/worker-transport.ts`
 - **The list:** your headless workers' folders (`cloud_workers.folders`) plus the folders of their `cloud_cards`, so a
   project shows with no cards, and a worker too old to report still shows the ones it has cards in. An offline worker's
   projects stay listed. A chip carries the worker's name; a row in More reads `on m1mini` or `on m1mini · offline`.
+- **A thread the worker refuses lands here** (`lib/worker-refused.ts`, built 2026-11-11). A new thread in a worker
+  project makes nothing on this Mac, and the board's placeholder (`lib/worker-pending-cards.ts`) goes by itself after
+  `PENDING_MS`; so a run the worker turned down ("This worker trusts no Mac yet", after its pairing Mac was revoked)
+  vanished with its prompt. `POST /api/cards` now hands each command it sends to `watchWorkerRun`, which asks after it
+  every `POLL_MS` for up to `WATCH_MS`; on `failed` it makes the thread on this board, in Needs you, in the local repo
+  with the worker folder's name (home when none), tagged `worker-refused`, with the worker's reason as its last line.
+  A command still queued when the watch ends is left alone: a worker that comes back runs it.
 - **`cards` stays local.** `Board` keeps its own `cards`, and what's drawn reads `boardCards` (`useBoardWorkers`).
   `ownColumns` keeps worker cards out of Archive all, Resume all and Switch all; `localPath` keeps a worker path out of
   the terminal, header badges, drawers and the copilot.
