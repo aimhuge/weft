@@ -462,7 +462,7 @@ Right-click a card for a native menu where everything is one click: open, rename
 Review, Done or Backlog, stop, run `/weft:done`, `/weft:commit` or `/weft:preview`, start, restart or
 stop its dev server, start a new thread in its folder, reveal the folder in Finder, copy the folder path
 or a `claude --resume` command, archive, and delete. Deleting asks first, in Weft's own dialog, with a
-"Don't ask again" tick that makes later deletes go straight through. Double-click any empty part of the board to open New thread, or right-click a column's empty space for it;
+"Don't ask again" tick that makes later deletes go straight through. A deleted card stays in **Recently deleted** for 30 days: the trash icon in the Done column's header lists them, with Restore on each. Double-click any empty part of the board to open New thread, or right-click a column's empty space for it;
 in Done, also show or hide archived cards and archive all the Done cards on screen. Every item has a key,
 shown beside it, that picks it while the menu is open: right-click, then `D` for Done, `1` for `/weft:done`,
 `Y` for YOLO. (Desktop app only.)

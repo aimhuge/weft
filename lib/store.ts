@@ -12,6 +12,7 @@ import { normalizeTags } from "./tags";
 import { compareCardOrder, ordersForSlot } from "./card-order";
 import { orphanTasks } from "./tasks";
 import { writeFileAtomic } from "./atomic-write";
+import { keepDeleted } from "./card-trash-file";
 
 // The app was called Threadboard and kept its data in ~/.threadboard. Move that folder to
 // ~/.weft the first time, unless ~/.weft already exists. If the move fails, keep using the old one.
@@ -244,6 +245,8 @@ export function reorderCard(id: string, beforeId: string | null): Card {
 }
 
 export function deleteCard(id: string) {
+  // Kept in Recently deleted for 30 days first (lib/card-trash.ts); a failure there never stops the delete.
+  keepDeleted(DATA_DIR, state().cards.get(id), () => getThread(id));
   state().cards.delete(id);
   state().threads.delete(id);
   fs.rmSync(threadFile(id), { force: true });

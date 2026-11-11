@@ -39,9 +39,9 @@ describe("ColumnHeader", () => {
     expect(onToggleArchived).toHaveBeenCalledOnce();
   });
 
-  it("hides both buttons when there is nothing to show or archive", () => {
+  it("hides both buttons when there is nothing to show or archive, keeping only Recently deleted", () => {
     setup({ archivedCount: 0, toArchive: 0 });
-    expect(screen.queryAllByRole("button")).toHaveLength(0);
+    expect(screen.queryAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Recently deleted"]);
   });
 
   it("puts no Done buttons on other columns", () => {
