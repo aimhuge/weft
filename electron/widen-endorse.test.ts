@@ -133,3 +133,38 @@ describe("the endorse IPC", () => {
     expect(await h.call("approval:endorse-refresh")).toEqual([]);
   });
 });
+
+// A new worker takes this Mac's passkeys and phones under pairing's own Touch ID (electron/host-pairing.cjs).
+describe("planPairing", () => {
+  const plan = (passkeys: Paired) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "weft-endorse-plan-"));
+    const pair = crypto.generateKeyPairSync("ed25519");
+    const signer = { sign: (m: string) => crypto.sign(null, Buffer.from(m), pair.privateKey).toString("base64") };
+    const paired = { list: passkeys };
+    const confirm = vi.fn(() => Promise.resolve(true));
+    const endorsed = createEndorsed({ dir, safeStorage });
+    const r = registerWidenEndorse(() => {}, { signer, macDevice: () => "mac-1", confirm, passkeys: () => paired.list, endorsed, now: () => 7_000 });
+    return { r, paired, confirm, endorsed };
+  };
+
+  it("plans nothing with no passkey or phone paired", () => {
+    expect(plan([]).r.planPairing()).toBeNull();
+  });
+
+  it("says who will approve, and signs that set for the worker without a Touch ID of its own", async () => {
+    const p = plan([{ id: "b1", passkey: { credId: "c", publicKey: "k" } }, { id: "ph", kind: "phone", signKey: "s" } as never]);
+    const planned = p.r.planPairing()!;
+    expect(planned.say).toBe('let your paired passkey approve folder, agent and "!" changes and Allows, and your paired phone approve Allows there');
+    expect(await planned.run("w9")).toEqual({ passkeys: 1, phones: 1 });
+    expect(p.confirm).not.toHaveBeenCalled();
+    expect((p.endorsed.read() as Record<string, unknown>).w9).toMatchObject({ generation: 7_000, keys: [{ device: "b1" }], phones: [{ device: "ph" }] });
+  });
+
+  it("leaves out one unpaired while the prompt was up, and never adds one paired since", async () => {
+    const p = plan([{ id: "b1", passkey: { credId: "c", publicKey: "k" } }]);
+    const planned = p.r.planPairing()!;
+    p.paired.list = [{ id: "b2", passkey: { credId: "d", publicKey: "k2" } }];
+    expect(await planned.run("w9")).toEqual({ passkeys: 0, phones: 0 });
+    await expect(planned.run("bad id")).rejects.toThrow("That names no worker.");
+  });
+});

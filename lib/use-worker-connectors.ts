@@ -101,7 +101,7 @@ export function useWorkerConnectors(bridge: ConnectorsBridge | undefined = conne
     reload,
     connect: () => {
       if (view) openInPane(view.connectUrl);
-      setNote("Connect GitHub in the browser pane, then come back here.");
+      setNote("Connect GitHub in the browser pane. Workers you add after that get it.");
     },
     set: (workerId: string, workerName: string, settings: GrantSettings) =>
       act(async () => {

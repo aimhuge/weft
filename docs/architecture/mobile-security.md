@@ -552,8 +552,9 @@ refused with the message above, and phone-only asks need the Mac.
 ### Phones on a worker (H10, built 2026-11-03)
 
 A worker trusts nothing off the network, so a phone's key reaches it the way a passkey's does: **endorsed by the pairing
-Mac** in the same signed set (`electron/widen-endorse.cjs`, `lib/host-endorse.ts`). Settings → Devices → a worker's
-**Passkeys** now names this Mac's paired phones too (`kind: "phone"` in the sealed `paired-devices.json`, each one's
+Mac** in the same signed set (`electron/widen-endorse.cjs`, `lib/host-endorse.ts`). Since 2026-11-11 a new worker takes the
+set when it's paired, named in pairing's own Touch ID ([weft-worker.md](weft-worker.md#defaults-at-pairing)); before
+that, Settings → Devices → a worker's **Passkeys** named this Mac's paired phones too (`kind: "phone"` in the sealed `paired-devices.json`, each one's
 Ed25519 `signKey` as the Mac pinned it at pairing), after one Touch ID: "let your paired phone approve Allows on the
 worker m1mini (7f3e…)".
 

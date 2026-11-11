@@ -89,7 +89,7 @@ on every side, and the migration was applied to a scratch Postgres; not yet run 
 app isn't registered yet).
 
 ```
-connect (once):   Settings → Devices → a worker → Connectors → Connect GitHub ─ browser pane ─ weft.zip/api/connectors/github/start
+connect (once):   Settings → Connectors → GitHub on your workers → Connect GitHub ─ browser pane ─ weft.zip/api/connectors/github/start
                   (GET: one button; its POST, same-origin only, ends any earlier connection at GitHub, then a state + PKCE
                   verifier in a MACed __Host- cookie) ─ GitHub consent ─ /callback ─ code + verifier ─ ghu_ (8 h) + ghr_ (6 months)
                   sealed with WEFT_CONNECTOR_TOKEN_KEY ─ connector_github_tokens (service role only)
@@ -98,6 +98,8 @@ this Mac's key:   main registers its desktop approval key (electron/desktop-sign
                   trusted Mac vouches for it
 pairing a worker: worker_pair_confirm under Touch ID ─ main pins the box's keys (electron/worker-pins.cjs) and signs them
                   ─ POST /api/connectors/pin ─ connector_worker_pins
+turn on (pairing): pairing's own Touch ID names GitHub and the repos ─ main signs the same grant at DEFAULT_SETTINGS
+                  (weft-worker.md#defaults-at-pairing) ─ POST /api/connectors/github/grant, checked the same way
 turn on / change: Touch ID in main ─ main signs {you, worker, connector, settings, nonce, time, epoch it replaces}
                   ─ POST /api/connectors/github/grant: signature, freshness, nonce once, the vouched pairing, the epoch
                   ─ connector_grants (no session can write it); a stricter change also ends the worker's tokens
@@ -333,12 +335,14 @@ in that env.
 - **The daemon** (`lib/connector-client.ts`) asks weft.zip per card and repo, and holds each answer in memory only, until
   2 minutes before its expiry. The repo comes from the card's checkout's origin, never the caller.
 
-### Settings → Devices
+### Settings → Connectors, and pairing
 
-A paired worker's row gets one small badge, **Connectors** (or **GitHub ✓** when on), that opens the menu in place
-(`components/WorkerConnectors.tsx`, `lib/use-worker-connectors.ts`, `/api/devices/connectors`, `lib/connector-view.ts`):
-Connect GitHub (once, in the browser pane), Turn on / Turn off, the settings as checkmarked choices, and, while any Mac
-key is still waiting, a line saying this Mac's waits for its emailed link, and **Trust** / **Remove** for another Mac's:
+Since 2026-11-11 there is no per-worker menu. Settings → Connectors → **GitHub on your workers**
+(`components/GitHubConnector.tsx` over `lib/use-worker-connectors.ts`, `/api/devices/connectors`, `lib/connector-view.ts`)
+connects GitHub once, in the browser pane, or disconnects it; every worker paired after that gets it at the defaults
+under pairing's Touch ID ([weft-worker.md](weft-worker.md#defaults-at-pairing)), and Forget turns it off with the worker.
+The settings below are still what main and weft.zip enforce, and the hook and main's `connectors:set`/`allow`/`trust`
+handlers still take them, but nothing in the UI changes them from the defaults (the first of each list):
 
 | Setting | Choices (default first) | Enforced by |
 | --- | --- | --- |

@@ -1080,6 +1080,10 @@ It installs the toolchain and Weft, enrols with a one-time token, and starts a l
 Or pair it instead: Settings → **Devices** → **Add a worker** gives a line with a pairing code; the box makes its own key,
 claims the code, prints a check code, and joins once you confirm the same code with Touch ID on the Mac. Settings → Devices
 also lists every Mac, worker, phone and browser of yours, the keys each holds, and **Revoke** for any of them.
+A worker you pair gets sensible defaults under that same Touch ID, which names each one: your paired passkeys and phones
+can approve there (within their usual limits), and once you've connected GitHub in Settings → **Connectors** → GitHub on
+your workers, its cards push and use `gh` as you for their own repo. Secrets are never kept on the box: each use asks
+your Mac.
 A worker's row has one button, **Forget**, and a line saying what it does: it turns the worker's key off (the worker stops
 trusting this Mac), and `weft-worker forget` on the box starts it over (its pairing, the Mac it trusts and
 every Mac it stopped trusting go; its signing key and `work/` stay), ready for a new pairing code from this Mac or

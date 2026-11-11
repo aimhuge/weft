@@ -459,11 +459,15 @@ and signed by this Mac. The worker puts it in that one Goose process's env and r
 
 ### Kept on a worker
 
-Built 2026-11-03 (H8's last step), with `supabase/migrations/20261103130000_worker_vault_keep.sql` (not applied). Off unless
-the user turns it on, per worker, project and environment: Settings → Devices → a paired worker → **Secrets**.
+Built 2026-11-03 (H8's last step), with `supabase/migrations/20261103130000_worker_vault_keep.sql` (not applied). **Off, with
+no UI since 2026-11-11**: Settings → Devices → Secrets went with the row's other buttons, and the safe default stays
+(every secret use on a worker asks this Mac, and its value travels sealed for that one use). Nothing a worker holds got
+wider: pairing's defaults ([weft-worker.md](weft-worker.md#defaults-at-pairing)) add passkeys and GitHub, never kept
+values. Main's side below still runs for a set kept before (`watchVault` re-sends a changed value, Stop and Wipe narrow
+it), and Forget and Revoke wipe it first (`lib/use-worker-keep.ts`, now only that bridge).
 
 ```
-Mac   Settings → Devices → Secrets (components/WorkerKeep.tsx, lib/use-worker-keep.ts) ─ tick the warning ─ Keep
+Mac   (until 2026-11-11) Settings → Devices → Secrets ─ tick the warning ─ Keep
 main  electron/worker-keep.cjs keep: the worker row with its own session (yours, not revoked) ─ the box key it PINNED
       (refused if the row's key differs) ─ vault.valuesFor(this Mac's checkout, development|preview), no NODE_OPTIONS/DYLD_*
       ─ Touch ID ("keep N development secrets of o/r on the worker m1mini. Any code a thread runs there can read them")

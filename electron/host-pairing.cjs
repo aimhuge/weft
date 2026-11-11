@@ -61,11 +61,33 @@ function checkHostClaim(code, row) {
   return null;
 }
 
+// The defaults pairing plans (pairingDefaults in electron/pairing-ipc.cjs): each { key, say, run }, read before the prompt.
+async function planned(pairingDefaults) {
+  const plans = await Promise.resolve().then(pairingDefaults).catch(() => []);
+  return Array.isArray(plans) ? plans.filter((p) => p && typeof p.key === "string" && typeof p.say === "string" && typeof p.run === "function") : [];
+}
+
+// ", let your paired passkey approve … there, and let its cards use GitHub …": the plans' clauses after the prompt's own.
+function alsoSaid(plans) {
+  const says = plans.map((p) => p.say);
+  if (!says.length) return "";
+  return `, ${says.length > 1 ? `${says.slice(0, -1).join(", ")}, and ${says[says.length - 1]}` : says[0]}`;
+}
+
+// Each default done for the new worker, one at a time; one that fails says why and doesn't undo the pairing or the others.
+async function applied(plans, workerId) {
+  /** @type {Record<string, unknown>} */
+  const out = {};
+  for (const p of plans) out[p.key] = await Promise.resolve().then(() => p.run(workerId)).then((r) => r ?? { ok: true }, (err) => ({ error: String(err?.message ?? err) }));
+  return out;
+}
+
 /**
  * @param {{ db: () => any, userId: () => string, macDevice: () => string, myDevice: () => Promise<{ publicKey: string }>,
  *   confirm: (reason: string) => Promise<boolean>, now?: () => number,
  *   pinWorker?: (id: string, keys: { name: string, publicKey: string, signKey: string }) => void,
- *   macSignKey?: () => Promise<string>, vouchWorker?: (id: string) => Promise<unknown> }} deps
+ *   macSignKey?: () => Promise<string>, vouchWorker?: (id: string) => Promise<unknown>,
+ *   pairingDefaults?: () => Promise<Array<{ key: string, say: string, run: (workerId: string) => Promise<unknown> }>> }} deps
  * macSignKey is this Mac's Ed25519 approval key (electron/desktop-signer.cjs, base64): it rides in the code, which the
  * user carries to the box by hand, so the box trusts the secret_use rows this Mac signs and no one else's
  * (lib/worker-mac-keys.ts). Never through the database, where any session of yours could swap it.
@@ -73,8 +95,10 @@ function checkHostClaim(code, row) {
  * asks must carry its sign key's signature (electron/worker-secret.cjs) and its box key can't be swapped later.
  * vouchWorker signs those pinned keys for weft.zip (electron/connector-grants.cjs), so its connector mint serves the
  * worker only with the sign key this Mac checked.
+ * pairingDefaults plans what a new worker gets by default (passkeys, GitHub): each clause goes in the one Touch ID prompt,
+ * and each runs only after its yes, its outcome in the result's `defaults`.
  */
-function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Date.now, pinWorker = () => {}, macSignKey = undefined, vouchWorker = async () => {} }) {
+function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Date.now, pinWorker = () => {}, macSignKey = undefined, vouchWorker = async () => {}, pairingDefaults = async () => [] }) {
   /** @type {Map<string, { secret: string, orgId: string, expiresAt: number }>} */
   const open = new Map();
 
@@ -128,8 +152,12 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
       return { status: "failed", error: why };
     }
     const shown = checkCode(id, code.orgId, { ...row, arch: row.arch ?? "" });
+    // What a new worker gets by default (docs/architecture/weft-worker.md#defaults-at-pairing), each said in this one
+    // prompt and done only after its yes: your passkeys and phones approving there, GitHub for its cards. A default that
+    // can't be planned is left out, never a reason not to pair.
+    const plans = await planned(pairingDefaults);
     // The code first, so a long name can't push it out of the prompt; the name is SAFE_NAME-checked above.
-    if (!(await confirm(`check the box shows the code ${shown}, then add the worker ${row.name} to your workspace`))) {
+    if (!(await confirm(`check the box shows the code ${shown}, then add the worker ${row.name} to your workspace${alsoSaid(plans)}`))) {
       await setStatus(id, "cancelled");
       return { status: "cancelled" };
     }
@@ -148,7 +176,8 @@ function createHostPairing({ db, userId, macDevice, myDevice, confirm, now = Dat
     await Promise.resolve()
       .then(() => vouchWorker(String(workerId)))
       .catch((err) => console.warn(`Couldn't vouch for the worker on weft.zip: ${err?.message ?? err}`));
-    return { status: "paired", worker: { id: workerId, name: row.name, platform: row.platform, code: shown } };
+    const defaults = await applied(plans, String(workerId));
+    return { status: "paired", worker: { id: workerId, name: row.name, platform: row.platform, code: shown }, ...(plans.length ? { defaults } : {}) };
   }
 
   /** @returns {Promise<void>} */

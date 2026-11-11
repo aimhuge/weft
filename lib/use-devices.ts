@@ -4,13 +4,13 @@
 // the one registry through /api/devices, Revoke for any kind, and Add a worker, which pairs a box over
 // window.weft.hostPairing the way a phone pairs (the code's secret, the claim check and Touch ID stay in main).
 import { runPasskeySync, usePasskeySync } from "./use-passkey-sync";
-import { canSignWiden, endorsePasskeys } from "./widen-signer";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api-client";
 import type { DeviceView, DevicesView } from "./device-registry";
 import { movedNote } from "./device-move";
 import { pairingBridge, type PairingBridge } from "./use-pairing";
 import { workerKeepBridge } from "./use-worker-keep";
+import { defaultsNote, passkeysSigned, type PairingDefaults } from "./worker-defaults";
 
 export const POLL_MS = 2_000;
 const RELOAD_MS = 15_000;
@@ -24,7 +24,8 @@ export interface WorkerCode {
   fingerprint?: string;
 }
 
-type WorkerCheck = { status: "open" | "paired" | "cancelled" | "expired" | "failed"; error?: string; worker?: { id?: string; name: string; code: string } };
+// defaults: what main did for a newly paired worker under pairing's own Touch ID (lib/worker-defaults.ts).
+type WorkerCheck = { status: "open" | "paired" | "cancelled" | "expired" | "failed"; error?: string; worker?: { id?: string; name: string; code: string }; defaults?: PairingDefaults };
 
 export interface HostPairingBridge {
   start(orgId?: string): Promise<WorkerCode>;
@@ -80,7 +81,7 @@ export function revokeRoute(device: Pick<DeviceView, "id" | "kind">, pinned: Rea
 }
 
 export function workerOutcome(r: WorkerCheck): string {
-  if (r.status === "paired") return `Added ${r.worker?.name ?? "the worker"}.`;
+  if (r.status === "paired") return [`Added ${r.worker?.name ?? "the worker"}.`, defaultsNote(r.defaults)].filter(Boolean).join(" ");
   if (r.status === "expired") return "The code expired. Make a new one.";
   if (r.status === "failed") return `Not added: ${r.error ?? "the claim didn't check out"}`;
   return "Not added.";
@@ -98,26 +99,6 @@ interface Bridges {
 }
 
 export const bridgesHere = (): Bridges => (typeof window === "undefined" ? {} : { pairing: pairingBridge(), hosts: hostPairingBridge() });
-
-// Main signs the whole set of paired passkeys (and phones) for a worker after Touch ID; lib/passkey-sync.ts sends it as a
-// `pin` command and waits for the worker's signed receipt.
-export async function sendPasskeys(workerId: string, name: string, sync: () => Promise<string[]> = runPasskeySync): Promise<string> {
-  const endorsements = await endorsePasskeys(workerId);
-  if (!endorsements) return `Not approved, so ${name} trusts no new passkey.`;
-  if (!endorsements.length) return "No passkey or phone is paired with this Mac yet: pair one in Settings → Sync first.";
-  const which = endorsedWhich(endorsements[0] as { passkeys?: unknown[]; phones?: unknown[] } | undefined);
-  if ((await sync()).includes(workerId)) return `Sent: ${name} will let ${which} approve changes there once it takes it.`;
-  return `${name} now lets ${which} approve changes there.`;
-}
-
-// "your passkey", "your 2 passkeys and your phone": what one endorsement names.
-function endorsedWhich(e: { passkeys?: unknown[]; phones?: unknown[] } | undefined): string {
-  const say = (count: number, one: string) => (count === 1 ? `your ${one}` : `your ${count} ${one}s`);
-  const passkeys = e?.passkeys?.length ?? 0;
-  const phones = e?.phones?.length ?? 0;
-  const parts = [...(passkeys || !phones ? [say(passkeys, "passkey")] : []), ...(phones ? [say(phones, "phone")] : [])];
-  return parts.join(" and ");
-}
 
 // A ref read through a call, so a check after an await isn't narrowed by one before it.
 const isLive = (ref: { current: boolean }) => ref.current;
@@ -173,6 +154,8 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
         setCode(null);
         setNote(workerOutcome(r));
         if (r.status !== "paired") return;
+        // Main signed this Mac's passkeys and phones for it under pairing's Touch ID: send that set now, as Passkeys did.
+        if (passkeysSigned(r.defaults)) await runPasskeySync().catch(() => null);
         // While your Mac seals, offer the new worker the key at once, under its own Touch ID (electron/worker-key-grants.cjs).
         const w = r.worker;
         if (w?.id && hosts.grantKey && (await hosts.keyStatus?.())?.sealOn) {
@@ -253,21 +236,12 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
       await reload();
     });
 
-  // Lets this Mac's paired passkeys approve folder, agent, shell and terminal changes on a worker (lib/worker-pin.ts).
-  const trustPasskeys = (device: DeviceView) =>
-    act(async () => {
-      const note = await sendPasskeys(device.id, device.name, () => runPasskeySync());
-      if (live.current) setNote(note);
-    });
-
   return {
     view,
     error,
     code,
     note,
-    canTrustPasskeys: canSignWiden(),
     untaken,
-    trustPasskeys,
     canAddWorker: Boolean(hosts),
     canRepin: Boolean(hosts?.forgetPin),
     canRepair: Boolean(hosts?.approveRepair),

@@ -129,6 +129,33 @@ function registerConnectorGrants(handle, deps) {
   const signer = createConnectorSigner(deps);
   const nonce = () => crypto.randomBytes(32).toString("hex");
 
+  // Signs and sends a grant someone already said yes to: Turn on's own Touch ID, or pairing's (planPairing).
+  async function grant({ uid, worker, connector, next, repos, prevEpoch }) {
+    const { key } = await signer.register();
+    await signer.vouch(worker);
+    const statement = { userId: uid, workerId: worker, connector, settings: next, repos, nonce: nonce(), issuedAt: now(), prevEpoch };
+    const sig = await sign(grantMessage(statement));
+    const r = await call("POST", "/github/grant", { workerId: worker, connector, settings: next, repos, nonce: statement.nonce, issuedAt: statement.issuedAt, prevEpoch, signerKey: key, sig });
+    return { ok: true, settings: next, waiting: r.waiting === true };
+  }
+
+  // GitHub for a worker being paired, at DEFAULTS (docs/architecture/weft-worker.md#defaults-at-pairing): only once you've
+  // connected GitHub on weft.zip, and for exactly the repos pairing's own Touch ID prompt names. Null when it can't apply
+  // (signed out, not connected, no checkouts, more than MAX_REPOS to name), so pairing goes ahead without it.
+  async function planPairing() {
+    const uid = userId();
+    if (!uid) return null;
+    const status = await call("GET", "/github").catch(() => null);
+    if (!status?.connected) return null;
+    const known = await knownRepos();
+    if (!known.length || known.length > MAX_REPOS) return null;
+    const repos = known.map((k) => k.repo);
+    return {
+      say: `let its cards use ${CONNECTOR_NAMES.github}, for ${repoList(known)}`,
+      run: (worker) => grant({ uid, worker: String(worker), connector: "github", next: { ...DEFAULTS, asks: [...DEFAULTS.asks] }, repos, prevEpoch: 0 }),
+    };
+  }
+
   // Turns a connector on for a worker, or changes its settings. { denied: true } when Touch ID said no.
   handle("connectors:set", async (workerId, workerName, connector, rawSettings) => {
     const uid = userId();
@@ -143,12 +170,7 @@ function registerConnectorGrants(handle, deps) {
     if (known.length > MAX_REPOS) throw new Error(`This Mac has ${known.length} GitHub checkouts, and a grant covers at most ${MAX_REPOS}, each named before Touch ID. Remove projects you don't need on this worker from Weft, then try again.`);
     const repos = known.map((k) => k.repo);
     if (!(await confirm(changeReason(was, next, known, clean(workerName || worker, 60), connector)))) return { denied: true };
-    const { key } = await signer.register();
-    await signer.vouch(worker);
-    const statement = { userId: uid, workerId: worker, connector, settings: next, repos, nonce: nonce(), issuedAt: now(), prevEpoch: Number(was?.epoch ?? 0) };
-    const sig = await sign(grantMessage(statement));
-    const r = await call("POST", "/github/grant", { workerId: worker, connector, settings: next, repos, nonce: statement.nonce, issuedAt: statement.issuedAt, prevEpoch: statement.prevEpoch, signerKey: key, sig });
-    return { ok: true, settings: next, waiting: r.waiting === true };
+    return grant({ uid, worker, connector, next, repos, prevEpoch: Number(was?.epoch ?? 0) });
   });
 
   // Allows one project or card under a per-project or per-card approval, after Touch ID.
@@ -190,7 +212,7 @@ function registerConnectorGrants(handle, deps) {
     return call("DELETE", `/signers?id=${encodeURIComponent(String(id))}`);
   });
 
-  return signer;
+  return { ...signer, planPairing };
 }
 
 module.exports = { registerConnectorGrants, createConnectorSigner, weftZip, settingsOf, looser, fingerprint, MAX_REPOS, SCOPES, APPROVALS, LIFETIMES, ASKS };

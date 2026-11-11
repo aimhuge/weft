@@ -346,7 +346,7 @@ starting a box over took deleting files by hand. Now:
 - **On the Mac.** A worker's row has one button, **Forget**, and a line under it saying what it does ("Forget: m1mini
   stops trusting this Mac; pair it again to use it"), with nothing behind a menu (`components/WorkerActions.tsx`).
   Connectors, kept secrets and passkeys left the row too ("i dont know what those things mean, we should give sensable
-  defaults for them"): `WorkerConnectors` and `WorkerKeep` stay in the tree for the card that gives them defaults. Forget asks first, shows the lines to run on the box, then revokes
+  defaults for them"): each is now a default a worker gets when it's paired ([Defaults at pairing](#defaults-at-pairing)). Forget asks first, shows the lines to run on the box, then revokes
   the worker's row (`useDevices().forget`, the same `device_revoke` and kept-vault wipe Revoke used). A token-enrolled
   worker that owns threads can't bring them back on a new pairing, so its Forget offers the move first. Re-pin and
   Re-pair are gone from the page: a forgotten box pairs again with new keys (so nothing stale stays pinned), with this
@@ -380,6 +380,38 @@ weft-worker restart
 two Macs signed in, the worker's secret and vault asks go only to the one it's paired with (`cloud_workers.paired_mac`,
 [device-registry.md](device-registry.md#the-pairing-mac)); when that Mac is away the card hears so, rather than the ask
 going to a Mac whose answer the box would refuse.
+
+#### Defaults at pairing
+
+Built 2026-11-11, after "i dont know what those things mean, we should give sensable defaults for them". A worker you add
+gets what its row's GitHub, Passkeys and Secrets buttons used to give, with no buttons, under the **one Touch ID pairing
+already asks for**. That prompt names every default it covers, and main does each one only after its yes:
+
+> check the box shows the code 4F2-9K, then add the worker m1mini to your workspace, let your paired passkey approve
+> folder, agent and "!" changes and Allows, and your paired phone approve Allows there, and let its cards use GitHub as
+> you, with Weft, for ada/app, ada/web
+
+- **How.** `electron/host-pairing.cjs` asks `pairingDefaults` (wired in `electron/pairing-ipc.cjs`) for its plans before
+  the prompt, puts each plan's `say` in it, and after the pin and vouch runs each plan's `run(workerId)`. A plan that
+  can't be made is left out of the prompt (never a reason not to pair); one that fails says why in the result's `defaults`
+  and undoes nothing. The board words the outcome after "Added m1mini." (`lib/worker-defaults.ts`) and sends a signed
+  passkey set at once (`runPasskeySync`, as Passkeys did).
+- **Passkeys and phones** (`electron/widen-endorse.cjs` `planPairing`): the set paired on this Mac when the prompt was
+  made, signed for the worker after the yes, narrowed to what's still paired then (one unpaired meanwhile stays out, one
+  paired meanwhile isn't added). The ladder is unchanged: a passkey still can't approve vault secrets, skipping
+  permissions or an agent's settings (`PHONE_ONLY` in `lib/passkey-phone-only.ts`, `PASSKEY_TOO_WIDE` in
+  `lib/widen-check.ts`), a passkey or phone paired later still takes its own Touch ID before any worker trusts it, and a
+  revoke still narrows every worker's set. Plans nothing when none is paired.
+- **GitHub** (`electron/connector-grants.cjs` `planPairing`): only once you've connected GitHub on weft.zip (Settings →
+  Connectors → GitHub on your workers, `components/GitHubConnector.tsx`), at `DEFAULT_SETTINGS` (this project's repo,
+  approval once per worker, until revoked, asking before a protected-branch push), for exactly the checkouts the prompt
+  names (none, or more than `MAX_REPOS`, plans nothing). Signed by this Mac's approval key like Turn on was, so weft.zip's
+  checks are the same; a Mac key not trusted yet makes it wait for the emailed link, and the note says so. Forget ends its
+  tokens with the worker's revoke.
+- **Kept secrets stay off.** Each secret use on a worker still asks this Mac ([secrets.md](secrets.md#kept-on-a-worker)).
+  "Keep on this worker" has no UI any more; Forget and Revoke still wipe what a worker kept before.
+- **What it doesn't do.** A worker paired before 2026-11-11 gets none of this: Forget it and pair it again. Per-worker
+  GitHub settings and Allows have no UI (`lib/use-worker-connectors.ts` still carries them, with main's handlers).
 
 #### Passkey heads: a worker never approves with an outdated set
 

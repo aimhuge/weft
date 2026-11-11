@@ -76,13 +76,22 @@ function heldSigned(signKey, worker, receipt) {
 }
 
 /** The Touch ID prompt for adding to a worker's set: passkeys widen and approve, phones approve Allows. */
-function endorsePrompt(passkeys, phones, worker) {
+// "your paired passkey approve folder, agent and "!" changes and Allows, and your paired phone approve Allows": who a
+// set lets approve, and what. The same words in Passkeys' prompt and in pairing's (approvalClause).
+function approvers(passkeys, phones) {
   const n = (count, one) => (count === 1 ? `paired ${one}` : `${count} paired ${one}s`);
   const parts = [];
   if (passkeys) parts.push(`your ${n(passkeys, "passkey")} approve folder, agent and "!" changes and Allows`);
   if (phones) parts.push(`your ${n(phones, "phone")} approve Allows`);
-  return `let ${parts.join(", and ")} on the worker ${worker}`;
+  return parts.join(", and ");
 }
+
+function endorsePrompt(passkeys, phones, worker) {
+  return `let ${approvers(passkeys, phones)} on the worker ${worker}`;
+}
+
+// The same, as a clause of pairing's own Touch ID prompt (electron/host-pairing.cjs).
+const approvalClause = (passkeys, phones) => `let ${approvers(passkeys, phones)} there`;
 
 /**
  * @param {(channel: string, fn: (...args: any[]) => unknown) => void} handle the board-only IPC handler
@@ -195,6 +204,31 @@ function registerWidenEndorse(handle, { signer, macDevice, confirm, passkeys, en
     endorsed.set(worker, { ...record, confirmed: Math.max(Number(record.confirmed) || 0, raw.receipt.generation) });
     return raw.receipt.generation >= Number(record.generation);
   });
+
+  // The passkeys and phones a worker takes when it's paired (docs/architecture/weft-worker.md#defaults-at-pairing): the
+  // set as it is now, named in pairing's own Touch ID prompt, and signed for the new worker only once that prompt said
+  // yes. Null with none paired. The board then sends it as a `pin` command, as after Passkeys (lib/passkey-sync.ts).
+  function planPairing() {
+    const keys = pairedKeys();
+    const phones = pairedPhones();
+    if (!keys.length && !phones.length) return null;
+    return {
+      say: approvalClause(keys.length, phones.length),
+      async run(worker) {
+        if (typeof worker !== "string" || !ID.test(worker)) throw new Error("That names no worker.");
+        // Narrowed to what's still paired: one revoked while the prompt was up stays out. Never widened past the prompt.
+        const keysNow = new Set(pairedKeys().map(keyOf));
+        const phonesNow = new Set(pairedPhones().map(phoneOf));
+        const k = keys.filter((x) => keysNow.has(keyOf(x)));
+        const p = phones.filter((x) => phonesNow.has(phoneOf(x)));
+        sign(worker, k, endorsed.read()[worker], p);
+        await publish(worker);
+        return { passkeys: k.length, phones: p.length };
+      },
+    };
+  }
+
+  return { planPairing };
 }
 
-module.exports = { registerWidenEndorse, createEndorsed, endorseMessage, endorsePrompt, heldMessage, headMessage, ENDORSE_V, ENDORSE_V3, HEAD_V, HEAD_EVERY_MS };
+module.exports = { registerWidenEndorse, createEndorsed, endorseMessage, endorsePrompt, approvalClause, heldMessage, headMessage, ENDORSE_V, ENDORSE_V3, HEAD_V, HEAD_EVERY_MS };

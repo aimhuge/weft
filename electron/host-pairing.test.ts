@@ -204,3 +204,54 @@ describe("adding a worker by pairing", () => {
     await expect(hosts.check(id)).rejects.toThrow("The worker couldn't be added: the claim changed after it was checked");
   });
 });
+
+// What a new worker gets by default (docs/architecture/weft-worker.md#defaults-at-pairing): said in pairing's one prompt,
+// done only after its yes, and never a reason not to pair.
+describe("defaults at pairing", () => {
+  const paired = async (pairingDefaults: () => Promise<unknown>, confirm = true) => {
+    const db = fakeDb();
+    const ask = vi.fn<(reason: string) => Promise<boolean>>(() => Promise.resolve(confirm));
+    const hosts = createHostPairing({ db: () => db.db, userId: () => "u1", macDevice: () => "mac-id", myDevice: () => Promise.resolve({ publicKey: "mac-key" }), confirm: ask, pinWorker, pairingDefaults } as never);
+    const { code, id } = await hosts.start(ORG);
+    claimAs(code, db.rows);
+    return { result: await hosts.check(id), ask };
+  };
+
+  it("names every default in the one prompt, then does each for the new worker", async () => {
+    const passkeys = vi.fn(() => Promise.resolve({ passkeys: 1, phones: 0 }));
+    const github = vi.fn(() => Promise.resolve(undefined));
+    const { result, ask } = await paired(() => Promise.resolve([{ key: "passkeys", say: "let your paired passkey approve there", run: passkeys }, { key: "github", say: "let its cards use GitHub", run: github }]));
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(ask.mock.calls[0]?.[0]).toMatch(/to your workspace, let your paired passkey approve there, and let its cards use GitHub$/);
+    expect(passkeys).toHaveBeenCalledWith("worker-1");
+    expect(github).toHaveBeenCalledWith("worker-1");
+    expect(result).toMatchObject({ status: "paired", defaults: { passkeys: { passkeys: 1, phones: 0 }, github: { ok: true } } });
+  });
+
+  it("says one default alone with no 'and', and the prompt as before with none", async () => {
+    const one = await paired(() => Promise.resolve([{ key: "github", say: "let its cards use GitHub", run: () => Promise.resolve({ ok: true }) }]));
+    expect(one.ask.mock.calls[0]?.[0]).toMatch(/to your workspace, let its cards use GitHub$/);
+    const none = await paired(() => Promise.resolve([]));
+    expect(none.ask.mock.calls[0]?.[0]).toMatch(/to your workspace$/);
+    expect(none.result).not.toHaveProperty("defaults");
+  });
+
+  it("does none of them when the prompt is declined", async () => {
+    const run = vi.fn();
+    const { result } = await paired(() => Promise.resolve([{ key: "github", say: "x", run }]), false);
+    expect(result).toEqual({ status: "cancelled" });
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("pairs anyway when planning fails, a plan is malformed, or a default fails", async () => {
+    const failed = await paired(() => Promise.reject(new Error("offline")));
+    expect(failed.result).toMatchObject({ status: "paired" });
+    expect(failed.ask.mock.calls[0]?.[0]).toMatch(/to your workspace$/);
+    const junk = await paired(() => Promise.resolve("nope"));
+    expect(junk.result).not.toHaveProperty("defaults");
+    // A plan's run is main's code, but one rejecting with a bare string still reads as its error.
+    // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+    const odd = await paired(() => Promise.resolve([null, { key: "x" }, { key: "github", say: "s", run: () => Promise.reject(new Error("weft.zip down")) }, { key: "passkeys", say: "p", run: () => Promise.reject("raw") }]));
+    expect(odd.result).toMatchObject({ status: "paired", defaults: { github: { error: "weft.zip down" }, passkeys: { error: "raw" } } });
+  });
+});

@@ -97,7 +97,7 @@ describe("changes", () => {
     const early = renderHook(() => useWorkerConnectors(bridge));
     act(() => early.result.current.connect());
     expect(openInPane).not.toHaveBeenCalled();
-    expect(early.result.current.note).toBe("Connect GitHub in the browser pane, then come back here.");
+    expect(early.result.current.note).toBe("Connect GitHub in the browser pane. Workers you add after that get it.");
     const { result } = await loaded();
     act(() => result.current.connect());
     expect(openInPane).toHaveBeenCalledWith(VIEW.connectUrl);

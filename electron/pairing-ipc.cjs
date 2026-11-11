@@ -105,7 +105,16 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   const workerKeys = createWorkerKeyGrants({ dir: dataDir, safeStorage: keychain, db, userId, macDevice, sign: macSign, pins: workerPins, syncKeys, confirm, sealOn: () => paired.settings().seal === true, keepFor });
   afterRotate = (orgId, version) => workerKeys.regrant(orgId, version);
   registerWorkerKeyGrants(handle, workerKeys);
-  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker, dropKeys: workerKeys.drop }, workerPins);
+  // What a new worker gets by default, said in pairing's one Touch ID (docs/architecture/weft-worker.md#defaults-at-pairing):
+  // this Mac's passkeys and phones approving there, and GitHub for its cards when you've connected it. The endorser is
+  // registered below, so it's read when a pairing asks, not now.
+  let endorser = null;
+  const pairingDefaults = async () => {
+    const passkeys = endorser?.planPairing() ?? null;
+    const github = await connectorSigner.planPairing().catch(() => null);
+    return [...(passkeys ? [{ key: "passkeys", ...passkeys }] : []), ...(github ? [{ key: "github", ...github }] : [])];
+  };
+  require("./host-pairing-ipc.cjs").registerHostPairing(handle, { db, userId, macDevice, myDevice, confirm, macSignKey, macSign, vouchWorker, pairingDefaults, dropKeys: workerKeys.drop }, workerPins);
   const projectRepos = require("./worker-projects.cjs").createProjectRepos({ dataDir });
   const signStart = require("./connector-start.cjs").createStartSigner({ userId, sign: macSign, signKey: macSignKey, projectRepos });
   // Signed widening for a remote host's card (electron/widen-sign.cjs), naming a worker by the name it was pinned under,
@@ -114,7 +123,7 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
   const gooseSet = require("./worker-goose-set.cjs").createGooseSetRecord({ dir: dataDir, safeStorage: keychain });
   require("./widen-sign.cjs").registerWidenSign(handle, { signer, macDevice, confirm, hostName: (id) => workerPins.nameOf(id), onGoose: (host, goose) => gooseSet.set(host, goose) });
   const { registerWidenEndorse, createEndorsed } = require("./widen-endorse.cjs");
-  registerWidenEndorse(handle, {
+  endorser = registerWidenEndorse(handle, {
     signer,
     macDevice,
     confirm,

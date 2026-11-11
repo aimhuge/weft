@@ -30,6 +30,10 @@ describe("use-devices helpers", () => {
 
   it("says how a worker's code ended", () => {
     expect(workerOutcome({ status: "paired" })).toBe("Added the worker.");
+    // What pairing's one Touch ID also did for it (lib/worker-defaults.ts).
+    expect(workerOutcome({ status: "paired", worker: { name: "m1mini", code: "x" }, defaults: { passkeys: { passkeys: 1 }, github: { ok: true } } })).toBe(
+      "Added m1mini. Your passkey can approve there. GitHub is on for its cards.",
+    );
     expect(workerOutcome({ status: "expired" })).toMatch(/expired/);
     expect(workerOutcome({ status: "failed", error: "bad proof" })).toBe("Not added: bad proof");
     expect(workerOutcome({ status: "failed" })).toMatch(/didn't check out/);
