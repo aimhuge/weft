@@ -24,6 +24,15 @@ Several sessions share this branch and working tree, so git history and a broad 
 you what this session did. Use your memory of the conversation: every file you edited, created or
 wrote. That list is the "session files".
 
+## First: already done?
+
+Run `${CLAUDE_SKILL_DIR}/settled.sh <session files>` before anything else. Exit 0 means the session's
+files are all committed and the branch has nothing left to push: the card already shipped its work.
+Then skip every phase below (no tests, docs, scout, deploy check, report page or banner) and reply with
+one line naming what's already in (the commit or the release), then
+`BOARD STATUS: column=done | stage=Done | remaining=none`, and Weft archives the card. Exit 1 prints
+what's left: carry on with Phase 1.
+
 ## Phase 1: Check (you, in parallel)
 
 1. Start `${CLAUDE_SKILL_DIR}/tests.sh <session files>` in the background (Bash `run_in_background`):

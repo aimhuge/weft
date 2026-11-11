@@ -384,7 +384,8 @@ When a new doc lands in this folder, add it here on the same change.
   the rail's 🖥 Services drawer, every process Weft spawned (one `ps` of the tree under Electron, split by thread CLI, dev server, terminal and other) with CPU, memory, End and a refresh-rate cookie.
   `lib/dev-commands.ts` + `lib/dev-launchers.ts` + `lib/dev-launchers-view.ts` + `components/DevLaunchers.tsx`: its Dev servers section, first in the drawer above the usage numbers: each working folder's dev command (package.json, Procfile, Rails, Django, deno, Makefile, wrangler) with Start, or Stop and Restart, whether it started or restarted and which card started it (its name opens the card); Weft's own folder is listed last as the board itself, with a link to its address that opens outside the pane. A thread's name in the services list opens its card.
 - `plugin/skills/*`: my own skills (`/weft:done`, `/weft:commit`, `/weft:preview`, `/weft:setup-done`,
-  which installs tests, docs and strict lint on a project before `/done`; `/weft:done` also keeps this file current);
+  which installs tests, docs and strict lint on a project before `/done`; `/weft:done` also keeps this file current, and first runs
+  `plugin/skills/done/settled.sh`: a card whose files are committed and pushed is archived with no tests, docs or report);
   `lib/skills.ts` lists skills, `lib/automations.ts` turns "When … run …" rules into turns.
   `lib/skill-library.ts` + `lib/skill-usage.ts` + `lib/skill-sets.ts` + `lib/skill-set-actions.ts` + `app/api/skills/set` + `components/SkillsDrawer.tsx` + `components/SkillsChip.tsx`:
   skill sets, a thread gets only its project's skills (an off-list per folder seeded from what its transcripts ran, plus the card's own
