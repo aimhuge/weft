@@ -51,6 +51,13 @@ const nextConfig: NextConfig = {
           "/**/*": [
             "./node_modules/@anthropic-ai/claude-agent-sdk/**/*",
             `./node_modules/@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}/**/*`,
+            "./node_modules/@github/copilot-sdk/**/*",
+            `./node_modules/@github/copilot-sdk-${process.platform}-${process.arch}/**/*`,
+            ...(process.platform === "linux" ? [`./node_modules/@github/copilot-sdk-linuxmusl-${process.arch}/**/*`] : []),
+            "./node_modules/koffi/**/*",
+            "./node_modules/@koromix/koffi-*/**/*",
+            // Sharp's Windows addon loads these DLLs at runtime, beyond Next's import trace.
+            ...(process.platform === "win32" ? [`./node_modules/@img/sharp-win32-${process.arch}/lib/*.dll`] : []),
           ],
         }
       : {}),
@@ -74,7 +81,10 @@ const nextConfig: NextConfig = {
       "./node_modules/{@electron,builder-util,builder-util-runtime}/**/*",
       // weft.zip relays AI work to the desktop and never starts Claude Code, so leave its native binary (~225 MB,
       // traced into every route that imports the SDK) out of Vercel's functions; the desktop build needs it.
-      ...(process.env.WEFT_STANDALONE ? [] : ["./node_modules/@anthropic-ai/claude-agent-sdk-*/**/*"]),
+      ...(process.env.WEFT_STANDALONE ? [] : [
+        "./node_modules/@anthropic-ai/claude-agent-sdk-*/**/*",
+        "./node_modules/@github/copilot-sdk-*/**/*",
+      ]),
     ],
   },
   // weft.zip/@username is a public profile. A route folder can't start with "@" (a parallel-route slot), so the
@@ -89,7 +99,7 @@ const nextConfig: NextConfig = {
   // (node_modules/@esbuild/darwin-arm64/bin/esbuild); when Turbopack resolves it on the server it 500s every
   // route that imports it transitively (2026-10-19). Externalize it the same way.
   // multicast-dns (lib/lan-offer.ts, the LAN path to a worker) opens a UDP socket: loaded from node_modules as it is.
-  serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "esbuild", "multicast-dns"],
+  serverExternalPackages: ["@anthropic-ai/claude-agent-sdk", "@github/copilot-sdk", "esbuild", "multicast-dns"],
   // @weft/client (packages/weft-client) is a workspace package that ships TypeScript source, so Next compiles it with
   // the app's own code instead of loading it from node_modules at runtime.
   transpilePackages: ["@weft/client"],

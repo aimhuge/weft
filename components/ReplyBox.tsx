@@ -45,6 +45,7 @@ export default function ReplyBox({
   suggestion,
   sendLater,
   status,
+  modelPicker,
   stale,
   cutOff = false,
   noPriorContext: noPriorContextProp = false,
@@ -70,6 +71,7 @@ export default function ReplyBox({
   suggestion?: string;
   sendLater?: SendLater;
   status?: ReactNode;
+  modelPicker?: ReactNode;
   stale?: StaleProps;
   // The last turn stopped short (lib/reply-mode.ts turnCutOff), so Continue is offered.
   cutOff?: boolean;
@@ -372,6 +374,7 @@ export default function ReplyBox({
         sizeClass="min-h-[44px] max-h-[40vh]"
         className={modeBorder(view.tone)}
         header={view.chip && <ModeChip tone={view.tone} text={view.chip} />}
+        modelPicker={modelPicker}
         actions={
           <ReplyBoxActions
             view={view}

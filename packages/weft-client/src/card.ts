@@ -11,7 +11,7 @@ export const COLUMNS = [
 
 export type Column = (typeof COLUMNS)[number]["id"];
 
-export type Backend = "claude" | "puku" | "codex" | "goose";
+export type Backend = "claude" | "puku" | "codex" | "goose" | "github-copilot";
 
 // How hard a thread's model thinks, where its CLI offers the choice.
 export type Effort = "low" | "medium" | "high" | "xhigh" | "max";

@@ -1,8 +1,6 @@
 "use client";
 
-// The New thread dialog's controls row: folder picker, agent picker (who the thread is, lib/agents.ts), model picker
-// (which also picks the CLI), effort picker, and the permission mode picker. Extracted from NewCardDialog.tsx so the dialog body and the controls can change on
-// their own schedule.
+// The New thread dialog's model picker and the controls below the composer.
 
 import { useUiText } from "@/lib/ui-language";
 import type { Backend, Effort, PermissionMode } from "@/lib/types";
@@ -18,16 +16,36 @@ import IsolateMenu, { type IsolatePick } from "./IsolateMenu";
 // A select inside a bordered label that draws the box and chevron itself.
 const BARE_SELECT = "cursor-pointer appearance-none bg-transparent pr-4 font-medium outline-none";
 
+export function NewThreadModelPicker({ cwd, backend, model, onPickModel, onPickCli }: {
+  cwd: string;
+  backend: Backend;
+  model: string;
+  onPickModel: (model: string) => void;
+  onPickCli: (backend: Backend) => void;
+}) {
+  const t = useUiText();
+  return (
+    <label data-human-only className="flex max-w-56 items-center rounded-md border border-line-strong px-2 py-1 text-[12px] text-ink">
+      <span className="sr-only">{t("Model")}</span>
+      <ModelSelect
+        value={model}
+        label={t("Model")}
+        onChange={onPickModel}
+        cli={{ backend, onPick: onPickCli }}
+        className={BARE_SELECT}
+        cwd={cwd}
+      />
+    </label>
+  );
+}
+
 export function NewCardDialogControls({
   cwd,
   home,
   backend,
-  model,
   effort,
   permissionMode,
   onChooseFolder,
-  onPickModel,
-  onPickCli,
   onPickEffort,
   onPickMode,
   isolate,
@@ -36,12 +54,9 @@ export function NewCardDialogControls({
   cwd: string;
   home: string;
   backend: Backend;
-  model: string;
   effort: Effort | "";
   permissionMode: PermissionMode;
   onChooseFolder: (folder: string) => void;
-  onPickModel: (model: string) => void;
-  onPickCli: (backend: Backend) => void;
   onPickEffort: (effort: Effort | "") => void;
   onPickMode: (mode: PermissionMode) => void;
   // Shared or a worktree, and its branch (components/IsolateMenu.tsx); left out where isolation isn't offered.
@@ -56,23 +71,6 @@ export function NewCardDialogControls({
       <RepoPicker value={cwd} home={home} onChange={onChooseFolder} />
       {isolate && <IsolateMenu cwd={cwd} {...isolate} />}
       {agent && <AgentSelect {...agent} />}
-
-      <label className="relative flex items-center gap-1.5 rounded-md border border-line-strong py-1.5 pl-2.5 pr-1.5 text-[12px] text-ink">
-        <span className="sr-only">{t("Model")}</span>
-        <ModelSelect
-          value={model}
-          label={t("Model")}
-          onChange={onPickModel}
-          cli={{ backend, onPick: onPickCli }}
-          className={BARE_SELECT}
-          cwd={cwd}
-        />
-        <Icon
-          name="chevronDown"
-          size={12}
-          className="pointer-events-none absolute right-1.5"
-        />
-      </label>
 
       {backend !== "puku" && (
         <label

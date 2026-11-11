@@ -41,6 +41,7 @@ const Composer = forwardRef<
     onChange?: (markdown: string) => void;
     // Buttons at the right end of the bottom bar, such as Send.
     actions?: ReactNode;
+    modelPicker?: ReactNode;
     // A line at the top inside the frame, such as the reply box's mode chip.
     header?: ReactNode;
     // The editing area's height, e.g. "min-h-[260px] max-h-[55vh]".
@@ -55,7 +56,7 @@ const Composer = forwardRef<
     dropTarget?: string;
   }
 >(function Composer(
-  { initial = "", placeholder, autoFocus, variant, onSubmit, onSubmitAlt, onChange, actions, header, sizeClass, className = "", cwd, cardId, dropTarget },
+  { initial = "", placeholder, autoFocus, variant, onSubmit, onSubmitAlt, onChange, actions, modelPicker, header, sizeClass, className = "", cwd, cardId, dropTarget },
   ref,
 ) {
   const [source, setSource] = useState<string | null>(null);
@@ -293,6 +294,7 @@ const Composer = forwardRef<
         dictation={dictation}
         fileInput={fileInput}
         uploadIntoSource={uploadIntoSource}
+        modelPicker={modelPicker}
         actions={actions}
       />
     </div>

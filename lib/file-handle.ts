@@ -43,20 +43,20 @@ export async function openInside(abs: string, root: string, escaped: () => Error
 }
 
 // Saves `text` at `abs` inside `root`, atomically: a reader never sees half a file.
-export async function writeInside(abs: string, root: string, text: string, escaped: () => Error): Promise<string> {
+export async function writeInside(abs: string, root: string, text: string, escaped: () => Error, mode = 0o644): Promise<string> {
   const dir = path.dirname(abs);
   await fsp.mkdir(dir, { recursive: true });
   const realDir = await fsp.realpath(dir);
   if (!within(root, realDir)) throw escaped();
   const target = path.join(realDir, path.basename(abs));
   const tmp = path.join(realDir, `.${path.basename(abs)}.${String(process.pid)}.${String(Date.now())}.tmp`);
-  const fh = await fsp.open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0o644);
+  const fh = await fsp.open(tmp, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, mode);
   try {
-    await fh.writeFile(text, "utf8");
-  } finally {
-    await fh.close();
-  }
-  try {
+    try {
+      await fh.writeFile(text, "utf8");
+    } finally {
+      await fh.close();
+    }
     if ((await fsp.realpath(dir)) !== realDir) throw escaped();
     await fsp.rename(tmp, target);
   } catch (err) {

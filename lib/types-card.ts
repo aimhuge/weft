@@ -10,9 +10,9 @@ export { COLUMNS, MODES, type Backend, type Column, type PermissionMode };
 // The copilot is one long-lived thread with this fixed id, kept off the board.
 export const COPILOT_ID = "copilot";
 
-export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
+export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot" };
 // The short name, for a label that sits beside something else ("Sonnet 5.5 (Claude)").
-export const BACKEND_SHORT: Record<Backend, string> = { claude: "Claude", puku: "Puku", codex: "Codex", goose: "Goose" };
+export const BACKEND_SHORT: Record<Backend, string> = { claude: "Claude", puku: "Puku", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot" };
 // bypassPermissions is "YOLO": every tool runs without asking.
 
 // How the pickers (new thread, thread header, card menu) name each mode, loosest first.

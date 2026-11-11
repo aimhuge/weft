@@ -93,7 +93,7 @@ describe("the Goose models a menu lists", () => {
 describe("the menu's groups", () => {
   it("has one group per CLI, in the CLIs' order", () => {
     const groups = modelGroups();
-    expect(groups.map((g) => g.backend)).toEqual(["claude", "puku", "codex", "goose"]);
+    expect(groups.map((g) => g.backend)).toEqual(["claude", "puku", "codex", "goose", "github-copilot"]);
   });
 
   it("heads each group with its CLI's name alone: every CLI runs behind Weft's guards (lib/guards)", () => {

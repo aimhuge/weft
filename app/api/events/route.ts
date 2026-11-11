@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { trackActivity } from "@/lib/activity";
 import { subscribe } from "@/lib/bus";
-import { guard } from "@/lib/guard";
+import { elevated, guard } from "@/lib/guard";
 import { startLimitPoll } from "@/lib/limit-poll";
 
 // Server-sent events: every card change and thread update, as it happens. The board opens this first,
@@ -9,6 +9,7 @@ import { startLimitPoll } from "@/lib/limit-poll";
 export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
+  const canSeeCopilotLogin = !elevated(req, { write: false });
   await connection();
   try {
     trackActivity();
@@ -29,7 +30,10 @@ export async function GET(req: Request) {
           cleanup();
         }
       };
-      const unsubscribe = subscribe((event) => write(`data: ${JSON.stringify(event)}\n\n`));
+      const unsubscribe = subscribe((event) => {
+        if (event.type === "login" && event.login.backend === "github-copilot" && !canSeeCopilotLogin) return;
+        write(`data: ${JSON.stringify(event)}\n\n`);
+      });
       const ping = setInterval(() => write(": ping\n\n"), 15_000);
       cleanup = () => {
         unsubscribe();

@@ -169,7 +169,7 @@ export function boardMcpServer(actions: BoardActions, reach: WorkerReach = worke
           prompt: z.string(),
           folder: z.string().describe("Project folder, absolute or ~/..., or a worker:// project on one of the user's Weft Workers"),
           title: z.string().optional(),
-          cli: z.enum(["claude", "puku", "codex", "goose"]).optional(),
+          cli: z.enum(["claude", "puku", "codex", "goose", "github-copilot"]).optional(),
           permission_mode: z.enum(["default", "acceptEdits", "auto", "bypassPermissions"]).optional(),
           tags: TAGS,
           agent: agentParam(),

@@ -190,12 +190,12 @@ describe("NewCardDialog", () => {
     const picker = screen.getByRole("combobox", { name: "Model" });
     expect(screen.queryByRole("group", { name: "CLI" })).toBeNull();
     pickModel("Model", "Opus 4.8");
-    // Codex's model lives in its own config, so its row is that model, and it picks the CLI.
-    pickModel("Model", "Codex’s configured model");
-    expect(picker).toHaveValue("Codex’s configured model");
+    expect(box.parentElement).toContainElement(picker);
+    pickModel("Model", "GitHub Copilot’s configured model");
+    expect(picker).toHaveValue("GitHub Copilot’s configured model");
     await userEvent.type(box, "Hi");
     await userEvent.click(screen.getByRole("button", { name: "Start now" }));
-    expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "codex" }));
+    expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "github-copilot" }));
   });
 
   it("starts in Settings' default permission mode", async () => {

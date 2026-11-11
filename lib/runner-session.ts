@@ -31,6 +31,7 @@ import { sessionDirs } from "./show-dir";
 import { promptsBuild, weftSystemPrompt } from "./weft-prompts";
 import { CODEX_CODE, driveCodex } from "./codex-runner";
 import { GOOSE_RUNNER_CODE, driveGoose } from "./goose-runner";
+import { driveGitHubCopilot } from "./github-copilot-runner";
 import { getCard, updateCard } from "./store";
 import { loseTasks } from "./task-ledger";
 import * as turnRules from "./turn";
@@ -48,7 +49,7 @@ const MAX_SPARES = 3;
 // the code (not random) because each API route can load its own copy of these modules. The pure turn
 // rules in turn.ts count too: a session started before they changed would still run the old ones.
 const BUILD = createHash("sha1")
-  .update([drive, driveCodex, driveGoose, queryOptions, threadEnv, weftMcpServers, weftSystemPrompt, subagentPrompt, ...CODEX_CODE, ...GOOSE_RUNNER_CODE, ...TURN_CODE, askUser, askAboutCall, settle, onElicitation, ...Object.values(turnRules)].map(String).join("\n"))
+  .update([drive, driveExternal, driveCodex, driveGoose, driveGitHubCopilot, queryOptions, threadEnv, weftMcpServers, weftSystemPrompt, subagentPrompt, ...CODEX_CODE, ...GOOSE_RUNNER_CODE, ...TURN_CODE, askUser, askAboutCall, settle, onElicitation, ...Object.values(turnRules)].map(String).join("\n"))
   .digest("hex");
 
 // The code fingerprint plus what a CLI only reads when it starts: the content of Weft's pinned prompts
@@ -93,7 +94,7 @@ export function open(spec: Spec, cardId: string | null): Session {
     preamble: spec.backend === "puku" ? pukuContext(spec.cwd, weftSystemPrompt(spec), spec.skillsOff) : undefined,
     // A new conversation gets its id from Weft (--session-id), not from the CLI's init: puku can take 15s or more
     // to send init, and a turn stopped before then left the card nothing to resume, so "continue" began a new one.
-    sessionId: spec.backend === "codex" || spec.sessionId ? undefined : randomUUID(),
+    sessionId: spec.backend === "codex" || spec.backend === "github-copilot" || spec.sessionId ? undefined : randomUUID(),
   };
   if (cardId) sessions.set(cardId, session);
   session.done = drive(session, executable);
@@ -116,7 +117,7 @@ export function warmUp(cardId: string) {
 // Keeps a spare CLI open in a project folder for the next new card there.
 export function ensureSpare(cwd: string, backend: Backend = "claude") {
   // Codex and Goose start a fresh process for every turn, so there is no spare process to keep warm.
-  if (backend === "codex" || backend === "goose") return;
+  if (backend === "codex" || backend === "goose" || backend === "github-copilot") return;
   const key = spareKey(backend, cwd);
   const existing = spares.get(key);
   if (existing && !isStale(existing)) return;
@@ -235,18 +236,26 @@ function queryOptions(session: Session, executable: string | undefined): Options
   };
 }
 
+function driveExternal(session: Session, executable: string | undefined) {
+  if (session.spec.backend === "codex") {
+    if (!executable) throw new Error("Codex CLI isn't on this app's PATH.");
+    return driveCodex(session, executable);
+  }
+  if (session.spec.backend === "goose") {
+    if (!executable) throw new Error("goose isn't on this app's PATH.");
+    return driveGoose(session, executable);
+  }
+  if (session.spec.backend === "github-copilot") return driveGitHubCopilot(session);
+  return undefined;
+}
+
 async function drive(session: Session, executable: string | undefined) {
   // Let open() finish registering the session before anything below can fail and clean it up.
   await Promise.resolve();
   try {
-    if (session.spec.backend === "codex") {
-      if (!executable) throw new Error("Codex CLI isn't on this app's PATH.");
-      await driveCodex(session, executable);
-      return;
-    }
-    if (session.spec.backend === "goose") {
-      if (!executable) throw new Error("goose isn't on this app's PATH.");
-      await driveGoose(session, executable);
+    const external = driveExternal(session, executable);
+    if (external) {
+      await external;
       return;
     }
     session.query = query({ prompt: session.inbox, options: queryOptions(session, executable) });

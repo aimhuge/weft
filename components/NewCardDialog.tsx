@@ -19,7 +19,7 @@ import { NEW_THREAD } from "@/lib/file-drop";
 import Composer, { type ComposerHandle } from "./Composer";
 import { IntroButton, IntroFrame, PlayIntroButton } from "./FeatureIntro";
 import NewThreadHeaderActions from "./NewThreadHeaderActions";
-import { NewCardDialogControls } from "./NewCardDialogControls";
+import { NewCardDialogControls, NewThreadModelPicker } from "./NewCardDialogControls";
 import { isWorkerProject } from "@/lib/worker-project";
 import { NewCardDialogFooter } from "./NewCardDialogFooter";
 import { RestartRequested } from "./RestartChip";
@@ -129,6 +129,15 @@ export default function NewCardDialog({
           placeholder={t("What should this thread do? Paste screenshots or videos right where they belong, or hit the mic and talk.")}
           sizeClass="h-full min-h-[180px]"
           className="flex-1"
+          modelPicker={
+            <NewThreadModelPicker
+              cwd={dialog.cwd}
+              backend={dialog.backend}
+              model={dialog.model}
+              onPickModel={dialog.setModel}
+              onPickCli={dialog.pickCliDefault}
+            />
+          }
         />
       </div>
 
@@ -136,12 +145,9 @@ export default function NewCardDialog({
         cwd={dialog.cwd}
         home={home}
         backend={dialog.backend}
-        model={dialog.model}
         effort={dialog.effort}
         permissionMode={dialog.permissionMode}
         onChooseFolder={dialog.chooseFolder}
-        onPickModel={dialog.setModel}
-        onPickCli={dialog.pickCliDefault}
         onPickEffort={dialog.setEffort}
         onPickMode={dialog.pickMode}
         isolate={{

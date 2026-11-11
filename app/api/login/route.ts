@@ -1,10 +1,11 @@
 import { connection } from "next/server";
-import { fail, guard } from "@/lib/guard";
+import { elevated, fail, guard } from "@/lib/guard";
 import { authStatus, cancelLogin, loginRuns, openLoginInTerminal, sendLoginInput, startLogin } from "@/lib/login";
 import { clearLoginWaiters, retryAfterLogin } from "@/lib/runner";
+import { BACKEND_IDS } from "@/lib/new-thread";
 import type { Backend, LoginView } from "@/lib/types";
 
-const BACKENDS: Backend[] = ["claude", "puku", "codex", "goose"];
+const BACKENDS = BACKEND_IDS;
 const ACTIONS = ["start", "input", "cancel", "terminal"] as const;
 type Action = (typeof ACTIONS)[number];
 
@@ -17,8 +18,12 @@ export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
-  const [claude, puku, codex, goose] = await Promise.all([authStatus("claude"), authStatus("puku"), authStatus("codex"), authStatus("goose")]);
-  return Response.json({ status: { claude, puku, codex, goose }, runs: loginRuns() });
+  const statuses = await Promise.all(BACKENDS.map(async (backend) => [backend, await authStatus(backend)] as const));
+  const runs = loginRuns();
+  return Response.json({
+    status: Object.fromEntries(statuses),
+    runs: elevated(req, { write: false }) ? runs.filter((run) => run.backend !== "github-copilot") : runs,
+  });
 }
 
 export async function POST(req: Request) {
@@ -27,7 +32,12 @@ export async function POST(req: Request) {
   try {
     const body = (await req.json()) as Record<string, unknown>;
     const backend = body.backend as Backend;
-    if (!BACKENDS.includes(backend)) throw new Error("Unknown CLI. Use claude, puku, codex or goose.");
+    if (!BACKENDS.includes(backend)) throw new Error(`Unknown CLI. Use ${BACKENDS.join(", ")}.`);
+    if (backend === "github-copilot") {
+      const boardOnly = elevated(req);
+      if (boardOnly) return boardOnly;
+      if (body.action === "terminal" || body.action === "input") throw new Error("Enter the device code on GitHub.");
+    }
     const action = body.action as Action;
     if (!ACTIONS.includes(action)) throw new Error("Unknown login action.");
 

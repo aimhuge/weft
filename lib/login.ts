@@ -6,13 +6,14 @@ import type { Backend, LoginState, LoginTrial, LoginView } from "./types";
 import { globalSingleton } from "./global-singleton";
 import { openLoginInTerminal } from "./login-terminal";
 import { authStatus } from "./login-status";
+import { startCopilotLogin } from "./github-copilot-login";
 import { clean, errMessage, isNotLoggedInError, isRateLimitError, lastUrl, needsTty } from "./login-output";
 
 // Runs `<cli> auth login` in the background when a thread finds its CLI logged out, streams the
 // CLI's output to the board's login pop-up, and falls back to a Terminal window when the CLI
 // needs a real TTY (the macOS Terminal path lives in ./login-terminal).
 
-const COMMANDS: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose" };
+const COMMANDS: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose", "github-copilot": "copilot" };
 const OUTPUT_BYTES = 8 * 1024;
 // Raw output kept for re-cleaning, so escape codes split across chunks still strip cleanly.
 const RAW_BYTES = 32 * 1024;
@@ -26,6 +27,7 @@ interface LoginRun {
   view: LoginView;
   raw: string;
   child?: ChildProcess;
+  abort?: AbortController;
   poll?: ReturnType<typeof setInterval>;
   polling: boolean;
   // Called once, when the CLI reports it's logged in.
@@ -151,6 +153,7 @@ function retire(run: LoginRun | undefined) {
   if (!run) return [];
   stopPolling(run);
   killChild(run);
+  run.abort?.abort();
   if (run.publishTimer) clearTimeout(run.publishTimer);
   run.publishTimer = undefined;
   return run.onDone.splice(0);
@@ -230,6 +233,8 @@ export function startLogin(backend: Backend, onDone?: () => void): LoginView {
   if (existing && (existing.view.state === "running" || existing.view.state === "terminal")) {
     return addCallback(existing, onDone);
   }
+
+  if (backend === "github-copilot") return startCopilotLogin(onDone);
 
   // Codex login requires an interactive terminal for browser/device authorization, and Goose's
   // `configure` is an interactive wizard: both need a real TTY, so they go to a Terminal window.

@@ -41,7 +41,7 @@ function login(cardId: string, backend: Backend, trial?: LoginTrial) {
 // entry from the session transcript on retry.
 export function needLogin(cardId: string, backend: Backend, message: string) {
   const card = getCard(cardId);
-  if (card?.sessionId) updateCard(cardId, { sessionId: undefined });
+  if (card?.sessionId && backend !== "github-copilot") updateCard(cardId, { sessionId: undefined });
   safeUpdate(cardId, {
     column: "needs_you",
     pending: null,
@@ -52,7 +52,7 @@ export function needLogin(cardId: string, backend: Backend, message: string) {
   waiting.add(cardId);
   loginWaiters.set(backend, waiting);
   if (backend === "puku" && !hasOwnPukuLogin()) void pukuTrialOrLogin(cardId, message);
-  else login(cardId, backend);
+  else if (backend !== "github-copilot") login(cardId, backend);
 }
 
 // Runs every card that was waiting on this CLI's login. Safe to call more than once.

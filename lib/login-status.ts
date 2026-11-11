@@ -1,5 +1,7 @@
 import { execFile } from "node:child_process";
 import { cliEnv } from "./env";
+import { githubCopilotStatus } from "./github-copilot-client";
+import { spawnPlan } from "./win-command";
 import type { Backend, CliStatus } from "./types";
 import { binary, cleanOutput as clean, message } from "./login";
 
@@ -54,6 +56,7 @@ function parseGooseStatus(stdout: string, stderr: string): CliStatus | null {
 }
 
 export async function authStatus(backend: Backend): Promise<CliStatus> {
+  if (backend === "github-copilot") return githubCopilotStatus();
   let bin: string;
   try {
     bin = binary(backend);
@@ -69,10 +72,11 @@ export async function authStatus(backend: Backend): Promise<CliStatus> {
         : ["auth", "status", "--json"];
     const env = cliEnv();
     if (backend === "codex") delete env.CLAUDE_CODE_ENTRYPOINT;
+    const plan = spawnPlan(bin, args, { env });
     execFile(
-      bin,
-      args,
-      { env, timeout: STATUS_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+      plan.command,
+      plan.args,
+      { env, timeout: STATUS_TIMEOUT_MS, maxBuffer: 1024 * 1024, ...(plan.windowsVerbatimArguments && { windowsVerbatimArguments: true }) },
       (err, stdout: string | undefined, stderr: string | undefined) => {
         const status = backend === "codex"
           ? parseCodexStatus(stdout ?? "", stderr ?? "")

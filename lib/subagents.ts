@@ -18,7 +18,7 @@ import type { SubagentModel } from "./types-settings";
 // reach this module (and the settings file it reads) — see the note there.
 export type { SubagentModel };
 
-const COMMAND: Record<Backend, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose" };
+const COMMAND: Record<Exclude<Backend, "github-copilot">, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose" };
 
 // The CLI that serves a model id, or undefined for "choose", "inherit" and ids neither serves.
 export const subagentBackend = backendFor;
@@ -71,6 +71,7 @@ export const GOOSE_DELEGATE = `Use subagents more than you'd think: their file r
 // (lib/goose-runner.ts gooseEnv). A Goose thread has no Agent tool to fall back on.
 function crossCli(model: string | undefined, backend: Backend, thread: Backend = "claude"): string {
   const fallback = thread === "goose" ? "do the work yourself" : "use the Agent tool";
+  if (backend === "github-copilot") return "GitHub Copilot is unavailable for subagents.";
   const reach = thread === "goose" ? "" : ", which the Agent tool can't reach from this CLI";
   // The id that goes on the command line is the bare one: a pick may carry the "goose:" prefix,
   // and "goose run --model goose:<id>" is not a model any CLI serves.
@@ -98,6 +99,7 @@ function goosePrompt(model: SubagentModel): string {
 }
 
 export function subagentPrompt(model: SubagentModel, backend: Backend): string {
+  if (backend === "github-copilot") return "";
   if (backend === "goose") return goosePrompt(model);
   if (model === "choose") return backend === "claude" ? `${DELEGATE}\n\n${CHOOSE}` : DELEGATE;
   if (model === "inherit") return `${DELEGATE}\n\nSubagents run on the same model as this thread (the user's Weft setting), so leave the Agent tool's model input out.`;

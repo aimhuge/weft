@@ -17,6 +17,7 @@ export const CLIS: { id: Backend; label: string; note: string }[] = [
   { id: "claude", label: "Claude Code", note: "Anthropic's coding agent" },
   { id: "puku", label: "puku-cli", note: "Claude Code on the Puku gateway, free to try" },
   { id: "codex", label: "Codex", note: "OpenAI's coding agent" },
+  { id: "github-copilot", label: "GitHub Copilot", note: "GitHub's coding agent" },
 ];
 
 export type { CliStatuses };
@@ -71,10 +72,10 @@ function CliRow({ cli, status, trial, onLogin, starting }: CliRowProps) {
   return (
     <div className="flex items-center gap-2.5 rounded-md border border-line px-3 py-1.5 text-[12.5px]">
       <span className={`size-2 shrink-0 rounded-full ${dot}`} aria-hidden />
-      <span className="w-[92px] shrink-0 font-medium text-ink">{cli.label}</span>
+      <span className="w-[104px] shrink-0 font-medium text-ink">{cli.label}</span>
       <span className="min-w-0 flex-1 truncate text-muted">{line}</span>
       {canLogIn && (
-        <button type="button" onClick={onLogin} disabled={starting} className="flex shrink-0 items-center gap-1 rounded-md border border-line-strong px-2 py-0.5 text-[12px] text-ink hover:bg-sunken disabled:opacity-50">
+        <button type="button" aria-label={`Log in to ${cli.label}`} onClick={onLogin} disabled={starting} className="flex shrink-0 items-center gap-1 rounded-md border border-line-strong px-2 py-0.5 text-[12px] text-ink hover:bg-sunken disabled:opacity-50">
           {starting && <Spinner size={10} />}
           Log in
         </button>

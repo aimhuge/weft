@@ -6,7 +6,7 @@ const paths: Partial<Record<Backend, string>> = {};
 
 // Claude Code comes from the Agent SDK; puku-cli, Codex and Goose come from the user's PATH.
 export function executableFor(backend: Backend) {
-  if (backend === "claude") return undefined;
+  if (backend === "claude" || backend === "github-copilot") return undefined;
   if (!paths[backend]) {
     const command = backend === "puku" ? "puku-cli" : backend === "goose" ? "goose" : "codex";
     try {

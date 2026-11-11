@@ -9,6 +9,7 @@ const CLIS: { id: Backend; label: string }[] = [
   { id: "claude", label: "Claude Code" },
   { id: "puku", label: "puku-cli" },
   { id: "codex", label: "Codex" },
+  { id: "github-copilot", label: "GitHub Copilot" },
 ];
 
 // How often the panel re-reads the logins while it is open. A login finishes in the browser,
@@ -112,7 +113,7 @@ export default function CliLogins({ titleClass }: { titleClass: string }) {
             const running = liveRun(login.runs, cli.id);
             return (
               <div key={cli.id} className="flex items-center gap-3 rounded-md border border-line px-3 py-2.5">
-                <span className="w-[96px] shrink-0 text-[13px] font-medium text-ink">{cli.label}</span>
+                <span className="w-[104px] shrink-0 text-[13px] font-medium text-ink">{cli.label}</span>
                 <span className="flex min-w-0 flex-1 items-center gap-2">
                   <span className={`h-2 w-2 shrink-0 rounded-full ${line.dot}`} aria-hidden="true" />
                   <span className={`min-w-0 break-words text-[12.5px] ${s?.error ? "text-danger" : "text-muted"}`}>
