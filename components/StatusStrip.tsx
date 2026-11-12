@@ -26,7 +26,7 @@ function modelTone(backend?: Backend) {
   return "text-warn";
 }
 
-const CLI_NAMES: Record<Backend, string> = { claude: "claude", puku: "puku", codex: "codex", goose: "goose" };
+const CLI_NAMES: Record<Backend, string> = { claude: "claude", puku: "puku", codex: "codex", goose: "goose", "github-copilot": "GitHub Copilot" };
 
 // Which CLI and model the thread runs on: the model its session started with (runsOn), else the one the
 // last turn spent most on. The tip says when those differ (a subagent or side call cost more).

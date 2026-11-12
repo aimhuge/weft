@@ -281,7 +281,7 @@ export async function stop(cardId: string) {
   while (session.pending.length) settle(cardId, false);
   if (!session.busy) return;
   session.stopping = true;
-  if (session.spec.backend === "codex") {
+  if (session.spec.backend === "codex" || session.spec.backend === "github-copilot") {
     session.abort.abort();
     await session.done;
     return;

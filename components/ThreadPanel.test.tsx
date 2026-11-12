@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeCard } from "./test-utils";
 import ThreadPanel from "./ThreadPanel";
 
-const api = vi.hoisted(() => ({ skills: vi.fn(() => Promise.resolve({ skills: [] })), copilotSuggestions: vi.fn(() => Promise.resolve({ chips: [], covers: [] })), copilotChipClicked: vi.fn(() => Promise.resolve({ ok: true })), stop: vi.fn(() => Promise.resolve()) }));
+const api = vi.hoisted(() => ({ skills: vi.fn(() => Promise.resolve({ skills: [] })), copilotSuggestions: vi.fn(() => Promise.resolve({ chips: [], covers: [] })), copilotChipClicked: vi.fn(() => Promise.resolve({ ok: true })), stop: vi.fn(() => Promise.resolve()), switchBackend: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/client", () => ({ api }));
 vi.mock("./Composer", () => import("./composer-mock"));
 // ThreadView listens for live thread events itself; jsdom has no EventSource.
@@ -61,6 +61,15 @@ describe("ThreadPanel", () => {
     renderPanel({ id: "copilot", role: "copilot", title: "Copilot" });
     await userEvent.click(screen.getByRole("heading", { name: "Copilot" }));
     expect(screen.queryByDisplayValue("Copilot")).not.toBeInTheDocument();
+  });
+
+  it("can switch an existing thread to GitHub Copilot from its reply composer", async () => {
+    renderPanel({ backend: "claude" });
+    const reply = await screen.findByRole("textbox", { name: "Message" });
+    const composer = within(reply.parentElement!);
+    await userEvent.click(composer.getByRole("button", { name: /Switch model/ }));
+    await userEvent.click(composer.getByRole("button", { name: "GitHub Copilot’s configured model" }));
+    expect(api.switchBackend).toHaveBeenCalledWith("c1", "github-copilot", false, "github-copilot-default");
   });
 
   it("opens the editor column from the ✏︎ in its header, lit while the editor is open", async () => {

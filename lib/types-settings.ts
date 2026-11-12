@@ -125,6 +125,8 @@ export interface LoginView {
   output: string;
   // The last https URL the CLI printed, if any (the login page).
   url?: string;
+  // GitHub's one-time device code, shown separately from CLI output.
+  userCode?: string;
   startedAt: number;
   // Why Weft's Puku trial didn't cover this login (lib/puku-trial.ts), for the pop-up to say.
   trial?: LoginTrial;

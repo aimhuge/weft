@@ -48,6 +48,7 @@ export const BACKENDS: { id: Backend; label: string }[] = [
   { id: "puku", label: "puku-cli" },
   { id: "codex", label: "Codex" },
   { id: "goose", label: "Goose" },
+  { id: "github-copilot", label: "GitHub Copilot" },
 ];
 
 // Every CLI Weft can start a thread on, as plain ids. The one list of them: a route that
@@ -62,6 +63,7 @@ export const CODEX_DEFAULT_MODEL = "codex-default";
 // Picker sentinel: Goose's provider's own default model. Goose serves many providers, so
 // this is "whatever the configured provider picks" rather than one fixed model.
 export const GOOSE_DEFAULT_MODEL = "goose-default";
+export const GITHUB_COPILOT_DEFAULT_MODEL = "github-copilot-default";
 
 // The Puku gateway serves these three and answers any other id as puku-ai-2.8.
 // Goose's models are not here: each provider serves its own ids (lib/goose-provider.ts).
@@ -83,6 +85,7 @@ export const MODELS: Record<Backend, { id: string; label: string }[]> = {
   // serves its own ids, so a fixed list here would be wrong for all but one of them. This is the
   // one row every Goose menu has — the provider's own pick.
   goose: [{ id: GOOSE_DEFAULT_MODEL, label: "Your BYOK model" }],
+  "github-copilot": [{ id: GITHUB_COPILOT_DEFAULT_MODEL, label: "GitHub Copilot’s configured model" }],
 };
 
 // Every model id any CLI serves. The pickers offer them all — picking a model moves the
@@ -175,7 +178,7 @@ export function modelOn(backend: Backend, model: string | undefined): string | u
   if (isGooseValue(model)) return backend === "goose" ? modelOn(backend, bareModel(model)) : undefined;
   if (model === CODEX_DEFAULT_MODEL) return undefined;
   // Goose's own sentinel too: "goose-default" means the provider picks, so the card pins no model id.
-  if (model === GOOSE_DEFAULT_MODEL) return undefined;
+  if (model === GOOSE_DEFAULT_MODEL || model === GITHUB_COPILOT_DEFAULT_MODEL) return undefined;
   // A Goose card takes any model id: Goose's providers are gateways that serve their own ids (a local
   // Ollama model, a private endpoint's), so no list can name them all and dropping one would silently
   // run a different model than the card asked for.
@@ -213,6 +216,7 @@ const EFFORT_BY_BACKEND: Record<Backend, Effort[]> = {
   puku: ["low", "medium", "high", "max"],
   codex: ["low", "medium", "high", "xhigh", "max"],
   goose: [],
+  "github-copilot": [],
 };
 
 // The closest effort a backend accepts. Drops xhigh to high for puku. "" / undefined pass through

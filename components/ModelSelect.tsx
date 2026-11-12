@@ -1,12 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, NO_MODEL } from "@/lib/new-thread";
+import { CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, NO_MODEL } from "@/lib/new-thread";
 import { useLimitedModels } from "@/lib/use-plan-limits";
 import { gooseModelsFor } from "@/lib/goose-provider";
 import { useGooseChoice, useNamedModels, type GooseChoice } from "@/lib/use-named-models";
 import { cliChoiceModel, gooseNamed, modelGroups, type NamedModel } from "@/lib/model-options";
 import type { Backend } from "@/lib/types";
+import { isWorkerProject } from "@/lib/worker-project";
 import ModelTypeahead from "./ModelTypeahead";
 
 // Every model menu in Weft: the New thread dialog's, and each one in Settings → Models. One
@@ -33,14 +34,17 @@ export type PickerOption = { value: string; label: string };
 
 // The configured-model rows of the CLIs whose model lives in their own config. Picking one moves the
 // thread to that CLI with no model pinned.
-const CONFIGURED: Record<string, Backend> = { [CODEX_DEFAULT_MODEL]: "codex", [GOOSE_DEFAULT_MODEL]: "goose" };
+const CONFIGURED: Record<string, Backend> = { [CODEX_DEFAULT_MODEL]: "codex", [GOOSE_DEFAULT_MODEL]: "goose", [GITHUB_COPILOT_DEFAULT_MODEL]: "github-copilot" };
 
 // Whether a model belongs in the menu. A Goose model shows only when the provider the user set
 // up serves it (Settings → Models → Bring your own key); the models the user named always do, and
 // so does the row's current pick, so the menu never shows a value it doesn't list.
-function useOffered(value: string, goose: GooseChoice) {
+function useOffered(value: string, goose: GooseChoice, offerCopilot: boolean) {
   const ready = new Set(gooseModelsFor(goose.providerId, goose.modelId));
-  return (backend: Backend, id: string) => backend !== "goose" || id === GOOSE_DEFAULT_MODEL || id === value || ready.has(id);
+  return (backend: Backend, id: string) => {
+    if (backend === "github-copilot") return offerCopilot;
+    return backend !== "goose" || id === GOOSE_DEFAULT_MODEL || id === value || ready.has(id);
+  };
 }
 
 // A menu that picks the CLI too: the row's CLI, and the pick of a CLI with its own default model.
@@ -71,7 +75,8 @@ export default function ModelSelect({
   const limited = useLimitedModels(cwd);
   const atLimit = useMemo(() => new Set(limited.map((l) => l.model)), [limited]);
   const goose = useGooseChoice();
-  const offered = useOffered(value, goose);
+  const shown = cli && value === NO_MODEL ? cliChoiceModel(cli.backend) || configuredRow(cli.backend) : value;
+  const offered = useOffered(value, goose, !isWorkerProject(cwd) || shown === GITHUB_COPILOT_DEFAULT_MODEL);
   const names = useNamedModels();
 
   // The models the user named, per CLI. A name is a Goose name — the setting is `gooseNamedModels`
@@ -108,9 +113,6 @@ export default function ModelSelect({
       }),
     [named, atLimit, offered],
   );
-
-  // The value the menu holds: with no model picked, the model the CLI runs, or its configured-model row.
-  const shown = cli && value === NO_MODEL ? cliChoiceModel(cli.backend) || configuredRow(cli.backend) : value;
 
   function pick(next: string) {
     const backend = CONFIGURED[next];

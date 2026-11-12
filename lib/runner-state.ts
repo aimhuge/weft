@@ -24,7 +24,7 @@ import { workDir } from "./work-dir";
 // helpers around them. lib/runner.ts is the front door; lib/runner-session.ts opens and drives sessions,
 // lib/runner-turn.ts handles what the CLI sends, lib/runner-ask.ts the permission requests.
 
-export const CLI_NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
+export const CLI_NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot" };
 
 export interface Pending {
   id: string;

@@ -18,6 +18,8 @@ Tags: `Now` is being built this session; `P1` is next and high value; `P2` is cl
 
 ## Board and organization
 
+- **GitHub Copilot desktop backend** — device-code sign-in, persistent threads, and guarded project file reads and edits. Next: model selection and more project tools.
+
 - `Done` **Simplified Chinese UI** for the board, the main Settings controls, and new-thread forms on desktop and web. The language picker applies immediately and remembers the choice.
 
 - `Done` **Regular and Advanced modes** — Regular strips the board to its threads; Advanced is everything. A new install starts on Regular and a board in use stays on Advanced (`boardMode` in `lib/board-prefs.ts`, `lib/use-regular-mode.ts`, `components/AdvancedOnly.tsx`, Settings → General → Advanced mode). Next: the thread panel's chrome and the column headers' bulk actions.

@@ -47,6 +47,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `slack.md` — the Slack rail drawer: bot + app tokens in the Keychain, Socket Mode in main, commits/pushes (reflog), deploys and card status to a channel, `/weft` and @Weft start cards, weft.zip card links, a channel per kind of update, and growth (new user, new team, payment) with a daily summary.
 - `puku-trial.md` — the puku trial: a puku thread with no Puku login runs through the deployed Weft's proxy on Weft's own key, day-long token, per-account daily cap.
 - `goose.md` — the Goose backend: one `goose run` process per turn and its `stream-json` events, the provider catalog and the BYO key, the grant that puts the key in Goose's env without it ever reaching the board, and the per-card `GOOSE_PATH_ROOT`.
+- `github-copilot.md` — GitHub Copilot desktop threads, the bundled SDK runtime, device-code login and guarded project file tools.
 - `email-forwarding.md` — `weft.zip` mail → Resend → Svix-signed `email.received` → one inbox.
 - `github-issues.md` — a project's open GitHub issues become Backlog cards, one direction, polled every 5 min, instant sync via the deployed relay.
 - `project-seed.md` — a new project's starter Backlog: up to 6 parked cards (agent docs, Supabase migrations, your issues, failing checks, a TODO cluster), once per project, Re-seed from the project menu; the shared project-open hook.

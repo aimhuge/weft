@@ -25,7 +25,7 @@ export const MODEL_ID_MAX = 100;
 
 const twoPlaces = (n: number) => Math.round(n * 100) / 100;
 
-const BACKENDS: ReadonlySet<string> = new Set<Backend>(["claude", "puku", "codex", "goose"]);
+const BACKENDS: ReadonlySet<string> = new Set<Backend>(["claude", "puku", "codex", "goose", "github-copilot"]);
 
 export function packLimits(samples: LimitSample[], max = MAX_PACKED, models: ModelLimit[] = []): PackedLimits {
   const kept = samples.slice(-max);

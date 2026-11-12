@@ -209,7 +209,7 @@ describe("BACKEND_IDS", () => {
   it("names every CLI the type allows", () => {
     // A CLI added to the Backend type but not to BACKENDS would be one the dialog can't offer
     // and no route would accept.
-    const every: string[] = ["claude", "puku", "codex", "goose"];
+    const every: string[] = ["claude", "puku", "codex", "goose", "github-copilot"];
     expect([...BACKEND_IDS].sort()).toEqual(every.sort());
   });
 

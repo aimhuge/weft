@@ -47,6 +47,7 @@ describe("BackendPicker", () => {
       await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
       expect(await screen.findByText(/at its limit/)).toBeInTheDocument();
       expect(screen.getByText(/at its limit/).closest("button")).toHaveTextContent("Opus 5.5");
+      expect(screen.queryByRole("group", { name: "GitHub Copilot" })).not.toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();
     }
