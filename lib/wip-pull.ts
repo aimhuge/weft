@@ -7,6 +7,8 @@ import { deviceId } from "./device-id";
 import { projectRoot } from "./repos";
 import { busyCards } from "./runner-state";
 import { getCard } from "./store";
+import { parseMacSource, sendMacSnapshot } from "./mac-host-verbs";
+import { githubRepoOf } from "./repos";
 import { applyWip, fetchWip, type Applied } from "./wip-snapshot";
 import { waitForCommand, type CommandResult } from "./worker-command-wait";
 import { sendWorkerHostVerb } from "./worker-host-verbs";
@@ -21,8 +23,17 @@ export interface Pulled extends Applied {
   running: number;
 }
 
+// What a pull from another Mac carries: its approval, signed by this Mac's main after Touch ID over exactly these.
+export interface MacAsk {
+  origin: string;
+  mac?: string;
+  widen: unknown;
+}
+
 export interface PullDeps {
   send: (workerId: string, folder: string) => Promise<{ commandId: string }>;
+  sendMac: typeof sendMacSnapshot;
+  repoOf: (root: string) => string | undefined;
   wait: (commandId: string) => Promise<CommandResult>;
   fetch: typeof fetchWip;
   apply: typeof applyWip;
@@ -34,6 +45,8 @@ export interface PullDeps {
 
 const DEFAULTS: PullDeps = {
   send: (workerId, folder) => sendWorkerHostVerb({ workerId, verb: "tree.snapshot", args: { folder } }),
+  sendMac: sendMacSnapshot,
+  repoOf: githubRepoOf,
   wait: (commandId) => waitForCommand(() => commandResult(commandId), WAIT),
   fetch: fetchWip,
   apply: applyWip,
@@ -46,23 +59,36 @@ const threads = (n: number) => (n === 1 ? "1 thread" : `${n} threads`);
 
 // What the worker answered, or why it didn't.
 function answered(done: CommandResult): { running: number } {
-  if (done.status === "pending") throw new Error("That worker didn't answer. Is it online?");
-  if (done.status === "claimed") throw new Error("That worker is still sending its work. Try again in a moment.");
+  if (done.status === "pending") throw new Error("It didn't answer. Is it online?");
+  if (done.status === "claimed") throw new Error("It's still sending its work. Try again in a moment.");
   const result = done.result as { ok?: boolean; error?: string; value?: { running?: number } } | undefined;
-  if (done.status === "failed" || !result?.ok) throw new Error(done.error ?? result?.error ?? "That worker couldn't send its work.");
+  if (done.status === "failed" || !result?.ok) throw new Error(done.error ?? result?.error ?? "It couldn't send its work.");
   return { running: Number(result.value?.running) || 0 };
 }
 
-export async function pullWip(folder: string, from: string, deps: PullDeps = DEFAULTS): Promise<Pulled> {
+// Where the work comes from: a worker's project, or another Mac of yours with its signed ask. The id names its hidden ref.
+async function ask(root: string, from: string, deps: PullDeps, mac?: MacAsk): Promise<{ commandId: string; id: string }> {
+  const other = parseMacSource(from);
+  if (other) {
+    if (!mac?.widen) throw new Error("Asking another Mac needs your approval with Touch ID.");
+    const repo = deps.repoOf(root);
+    if (!repo || repo.toLowerCase() !== mac.origin.toLowerCase()) throw new Error("This project has no GitHub remote to meet the other Mac on.");
+    const args = { origin: mac.origin, ...(mac.mac === undefined ? {} : { mac: mac.mac }), widen: mac.widen };
+    return { ...(await deps.sendMac(other, root, args)), id: other.device };
+  }
   const source = parseWorkerProject(from);
-  if (!source) throw new Error("Pick one of your Weft Workers' projects to pull from.");
+  if (!source) throw new Error("Pick one of your Weft Workers' or Macs' projects to pull from.");
+  return { ...(await deps.send(source.workerId, source.folder)), id: source.workerId };
+}
+
+export async function pullWip(folder: string, from: string, deps: PullDeps = DEFAULTS, mac?: MacAsk): Promise<Pulled> {
   const root = deps.root(folder);
   const running = deps.busy().filter((cwd) => cwd === root || cwd.startsWith(root + path.sep)).length;
   if (running) throw new Error(`${threads(running)} still running in ${path.basename(root)} here. Stop ${running === 1 ? "it" : "them"} first: a pull rewrites the files under ${running === 1 ? "it" : "them"}.`);
-  const { commandId } = await deps.send(source.workerId, source.folder);
-  const worker = answered(await deps.wait(commandId));
-  if (!(await deps.fetch(root, source.workerId))) throw new Error("That worker's work didn't reach the project's remote. Can it push there?");
-  return { ...(await deps.apply(root, source.workerId, deps.self())), running: worker.running };
+  const { commandId, id } = await ask(root, from, deps, mac);
+  const other = answered(await deps.wait(commandId));
+  if (!(await deps.fetch(root, id))) throw new Error("Its work didn't reach the project's remote. Can it push there?");
+  return { ...(await deps.apply(root, id, deps.self())), running: other.running };
 }
 
 // The toast after a pull.

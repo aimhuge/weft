@@ -240,6 +240,14 @@ contextBridge.exposeInMainWorld("weft", {
     endorseRefresh: () => ipcRenderer.invoke("approval:endorse-refresh"),
     endorseConfirm: (request) => ipcRenderer.invoke("approval:endorse-confirm", request),
   },
+  // Your other Macs that may ask this one for its uncommitted work (electron/mac-pair.cjs): copy this Mac's code, paste
+  // another's (Touch ID in main), list and forget them.
+  macPair: {
+    code: () => ipcRenderer.invoke("mac-pair:code"),
+    trust: (code) => ipcRenderer.invoke("mac-pair:trust", code),
+    list: () => ipcRenderer.invoke("mac-pair:list"),
+    forget: (id) => ipcRenderer.invoke("mac-pair:forget", id),
+  },
   // Adding a worker by pairing it (electron/host-pairing-ipc.cjs, docs/architecture/device-registry.md): the install
   // line comes back; the code's secret check and Touch ID stay in main.
   hostPairing: {

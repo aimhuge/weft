@@ -8,8 +8,8 @@
 const crypto = require("node:crypto");
 
 const WIDEN_V = "weft-widen-v1";
-const VERBS = new Set(["card.update", "card.shell", "card.schedule", "terminal.open", "card.create", "settings.put"]);
-const CHANGE_KEYS = new Set(["cwd", "agent", "permissionMode", "readScope", "shell", "schedule", "terminal", "create", "goose"]);
+const VERBS = new Set(["card.update", "card.shell", "card.schedule", "terminal.open", "card.create", "settings.put", "tree.snapshot"]);
+const CHANGE_KEYS = new Set(["cwd", "agent", "permissionMode", "readScope", "shell", "schedule", "terminal", "create", "goose", "wip"]);
 // A worker's Goose provider and endpoint (settings.put): where a Goose card's traffic goes.
 const GOOSE_KEYS = ["gooseProviderId", "gooseBaseUrl"];
 const ID = /^[A-Za-z0-9_:.-]{1,200}$/;
@@ -67,6 +67,7 @@ function changeProblem(change) {
   }
   if (change.permissionMode !== undefined && change.permissionMode !== "bypassPermissions") return "That isn't a mode main signs.";
   if (change.goose !== undefined) return gooseProblem(change.goose);
+  if (change.wip !== undefined) return wipProblem(change.wip);
   return change.create === undefined ? null : createProblem(change.create);
 }
 
@@ -79,6 +80,13 @@ function gooseProblem(g) {
     if (why) return why;
   }
   return Object.values(g).every((v) => typeof v === "string") ? null : "That change isn't text main can show.";
+}
+
+// Another Mac's uncommitted work: the project, its GitHub repo and the Mac's name, each shown whole.
+function wipProblem(w) {
+  if (!plain(w) || Object.keys(w).some((k) => !["folder", "origin", "mac"].includes(k))) return "That request for uncommitted work isn't one main signs.";
+  if (!w.folder || !w.origin) return "That request for uncommitted work names no project.";
+  return shownProblem(w.folder, 60) ?? shownProblem(w.origin, 100) ?? (w.mac === undefined ? null : shownProblem(w.mac, 60));
 }
 
 // A new thread: its agent and folder shown, its first message signed as sent.
@@ -106,6 +114,7 @@ function changeWords(change) {
   if (change.terminal !== undefined) parts.push(`open a full shell (a terminal) in ${oneLine(change.terminal, 60)}`);
   if (change.create) parts.push(`start a thread with the agent ${oneLine(change.create.agent, 60)} in ${oneLine(change.create.folder, 60)}`);
   if (change.goose) parts.push(gooseWords(change.goose));
+  if (change.wip) parts.push(`have it send its uncommitted work in ${oneLine(change.wip.folder, 60)} to ${oneLine(change.wip.origin, 100)}`);
   return parts.join(", ");
 }
 
@@ -148,6 +157,10 @@ function argsWords(verb, change, args) {
  * @param {string} self @param {(id: string) => string | null} [hostName]
  */
 function widenPrompt(req, self, hostName = () => null) {
+  if (req.verb === "tree.snapshot") {
+    const w = req.change.wip ?? {};
+    return `ask the Mac ${w.mac ? `${oneLine(w.mac, 60)} ` : ""}(${req.host.slice(0, 8)}) to send its uncommitted work in ${oneLine(w.folder, 60)} to ${oneLine(w.origin, 100)}`;
+  }
   const name = req.host === self ? null : hostName(req.host);
   const where = req.host === self ? "this Mac" : name ? `the worker ${oneLine(name, 60)} (${req.host.slice(0, 8)})` : `the host ${req.host}`;
   const which = req.verb === "settings.put" ? "the settings" : req.card ? `card ${req.card.slice(0, 8)}` : "a new card";

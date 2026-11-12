@@ -83,6 +83,20 @@ describe("freshWiden and withoutWiden", () => {
   });
 });
 
+describe("tree.snapshot", () => {
+  it("is a Mac's ask only when it names a repo; a worker's stays unsigned", () => {
+    expect(widenChangeOf({ verb: "tree.snapshot", args: { id: "", folder: "weft", origin: "me/weft", mac: "Air" } })).toEqual({ wip: { folder: "weft", origin: "me/weft", mac: "Air" } });
+    expect(widenChangeOf({ verb: "tree.snapshot", args: { folder: "weft", origin: "me/weft" } })).toEqual({ wip: { folder: "weft", origin: "me/weft" } });
+    expect(widenChangeOf({ verb: "tree.snapshot", args: { folder: 3, origin: "o", mac: 4 } })).toEqual({ wip: { folder: "", origin: "o" } });
+    expect(widenChangeOf({ verb: "tree.snapshot", args: { folder: "weft" } })).toBeNull();
+    expect(widenChangeOf({ verb: "tree.snapshot", args: { folder: "weft", origin: 5 } })).toBeNull();
+  });
+
+  it("is said in words", () => {
+    expect(widenLabel({ wip: { folder: "weft", origin: "me/weft" } })).toBe("send its uncommitted work in weft to me/weft");
+  });
+});
+
 describe("widenLabel", () => {
   it("says each change in words, cut", () => {
     expect(widenLabel({ cwd: "app", agent: "builder", permissionMode: "bypassPermissions", readScope: "/r" })).toBe(

@@ -392,7 +392,8 @@ export const api = {
   workerFolders: () => call<{ folders: string[] }>("GET", "/api/workers?folders=1"),
   setWorkerFolder: (folder: string, on: boolean) => call<{ folders: string[]; worker?: string }>("POST", "/api/workers", { action: "folder", folder, on }),
   // A project menu's pull of a Weft Worker's uncommitted work into this Mac's checkout (lib/wip-pull.ts); `note` is the toast.
-  pullWip: (folder: string, from: string) => call<{ note: string }>("POST", "/api/wip", { folder, from }),
+  // A Mac's `from` carries its signed ask (lib/mac-twins.ts signMacAsk); a worker's none.
+  pullWip: (folder: string, from: string, ask?: { origin: string; mac: string; widen: unknown }) => call<{ note: string }>("POST", "/api/wip", { folder, from, ...ask }),
   cloudSyncNow: () => call<{ status: CloudSyncStatus }>("POST", "/api/cloud-sync", { sync: true }),
   // The 🪝 drawer: each folder's webhooks, and a public relay URL for one (lib/webhooks.ts; signedIn: the relay needs a Weft account).
   webhooks: (folders: string[]) => call<{ hooks: Webhook[]; signedIn: boolean }>("GET", `/api/webhooks?${new URLSearchParams(folders.map((f) => ["folder", f]))}`),

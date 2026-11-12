@@ -151,6 +151,10 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     keep.registerWorkerKeep(handle, keeper);
   }
 
+  // Your other Macs that may ask this one for its uncommitted work (electron/mac-pair.cjs, electron/mac-pins.cjs).
+  const macPins = require("./mac-pins.cjs").createMacPins({ dir: dataDir, safeStorage: keychain, sodium: () => sodium });
+  require("./mac-pair.cjs").registerMacPair(handle, { pins: macPins, macDevice, signKey: macSignKey, confirm });
+
   const widenNonces = require("./widen-nonces.cjs").createWidenNonces({ dir: dataDir, safeStorage: keychain });
   const routes = {
     // The key the uploader seals with (lib/sync-seal-upload.ts); { none: true } when this Mac has no grant yet.
@@ -160,6 +164,8 @@ function setupPairing({ ipcMain, dataDir, accountClient, isBoard, confirm, safeS
     "POST /sync/keyring": withSodium(async ({ orgId }) => ({ keys: [...(await syncKeys.keyring(String(orgId)))].map(([version, key]) => ({ version, key })) })),
     // Whether an answer's signature is a paired phone's (lib/approval-check.ts). The key never leaves main.
     "POST /pairing/verify": withSodium(({ device, message, sig }) => paired.verify({ device: String(device), message: String(message), sig: String(sig) })),
+    // Whether a signed tree.snapshot is a paired Mac's (lib/mac-snapshot.ts): that key is good for nothing else.
+    "POST /pairing/verify-mac": withSodium(({ device, message, sig }) => macPins.verify({ device: String(device), message: String(message), sig: String(sig) })),
     // Whether a passkey assertion is a pinned browser's (lib/approval-passkey-check.ts); main keeps its counter.
     "POST /pairing/passkey-verify": (b) => paired.verifyPasskey({ device: String(b?.device), credId: String(b?.credId), message: String(b?.message), authenticatorData: String(b?.authenticatorData), clientDataJSON: String(b?.clientDataJSON), signature: String(b?.signature) }),
     // Spends a signed widening's nonce, once its signature checked out (electron/widen-nonces.cjs): main keeps them, so

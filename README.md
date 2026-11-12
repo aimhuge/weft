@@ -1142,7 +1142,9 @@ web board, where you can reply to it, answer it or stop it. Right-click a projec
 (or back to **Run on This Machine**): every new thread in that project then goes to your worker instead of starting
 here, and its card on this board records the prompt and which worker took it. When the same project is on this Mac
 and on a worker, its menu has **Pull Uncommitted Work from <worker>**: the worker sends what it hasn't committed and
-this Mac's checkout picks it up, or says why it won't (docs/architecture/wip-sync.md). A Weft desktop that syncs a folder
+this Mac's checkout picks it up, or says why it won't (docs/architecture/wip-sync.md). Between two of your Macs it's
+**Pull Uncommitted Work from <Mac>**, once you've paired them in Settings → Devices → Your other Macs (copy one's code,
+paste it on the other); each pull asks Touch ID. A Weft desktop that syncs a folder
 lists itself there too, as a **headed** worker (browser pane, vault and all), so a team sees every box that can run
 its cards, and a run sent to another of your Macs starts a card in the synced folder of that name. More in
 [docs/architecture/weft-worker.md](docs/architecture/weft-worker.md).

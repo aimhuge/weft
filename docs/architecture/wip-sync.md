@@ -51,12 +51,43 @@ The last row is the "one owner at a time" rule, checked at the moment the work m
 be none, or exactly the tree of its own last snapshot (`refs/weft/wip/<this Mac>`). There is no live write lock: both
 sides can still edit, and the next pull refuses if they did. A changed lockfile is said in the toast; nothing installs.
 
+## Mac to Mac
+
+Built 2026-11-12. Each Mac keeps its own checkout, threads and dev server, running at local speed; only the snapshot
+moves, once, when you switch Macs. Remoting every Mac into one box would put each edit, Bash call and reload on the
+network. A synced project's menu also lists your other Macs: **Pull Uncommitted Work from <Mac>**.
+
+```
+Mac B (asks)                                         Mac A (answers)
+menu → signMacAsk (lib/mac-twins.ts)
+  main: Touch ID, signs tree.snapshot {folder, origin, mac} with B's desktop key (electron/widen-sign.cjs)
+POST /api/wip { folder, from: mac:<A>/<name>, origin, mac, widen }
+sendMacSnapshot: host row to A's device id, folder = the project's name ──▶ macCheck: same account, synced folder by name
+                                                     macRules.hostVerb: tree.snapshot only (else NO_HOST_VERBS)
+                                                     lib/mac-snapshot.ts: widenProblem against A's Mac pins
+                                                       (POST /pairing/verify-mac → electron/mac-pins.cjs), fresh, nonce spent,
+                                                       origin = this folder's GitHub repo; snapshot + push refs/weft/wip/<A>
+fetchWip + applyWip, as from a worker ◀──
+```
+
+- **Why a pairing.** A Mac takes no host-level verb from the network, because a Supabase session is all a row proves.
+  Making A push its tree on a row alone would let a stolen session send any Mac's uncommitted work to a remote. So A
+  answers only with an approval signed by a Mac you paired with it by hand: Settings → Devices → **Your other Macs**.
+  Copy the asking Mac's code (`weft-mac1:`: its device id, its name, its desktop approval public key), paste it on the
+  answering Mac, and approve with Touch ID (`electron/mac-pair.cjs`). The code holds no secret; carrying it by hand is
+  what makes it trusted. Pair both ways to pull in both directions.
+- **A Mac pin is good for one thing.** `electron/mac-pins.cjs` is its own sealed file (`~/.weft/vault/mac-pins.json`),
+  apart from the phones and browsers in `paired-devices.cjs`: a paired Mac approves no tool run, gets no workspace key
+  and counts as no approver. `/pairing/verify-mac` checks only these pins, and only `lib/mac-snapshot.ts` asks it.
+- **Bound exactly.** The approval names A's device id, the verb, the project's name, its GitHub repo, the Mac name
+  shown in Touch ID, a nonce and the time (`weft-widen-v1`, two minutes). A answers only for a folder it syncs whose
+  name matches exactly one, and whose origin is that same repo, so a project that only shares a name is never pushed.
+- Forget on A drops the pin at once, with no Touch ID: it only narrows trust.
+
 ## Not built
 
 - **The other direction.** Sending this Mac's work to the worker means a row from the network rewriting the worker's
   tree, which is as strong as a shell: it needs a signed approval (project-hosts.md, Signed widening).
-- **Mac to Mac.** A Mac refuses host-level verbs from the network, and no table says where the same repo lives on
-  another Mac. Both are needed before one desktop can ask another.
 - **A direct line.** The snapshot goes by way of the remote, not the WebRTC session line; a `tree` channel would spare
   the remote the uncommitted code.
 - **Continuous mirroring**, staged-versus-unstaged state (a pull lands everything unstaged), submodules and LFS.

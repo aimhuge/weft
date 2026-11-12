@@ -9,11 +9,12 @@ const real = vi.hoisted(() => ({
   apply: vi.fn(() => Promise.resolve({ mac: "m1mini", changed: 1, install: false })),
 }));
 vi.mock("./worker-host-verbs", () => ({ sendWorkerHostVerb: real.send }));
+vi.mock("./mac-host-verbs", async () => ({ ...(await import("./mac-host-verbs-source")), sendMacSnapshot: vi.fn() }));
 vi.mock("./workers-account", () => ({ commandResult: real.result }));
 vi.mock("./worker-command-wait", () => ({ waitForCommand: real.wait }));
 vi.mock("./wip-snapshot", () => ({ fetchWip: real.fetch, applyWip: real.apply }));
 vi.mock("./device-id", () => ({ deviceId: () => "d".repeat(64) }));
-vi.mock("./repos", () => ({ projectRoot: (cwd: string) => cwd.replace(/\/sub$/, "") }));
+vi.mock("./repos", () => ({ projectRoot: (cwd: string) => cwd.replace(/\/sub$/, ""), githubRepoOf: () => undefined }));
 vi.mock("./runner-state", () => ({ busyCards: () => ["c1", "gone"] }));
 vi.mock("./store", () => ({ getCard: (id: string) => (id === "c1" ? { cwd: "/elsewhere" } : undefined) }));
 
@@ -27,6 +28,8 @@ const applied = { sha: "s", head: "h", at: 1, files: 2, mac: "m1mini", branch: "
 function deps(over: Partial<Deps> = {}) {
   const d: Deps = {
     send: vi.fn(() => Promise.resolve({ commandId: "cmd-1" })),
+    sendMac: vi.fn(() => Promise.resolve({ commandId: "cmd-2" })),
+    repoOf: () => "Me/Weft",
     wait: vi.fn(() => Promise.resolve({ status: "done" as const, error: null, result: { ok: true, cardId: "", value: { running: 1 } } })),
     fetch: vi.fn(() => Promise.resolve(applied)),
     apply: vi.fn(() => Promise.resolve(applied)),
@@ -49,7 +52,7 @@ describe("pullWip", () => {
   });
 
   it("only pulls from a worker's project", async () => {
-    await expect(pullWip("/repo", "/Users/me/other", deps())).rejects.toThrow("Pick one of your Weft Workers' projects");
+    await expect(pullWip("/repo", "/Users/me/other", deps())).rejects.toThrow("Pick one of your Weft Workers' or Macs' projects");
   });
 
   it("won't rewrite files under a thread that's running here", async () => {
@@ -72,6 +75,35 @@ describe("pullWip", () => {
     await expect(pullWip("/repo", FROM, deps({ fetch: () => Promise.resolve(null) }))).rejects.toThrow("didn't reach the project's remote");
     const quiet = deps({ wait: () => Promise.resolve({ status: "done", error: null, result: { ok: true } }) });
     expect((await pullWip("/repo", FROM, quiet)).running).toBe(0);
+  });
+});
+
+describe("pullWip from another Mac", () => {
+  const MAC = "mac:" + "b".repeat(64) + "/weft";
+  const ask = { origin: "me/weft", mac: "Studio", widen: { kind: "ed25519" } };
+
+  it("needs the Touch ID approval, and a GitHub remote that is the one it was signed over", async () => {
+    const d = deps();
+    await expect(pullWip("/repo", MAC, d)).rejects.toThrow("needs your approval");
+    await expect(pullWip("/repo", MAC, d, { origin: "me/weft", widen: undefined })).rejects.toThrow("needs your approval");
+    await expect(pullWip("/repo", MAC, d, { ...ask, origin: "me/other" })).rejects.toThrow("no GitHub remote to meet");
+    await expect(pullWip("/repo", MAC, deps({ repoOf: () => undefined }), ask)).rejects.toThrow("no GitHub remote to meet");
+    expect(d.sendMac).not.toHaveBeenCalled();
+  });
+
+  it("sends the signed ask, then fetches and applies under the other Mac's device id", async () => {
+    const d = deps();
+    expect(await pullWip("/repo", MAC, d, ask)).toEqual({ ...applied, running: 1 });
+    expect(d.sendMac).toHaveBeenCalledWith({ device: "b".repeat(64), folder: "weft" }, "/repo", { origin: "me/weft", mac: "Studio", widen: ask.widen });
+    expect(d.send).not.toHaveBeenCalled();
+    expect(d.fetch).toHaveBeenCalledWith("/repo", "b".repeat(64));
+    expect(d.apply).toHaveBeenCalledWith("/repo", "b".repeat(64), "a".repeat(64));
+  });
+
+  it("leaves the name out of the args when the ask carries none", async () => {
+    const d = deps();
+    await pullWip("/repo", MAC, d, { origin: "me/weft", widen: {} });
+    expect(d.sendMac).toHaveBeenCalledWith(expect.anything(), "/repo", { origin: "me/weft", widen: {} });
   });
 });
 

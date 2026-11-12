@@ -13,11 +13,12 @@ import { newCardBody, type CloudCommandRow, type NewCardMode } from "./cloud-com
 import { signedAgent, type WidenCheck } from "./create-widen";
 import { networkStartMode } from "./cloud-new-card-mode";
 import { macReceive } from "./cloud-inbox-receive";
+import { macSnapshotVerb } from "./mac-snapshot";
 import { syncNow, syncOrgId } from "./cloud-sync";
 import { orgForFolder } from "./cloud-sync-route";
 import { deviceId } from "./device-id";
 import { applyFolderGrant } from "./folder-grant";
-import { cardKinds, dispatcher, type CardRules } from "./host/dispatch";
+import { cardKinds, dispatcher, NO_HOST_VERBS, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
 import { defaultPermissionMode, syncFolders } from "./settings";
 import { getCard } from "./store";
@@ -100,6 +101,12 @@ const macRules: CardRules = {
   // A signed widening: a paired phone's or this Mac's own key, or a paired browser's passkey, checked by main against
   // its pins over the message rebuilt from this Mac's own id (lib/widen-check.ts).
   widen: (target, auth, refusal) => macWiden(target, auth, refusal),
+  // The one host-level verb a Mac takes from the network: a paired Mac's signed ask for this Mac's uncommitted work
+  // (lib/mac-snapshot.ts checks the approval against the Macs pinned here). Every other one stays NO_HOST_VERBS.
+  hostVerb: (verb, args) => {
+    if (verb !== "tree.snapshot") throw new Error(NO_HOST_VERBS);
+    return macSnapshotVerb(args);
+  },
   // The change is in the outbox already; this sends it now rather than on the next tick.
   after: () => syncNow(),
   answerAsKind: true,
@@ -138,13 +145,17 @@ function made(card: { id: string }): string {
   return card.id;
 }
 
+// Another Mac's ask for this one's uncommitted work names its project by name: it can't know the path here.
+const asksForWork = (command: CloudCommandRow) => command.kind === "host" && (command.payload as { verb?: unknown } | null)?.verb === "tree.snapshot";
+
 // Every kind runs only for a command made by the account signed in here, in a folder switched on in Settings → Sync,
 // for the workspace this Mac syncs that folder to. A new card may name its folder by project name (a run sent to this Mac as a
 // worker); the rest name the path.
 function macCheck(client: SupabaseClient, uid: string) {
   return async (command: CloudCommandRow): Promise<CloudCommandRow> => {
     if (command.created_by !== uid) throw new Error("That request wasn't made by the account signed in on this Mac.");
-    const folder = command.kind === "new_card" ? syncFolderFor(command.folder) : syncFolders().includes(command.folder) ? command.folder : null;
+    const byName = command.kind === "new_card" || asksForWork(command);
+    const folder = byName ? syncFolderFor(command.folder) : syncFolders().includes(command.folder) ? command.folder : null;
     if (!folder) throw new Error(`${command.folder} isn't switched on in Settings → Sync on this Mac.`);
     // Its workspace is the one this folder's cards sync to: a team that linked its project, or home.
     const home = await syncOrgId(client, uid);

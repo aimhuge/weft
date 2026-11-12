@@ -30,7 +30,7 @@ describe("POST /api/wip", () => {
 
   it("pulls, and says what came", async () => {
     expect(await (await post({ folder: "/repo", from: "worker://w1/repo" })).json()).toEqual({ mac: "m1mini", changed: 2, note: "Pulled 2 files." });
-    expect(wip.pullWip).toHaveBeenCalledWith("/repo", "worker://w1/repo");
+    expect(wip.pullWip).toHaveBeenCalledWith("/repo", "worker://w1/repo", undefined, undefined);
   });
 
   it("says why it couldn't", async () => {
