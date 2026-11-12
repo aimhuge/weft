@@ -6,7 +6,7 @@ import { folderName } from "@/lib/project-bar";
 import { projectMenu, type ProjectAction } from "@/lib/project-menu";
 import { projectSyncLine } from "@/lib/sync-menu";
 import { hostOf } from "@/lib/project-host";
-import { workerProjectMenu } from "@/lib/worker-project";
+import { parseWorkerProject, workerProjectMenu } from "@/lib/worker-project";
 import { setWorkerMarks } from "@/lib/worker-project-marks";
 import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
 import type { ProjectSummary } from "@/lib/board-view";
@@ -75,11 +75,16 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
       syncStatus: projectSyncLine(path, status, folders, Date.now()).text,
       onWorker,
       folders: project?.folders,
+      twins: twinsOf(name, deps.projects),
     });
     const picked = (await shell.popupMenu(menu)) as ProjectAction | null;
     if (!picked) return false;
     const actions = projectActions(path, name, { ...deps, shell, done, live, syncFolders: folders, syncStatus: status });
-    const run = isRemoveFolder(picked) ? () => removeFolder(path, name, picked.slice("remove-folder:".length), deps) : actions[picked];
+    const run = isRemoveFolder(picked)
+      ? () => removeFolder(path, name, picked.slice("remove-folder:".length), deps)
+      : isPullWip(picked)
+        ? () => pullWip(path, picked.slice("pull-wip:".length), deps)
+        : actions[picked];
     Promise.resolve(run()).catch(deps.notify);
     return true;
   };
@@ -123,10 +128,24 @@ async function removeFolder(path: string, name: string, folder: string, deps: Pr
   deps.toast(`${folderName(folder)} is no longer part of ${name}.`);
 }
 
+// The Weft Workers' projects with this one's folder name: the same repo on another machine (lib/worker-handoff.ts sends
+// a project there under its folder's name).
+function twinsOf(name: string, projects: ProjectSummary[]) {
+  return projects.flatMap((p) => (p.worker && parseWorkerProject(p.path)?.folder === name ? [{ path: p.path, name: p.worker.name, offline: p.worker.status === "offline" }] : []));
+}
+
+const isPullWip = (id: ProjectAction): id is `pull-wip:${string}` => id.startsWith("pull-wip:");
+
+// "Pull Uncommitted Work from <worker>": the worker snapshots and pushes on request, this Mac checks it out (lib/wip-pull.ts).
+async function pullWip(path: string, from: string, deps: ProjectMenuDeps) {
+  deps.toast("Asking for its uncommitted work…");
+  deps.toast((await api.pullWip(path, from)).note);
+}
+
 type ActionContext = ProjectMenuDeps & { shell: NonNullable<typeof window.weft>; done: Card[]; live: Card[] };
 
 // Each item's action, by id. A table rather than a switch, so no one function grows past the complexity cap.
-function projectActions(path: string, name: string, c: ActionContext): Record<Exclude<ProjectAction, `remove-folder:${string}`>, () => unknown> {
+function projectActions(path: string, name: string, c: ActionContext): Record<Exclude<ProjectAction, `remove-folder:${string}` | `pull-wip:${string}`>, () => unknown> {
   const openIn = async (target: "editor" | "terminal") => {
     const app = await c.shell.openIn?.(path, target);
     c.toast(app ? `Opened ${name} in ${app}.` : `No ${target === "editor" ? "code editor" : "terminal app"} found in Applications.`);

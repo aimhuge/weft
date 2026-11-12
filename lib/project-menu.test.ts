@@ -74,4 +74,14 @@ describe("projectMenu", () => {
     expect(item("add-folder")).toEqual({ id: "add-folder", label: "Add Folder…", accelerator: "O" });
     expect(item("remove-folder:/Users/me/api", { folders: ["/Users/me/api"] })).toEqual({ id: "remove-folder:/Users/me/api", label: "Remove api", detail: "/Users/me/api" });
   });
+
+  it("offers a pull from each worker that holds the project too, greyed out while it's offline", () => {
+    const twins = [
+      { path: "worker://w1/weft", name: "m1mini", offline: false },
+      { path: "worker://w2/weft", name: "vps", offline: true },
+    ];
+    expect(item("pull-wip:worker://w1/weft", { twins })).toEqual({ id: "pull-wip:worker://w1/weft", label: "Pull Uncommitted Work from m1mini", enabled: true });
+    expect(item("pull-wip:worker://w2/weft", { twins })).toEqual({ id: "pull-wip:worker://w2/weft", label: "Pull Uncommitted Work from vps", enabled: false, detail: "offline" });
+    expect(item("pull-wip:worker://w1/weft")).toBeUndefined();
+  });
 });

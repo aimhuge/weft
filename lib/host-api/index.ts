@@ -94,6 +94,9 @@ export const HOST_API = {
   "thread.page": { elevated: false, run: lazy(() => import("./thread"), "threadPageVerb") },
   "thread.search": { elevated: false, run: lazy(() => import("./thread"), "threadSearchVerb") },
   "thread.tool": { elevated: false, run: lazy(() => import("./thread"), "threadToolVerb") },
+  // A worker's uncommitted work, pushed to its hidden ref for the board that asked (lib/wip-snapshot.ts). It sends code
+  // to the project's remote, so it counts as granting power.
+  "tree.snapshot": { elevated: true, run: lazy(() => import("./tree-snapshot"), "treeSnapshotVerb") },
 } satisfies Record<HostVerb, Handler>;
 
 type Table = typeof HOST_API;
