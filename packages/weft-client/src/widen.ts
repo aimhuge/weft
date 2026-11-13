@@ -39,6 +39,10 @@ export interface WidenChange {
   // settings.put on a worker: Goose's provider and endpoint (gooseProviderId, gooseBaseUrl), where a Goose card's
   // traffic goes. Only the desktop's Touch ID key signs it; a passkey can't (lib/widen-check.ts).
   goose?: Record<string, unknown>;
+  // tree.snapshot on a Mac: send that Mac's uncommitted work in the project named `folder` (whose origin is the GitHub
+  // repo `origin`) to its hidden ref on the remote (docs/architecture/wip-sync.md). Only a Mac it was paired with signs it.
+  // `mac` is the asked Mac's name as the asking one knows it, for its Touch ID prompt; the asked Mac doesn't rely on it.
+  wip?: { folder: string; origin: string; mac?: string };
 }
 
 // The verb a widening names in its message: a host verb, or the terminal and new-thread actions that aren't verbs, which
@@ -57,9 +61,18 @@ function updateChange(body: Record<string, unknown>): WidenChange {
   return change;
 }
 
+const textOf = (v: unknown) => (typeof v === "string" ? v : "");
+
+function wipChange(args: Record<string, unknown>): NonNullable<WidenChange["wip"]> {
+  const wip = { folder: textOf(args.folder), origin: textOf(args.origin) };
+  return typeof args.mac === "string" ? { ...wip, mac: args.mac } : wip;
+}
+
 export function widenChangeOf({ verb, args }: { verb: string; args: Record<string, unknown> }): WidenChange | null {
   if (verb === "card.shell") return { shell: typeof args.command === "string" ? args.command : "" };
   if (verb === "card.schedule") return typeof args.text === "string" && isBang(args.text) ? { schedule: args.text } : null;
+  // Only a Mac's ask carries the repo it's bound to; a worker's tree.snapshot widens nothing and goes unsigned.
+  if (verb === "tree.snapshot") return typeof args.origin === "string" ? { wip: wipChange(args) } : null;
   if (verb === "settings.put") {
     const goose = gooseFieldsOf(args.patch);
     return goose ? { goose } : null;
@@ -174,6 +187,7 @@ export function widenLabel(change: WidenChange): string {
   if (change.terminal !== undefined) parts.push(`open a terminal in ${cut(change.terminal, 60)}`);
   if (change.create) parts.push(`start a thread with the agent ${cut(change.create.agent, 60)} in ${cut(change.create.folder, 60)}`);
   if (change.goose) parts.push(gooseWords(change.goose));
+  if (change.wip) parts.push(`send its uncommitted work in ${cut(change.wip.folder, 60)} to ${cut(change.wip.origin, 100)}`);
   return parts.join(", ") || "change nothing";
 }
 

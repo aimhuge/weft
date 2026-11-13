@@ -439,6 +439,8 @@ board     StatusStrip on a worker card ─ /api/limits?worker= ─ workerLimitSa
 - **Patterns can't hang it.** A "prompt matches" rule's pattern is capped at 300 characters and tested in a `vm` context
   with a 50 ms timeout (`lib/safe-pattern.ts`), so a catastrophic one (`(a+)+$`) from a synced row never matches instead of
   holding the daemon.
+- **`tree.snapshot`** is a third host-level verb a worker takes: its project's uncommitted work as a snapshot pushed to a
+  hidden ref, for the board that asked ([wip-sync.md](wip-sync.md)).
 - **Host verbs with no card.** `settings.get` and `settings.put` are `HOST_API` verbs (`lib/host-api/settings.ts`,
   `elevated: true`) that name no card: `isHostLevelVerb` in `@weft/client`, a row built by `hostLevelRow` (`folder` and
   `args.id` empty), read by `readHostCommand` with `id: ""` whatever the row says, run by the `host` kind's `onHost` branch

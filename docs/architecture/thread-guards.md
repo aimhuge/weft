@@ -23,6 +23,7 @@ Each CLI reaches the set through its own enforcement point:
 | Claude Code, puku-cli | Agent SDK in-process hooks (`Options.hooks`) | `lib/env.ts` `guardedCli()` |
 | Codex 0.162 | its own `PreToolUse`/`PostToolUse` hooks, given per turn on the command line | `lib/guards/codex.ts` |
 | Goose 1.56 | an open-plugin's `hooks/hooks.json` in the card's Goose state root | `lib/guards/goose.ts` |
+| GitHub Copilot | Weft-owned SDK tool handlers run the same guards before accessing files | `lib/github-copilot-tools.ts` |
 
 Codex and Goose hooks are commands, so their calls come to Weft over HTTP: the hook runs an inline `curl` to
 `/api/guards/<cli>/<event>` (`app/api/guards/[cli]/[event]/route.ts`) with the turn's bearer token

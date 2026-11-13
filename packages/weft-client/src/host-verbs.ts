@@ -54,6 +54,9 @@ export const HOST_VERBS = [
   "thread.page",
   "thread.search",
   "thread.tool",
+  // A project's uncommitted work as a snapshot on a hidden ref, for another machine to pick up (lib/wip-snapshot.ts).
+  // Host-level: it names a project folder, not a card.
+  "tree.snapshot",
 ] as const;
 
 /** Every verb a host runs. HOST_API is keyed by these, and it is the allowlist a remote host checks. */
@@ -68,10 +71,10 @@ export function isHostVerb(verb: string): verb is HostVerb {
 // The verbs that act on the host itself rather than a card: their row names no card, and a host runs them only when
 // its CardRules say it takes them from the network (a worker does; a Mac's settings stay in its own window, and its
 // cards reach a board through its own sync). card.list reads the host's cards rather than one of them.
-export type HostLevelVerb = "settings.get" | "settings.put" | "card.list";
+export type HostLevelVerb = "settings.get" | "settings.put" | "card.list" | "tree.snapshot";
 /** The verbs that act on a card: every one but the host-level ones. */
 export type CardVerb = Exclude<HostVerb, HostLevelVerb>;
-const HOST_LEVEL: ReadonlySet<string> = new Set<HostLevelVerb>(["settings.get", "settings.put", "card.list"]);
+const HOST_LEVEL: ReadonlySet<string> = new Set<HostLevelVerb>(["settings.get", "settings.put", "card.list", "tree.snapshot"]);
 
 export function isHostLevelVerb(verb: string): boolean {
   return HOST_LEVEL.has(verb);

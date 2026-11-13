@@ -30,6 +30,8 @@ export function useDesktopDictation(local: Dictation, focus: () => void): Dictat
       error: null,
       seconds: pill.seconds,
       level: pill.level,
+      // The pill shows its own "Opening mic…"; the composer button just turns red.
+      opening: false,
       clearError: () => {},
       toggle: () => {
         if (pill.state === "idle") focus();

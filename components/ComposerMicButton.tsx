@@ -11,7 +11,7 @@ function seconds(total: number) {
 }
 
 export default function ComposerMicButton({ dictation }: { dictation: ReturnType<typeof useDictation> }) {
-  const { state, level, seconds: elapsed } = dictation;
+  const { state, level, seconds: elapsed, opening } = dictation;
   const recording = state === "recording";
   const tip = recording
     ? "Stop and insert the text (Esc cancels)"
@@ -38,7 +38,7 @@ export default function ComposerMicButton({ dictation }: { dictation: ReturnType
         )}
         <span className="relative flex items-center gap-1.5">
           {state === "transcribing" ? <Spinner size={12} /> : <Icon name={recording ? "stop" : "mic"} size={14} />}
-          {recording && <span className="tabular-nums">{seconds(elapsed)}</span>}
+          {recording && <span className="tabular-nums">{opening ? "Opening mic…" : seconds(elapsed)}</span>}
           {state === "transcribing" && <span>Transcribing…</span>}
         </span>
       </button>

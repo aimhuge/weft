@@ -51,6 +51,7 @@ export default function ComposerBottomBar({
   dictation,
   fileInput,
   uploadIntoSource,
+  modelPicker,
   actions,
 }: {
   editor: Editor | null;
@@ -62,6 +63,7 @@ export default function ComposerBottomBar({
   dictation: ReturnType<typeof useDictation>;
   fileInput: RefObject<HTMLInputElement | null>;
   uploadIntoSource: (files: File[]) => Promise<void>;
+  modelPicker?: ReactNode;
   actions?: ReactNode;
 }) {
   const { upload } = useThreadTransport();
@@ -88,6 +90,7 @@ export default function ComposerBottomBar({
           active={source !== null}
           onClick={toggleSource}
         />
+        {modelPicker && <div className="ml-1 min-w-0">{modelPicker}</div>}
         <span className="min-w-0 flex-1 truncate px-1.5 text-[11.5px]">
           {dictation.error ? (
             <button type="button" onClick={dictation.clearError} className="text-danger" title="Dismiss">

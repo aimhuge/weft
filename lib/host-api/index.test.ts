@@ -84,6 +84,7 @@ vi.mock("@/lib/devserver", () => ({
   startDev: vi.fn(() => Promise.resolve({})),
 }));
 vi.mock("@/lib/devserver-list", () => ({ listDev: vi.fn(() => Promise.resolve([{ cardId: "c1", url: "http://localhost:3000/" }])) }));
+vi.mock("./tree-snapshot", () => ({ treeSnapshotVerb: vi.fn(() => Promise.resolve({ sha: "s1", mac: "m1mini", branch: "main", running: 0 })) }));
 vi.mock("@/lib/tunnels", () => ({ openTunnel: vi.fn(() => Promise.resolve({ address: "https://weft.zip/t/t1" })) }));
 
 const runner = await import("@/lib/runner");
@@ -142,12 +143,13 @@ const SAMPLES: Record<HostVerb, { args: unknown; reply: () => unknown }> = {
   "thread.search": { args: { id: "c1", q: "nothing" }, reply: () => ({ matches: [] }) },
   "thread.tool": { args: { id: "c1", toolId: "t1" }, reply: () => ({ result: "out" }) },
   "settings.get": { args: undefined, reply: () => ({ settings: { maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" } }) },
+  "tree.snapshot": { args: { folder: "weft" }, reply: () => ({ sha: "s1", mac: "m1mini", branch: "main", running: 0 }) },
   "settings.put": { args: { patch: { maxThreads: 6 } }, reply: () => ({ settings: { maxThreads: 6, keepAliveMinutes: 0, worktreePool: 1, defaultBackend: "claude" } }) },
 };
 
-// The local route each card verb is mounted on. The host-level verbs (settings.*) have none: this Mac's own settings are
-// its settings route, and a host takes them from the network only on a worker.
-type CardVerb = Exclude<HostVerb, "settings.get" | "settings.put">;
+// The local route each card verb is mounted on. The host-level verbs (settings.*, tree.snapshot) have none: this Mac's
+// own settings are its settings route, a host takes them from the network only on a worker, and only a worker sends its tree.
+type CardVerb = Exclude<HostVerb, "settings.get" | "settings.put" | "tree.snapshot">;
 const ROUTES: Record<CardVerb, string> = {
   "card.create": "../route.ts",
   "card.update": "route.ts",
@@ -193,7 +195,7 @@ const ROUTES: Record<CardVerb, string> = {
 };
 
 const verbs = Object.keys(HOST_API) as HostVerb[];
-const cardVerbs = verbs.filter((v): v is CardVerb => !v.startsWith("settings."));
+const cardVerbs = verbs.filter((v): v is CardVerb => !v.startsWith("settings.") && v !== "tree.snapshot");
 
 describe("HOST_API", () => {
   it.each(verbs)("runs %s", async (verb) => {
@@ -209,6 +211,7 @@ describe("HOST_API", () => {
   it("keeps a host's own settings elevated", () => {
     expect(HOST_API["settings.get"].elevated).toBe(true);
     expect(HOST_API["settings.put"].elevated).toBe(true);
+    expect(HOST_API["tree.snapshot"].elevated).toBe(true);
   });
 
   // The files route's GET (list, read) checks guard() for a read; its PUT (a save) checks elevated().

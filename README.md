@@ -1,7 +1,7 @@
 # Weft™
 
 Engineering the future, one thread at a time. Weft is a Trello-style board where each card is an AI CLI
-thread (Claude Code, puku-cli, Codex or Goose), with a browser pane on the side that you and the agents can both
+thread (Claude Code, puku-cli, Codex, Goose or GitHub Copilot), with a browser pane on the side that you and the agents can both
 use, and a copilot in its own small window that can see and run the board.
 
 In weaving, the weft is the thread that runs across the loom and binds the separate threads into
@@ -285,6 +285,9 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   in Settings → Shortcuts. On a Mac it needs `brew install whisper-cpp ffmpeg` and a
   model (on Windows whisper ships inside Weft, and the model downloads from Settings → Dictation → Advanced); it uses superwhisper's or Homebrew's models, or the one in `WEFT_WHISPER_MODEL`. In a
   normal browser tab without whisper it falls back to the browser's speech recognition.
+  It shows "Opening mic…" until it's really listening (the start chime means talk now), keeps the mic open for
+  30 seconds after a recording so the next one starts at once, and skips Bluetooth mics unless you pick one in
+  Settings → General → Dictation → Microphone.
   Settings → General → Dictation picks its language (naming it is faster than detecting it), takes a
   vocabulary of names and terms whisper should expect, and turns on **Advanced dictation**: Weft
   downloads large-v3-turbo if this Mac has none and keeps it warm in `whisper-server`, so text is back
@@ -410,6 +413,10 @@ rather than "Auto-resumed", which is a window resetting on its own. The check ri
 15-minute poll that watches the plan's windows, and runs again whenever a thread starts.
 
 Pick **Codex** in the New thread dialog to run the OpenAI Codex CLI. Install `codex` on your PATH and sign in with `codex login` first; Weft can open Codex's device login in Terminal from Settings → Accounts. Codex uses its own tools and saved sessions. Weft's browser, board, secrets and webhook MCP tools reach Codex over HTTP, and a folder's `CLAUDE.md` and `.claude/skills` are passed along (Codex reads neither); and every tool call goes through Weft's guards first, the same ones Claude Code threads run behind ([thread guards](docs/architecture/thread-guards.md)). Codex's sandbox mode and reasoning effort are fixed when a session starts.
+
+Pick **GitHub Copilot’s configured model** for a local desktop thread with GitHub Copilot. Sign in with a
+GitHub device code from **Settings → Accounts**. Copilot resumes its conversation and can list or read files in
+the card's project. Edits to existing files ask for approval on the card. See [GitHub Copilot threads](docs/architecture/github-copilot.md).
 
 Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on, and its models are the ones the Goose group of every model menu lists — your provider's own ids, not another provider's. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Your BYOK model** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. Give your models a name in the same page's **Model names** section, and every menu shows "Big Opus" instead of the raw id, with the id beside it. A name says the model runs on Goose, so it stays in the Goose group even when the id is another CLI's too — name `puku-ai-2.8` and the row reads "Big Opus" under Goose, and the thread starts on Goose. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
 
@@ -1140,7 +1147,11 @@ A worker updates itself: when Weft has a new commit and no card is running there
 **Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the
 web board, where you can reply to it, answer it or stop it. Right-click a project chip and tick **Run on Worker**
 (or back to **Run on This Machine**): every new thread in that project then goes to your worker instead of starting
-here, and its card on this board records the prompt and which worker took it. A Weft desktop that syncs a folder
+here, and its card on this board records the prompt and which worker took it. When the same project is on this Mac
+and on a worker, its menu has **Pull Uncommitted Work from <worker>**: the worker sends what it hasn't committed and
+this Mac's checkout picks it up, or says why it won't (docs/architecture/wip-sync.md). Between two of your Macs it's
+**Pull Uncommitted Work from <Mac>**, once you've paired them in Settings → Devices → Your other Macs (copy one's code,
+paste it on the other); each pull asks Touch ID. A Weft desktop that syncs a folder
 lists itself there too, as a **headed** worker (browser pane, vault and all), so a team sees every box that can run
 its cards, and a run sent to another of your Macs starts a card in the synced folder of that name. More in
 [docs/architecture/weft-worker.md](docs/architecture/weft-worker.md).

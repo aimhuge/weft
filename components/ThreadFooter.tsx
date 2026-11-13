@@ -107,6 +107,15 @@ function staleSplit(
   return { cache, onFresh };
 }
 
+function replyControls(card: Card, desktop: boolean | undefined, show: boolean) {
+  const pilot = card.role === "copilot";
+  const modelPicker = (pilot || desktop) && <BackendPicker card={card} up />;
+  const status = pilot
+    ? !show && modelPicker
+    : <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} cardLimits={!desktop} />;
+  return { modelPicker, status };
+}
+
 export function ThreadReply({ card, show, live, placeholder, question, scheduling, editLast, onEditing, onSend, track }: {
   card: Card;
   show: boolean;
@@ -127,7 +136,7 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   // A shared card's @mentions ask before they let anyone in (lib/use-mention-ask.ts).
   const { send, bar } = useMentionSend(card, onSend, transport.desktop && !pilot);
   // Off this Mac (a worker's card, weft.zip) the plan limits are the card's own, from the CLI that runs it there.
-  const status = pilot ? <BackendPicker card={card} up /> : <StatusStrip stats={card.stats} cwd={card.cwd} backend={card.backend} cardLimits={!transport.desktop} />;
+  const { modelPicker, status } = replyControls(card, transport.desktop, show);
   if (!show) return <div className="shrink-0 border-t border-line px-4 py-1.5">{status}</div>;
   return (
     <>
@@ -136,6 +145,7 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
       midTurn={!pilot && (card.backend === "claude" || card.backend === "puku")}
       sendLater={scheduling && { backend: card.backend, resets: scheduling.resets, scheduled: card.scheduled ?? [] }}
       status={status}
+      modelPicker={modelPicker}
       stale={pilot ? undefined : staleSplit(card, fresh, track)}
       cutOff={turnCutOff(card)}
       // No live session: a model/CLI was just switched (lib/backend-switch.ts clears sessionId), or the

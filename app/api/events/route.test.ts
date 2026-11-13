@@ -12,8 +12,10 @@ const bus = (globalThis as unknown as { __weftBus: EventEmitter }).__weftBus;
 const listeners = () => bus.listenerCount("event");
 const decoder = new TextDecoder();
 
-async function open(signal = new AbortController().signal, host = "localhost:3000") {
-  const res = await GET(new Request("http://localhost/api/events", { headers: { host }, signal }));
+async function open(signal = new AbortController().signal, token?: string) {
+  const headers = new Headers({ host: "localhost:3000" });
+  if (token) headers.set("x-weft-token", token);
+  const res = await GET(new Request("http://localhost/api/events", { headers, signal }));
   return { res, reader: res.body!.getReader() };
 }
 const next = async (reader: ReadableStreamDefaultReader<Uint8Array>) => {
@@ -50,6 +52,25 @@ describe("GET /api/events", () => {
     vi.advanceTimersByTime(15_000);
     expect(await next(reader)).toBe(": ping\n\n");
     await reader.cancel();
+  });
+
+  it("sends the Copilot device code only to the desktop board", async () => {
+    vi.stubEnv("WEFT_SHELL_TOKEN", "test-launch-token");
+    const { reader: board } = await open(undefined, "test-launch-token");
+    const { reader: ordinary } = await open(undefined, "1");
+    try {
+      await Promise.all([next(board), next(ordinary)]);
+      const login: BoardEvent = { type: "login", login: {
+        backend: "github-copilot", state: "running", output: "", userCode: "TEST-CODE", startedAt: 0,
+      } };
+      publish(login);
+      publish(event);
+      expect(await next(board)).toContain("TEST-CODE");
+      expect(await next(ordinary)).toBe(`data: ${JSON.stringify(event)}\n\n`);
+    } finally {
+      await Promise.all([board.cancel(), ordinary.cancel()]);
+      vi.unstubAllEnvs();
+    }
   });
 
   it("unsubscribes and closes the stream when the client aborts", async () => {

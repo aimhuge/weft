@@ -9,6 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
 import type { NewCommand } from "./cloud-commands";
 import { hostCommand } from "./host-command";
+import { GITHUB_COPILOT_DEFAULT_MODEL } from "./new-thread";
 import { ATTACHMENTS, insert, myWorkers, requireSession, withAttachments } from "./worker-board";
 import { RUN_MODES, runCommand, workerDevice } from "./worker-commands";
 import { connectorStart, START_CONNECTOR, type StartConnectorDeps } from "./worker-folder-repo";
@@ -62,6 +63,16 @@ function agentRun(target: { orgId: string; workerId: string; folder: string }, b
   return { ...row, payload: { ...(row.payload as Record<string, unknown>), ...extra } } as NewCommand;
 }
 
+function workerProject(body: WorkerThreadInput) {
+  if (body.backend === "github-copilot" || body.model === GITHUB_COPILOT_DEFAULT_MODEL) {
+    throw new Error("GitHub Copilot is only available on the local desktop.");
+  }
+  const project = parseWorkerProject(body.cwd);
+  if (!project) throw new Error("That isn't a worker project.");
+  if (!body.prompt.trim()) throw new Error("Write a prompt for this thread.");
+  return project;
+}
+
 // It never starts anywhere else: an offline worker refuses here rather than queue a card that would land hours later.
 export async function startWorkerThread(
   body: WorkerThreadInput,
@@ -71,9 +82,7 @@ export async function startWorkerThread(
   presence: PresenceWatch = presenceWatch(),
   connector: StartConnectorDeps = START_CONNECTOR,
 ): Promise<{ commandId: string; worker: string; cardId: string }> {
-  const project = parseWorkerProject(body.cwd);
-  if (!project) throw new Error("That isn't a worker project.");
-  if (!body.prompt.trim()) throw new Error("Write a prompt for this thread.");
+  const project = workerProject(body);
   const who = await requireSession(client);
   const worker = (await myWorkers(client, who)).find((w) => w.id === project.workerId);
   if (!worker) throw new Error("That worker isn't one of yours anymore.");

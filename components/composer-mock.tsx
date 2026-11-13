@@ -6,8 +6,8 @@ import type { ComposerHandle } from "./Composer";
 
 const ComposerMock = forwardRef<
   ComposerHandle,
-  { initial?: string; placeholder?: string; autoFocus?: boolean; onSubmit: () => void; onSubmitAlt?: () => void; onChange?: (markdown: string) => void; actions?: ReactNode; header?: ReactNode; dropTarget?: string }
->(function ComposerMock({ initial, placeholder, autoFocus, onSubmit, onSubmitAlt, onChange, actions, header, dropTarget }, ref) {
+  { initial?: string; placeholder?: string; autoFocus?: boolean; onSubmit: () => void; onSubmitAlt?: () => void; onChange?: (markdown: string) => void; actions?: ReactNode; modelPicker?: ReactNode; header?: ReactNode; dropTarget?: string }
+>(function ComposerMock({ initial, placeholder, autoFocus, onSubmit, onSubmitAlt, onChange, actions, modelPicker, header, dropTarget }, ref) {
   const box = useRef<HTMLTextAreaElement>(null);
   useImperativeHandle(ref, () => ({
     focus: () => box.current?.focus(),
@@ -42,6 +42,7 @@ const ComposerMock = forwardRef<
           }
         }}
       />
+      {modelPicker}
       {actions}
     </div>
   );

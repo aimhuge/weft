@@ -8,7 +8,7 @@
 // The Goose rows come from the provider the user configured: a model id is whatever that provider
 // serves, and a named model is one the user gave a name to (lib/goose-models.ts).
 
-import { BACKENDS, CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, backendFor, bareModel, gooseValue } from "./new-thread";
+import { BACKENDS, CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, backendFor, bareModel, gooseValue } from "./new-thread";
 import type { Backend } from "./types";
 
 // A row in a model menu.
@@ -28,7 +28,7 @@ export interface ModelOption {
 // The CLIs whose model lives in their own config: Codex reads its model from its own config,
 // Goose from the provider the user set up. Each has one row in the menu for it, and picking that
 // row moves a thread to that CLI with no model pinned.
-const CLI_DEFAULT_IDS: ReadonlySet<string> = new Set([CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL]);
+const CLI_DEFAULT_IDS: ReadonlySet<string> = new Set([CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL]);
 
 /** Whether a string names one of the CLIs Weft knows. */
 export function isBackend(value: string): value is Backend {

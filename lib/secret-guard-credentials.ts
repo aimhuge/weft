@@ -111,10 +111,11 @@ export function credentialVerdict(words: string[]): string | null {
 // Vercel CLIs' tokens, gog's OAuth client and file keyring. Matched on the end of the full path, so a folder of
 // the same name in a project doesn't count; the CLIs' own folders count whole, for `grep -r token ~/.config/gh`.
 const CREDENTIAL_PATH =
-  /(?:^|\/)(\.config\/gh(\/hosts\.ya?ml)?|\.git-credentials|\.config\/git\/credentials|\.netrc|\.supabase(\/access-token)?|com\.vercel\.cli(\/auth\.json)?|gogcli(\/(credentials\.json|keyring(\/.*)?))?)$/i;
+  /(?:^|\/)(\.config\/gh(\/hosts\.ya?ml)?|\.git-credentials|\.config\/git\/credentials|\.netrc|\.supabase(\/access-token)?|com\.vercel\.cli(\/auth\.json)?|gogcli(\/(credentials\.json|keyring(\/.*)?))?|\.copilot(\/.*)?)$/i;
 // What a glob like `~/.config/gh/*` is tried against.
 const CREDENTIAL_FILES = [
   ".config/gh/hosts.yml",
+  ".copilot/config.json",
   ".git-credentials",
   ".config/git/credentials",
   ".netrc",
@@ -127,7 +128,7 @@ const CREDENTIAL_FILES = [
 
 // Whether an absolute path is (or a glob reaches) a CLI's credential file.
 export function isCliCredential(at: string, glob?: RegExp): boolean {
-  if (CREDENTIAL_PATH.test(at)) return true;
+  if (CREDENTIAL_PATH.test(at.replace(/\\/g, "/"))) return true;
   return glob ? CREDENTIAL_FILES.some((f) => glob.test(f)) : false;
 }
 

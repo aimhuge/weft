@@ -7,6 +7,7 @@ import { DICTATION_LANGUAGES } from "@/lib/dictation-languages";
 import type { DictationSettingsView } from "@/lib/dictation-types";
 import { SettingsSectionHeader } from "./SettingsLayout";
 import SwitchRow from "./SwitchRow";
+import DictationMicPicker from "./DictationMicPicker";
 
 // Settings → General: the mic button's language, your vocabulary, and Advanced dictation, which
 // downloads a model and keeps whisper-server warm (lib/whisper-server.ts).
@@ -82,6 +83,7 @@ export default function DictationSettings() {
           ))}
         </select>
       </section>
+      <DictationMicPicker />
       <section className="flex flex-col gap-1.5">
         <div className="flex flex-col gap-0.5">
           <h3 className="text-[13px] font-medium text-ink">{t("Vocabulary")}</h3>

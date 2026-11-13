@@ -44,8 +44,8 @@ export function guard(req: Request, { write = true }: { write?: boolean } = {}):
 // Writes that grant power (answer a permission prompt, change settings, allow a folder, loosen a card's mode,
 // run a shell command) need the launch token itself, not the "1" a thread's curl may send for ordinary board
 // moves (lib/sprint-plan.ts, lib/commit-pile.ts). The desktop app puts the token on every board-window request.
-export function elevated(req: Request): Response | null {
-  const denied = guard(req);
+export function elevated(req: Request, { write = true }: { write?: boolean } = {}): Response | null {
+  const denied = guard(req, { write });
   if (denied) return denied;
   if (!hasToken(req)) return Response.json({ error: "This change needs Weft's own window" }, { status: 403 });
   return null;

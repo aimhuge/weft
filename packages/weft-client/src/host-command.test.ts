@@ -168,6 +168,7 @@ describe("verbs on the host itself", () => {
     });
     expect(hostLevelRow({ orgId: "o", device: "d" }, "settings.get").payload.args).toEqual({ id: "" });
     expect(isHostLevelVerb("settings.get")).toBe(true);
+    expect(isHostLevelVerb("tree.snapshot")).toBe(true);
     expect(isHostLevelVerb("card.stop")).toBe(false);
   });
 

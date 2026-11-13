@@ -15,6 +15,7 @@ import { ThisMacStanding } from "./DeviceStanding";
 import { MoveThreads, RevokeConfirm } from "./WorkerMoveThreads";
 import { offersMove, threadsText } from "@/lib/device-move";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
+import { MacPairing } from "./MacPairing";
 
 const SUBTLE = "text-[12.5px] text-muted";
 const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
@@ -174,6 +175,7 @@ export default function DevicesSettings() {
           ))}
         </ul>
       )}
+      <MacPairing />
     </SettingsCard>
   );
 }

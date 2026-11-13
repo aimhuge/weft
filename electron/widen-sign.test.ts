@@ -174,3 +174,32 @@ describe("Goose's provider on a worker", () => {
     expect(onGoose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("tree.snapshot: another Mac's uncommitted work", () => {
+  const wip = (w: unknown) => readWidenRequest({ host: "d".repeat(64), card: "", verb: "tree.snapshot", change: { wip: w }, args: w as Record<string, unknown> });
+
+  it("takes a project and repo (and the Mac's name), shown whole, and nothing else", () => {
+    expect(wip({ folder: "weft", origin: "me/weft", mac: "Studio" })).toMatchObject({ verb: "tree.snapshot", change: { wip: { folder: "weft" } } });
+    expect(wip({ folder: "weft", origin: "me/weft" })).toMatchObject({ verb: "tree.snapshot" });
+    expect(wip({ folder: "weft", origin: "me/weft", extra: 1 })).toMatch(/isn't one main signs/);
+    expect(wip(["x"])).toMatch(/isn't one main signs/);
+    expect(wip({ folder: "", origin: "me/weft" })).toMatch(/names no project/);
+    expect(wip({ folder: "weft", origin: "" })).toMatch(/names no project/);
+    expect(wip({ folder: "w".repeat(61), origin: "o" })).toMatch(/too long/);
+    expect(wip({ folder: "weft", origin: "o".repeat(101) })).toMatch(/too long/);
+    expect(wip({ folder: "weft", origin: "o", mac: "m".repeat(61) })).toMatch(/too long/);
+    expect(wip({ folder: "we\nft", origin: "o" })).toMatch(/can't show/);
+  });
+
+  it("asks Touch ID in its own words, with or without the Mac's name, and agrees with @weft/client", async () => {
+    const self = "a".repeat(64);
+    const req = { host: "d".repeat(64), card: "", verb: "tree.snapshot" as const, change: { wip: { folder: "weft", origin: "me/weft", mac: "Studio" } }, args: {} };
+    expect(widenPrompt(req, self)).toBe("ask the Mac Studio (dddddddd) to send its uncommitted work in weft to me/weft");
+    expect(widenPrompt({ ...req, change: { wip: { folder: "weft", origin: "me/weft" } } }, self)).toBe("ask the Mac (dddddddd) to send its uncommitted work in weft to me/weft");
+    const h = handlers();
+    const args = { folder: "weft", origin: "me/weft", mac: "Studio" };
+    const auth = (await h.call("approval:widen", { host: "d".repeat(64), card: "", verb: "tree.snapshot", change: { wip: args }, args })) as Record<string, unknown>;
+    expect(auth).toMatchObject({ kind: "ed25519" });
+    expect(h.confirm).toHaveBeenCalledWith("ask the Mac Studio (dddddddd) to send its uncommitted work in weft to me/weft");
+  });
+});

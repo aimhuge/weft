@@ -5,30 +5,37 @@ import { backendPick } from "@/lib/backend-pick";
 import { patchNow } from "@/lib/optimistic-cards";
 import { isLive } from "@/lib/format";
 import { hostOf } from "@/lib/project-host";
-import { BACKENDS, CODEX_DEFAULT_MODEL, MODELS, NO_MODEL, runningOn } from "@/lib/new-thread";
+import { BACKENDS, CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, MODELS, NO_MODEL, runningOn } from "@/lib/new-thread";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
 import { useEscape } from "@/lib/use-escape";
 import { useLimitedModels } from "@/lib/use-plan-limits";
+import { isWorkerCard } from "@/lib/worker-project";
 import { BackendBadge } from "./CardView";
 import Icon from "./Icon";
+
+function pickableBackends(card: Card) {
+  return isWorkerCard(card) ? BACKENDS.filter((backend) => backend.id !== "github-copilot") : BACKENDS;
+}
 
 // A clickable version of the CLI chip for the thread header. Click it and pick a model: one of this
 // CLI's swaps the open CLI's model, one of the other CLI's switches CLI and the next turn runs there
 // (stop the thread first). No replay by default — that's the rate-limit banner's job (and it
-// always replays). The copilot picks too (lib/copilot.ts runs it on any CLI); under its reply box the
-// menu opens upward (up), since the box sits at the bottom of its window.
+// always replays). In a reply composer the menu opens upward, since the box sits at the bottom of its window.
 export default function BackendPicker({ card, up = false }: { card: Card; up?: boolean }) {
   // Without a "[1m]" context suffix, so it matches a MODELS id.
   const model = runningOn(card).model?.replace(/\[[^\]]*\]$/, "");
   // "" is the CLI's own choice — the card's own model, when it has one. Codex's "Codex default"
   // is the same idea under its own name, so it reads as the default too.
-  const selectedModel = card.backend === "codex" && (!model || model === "Codex") ? CODEX_DEFAULT_MODEL : model;
-  const onDefault = !selectedModel || selectedModel === CODEX_DEFAULT_MODEL;
+  let selectedModel = model;
+  if (card.backend === "codex" && (!model || model === "Codex")) selectedModel = CODEX_DEFAULT_MODEL;
+  if (card.backend === "github-copilot") selectedModel = GITHUB_COPILOT_DEFAULT_MODEL;
+  const onDefault = !selectedModel || selectedModel === CODEX_DEFAULT_MODEL || selectedModel === GITHUB_COPILOT_DEFAULT_MODEL;
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const live = isLive(card);
   const atLimit = new Set(useLimitedModels(card.cwd).map((l) => l.model));
+  const backends = pickableBackends(card);
   useEscape(open, () => setOpen(false));
 
   useEffect(() => {
@@ -67,9 +74,10 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
         aria-label={`Switch model (currently ${BACKEND_LABELS[card.backend]})`}
         aria-expanded={open}
         title="Switch model or CLI"
-        className={`shrink-0 rounded ${model ? "" : "px-0"}`}
+        className="flex max-w-full items-center gap-1 rounded"
       >
         <BackendBadge backend={card.backend} card={card} />
+        {up && <Icon name="chevronDown" size={12} className="shrink-0 text-muted" />}
       </button>
       {open && (
         <div className={`absolute left-0 z-30 w-48 rounded-lg ${up ? "bottom-full mb-1 max-h-[60vh] overflow-y-auto" : "top-full mt-1"} border border-line bg-panel p-1 shadow-lg`}>
@@ -86,7 +94,7 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
               <span className="flex-1 font-medium text-ink">Default model</span>
             </button>
           </div>
-          {BACKENDS.map((b) => (
+          {backends.map((b) => (
             <div key={b.id} role="group" aria-label={b.label}>
               <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium text-faint">{b.label}</p>
               {MODELS[b.id].map((m) => {

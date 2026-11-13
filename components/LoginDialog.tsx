@@ -8,7 +8,7 @@ import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "./button-styles";
 
-const NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose" };
+const NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot" };
 
 // How long "Logged in" shows before the pop-up closes itself.
 const DONE_MS = 2000;
@@ -63,6 +63,55 @@ function TrialNote({ trial }: { trial: LoginTrial }) {
         {waiting ? <Spinner size={13} /> : <Icon name="github" size={14} />} {waiting ? "Signing in…" : "Sign in to Weft"}
       </button>
     </div>
+  );
+}
+
+function CodeEntry({
+  backend,
+  code,
+  codeError,
+  busy,
+  onCodeChange,
+  onSubmit,
+}: {
+  backend: Backend;
+  code: string;
+  codeError: string | null;
+  busy: boolean;
+  onCodeChange: (code: string) => void;
+  onSubmit: (e: SubmitEvent<HTMLFormElement>) => void;
+}) {
+  if (backend === "github-copilot") return null;
+  return (
+    <form onSubmit={onSubmit} className="flex flex-col gap-1.5">
+      <label htmlFor="login-code" className="text-[12px] font-medium text-muted">
+        Paste a code from the login page
+      </label>
+      <div className="flex gap-2">
+        <input
+          id="login-code"
+          value={code}
+          onChange={(e) => onCodeChange(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="Only if the CLI asks for one"
+          className="min-w-0 flex-1 rounded-md border border-line-strong bg-canvas px-3 py-2 font-mono text-[13px] text-ink outline-none placeholder:font-sans placeholder:text-faint focus:border-accent"
+        />
+        <button type="submit" disabled={busy} className={`${BUTTON_SECONDARY} inline-flex items-center gap-1.5`}>
+          <Icon name="send" size={13} /> Send
+        </button>
+      </div>
+      {codeError && <p className="text-[12.5px] text-danger">{codeError}</p>}
+    </form>
+  );
+}
+
+function TerminalFallback({ backend, busy, onClick }: { backend: Backend; busy: boolean; onClick: () => void }) {
+  if (backend === "github-copilot") return null;
+  return (
+    <button onClick={onClick} disabled={busy} className={BUTTON_SECONDARY}>
+      Use Terminal instead
+    </button>
   );
 }
 
@@ -135,7 +184,7 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
   const name = NAMES[login.backend];
 
   return (
-    <Modal title={`Log in to ${name}`} onClose={onClose} keepOnBackdrop className="w-full max-w-[520px]">
+    <Modal title={`Log in to ${name}`} onClose={onClose} layer="front" keepOnBackdrop className="w-full max-w-[520px]">
 
         <div className="flex flex-col gap-4 px-5 py-4">
           {login.trial && login.state !== "done" && <TrialNote trial={login.trial} />}
@@ -158,29 +207,24 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
                 </div>
               )}
 
-              <form onSubmit={(e) => void sendCode(e)} className="flex flex-col gap-1.5">
-                <label htmlFor="login-code" className="text-[12px] font-medium text-muted">
-                  Paste a code from the login page
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    id="login-code"
-                    value={code}
-                    onChange={(e) => {
-                      setCode(e.target.value);
-                      setCodeError(null);
-                    }}
-                    autoComplete="off"
-                    spellCheck={false}
-                    placeholder="Only if the CLI asks for one"
-                    className="min-w-0 flex-1 rounded-md border border-line-strong bg-canvas px-3 py-2 font-mono text-[13px] text-ink outline-none placeholder:font-sans placeholder:text-faint focus:border-accent"
-                  />
-                  <button type="submit" disabled={busy} className={`${BUTTON_SECONDARY} inline-flex items-center gap-1.5`}>
-                    <Icon name="send" size={13} /> Send
-                  </button>
+              {login.userCode && (
+                <div className="rounded-md border border-line bg-sunken px-3 py-2">
+                  <p className="text-[12px] text-muted">Enter this one-time code on GitHub:</p>
+                  <code className="mt-1 block select-all font-mono text-lg font-semibold tracking-wider text-ink">{login.userCode}</code>
                 </div>
-                {codeError && <p className="text-[12.5px] text-danger">{codeError}</p>}
-              </form>
+              )}
+
+              <CodeEntry
+                backend={login.backend}
+                code={code}
+                codeError={codeError}
+                busy={busy}
+                onCodeChange={(next) => {
+                  setCode(next);
+                  setCodeError(null);
+                }}
+                onSubmit={(e) => void sendCode(e)}
+              />
 
               <details className="group">
                 <summary className="cursor-pointer select-none text-[12px] font-medium text-muted hover:text-ink">
@@ -224,9 +268,7 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
 
         {login.state === "running" && (
           <div className="flex justify-end gap-2 border-t border-line px-5 py-3">
-            <button onClick={() => void act("terminal")} disabled={busy} className={BUTTON_SECONDARY}>
-              Use Terminal instead
-            </button>
+            <TerminalFallback backend={login.backend} busy={busy} onClick={() => void act("terminal")} />
             <button onClick={cancel} className={BUTTON_SECONDARY}>
               Cancel
             </button>
@@ -246,9 +288,7 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
             <button onClick={onClose} className={BUTTON_SECONDARY}>
               Close
             </button>
-            <button onClick={() => void act("terminal")} disabled={busy} className={BUTTON_SECONDARY}>
-              Use Terminal instead
-            </button>
+            <TerminalFallback backend={login.backend} busy={busy} onClick={() => void act("terminal")} />
             <button onClick={() => void act("start")} disabled={busy} className={BUTTON_PRIMARY}>
               <Icon name="reload" size={13} /> Try again
             </button>

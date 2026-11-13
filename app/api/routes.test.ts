@@ -804,9 +804,8 @@ describe("/login", () => {
 
   it("GET returns every CLI's status and runs", async () => {
     const json = await body(await loginRoute.GET(req("/login")));
-    // Every CLI, Goose included: the route reports the status of all four.
     expect(json).toEqual({
-      status: { claude: { loggedIn: true }, puku: { loggedIn: true }, codex: { loggedIn: true }, goose: { loggedIn: true } },
+      status: { claude: { loggedIn: true }, puku: { loggedIn: true }, codex: { loggedIn: true }, goose: { loggedIn: true }, "github-copilot": { loggedIn: true } },
       runs: [],
     });
   });

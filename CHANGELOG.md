@@ -8,6 +8,21 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **🧵 Pull a worker's uncommitted work onto this Mac.** When the same project is on this Mac and on a Weft Worker, its right-click menu has **Pull Uncommitted Work from <worker>**. The worker snapshots what it hasn't committed and pushes it to a hidden ref on the project's remote (no branch moves, so no CI and no deploy), and this Mac checks it out. A pull refuses rather than lose work: on another branch, on commits the worker lacks, over uncommitted work this Mac never sent, or under a running thread. `.env` files never travel. Main files: `lib/wip-snapshot.ts`, `lib/wip-pull.ts`, `lib/host-api/tree-snapshot.ts`, `app/api/wip/route.ts`, docs/architecture/wip-sync.md.
+- **💻 Pull uncommitted work from your other Mac.** Pair two of your Macs once in Settings → Devices → Your other Macs: copy one Mac's code and paste it on the other. After that, a synced project's right-click menu shows **Pull Uncommitted Work from <Mac>**. Each pull asks for Touch ID. The other Mac answers only to a Mac you paired by hand, and only for a project it syncs that has the same GitHub repo. Then the work lands here exactly as a worker's pull does. Each Mac keeps running its own threads at local speed, and only the snapshot moves. Main files: `lib/mac-snapshot.ts`, `electron/mac-pair.cjs`, `electron/mac-pins.cjs`, `lib/mac-twins.ts`, `components/MacPairing.tsx`.
+
+### Changed
+
+- **A card that already shipped its work is archived straight away on Done.** If a card's files are committed and its branch is pushed, `/weft:done` now skips the tests, docs, scout, deploy check and report page, and the card goes straight to the archive (`plugin/skills/done/settled.sh`, `plugin/skills/done/SKILL.md`).
+
+### Fixed
+
+- **weft.zip keeps offering the download when GitHub's download path is down.** When `releases/latest/download/update.json` (or `latest.yml`) times out or answers an error, as it did with 504s for many minutes on 2026-11-09, the home page and weft.zip/download ask GitHub's API for the latest release instead and build the same version, dmg and Windows installer links, rather than falling back to "The first release is on its way". (`lib/home-release.ts`)
+- **The @ people list opens fast, and the text boxes tell you about it.** Your workspace and the card's repo people are loaded as soon as the composer opens and show at once, and GitHub's search results join them when they arrive (each query asked only once). The rows are smaller and quieter. The reply, new-thread and review-feedback boxes now hint "@ to mention someone, / for skills". (lib/people-search.ts, components/PeopleTypeahead.tsx, lib/reply-placeholder.ts)
+- **Rail tooltips no longer disappear under the browser pane.** When the pane sits right beside the left rail, a hover tip used to be squeezed into the rail's 50px and cut off by the pane. It now floats over the pane in a small window of its own (`electron/native-tip.cjs`, `components/Tip.tsx`).
+
 ## [0.8.2] - 2026-11-11
 
 ### Added
@@ -28,6 +43,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Fixed
 
 - **weft.zip keeps offering the download when GitHub's download path is down.** When `releases/latest/download/update.json` (or `latest.yml`) times out or answers an error, as it did with 504s for many minutes on 2026-11-09, the home page and weft.zip/download ask GitHub's API for the latest release instead and build the same version, dmg and Windows installer links, rather than falling back to "The first release is on its way". (`lib/home-release.ts`)
+- **The @ people list opens fast, and the text boxes tell you about it.** Your workspace and the card's repo people are loaded as soon as the composer opens and show at once, and GitHub's search results join them when they arrive (each query asked only once). The rows are smaller and quieter. The reply, new-thread and review-feedback boxes now hint "@ to mention someone, / for skills". (lib/people-search.ts, components/PeopleTypeahead.tsx, lib/reply-placeholder.ts)
 - **Rail tooltips no longer disappear under the browser pane.** When the pane sits right beside the left rail, a hover tip used to be squeezed into the rail's 50px and cut off by the pane. It now floats over the pane in a small window of its own (`electron/native-tip.cjs`, `components/Tip.tsx`).
 - **Clicking the uncommitted +/- numbers no longer starts a card.** The badge only opens its bubble on hover now; just the bubble's Commit them / Review N cards button starts the commit walk-through. Files: `components/PileBadge.tsx`.
 - **A thread your Worker turns down no longer vanishes.** A new thread in a Worker project makes nothing on your Mac, so when the Worker refused it (say "This worker trusts no Mac yet"), the card quietly left the board after two minutes and took your prompt with it. Weft now watches each thread it sends. If the Worker refuses one, the thread lands on your board in Needs you, in the project of the same name, tagged `worker-refused`, with the Worker's reason as its last line. Start it on your Mac, or fix the Worker and send it again (`lib/worker-refused.ts`, `app/api/cards/route.ts`).

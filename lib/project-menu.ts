@@ -17,6 +17,7 @@ export type ProjectAction =
   | "sync"
   | "run-here"
   | "run-worker"
+  | `pull-wip:${string}`
   | "pin"
   | "unpin"
   | "hide"
@@ -43,6 +44,8 @@ export interface ProjectMenuState {
   onWorker: boolean;
   // Folders added to the project (lib/project-folders.ts), each with a Remove item under Add Folder….
   folders?: string[];
+  // The Weft Workers that hold this project too, each a "Pull Uncommitted Work from <worker>" item (lib/wip-pull.ts).
+  twins?: { path: string; name: string; offline: boolean }[];
 }
 
 const SEPARATOR: MenuItem = { type: "separator" };
@@ -91,6 +94,7 @@ export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
     { id: "sync", label: s.synced ? `Don't Sync ${name}` : `Sync ${name}`, enabled: s.syncable || s.synced, detail: s.syncStatus },
     { id: "run-here", label: "Run on This Machine", checked: !s.onWorker },
     { id: "run-worker", label: "Run on Worker", checked: s.onWorker, enabled: s.syncable || s.onWorker },
+    ...(s.twins ?? []).map((t) => ({ id: `pull-wip:${t.path}`, label: `Pull Uncommitted Work from ${t.name}`, enabled: !t.offline, ...(t.offline ? { detail: "offline" } : {}) })),
     SEPARATOR,
     s.pinned ? { id: "unpin", label: "Unpin from Bar" } : { id: "pin", label: "Pin to Bar" },
     s.hidden ? { id: "show", label: "Show in Bar" } : { id: "hide", label: "Hide from Bar" },
