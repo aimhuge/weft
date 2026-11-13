@@ -37,6 +37,11 @@ export async function flushPostHogLogs() {
   await posthogLoggerProvider?.forceFlush();
 }
 
-export function register() {
+export async function register() {
   // Keep this provider dedicated to the purpose-written PostHog log lines above.
+  // The packaged server ends when Electron is gone, with its CLIs (lib/parent-watch.ts).
+  if (process.env.NEXT_RUNTIME === "nodejs" && (process.env.WEFT_PARENT_PID || process.env.ELECTRON_RUN_AS_NODE)) {
+    const { watchParent } = await import("@/lib/parent-watch");
+    watchParent();
+  }
 }
