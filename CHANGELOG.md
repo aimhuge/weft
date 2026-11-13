@@ -8,10 +8,14 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-13
+
 ### Added
 
 - **🧵 Pull a worker's uncommitted work onto this Mac.** When the same project is on this Mac and on a Weft Worker, its right-click menu has **Pull Uncommitted Work from <worker>**. The worker snapshots what it hasn't committed and pushes it to a hidden ref on the project's remote (no branch moves, so no CI and no deploy), and this Mac checks it out. A pull refuses rather than lose work: on another branch, on commits the worker lacks, over uncommitted work this Mac never sent, or under a running thread. `.env` files never travel. Main files: `lib/wip-snapshot.ts`, `lib/wip-pull.ts`, `lib/host-api/tree-snapshot.ts`, `app/api/wip/route.ts`, docs/architecture/wip-sync.md.
 - **💻 Pull uncommitted work from your other Mac.** Pair two of your Macs once in Settings → Devices → Your other Macs: copy one Mac's code and paste it on the other. After that, a synced project's right-click menu shows **Pull Uncommitted Work from <Mac>**. Each pull asks for Touch ID. The other Mac answers only to a Mac you paired by hand, and only for a project it syncs that has the same GitHub repo. Then the work lands here exactly as a worker's pull does. Each Mac keeps running its own threads at local speed, and only the snapshot moves. Main files: `lib/mac-snapshot.ts`, `electron/mac-pair.cjs`, `electron/mac-pins.cjs`, `lib/mac-twins.ts`, `components/MacPairing.tsx`.
+- **⭐ A new weft.zip home page, a nudge to star Weft, and dev-mode updates.** The home page tells Weft's story with a live mini board, a card demo and a small game, plus Why and Open Source sections; the plans fold into one table. The board asks once, at a good moment, if you'd star Weft on GitHub. And a Weft run from source can pull and merge origin from the update window. (`components/home/*`, `lib/home-story.ts`, `lib/star-prompt.ts`, `app/api/star`, `electron/dev-update.cjs`)
+- **🎙 Pick your microphone for dictation, and the first words aren't lost.** Dictation settings and the pill have a mic picker, and the recorder stays warm so it hears you from the first syllable. (`lib/mic.ts`, `components/DictationMicPicker.tsx`, `lib/use-dictation.ts`)
 
 ### Changed
 
