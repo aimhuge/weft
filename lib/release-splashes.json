@@ -1,4 +1,11 @@
 {
+  "0.8.3": {
+    "lines": [
+      "Pull your uncommitted work from your other Mac or a Weft Worker, so you pick up right where you left off.",
+      "Pick your microphone for dictation, and Weft hears you from the very first word.",
+      "A card that's already committed and pushed goes straight to the archive on Done, with nothing to wait for."
+    ]
+  },
   "0.8.2": {
     "lines": [
       "Deleted a card by mistake? Weft keeps it for 30 days, so you can restore it from the Done column's trash.",
