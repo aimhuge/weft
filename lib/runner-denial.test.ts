@@ -2,7 +2,7 @@
 // Auto mode's classifier denials (lib/classifier-denial.ts) through the runner, against the fake SDK in lib/runner.harness.ts.
 import type { HookCallbackMatcher, HookInput, Options } from "@anthropic-ai/claude-agent-sdk";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { flush, makeCard, nth, resetHarness, success } from "./runner.harness";
+import { assistant, flush, makeCard, nth, resetHarness, success, toolResultMsg, toolUse } from "./runner.harness";
 import type { Card, ThreadItem } from "./types";
 
 const h = await vi.hoisted(async () => (await import("./runner.harness")).harnessState());
@@ -59,6 +59,21 @@ async function deniedTurn() {
 }
 
 describe("a classifier denial", () => {
+  it("isn't asked about when the thread ran the same tool after it and finished", async () => {
+    addCard({ id: "c1", permissionMode: "auto" });
+    runner.sendMessage("c1", "apply it");
+    await flush();
+    lastQuery().emit(
+      denied,
+      assistant(toolUse("tu2", MIGRATE, { ...input, name: "add_x_again" })),
+      toolResultMsg("tu2", "applied"),
+      deniedResult("Applied it another way\nBOARD STATUS: column=done | stage=Done | remaining=none"),
+    );
+    await flush();
+    expect(card("c1")).toMatchObject({ column: "done", pending: null });
+    expect(thread("c1")).not.toContainEqual(expect.objectContaining({ kind: "permission" }));
+  });
+
   it("parks the card in Needs you with the tool, the classifier's reason and the call", async () => {
     await deniedTurn();
     expect(card("c1")).toMatchObject({

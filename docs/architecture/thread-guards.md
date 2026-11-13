@@ -113,6 +113,11 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
 - When the turn ends (not stopped), `askAboutDenials` turns each distinct call into a `Pending` with
   `why: { category: "classifier", detail: <reason> }`, so the card goes to Needs you with the ordinary prompt UI; the
   queued-message handoff waits for it as it does for a Needs you status.
+- A denial the thread got past in the same turn isn't asked about, unless the turn ended in Needs you. `noteToolUse`
+  and `noteToolResult` (from `lib/runner-turn.ts`) mark it passed when, after it, the thread asked you itself
+  (AskUserQuestion) or a call of the same tool ran without an error: the thread that asked "Delete all?" and then ran
+  the deletion as a slightly different command doesn't leave a pointless "allow the blocked call" prompt behind. A
+  prompt answered anyway tells the thread not to redo work it already got done another way.
 - `components/PermissionInput.tsx` shows that reason as **Auto mode blocked** with **Allow once and retry** and
   **Keep denied**. Once the last of them is answered, an allowed call becomes a one-time grant (keyed by tool name plus
   its input with sorted keys) and Weft sends the thread "retry exactly that call"; with nothing allowed the card goes back

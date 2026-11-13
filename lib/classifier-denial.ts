@@ -22,6 +22,8 @@ export interface ClassifierDenial {
   toolUseId: string;
   toolName: string;
   reason: string;
+  // The thread got past it later in the turn: it asked you itself, or a later call of the same tool ran.
+  passed?: boolean;
 }
 
 type DeniedMessage = Extract<SDKMessage, { type: "system"; subtype: "permission_denied" }>;
@@ -31,6 +33,25 @@ export function noteDenial(session: Session, msg: DeniedMessage) {
   if (msg.decision_reason_type !== "classifier" || msg.agent_id) return;
   const reason = (msg.decision_reason || msg.message || "").trim();
   (session.denials ??= []).push({ toolUseId: msg.tool_use_id, toolName: msg.tool_name, reason });
+}
+
+// A tool call the thread made after a denial this turn. Asking you (AskUserQuestion) hands the decision to you,
+// so every denial before it is past; any other call is remembered until its result says whether it ran.
+export function noteToolUse(session: Session, toolUseId: string, toolName: string) {
+  if (!session.denials?.length) return;
+  if (toolName === "AskUserQuestion") for (const d of session.denials) d.passed = true;
+  else (session.sinceDenial ??= new Map()).set(toolUseId, toolName);
+}
+
+// A tool result: when a call made after a denial ran without an error, the thread found another way through
+// with the same tool (the deletion the classifier blocked, run as a slightly different command).
+export function noteToolResult(session: Session, toolUseId: string, isError: boolean) {
+  const since = session.sinceDenial ?? new Map<string, string>();
+  const toolName = since.get(toolUseId);
+  if (!toolName) return;
+  since.delete(toolUseId);
+  if (isError) return;
+  for (const d of session.denials ?? []) if (d.toolName === toolName) d.passed = true;
 }
 
 // One stable key per call, so a retry with the same input matches whatever order its keys come in.
@@ -46,9 +67,13 @@ function sorted(value: unknown): unknown {
 
 // The turn ended: unless it was stopped (ask false), each classifier denial becomes a prompt on the card,
 // which goes to Needs you. column is where the turn left the card, for "Keep denied". Returns whether any did.
+// A denial the thread got past isn't asked about when the turn ended in Review or Done: asking would only grant
+// a call nothing needs any more. One that ended in Needs you still asks: the thread may be waiting on it.
 export function askAboutDenials(cardId: string, session: Session, denials: SDKPermissionDenial[], column: Column, ask = true): boolean {
-  const noted = session.denials ?? [];
+  const stuck = column === "needs_you";
+  const noted = (session.denials ?? []).filter((d) => stuck || !d.passed);
   session.denials = undefined;
+  session.sinceDenial = undefined;
   // A grant the last retry didn't use is spent: it was for that turn only.
   session.retryGrants = undefined;
   void backToAuto(session);
@@ -98,7 +123,7 @@ function denialPrompt(cardId: string, session: Session, d: ClassifierDenial, inp
 export function retryMessage(toolNames: string[]) {
   const names = [...new Set(toolNames.map(shortToolName))].join(", ");
   const calls = toolNames.length === 1 ? "call" : "calls";
-  return `I allowed the ${names} ${calls} that auto mode's classifier blocked, once, in Weft. Retry exactly that ${calls} now, with the same input; Weft lets ${toolNames.length === 1 ? "it" : "them"} through this one time.`;
+  return `I allowed the ${names} ${calls} that auto mode's classifier blocked, once, in Weft. Retry exactly that ${calls} now, with the same input; Weft lets ${toolNames.length === 1 ? "it" : "them"} through this one time. If you already got what ${toolNames.length === 1 ? "it was" : "they were"} for another way, don't run ${toolNames.length === 1 ? "it" : "them"} again: say so and carry on.`;
 }
 
 // A granted retry, used up by the call it matches.

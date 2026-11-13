@@ -133,6 +133,8 @@ export interface Session {
   pending: Pending[];
   // Auto mode's classifier denials this turn, asked about when it ends, and the calls you then allowed once (lib/classifier-denial.ts).
   denials?: ClassifierDenial[];
+  // The calls made since the first of them, by id, until their results come back.
+  sinceDenial?: Map<string, string>;
   retryGrants?: string[];
   // Open while the live CLI is out of auto mode for one of those calls (lib/retry-window.ts).
   retryWindow?: RetryWindow;

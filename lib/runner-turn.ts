@@ -1,13 +1,11 @@
 import type { ModelUsage, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import path from "node:path";
 import { recordLimit } from "./activity";
 import { publish } from "./bus";
 import { switchToBackup } from "./backend-switch";
 import { runsOn } from "./cli-defaults";
 import { endDbCall, trackDbCall } from "./db-calls";
-import { editPreview } from "./edit-preview";
 import { firstLine, shortToolName, summarizeInput, toolAction } from "./format";
-import { askAboutDenials, noteDenial } from "./classifier-denial";
+import { askAboutDenials, noteDenial, noteToolResult, noteToolUse } from "./classifier-denial";
 import { changedLines, gitBranch } from "./git-stats";
 import { showAfterTurn } from "./show";
 import { recordLimits } from "./limit-history";
@@ -26,6 +24,7 @@ import { restoreDoneOverride } from "./done-override";
 import { withRedacted } from "./secret-run";
 import { secretAskOf } from "./vault-view";
 import { recordTask } from "./task-ledger";
+import { readFileEdit } from "./tool-file";
 import { extractStatus, type BoardStatus } from "./status";
 import { appendThread, getCard, getThread, replaceThreadItem } from "./store";
 import { adoptLocalMedia, liveToolResult, type ToolResult } from "./thread-media";
@@ -158,6 +157,7 @@ function handleAssistant(id: string, session: Session, msg: Extract<SDKMessage, 
         ...(fileEdit.edit && { edit: fileEdit.edit }),
       });
       session.toolIndex.set(block.id, index);
+      noteToolUse(session, block.id, block.name);
       trackDbCall(session, block.id, block.name, input);
       safeUpdate(id, { lastLine: `${shortToolName(block.name)} ${summary}`.trim() });
     }
@@ -175,44 +175,16 @@ function recordEdit(id: string, toolName: string, input: Record<string, unknown>
   if (touched) safeUpdate(id, { touchedFiles: touched });
 }
 
-// The path a tool call names (Read/Edit/Write/MultiEdit/NotebookEdit) and the EditPreview, when
-// the call edits a file. Used by the thread to render a clickable file link and an inline diff
-// instead of the raw tool result. Paths are returned relative to the card's folder when they
-// sit inside it (so the editor opens the same path), absolute when they don't. Wrapped in a
-// try/catch: a throw here (a bad path, fs error) drops the preview but never breaks the turn.
-const FILE_TOOLS = new Set(["Read", "Edit", "Write", "MultiEdit", "NotebookEdit"]);
-function readFileEdit(toolName: string, input: Record<string, unknown>, cwd: string): { file?: string; edit?: ReturnType<typeof editPreview> } {
-  if (!FILE_TOOLS.has(toolName)) return {};
-  const raw = typeof input.file_path === "string" ? input.file_path : typeof input.notebook_path === "string" ? input.notebook_path : "";
-  if (!raw) return {};
-  const file = relativize(raw, cwd);
-  let edit: ReturnType<typeof editPreview> = undefined;
-  try {
-    edit = editPreview(toolName, input, cwd);
-  } catch {
-    // The diff is decoration; a thrown preview (bad path, fs read) must not drop the tool call.
-  }
-  return { file, ...(edit && { edit }) };
-}
-
-// A path relative to `cwd` when it sits inside, absolute otherwise. Empty when neither can be done.
-function relativize(given: string, cwd: string): string {
-  try {
-    const abs = path.resolve(cwd, given);
-    const rel = path.relative(cwd, abs);
-    if (rel && !rel.startsWith("..") && !path.isAbsolute(rel)) return rel;
-    return abs;
-  } catch {
-    return given;
-  }
-}
-
 // Tool results fill in the tool items the assistant message added. A card that has used vault secrets gets
 // each value swapped for ‹NAME› before the result is stored (lib/secret-run.ts); the model saw it as it was.
 function handleToolResults(id: string, session: Session, msg: Extract<SDKMessage, { type: "user" }>): void | Promise<void> {
   const content = msg.message.content;
   if (!Array.isArray(content)) return;
-  for (const b of content) if (b.type === "tool_result") endDbCall(session, b.tool_use_id);
+  for (const b of content) {
+    if (b.type !== "tool_result") continue;
+    endDbCall(session, b.tool_use_id);
+    noteToolResult(session, b.tool_use_id, Boolean(b.is_error));
+  }
   const pending = content.flatMap((b) =>
     b.type === "tool_result" && session.toolIndex.has(b.tool_use_id)
       ? [{ index: session.toolIndex.get(b.tool_use_id) as number, result: liveToolResult(b.content), isError: Boolean(b.is_error) }]

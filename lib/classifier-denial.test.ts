@@ -265,6 +265,9 @@ describe("retryMessage", () => {
   it("names the calls", () => {
     expect(retryMessage([MIGRATE])).toMatch(/the supabase apply_migration call .* exactly that call .* lets it through/);
     expect(retryMessage(["Bash", "Bash", "Edit"])).toMatch(/the Bash, Edit calls .* lets them through/);
+    // A prompt answered after the thread already found another way: it shouldn't redo the work.
+    expect(retryMessage([MIGRATE])).toMatch(/already got what it was for another way, don't run it again/);
+    expect(retryMessage(["Bash", "Edit"])).toMatch(/what they were for another way, don't run them again/);
   });
 });
 
