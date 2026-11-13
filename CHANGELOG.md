@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Fixed
+
+- **Weft's server no longer outlives the app.** A quit, crash or update could leave the packaged app's server running under launchd. With nobody reading its log, each write failed and looped through Next's error logger at ~100% CPU for days, and it kept its claude CLIs alive. Now the server ends itself, and its CLIs, as soon as Weft is gone, its log pipe breaks, or a SIGTERM's graceful close takes longer than 5 seconds. It ships as a server patch, so installed apps get it without a new download (`lib/parent-watch.ts`, `instrumentation.ts`).
+
 ## [0.8.3] - 2026-11-13
 
 ### Added
