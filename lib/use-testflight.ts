@@ -5,6 +5,7 @@ import { apiFetch } from "./api-client";
 import { markPhonePromptSeen, phonePromptSeen, shouldOfferPhone } from "./phone-prompt";
 import type { InviteAnswer, TestflightInfo } from "./testflight-types";
 import { useAccount } from "./use-account";
+import { starAskedThisLaunch } from "./star-prompt";
 import { syncAskedThisLaunch } from "./use-sync-prompt";
 import { loadWelcome } from "./welcome-client";
 
@@ -43,6 +44,9 @@ export function useTestflightLink(): string | null {
 // Once a launch: the flag lives in the module, so the badges remounting doesn't ask twice.
 let offeredThisLaunch = false;
 
+// Whether it opened this launch, so the star ask (lib/use-star-prompt.ts) waits for another one.
+export const phoneOfferedThisLaunch = () => offeredThisLaunch;
+
 // When the "Weft on your phone" prompt opens (lib/phone-prompt.ts has the rules). Nothing is fetched until the cheap
 // local checks pass, then the welcome, the phones and the link are read once.
 export function usePhonePrompt(finished: number) {
@@ -58,7 +62,7 @@ export function usePhonePrompt(finished: number) {
       .then(([welcomed, phones, info]) => {
         const url = info?.url ?? null;
         if (!live || offeredThisLaunch) return;
-        if (!shouldOfferPhone({ ...gate, welcomed, phones, url, seen: phonePromptSeen(), syncAsked: syncAskedThisLaunch() })) return;
+        if (!shouldOfferPhone({ ...gate, welcomed, phones, url, seen: phonePromptSeen(), syncAsked: syncAskedThisLaunch() || starAskedThisLaunch() })) return;
         offeredThisLaunch = true;
         setOpen(info);
       })

@@ -1,0 +1,716 @@
+/* The two drawn demos on the weft.zip home page: the open card in the hero (components/home/CardDemo.tsx) and the
+   small board (components/home/MiniBoard.tsx). Both move on CSS keyframes alone; the page ships no client JS.
+   Each rests on a still frame (the review tour; the card in Review), and the motion is added only inside
+   prefers-reduced-motion: no-preference, so reduced motion gets the still and never a half-played loop. */
+
+/* ─── The open card ─────────────────────────────────────────────────────────── */
+.wz-cd {
+  --cd-loop: 18s;
+  margin: 0;
+  border-radius: 16px;
+  border: 1px solid rgb(236 229 216 / 0.18);
+  background: #0f131c;
+  box-shadow:
+    0 0 0 1px rgb(0 0 0 / 0.5),
+    0 60px 140px -50px rgb(218 122 76 / 0.35),
+    0 60px 120px -40px rgb(0 0 0 / 0.9);
+  overflow: hidden;
+}
+
+.wz-cdBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(236 229 216 / 0.1);
+  background: rgb(236 229 216 / 0.035);
+}
+
+/* Three window dots from one element. */
+.wz-cdDots {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  margin-right: 34px;
+  border-radius: 50%;
+  background: rgb(236 229 216 / 0.22);
+  box-shadow:
+    17px 0 0 rgb(236 229 216 / 0.22),
+    34px 0 0 rgb(236 229 216 / 0.22);
+}
+
+.wz-cdCardName {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+/* The three turns, as steps; the one on screen is lit. */
+.wz-cdTabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 0 auto;
+  padding: 0;
+  list-style: none;
+  counter-reset: cd;
+}
+
+.wz-cdTab {
+  position: relative;
+  z-index: 0;
+  padding: 5px 13px;
+  border-radius: 99px;
+  border: 1px solid rgb(236 229 216 / 0.12);
+  font-size: 13px;
+  color: var(--thread-2);
+  counter-increment: cd;
+}
+
+.wz-cdTab::after {
+  content: counter(cd);
+  float: left;
+  margin-right: 7px;
+  font-family: var(--mono);
+  color: var(--clay-2);
+}
+
+.wz-cdTab::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: -1;
+  border-radius: inherit;
+  border: 1px solid var(--clay-2);
+  background: rgb(218 122 76 / 0.2);
+  opacity: 0;
+}
+
+.wz-cdTab.wz-cd-review::before {
+  opacity: 1;
+}
+
+.wz-cdBody {
+  display: grid;
+  grid-template-columns: minmax(0, 0.72fr) minmax(0, 1.28fr);
+}
+
+.wz-cdLabel {
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--thread-3);
+}
+
+.wz-cdThread {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 18px 16px;
+  border-right: 1px solid rgb(236 229 216 / 0.1);
+}
+
+.wz-cdThread .wz-cdLabel {
+  margin-bottom: 4px;
+}
+
+.wz-cdYou,
+.wz-cdSays {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 14.5px;
+  line-height: 1.4;
+  text-wrap: pretty;
+}
+
+.wz-cdYou {
+  align-self: flex-end;
+  max-width: 90%;
+  border-bottom-right-radius: 4px;
+  background: var(--clay);
+  color: #1b1410;
+  font-weight: 500;
+}
+
+.wz-cdSays {
+  align-self: flex-start;
+  max-width: 94%;
+  border-bottom-left-radius: 4px;
+  background: rgb(236 229 216 / 0.07);
+  color: var(--thread);
+}
+
+.wz-cdComposer {
+  margin: auto 0 0;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid rgb(236 229 216 / 0.12);
+  font-size: 13.5px;
+  color: var(--thread-3);
+}
+
+.wz-cdPane {
+  padding: 18px;
+  min-width: 0;
+}
+
+/* The scenes are stacked in one box; only one is opaque at a time. */
+.wz-cdStage {
+  position: relative;
+  aspect-ratio: 16 / 9.4;
+}
+
+.wz-cdScene {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  border: 1px solid rgb(236 229 216 / 0.12);
+  overflow: hidden;
+  opacity: 0;
+}
+
+.wz-cdScene.wz-cd-review {
+  opacity: 1;
+}
+
+.wz-cdUrl {
+  margin: 0;
+  padding: 7px 12px;
+  border-bottom: 1px solid rgb(236 229 216 / 0.1);
+  background: rgb(236 229 216 / 0.05);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--thread-2);
+}
+
+.wz-cdView {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.wz-cdPage {
+  position: absolute;
+  inset: 0;
+  padding: 6% 7%;
+}
+
+/* Turn 1: the plan, as a page. */
+.wz-cdPlan {
+  background: #171c2b;
+}
+
+.wz-cdPageKicker {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--clay-2);
+}
+
+.wz-cdPageTitle {
+  margin: 4px 0 0;
+  font-family: var(--display);
+  font-size: clamp(22px, 2.6vw, 34px);
+  line-height: 1.1;
+}
+
+.wz-cdSteps {
+  display: grid;
+  gap: 10px;
+  margin: 5% 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wz-cdSteps li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 10px;
+  border: 1px solid rgb(236 229 216 / 0.1);
+  background: rgb(236 229 216 / 0.04);
+  font-size: 14px;
+}
+
+.wz-cdCheck {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #5fd3bc;
+}
+
+/* Turns 2 and 3: the page the thread built. A light page, so it reads as "a real app" against the dark board. */
+.wz-cdApp {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: #f4efe6;
+  color: #1c2030;
+}
+
+.wz-cdAppTitle {
+  margin: 0;
+  font-family: var(--display);
+  font-size: clamp(18px, 2.2vw, 28px);
+}
+
+.wz-cdPlans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4%;
+  width: 100%;
+  margin-top: 5%;
+  flex: 1;
+}
+
+.wz-cdPlanCard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12% 12% 10%;
+  border-radius: 10px;
+  border: 1px solid #1c203022;
+  background: #fff;
+}
+
+.wz-cdPlanHot {
+  border-color: var(--clay);
+  box-shadow: 0 10px 30px -14px rgb(218 122 76 / 0.7);
+}
+
+.wz-cdPlanName {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #6b6f80;
+}
+
+.wz-cdPlanPrice {
+  font-family: var(--display);
+  font-size: clamp(20px, 2.4vw, 30px);
+  line-height: 1;
+}
+
+.wz-cdLine {
+  height: 6px;
+  border-radius: 99px;
+  background: #1c203018;
+}
+
+.wz-cdLineShort {
+  width: 60%;
+}
+
+.wz-cdPlanBtn {
+  height: 22px;
+  margin-top: auto;
+  border-radius: 99px;
+  background: #1c203014;
+}
+
+.wz-cdPlanHot .wz-cdPlanBtn {
+  background: var(--clay);
+}
+
+/* Turn 3: the tour's stop, over the app, with a ring on what to look at. */
+.wz-cdRing {
+  position: absolute;
+  inset: 24% 4.5% 5%;
+  border-radius: 14px;
+  border: 2px solid var(--clay);
+  box-shadow: 0 0 0 999px rgb(21 26 41 / 0.28);
+  pointer-events: none;
+}
+
+.wz-cdTour {
+  position: absolute;
+  right: 4%;
+  bottom: 6%;
+  width: min(62%, 300px);
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid rgb(236 229 216 / 0.2);
+  background: #151a29;
+  box-shadow: 0 20px 50px -10px rgb(0 0 0 / 0.7);
+}
+
+.wz-cdTour p {
+  margin: 0;
+}
+
+.wz-cdTourStep {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--clay-2);
+}
+
+.wz-cdTourTitle {
+  margin-top: 4px !important;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.wz-cdTourLook {
+  margin-top: 2px !important;
+  font-size: 13.5px;
+  color: var(--thread-2);
+}
+
+.wz-cdTourActions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px !important;
+  font-size: 12.5px;
+}
+
+.wz-cdTourOk,
+.wz-cdTourReply {
+  padding: 5px 12px;
+  border-radius: 99px;
+}
+
+.wz-cdTourOk {
+  background: #5fd3bc;
+  color: #0f131c;
+  font-weight: 600;
+}
+
+.wz-cdTourReply {
+  flex: 1;
+  border: 1px solid rgb(236 229 216 / 0.16);
+  color: var(--thread-3);
+}
+
+/* ─── The small board ───────────────────────────────────────────────────────── */
+@property --wz-on {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+/* Everything inside is in em, off a font-size that follows the viewport: a whole board at any width. */
+.wz-mb {
+  --mb-gap: 0.8em;
+  --mb-slot: 5em;
+  --mb-loop: 14s;
+  margin: 0;
+  padding: 1em;
+  border-radius: 1.1em;
+  border: 1px solid rgb(236 229 216 / 0.16);
+  background: #0f131c;
+  box-shadow: 0 40px 100px -40px rgb(0 0 0 / 0.9);
+  font-size: clamp(7.5px, 1.5vw, 15px);
+}
+
+.wz-mbCols {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--mb-gap);
+}
+
+.wz-mbCol {
+  min-height: 18.6em;
+  padding: 0.7em;
+  border-radius: 0.8em;
+  background: rgb(236 229 216 / 0.035);
+}
+
+.wz-mbColName {
+  display: flex;
+  justify-content: space-between;
+  height: 1.6em;
+  margin: 0 0 0.6em;
+  font-size: 1em;
+  font-weight: 600;
+  color: var(--thread-2);
+}
+
+.wz-mbColName span {
+  font-family: var(--mono);
+  font-weight: 400;
+  color: var(--thread-3);
+}
+
+.wz-mbCard {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 4.4em;
+  margin-bottom: 0.6em;
+  padding: 0.65em 0.8em;
+  border-radius: 0.6em;
+  border: 1px solid rgb(236 229 216 / 0.12);
+  background: #1a2032;
+}
+
+.wz-mbTitle {
+  font-size: 1em;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wz-mbMeta {
+  font-family: var(--mono);
+  font-size: 0.78em;
+  color: var(--thread-3);
+}
+
+.wz-mbMeta::before {
+  content: "";
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.55em;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.wz-mbCol:nth-child(2) .wz-mbMeta,
+.wz-mbStates .wz-mbPhase2 {
+  color: var(--clay-2);
+}
+
+.wz-mbCol:nth-child(3) .wz-mbMeta,
+.wz-mbStates .wz-mbPhase3 {
+  color: #5fd3bc;
+}
+
+/* A column's own cards step down one slot while the traveler sits on top of it. */
+.wz-mbStack {
+  transform: translateY(calc(var(--wz-on) * var(--mb-slot)));
+}
+
+/* The traveler: laid over the first slot of the first column, one column wide, moved by whole columns. */
+.wz-mbTraveler {
+  --mb-step: calc(100% + var(--mb-gap));
+  position: absolute;
+  top: 2.9em;
+  left: 0.7em;
+  width: calc((100% - 3 * var(--mb-gap)) / 4 - 1.4em);
+  margin: 0;
+  border-color: var(--clay-2);
+  background: #242b42;
+  box-shadow: 0 0.8em 2em -0.6em rgb(218 122 76 / 0.6);
+  transform: translateX(calc(2 * (var(--mb-step) + 1.4em)));
+}
+
+.wz-mbStates {
+  position: relative;
+  height: 1.2em;
+}
+
+.wz-mbStates .wz-mbMeta {
+  position: absolute;
+  inset: 0;
+  opacity: var(--wz-on);
+}
+
+/* The still frame: the card resting in Review. */
+.wz-mbPhase3 {
+  --wz-on: 1;
+}
+
+/* ─── Motion ────────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: no-preference) {
+  .wz-cdScene.wz-cd-plan,
+  .wz-cdTab.wz-cd-plan::before {
+    animation: wz-cdA var(--cd-loop) infinite;
+  }
+
+  .wz-cdScene.wz-cd-app,
+  .wz-cdTab.wz-cd-app::before {
+    animation: wz-cdB var(--cd-loop) infinite;
+  }
+
+  .wz-cdScene.wz-cd-review,
+  .wz-cdTab.wz-cd-review::before {
+    animation: wz-cdC var(--cd-loop) infinite;
+  }
+
+  .wz-cdSays.wz-cd-plan { animation: wz-cdSayA var(--cd-loop) infinite; }
+  .wz-cdSays.wz-cd-app { animation: wz-cdSayB var(--cd-loop) infinite; }
+  .wz-cdSays.wz-cd-review { animation: wz-cdSayC var(--cd-loop) infinite; }
+
+  /* Each step and its tick carry their own animation-delay (CardDemo.tsx), which shifts their place in the loop. */
+  .wz-cdSteps li,
+  .wz-cdCheck {
+    animation: wz-cdStep var(--cd-loop) infinite both;
+  }
+
+  .wz-cdRing {
+    animation: wz-cdPulse 1.8s ease-in-out infinite;
+  }
+
+  .wz-mbTraveler {
+    animation: wz-mbTravel var(--mb-loop) cubic-bezier(0.6, 0, 0.2, 1) infinite;
+  }
+
+  .wz-mbPhase1 { animation: wz-mbP1 var(--mb-loop) infinite; }
+  .wz-mbPhase2 { animation: wz-mbP2 var(--mb-loop) infinite; }
+  .wz-mbPhase3 { animation: wz-mbP3 var(--mb-loop) infinite; }
+  .wz-mbPhase4 { animation: wz-mbP4 var(--mb-loop) infinite; }
+
+  .wz-mbCol:nth-child(2) .wz-mbMeta::before,
+  .wz-mbStates .wz-mbPhase2::before {
+    animation: wz-cdPulse 1.2s ease-in-out infinite;
+  }
+}
+
+/* The loop's thirds: plan to 29%, the app to 66%, the tour to 97%, then back. */
+@keyframes wz-cdA {
+  0%, 29% { opacity: 1; }
+  32%, 97% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes wz-cdB {
+  0%, 29% { opacity: 0; }
+  32%, 66% { opacity: 1; }
+  69%, 100% { opacity: 0; }
+}
+
+@keyframes wz-cdC {
+  0%, 66% { opacity: 0; }
+  69%, 97% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* The thread's replies arrive with their scene and stay until the loop ends. */
+@keyframes wz-cdSayA {
+  0%, 2% { opacity: 0; transform: translateY(6px); }
+  5%, 96% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@keyframes wz-cdSayB {
+  0%, 30% { opacity: 0; transform: translateY(6px); }
+  33%, 96% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@keyframes wz-cdSayC {
+  0%, 67% { opacity: 0; transform: translateY(6px); }
+  70%, 96% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@keyframes wz-cdStep {
+  0% { opacity: 0; transform: translateY(5px); }
+  3%, 40% { opacity: 1; transform: none; }
+  44%, 100% { opacity: 0; }
+}
+
+@keyframes wz-cdPulse {
+  50% { opacity: 0.45; }
+}
+
+/* Backlog to 12%, Running to 45%, Review to 75%, Done to 93%, then out and back to the start. */
+@keyframes wz-mbTravel {
+  0%, 12% { transform: translateX(0); opacity: 1; }
+  17%, 45% { transform: translateX(calc(var(--mb-step) + 1.4em)); }
+  50%, 75% { transform: translateX(calc(2 * (var(--mb-step) + 1.4em))); }
+  80%, 93% { transform: translateX(calc(3 * (var(--mb-step) + 1.4em))); opacity: 1; }
+  96% { transform: translateX(calc(3 * (var(--mb-step) + 1.4em))); opacity: 0; }
+  97% { transform: translateX(0); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes wz-mbP1 {
+  0%, 12% { --wz-on: 1; }
+  17%, 95% { --wz-on: 0; }
+  99%, 100% { --wz-on: 1; }
+}
+
+@keyframes wz-mbP2 {
+  0%, 12% { --wz-on: 0; }
+  17%, 45% { --wz-on: 1; }
+  50%, 100% { --wz-on: 0; }
+}
+
+@keyframes wz-mbP3 {
+  0%, 45% { --wz-on: 0; }
+  50%, 75% { --wz-on: 1; }
+  80%, 100% { --wz-on: 0; }
+}
+
+@keyframes wz-mbP4 {
+  0%, 75% { --wz-on: 0; }
+  80%, 94% { --wz-on: 1; }
+  98%, 100% { --wz-on: 0; }
+}
+
+@media (max-width: 860px) {
+  .wz-cdBody {
+    grid-template-columns: 1fr;
+  }
+
+  .wz-cdThread {
+    border-right: 0;
+    border-bottom: 1px solid rgb(236 229 216 / 0.1);
+  }
+
+  .wz-cdComposer {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .wz-cd {
+    border-radius: 12px;
+  }
+
+  .wz-cdBar {
+    flex-wrap: wrap;
+    row-gap: 10px;
+  }
+
+  .wz-cdTabs {
+    width: 100%;
+    margin: 0;
+  }
+
+  .wz-cdTab {
+    flex: 1;
+    padding: 5px 6px;
+    font-size: 11.5px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .wz-cdTab::after {
+    display: none;
+  }
+
+  .wz-cdPane,
+  .wz-cdThread {
+    padding: 14px;
+  }
+
+  .wz-cdStage {
+    aspect-ratio: 4 / 3.5;
+  }
+
+  .wz-cdSteps li {
+    padding: 8px 10px;
+    font-size: 12.5px;
+  }
+
+  .wz-cdTour {
+    width: 74%;
+    padding: 10px 12px;
+  }
+}

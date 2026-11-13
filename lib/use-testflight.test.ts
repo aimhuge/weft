@@ -2,6 +2,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { PHONE_PROMPT_KEY } from "./phone-prompt";
+import { markStarAsked } from "./star-prompt";
 
 const apiFetch = vi.hoisted(() => vi.fn());
 vi.mock("./api-client", () => ({ apiFetch }));
@@ -16,7 +17,7 @@ vi.mock("./use-sync-prompt", () => ({ syncAskedThisLaunch: () => sync.asked }));
 const welcome = vi.hoisted(() => ({ loadWelcome: vi.fn() }));
 vi.mock("./welcome-client", () => welcome);
 
-const { inviteMe, loadTestflight, resetOfferedForTests, useTestflightLink, usePhonePrompt } = await import("./use-testflight");
+const { inviteMe, loadTestflight, phoneOfferedThisLaunch, resetOfferedForTests, useTestflightLink, usePhonePrompt } = await import("./use-testflight");
 
 const INFO = { url: "https://testflight.apple.com/join/abc", invites: true };
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
@@ -193,6 +194,20 @@ describe("usePhonePrompt", () => {
     const { result } = renderHook(() => usePhonePrompt(3));
     await act(async () => {});
     expect(result.current.url).toBeNull();
+  });
+
+  it("waits for another launch once the star ask opened, and says when it opened", async () => {
+    markStarAsked();
+    const a = renderHook(() => usePhonePrompt(3));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalled());
+    await act(async () => {});
+    expect(a.result.current.url).toBeNull();
+    expect(phoneOfferedThisLaunch()).toBe(false);
+    a.unmount();
+    markStarAsked(false);
+    const b = renderHook(() => usePhonePrompt(3));
+    await waitFor(() => expect(b.result.current.url).not.toBeNull());
+    expect(phoneOfferedThisLaunch()).toBe(true);
   });
 
   it("swallows a failing welcome read", async () => {

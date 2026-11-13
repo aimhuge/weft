@@ -9,6 +9,8 @@ const { READ_HEADERS } = require("./server-read.cjs");
 const { createKeepWorking } = require("./keep-working.cjs");
 const { armRestart } = require("./restart-when-idle.cjs");
 const { createAppUpdater } = require("./updater.cjs");
+const { devGit, withDevUpdates } = require("./dev-update.cjs");
+const { cardsEditingFrom } = require("./dev-update-merge.cjs");
 const { pushUpdateState, registerUpdateBridge, showUpdateWindow } = require("./update-window.cjs");
 
 // A menu item only when the copilot's feature flag is on (lib/features.ts), spread into a menu template.
@@ -24,7 +26,24 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
     buildMenu();
     pushUpdateState();
   };
-  const updater = createAppUpdater({ getServer, onChange: onUpdate, openWindow: showUpdateWindow });
+  const released = createAppUpdater({ getServer, onChange: onUpdate, openWindow: showUpdateWindow });
+  // Dev mode follows origin/main instead of GitHub Releases (dev-update.cjs), restarting when idle once Electron's code moved.
+  const updater = app.isPackaged
+    ? released
+    : withDevUpdates(released, {
+        git: devGit({
+          dir: path.join(__dirname, ".."),
+          backupRoot: path.join(dataDir(), "update-backups"),
+          cardsEditing: cardsEditingFrom({ getServer, dir: path.join(__dirname, ".."), headers: READ_HEADERS }),
+        }),
+        currentVersion: app.getVersion(),
+        relaunch: async () => {
+          const error = await armRestart(getServer(), "relaunch");
+          if (error) dialog.showMessageBox({ type: "warning", message: "Couldn't restart Weft", detail: error });
+        },
+        onChange: onUpdate,
+        openWindow: showUpdateWindow,
+      });
   registerUpdateBridge(updater);
 
   function focusedContents() {

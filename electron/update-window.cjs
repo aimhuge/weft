@@ -66,6 +66,7 @@ function registerUpdateBridge(appUpdater) {
     check: () => updater.check(),
     install: () => updater.install(),
     download: () => updater.download(),
+    pull: () => updater.pull?.(), // dev mode's Update Now (dev-update.cjs)
     releases: () => shell.openExternal(RELEASES),
     close: () => updateWin?.close(),
   };

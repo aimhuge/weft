@@ -1,0 +1,480 @@
+/* The weft.zip home page's story sections (components/home/Home.tsx's hero, Why.tsx, MiniBoard.tsx's text, Game.tsx,
+   OpenSource.tsx and the closing download). Same palette and wz- prefix as home.css, which holds the shared type
+   (.wz-h1, .wz-h2, .wz-eyebrow), the nav, the downloads, the tour, the plans and the footer. */
+
+/* ─── Hero: words, then the open card. No photo: a clay glow and a faint grid behind. ─── */
+.wz-top {
+  position: relative;
+  isolation: isolate;
+  padding-bottom: 24px;
+}
+
+.wz-top::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 900px;
+  z-index: -1;
+  background:
+    radial-gradient(60% 55% at 78% 8%, rgb(218 122 76 / 0.22), transparent 70%),
+    radial-gradient(45% 40% at 8% 30%, rgb(95 211 188 / 0.08), transparent 70%),
+    linear-gradient(rgb(236 229 216 / 0.035) 1px, transparent 1px) 0 0 / 100% 56px,
+    linear-gradient(90deg, rgb(236 229 216 / 0.035) 1px, transparent 1px) 0 0 / 56px 100%;
+  mask-image: linear-gradient(180deg, #000 55%, transparent);
+}
+
+.wz-heroInner {
+  padding-top: 124px;
+  padding-bottom: 44px;
+}
+
+.wz-top .wz-h1 {
+  font-size: clamp(44px, 6.2vw, 84px);
+}
+
+.wz-top .wz-lede {
+  max-width: 36em;
+}
+
+/* ─── Section heads: the h2 with one plain sentence under it. ─── */
+.wz-secHead {
+  margin-bottom: 40px;
+}
+
+.wz-secHead .wz-h2 {
+  margin-bottom: 16px;
+  max-width: 16em;
+}
+
+.wz-secLede {
+  margin: 0;
+  max-width: 38em;
+  font-size: 18px;
+  color: var(--thread-2);
+  text-wrap: pretty;
+}
+
+/* ─── Why: what the others leave you with, struck through, over Weft's answer. ─── */
+.wz-why,
+.wz-boardSec,
+.wz-game,
+.wz-open,
+.wz-closing {
+  padding-top: 120px;
+}
+
+.wz-whyGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.wz-whyRow {
+  padding: 22px 22px 24px;
+  border-radius: 14px;
+  border: 1px solid rgb(236 229 216 / 0.1);
+  background: linear-gradient(180deg, rgb(236 229 216 / 0.045), rgb(236 229 216 / 0.01));
+}
+
+.wz-whyThem {
+  margin: 0;
+  min-height: 3.1em;
+  font-size: 13.5px;
+  line-height: 1.45;
+  color: var(--thread-3);
+  text-decoration: line-through;
+  text-decoration-color: rgb(218 122 76 / 0.7);
+}
+
+.wz-whyTitle {
+  margin: 18px 0 0;
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.1;
+  letter-spacing: -0.015em;
+  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 72;
+}
+
+.wz-whyBody {
+  margin: 10px 0 0;
+  font-size: 15px;
+  color: var(--thread-2);
+  text-wrap: pretty;
+}
+
+/* ─── Points: four short claims in a row, under the board and in the source box. ─── */
+.wz-points {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 28px;
+  margin-top: 40px;
+}
+
+.wz-point h3 {
+  margin: 0;
+  padding-top: 14px;
+  border-top: 1px solid rgb(240 153 95 / 0.55);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.wz-point p {
+  margin: 8px 0 0;
+  font-size: 14.5px;
+  color: var(--thread-2);
+  text-wrap: pretty;
+}
+
+/* ─── Game: the rules and levels on the left, a sample builder card on the right. ─── */
+.wz-game {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+  gap: 56px;
+  align-items: start;
+}
+
+.wz-game .wz-h2 {
+  margin-bottom: 16px;
+}
+
+.wz-xp {
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 30em;
+}
+
+.wz-xp li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgb(236 229 216 / 0.1);
+  font-size: 15.5px;
+  color: var(--thread-2);
+}
+
+.wz-xp b {
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--clay-2);
+  white-space: nowrap;
+}
+
+.wz-levels {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 10px;
+  margin: 30px 0 0;
+  padding: 0;
+  list-style: none;
+  max-width: 34em;
+  text-align: center;
+}
+
+.wz-levels img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 12px;
+  border: 1px solid rgb(236 229 216 / 0.12);
+}
+
+.wz-levels b {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.wz-levels span {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--thread-3);
+}
+
+.wz-bc {
+  margin: 0;
+  padding: 0 22px 20px;
+  border-radius: 16px;
+  border: 1px solid rgb(236 229 216 / 0.16);
+  background: #0f131c;
+  box-shadow: 0 40px 100px -40px rgb(0 0 0 / 0.9);
+  overflow: hidden;
+}
+
+.wz-bcUrl {
+  margin: 0 -22px;
+  padding: 9px 22px;
+  border-bottom: 1px solid rgb(236 229 216 / 0.1);
+  background: rgb(236 229 216 / 0.04);
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--thread-2);
+}
+
+.wz-bcTop {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+/* The picture in its level ring: the clay arc is how far to the next level. */
+.wz-bcRing {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: conic-gradient(var(--clay-2) 64%, rgb(236 229 216 / 0.14) 0);
+}
+
+.wz-bcFace {
+  display: grid;
+  place-items: center;
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: #232a3f;
+  font-family: var(--display);
+  font-size: 30px;
+}
+
+.wz-bcLv {
+  position: absolute;
+  bottom: -6px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  background: var(--clay);
+  color: var(--cloth);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wz-bcWho {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wz-bcClass {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--clay-2);
+}
+
+.wz-bcName {
+  font-family: var(--display);
+  font-size: 28px;
+  line-height: 1.1;
+  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 72;
+}
+
+.wz-bcLeague {
+  font-size: 13px;
+  color: var(--thread-2);
+}
+
+.wz-bcXp {
+  height: 6px;
+  margin-top: 20px;
+  border-radius: 99px;
+  background: rgb(236 229 216 / 0.1);
+  overflow: hidden;
+}
+
+.wz-bcXp span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--clay), var(--clay-2));
+}
+
+.wz-bcStats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.wz-bcStats div {
+  display: flex;
+  flex-direction: column-reverse;
+}
+
+.wz-bcStats dt {
+  font-size: 12px;
+  color: var(--thread-3);
+}
+
+.wz-bcStats dd {
+  margin: 0;
+  font-family: var(--display);
+  font-size: 26px;
+  line-height: 1.15;
+}
+
+/* 26 weeks, a column a week, a stitch a day; brighter means more XP that day. */
+.wz-bcCloth {
+  display: grid;
+  grid-template-rows: repeat(7, 1fr);
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  margin-top: 18px;
+}
+
+.wz-bcCloth i {
+  aspect-ratio: 1;
+  border-radius: 2px;
+  background: rgb(236 229 216 / 0.07);
+}
+
+.wz-bcCloth i[data-heat="1"] { background: rgb(218 122 76 / 0.3); }
+.wz-bcCloth i[data-heat="2"] { background: rgb(218 122 76 / 0.55); }
+.wz-bcCloth i[data-heat="3"] { background: rgb(240 153 95 / 0.8); }
+.wz-bcCloth i[data-heat="4"] { background: #f6b582; }
+
+.wz-bcNote {
+  margin-top: 16px;
+  font-size: 13.5px;
+  color: var(--thread-3);
+}
+
+.wz-root .wz-bcNote a,
+.wz-root .wz-openLicense {
+  color: var(--clay-2);
+}
+
+.wz-gameProfile {
+  margin: 20px 2px 0;
+  font-size: 15px;
+  color: var(--thread-2);
+  text-wrap: pretty;
+}
+
+.wz-gameProfile b {
+  color: var(--thread);
+}
+
+/* ─── Open: one bordered box, so the source reads as a statement and not a fifth feature row. ─── */
+.wz-openBox {
+  padding: 48px 44px 40px;
+  border-radius: 20px;
+  border: 1px solid rgb(236 229 216 / 0.14);
+  background:
+    radial-gradient(50% 80% at 100% 0%, rgb(95 211 188 / 0.09), transparent 70%),
+    linear-gradient(180deg, rgb(236 229 216 / 0.05), rgb(236 229 216 / 0.01));
+}
+
+.wz-openLinks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 14px;
+  margin: 36px 0 0;
+}
+
+.wz-root .wz-pill {
+  padding: 11px 20px;
+  border-radius: 99px;
+  border: 1px solid rgb(236 229 216 / 0.28);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--thread);
+}
+
+.wz-root .wz-pill:hover {
+  border-color: var(--thread);
+}
+
+.wz-root .wz-pillSolid {
+  border-color: var(--thread);
+  background: var(--thread);
+  color: var(--cloth);
+}
+
+.wz-openLicense {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+/* ─── Closing: the headline and the downloads once more. ─── */
+.wz-closing {
+  padding-bottom: 56px;
+}
+
+.wz-closing .wz-h2 {
+  margin-bottom: 0;
+  max-width: none;
+}
+
+@media (max-width: 960px) {
+  .wz-whyGrid,
+  .wz-points {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .wz-game {
+    grid-template-columns: 1fr;
+    gap: 40px;
+  }
+
+  .wz-whyThem {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .wz-heroInner {
+    padding-top: 104px;
+    padding-bottom: 40px;
+  }
+
+  .wz-why,
+  .wz-boardSec,
+  .wz-game,
+  .wz-open,
+  .wz-closing {
+    padding-top: 76px;
+  }
+
+  .wz-whyGrid,
+  .wz-points {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .wz-points {
+    gap: 22px;
+  }
+
+  .wz-secLede {
+    font-size: 16.5px;
+  }
+
+  .wz-levels {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .wz-openBox {
+    padding: 30px 20px 26px;
+    border-radius: 14px;
+  }
+
+  .wz-bc {
+    padding: 0 16px 16px;
+  }
+
+  .wz-bcUrl {
+    margin: 0 -16px;
+    padding: 9px 16px;
+  }
+}

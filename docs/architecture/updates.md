@@ -103,7 +103,7 @@ reaches the site without a deploy. When the `/releases/latest/download/` path fa
 ## How an installed Weft updates (`electron/updater.cjs`)
 
 - A packaged Weft fetches `https://github.com/aimhuge/weft/releases/latest/download/update.json` 30s after launch and
-  every 4 hours (`WEFT_UPDATE_FEED` overrides it). Dev mode never checks on its own; it updates with `git pull`.
+  every 4 hours (`WEFT_UPDATE_FEED` overrides it). Dev mode follows origin/main instead (below, #dev-mode).
 - `update.json` is Squirrel.Mac's static JSON feed (`currentRelease`, `releases[].updateTo.url` → the zip), plus
   `page` and `download` for the fallback.
 - When the feed's version is newer, the feed goes to Electron's built-in `autoUpdater` (Squirrel.Mac), which downloads
@@ -140,6 +140,31 @@ reaches the site without a deploy. When the `/releases/latest/download/` path fa
   idle checks right away. `electron/update-view.cjs` words each state (a feed 404 reads as "no release published yet");
   the updater keeps `notes`, `checkedAt`, `error` and `upToDate` in its state for it, and `updater.info()` hands it over.
   Without a window (`openWindow` unset) **Check for Updates…** falls back to message boxes.
+
+## Dev mode (`electron/dev-update.cjs`)
+
+Weft run from its own checkout (`pnpm desktop`, `~/Applications/Weft.app`) updates from origin/main, not Releases.
+`withDevUpdates` wraps the release updater in `electron/menus.cjs` when `!app.isPackaged`, so the menu item, the
+Software Update window and `update-view.cjs` (its `dev` branch) work unchanged.
+
+- **Check** (30s after launch, every 4 hours, and Check Now): `git fetch origin main`, then the commits HEAD lacks;
+  "What's new" lists their subjects. A checkout off `main`, or with commits origin/main doesn't have, says so and stops.
+- **Update Now**: `git merge --ff-only` to the fetched commit. Never a merge, rebase or stash: other cards' uncommitted
+  work shares this tree, and git refuses a fast-forward that would overwrite it.
+- **Dirty files the update also changes** (`electron/dev-update-merge.cjs`): git refuses the fast-forward even when
+  the card's edits and the new commits touch different paragraphs. Weft reads the refused files from git's error and
+  test-merges each with `git merge-file -p` (ours = the working copy, base = HEAD's version, theirs = the target's).
+  - Every file clean: the working copies are copied to `~/.weft/update-backups/<time>/`, put back to HEAD
+    (`git checkout HEAD -- <files>`), the fast-forward runs, and the merged text is written over the new version, so
+    the cards' edits stay uncommitted on top of the update. A staged edit in one of those files comes back unstaged.
+    If the fast-forward still fails, the working copies are written back and git's reason is shown.
+  - Any file conflicts: nothing is touched, and the window names the files and the open cards that edited them
+    (their `touchedFiles`, from `/api/cards`; just the file names when the server can't answer), then "Commit those
+    cards, then check again."
+  `pnpm install --frozen-lockfile` follows when `package.json` or the lockfile moved.
+- **Restart**: `next dev` reloads the board and server on its own, so a restart is only offered when `electron/` or
+  `package.json` changed since Electron launched, or the checkout's version differs from the running one (a `git pull`
+  in a terminal counts too). **Restart to Update** arms Restart When Idle (`relaunch`).
 
 ## What's new after an update (`lib/release-splash.ts`)
 

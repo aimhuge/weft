@@ -120,7 +120,7 @@ phases on the Team subscription (100% off for `freeMonths`, 50% off for `halfPri
 bill at full price from day one. Unlike the grants below it asks for a card at Checkout, so a startup that stays rolls
 straight into paying Team with nothing to redeem. Needs: the application form and its review on `/admin`, a
 partner-accelerator code path, and `@aimhuge/billing` support for schedule phases (or a Stripe coupon pair) in
-`startCheckout`. The weft.zip pricing section shows it as Coming soon until then.
+`startCheckout`. The weft.zip pricing section listed it as Coming soon until 2026-11-12, when the home page dropped plans that can't be bought yet; put it back when it can.
 
 **Grants** (`lib/billing/grants.ts`). `oss` and `edu` are `GRANT_PLANS` in `lib/billing/plan-gate.ts`, also in `TEAM_PLANS`.
 `grantPlan(service, orgId, plan)` writes the workspace's subscription row through `billing.saveSubscription` (no Stripe customer,

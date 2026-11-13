@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetSplash, seenVersion } from "@/lib/release-splash";
-import { resetDecidedForTests, useReleaseSplash } from "@/lib/use-release-splash";
+import { resetDecidedForTests, splashShownThisLaunch, useReleaseSplash } from "@/lib/use-release-splash";
 import ReleaseSplash, { SplashBody } from "./ReleaseSplash";
 
 vi.mock("@/lib/release-splashes.json", () => ({
@@ -34,6 +34,7 @@ describe("ReleaseSplash", () => {
     expect(screen.getByText("Your board reads like a sheet")).toBeTruthy();
     expect(screen.getByText("Full release notes").getAttribute("href")).toBe("https://github.com/aimhuge/weft/releases/tag/v0.7.0");
     expect(seenVersion()).toBe("0.7.0");
+    expect(splashShownThisLaunch()).toBe(true);
     await userEvent.click(screen.getByRole("button", { name: "Nice" }));
     expect(screen.queryByText("What's new in Weft 0.7.0")).toBeNull();
   });

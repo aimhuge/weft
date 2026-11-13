@@ -17,6 +17,48 @@ function errorDetail(error) {
   return error;
 }
 
+const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// Dev mode follows origin/main (dev-update.cjs): commits, a fast-forward and a restart, not release downloads.
+function devHeadline(state, currentVersion) {
+  const n = state.commits || 0;
+  switch (state.phase) {
+    case "checking":
+      return { tone: "busy", title: "Checking for updates…", detail: "Fetching main from GitHub." };
+    case "pulling":
+      return { tone: "busy", title: `Updating to ${plural(n, "new commit")}…`, detail: "Fast-forwarding this checkout, and installing packages when the lockfile moved." };
+    case "available":
+      return { tone: "new", title: `${plural(n, "new commit")} on main`, detail: "Update Now fast-forwards this checkout. Your uncommitted work stays as it is." };
+    case "ready":
+      return {
+        tone: "new",
+        title: state.version ? `Weft ${state.version} is pulled` : "Restart to finish updating",
+        detail: "Weft's app code changed, so it needs a restart. It waits for running threads to finish.",
+      };
+  }
+  if (state.error) return { tone: "error", title: "Couldn't update", detail: errorDetail(state.error) };
+  if (state.pulled) return { tone: "ok", title: `Updated: ${plural(state.pulled, "commit")}`, detail: "The board picks the changes up on its own; no restart needed." };
+  if (state.upToDate) return { tone: "ok", title: "You're up to date", detail: `This checkout is on the newest main.` };
+  return { tone: "idle", title: `Weft ${currentVersion}`, detail: "Dev mode follows main on GitHub, checking at launch and every 4 hours." };
+}
+
+function devButtons(state) {
+  const check = (label = "Check Now") => ({ action: "check", label });
+  switch (state.phase) {
+    case "checking":
+    case "pulling":
+      return [{ ...check(), disabled: true }];
+    case "available":
+      return [check("Check Again"), { action: "pull", label: "Update Now", primary: true }];
+    case "ready":
+      return [
+        { action: "close", label: "Later" },
+        { action: "install", label: "Restart to Update", primary: true },
+      ];
+  }
+  return [{ ...check(state.error ? "Try Again" : "Check Now"), primary: true }];
+}
+
 function headline(state, currentVersion, packaged) {
   const v = state.version;
   switch (state.phase) {
@@ -66,14 +108,16 @@ function buttons(state) {
 }
 
 // `running` is the version with its server patch, when one runs ("0.6.7+abc123", server-patch.cjs).
-function updateView({ state, currentVersion, packaged, running = null }, now = Date.now()) {
+// `dev` is a checkout following main (dev-update.cjs).
+function updateView({ state, currentVersion, packaged, running = null, dev = false }, now = Date.now()) {
+  const latest = dev ? (state.target ? `main @ ${state.target}` : "") : state.version ? `Weft ${state.version}` : "";
   return {
-    ...headline(state, currentVersion, packaged),
+    ...(dev ? devHeadline(state, currentVersion) : headline(state, currentVersion, packaged)),
     current: `Weft ${running || currentVersion}${packaged ? "" : " (dev)"}`,
-    latest: state.version ? `Weft ${state.version}` : "",
+    latest,
     notes: state.notes || "",
     checked: state.checkedAt ? `Checked ${ago(state.checkedAt, now)}` : "Not checked yet",
-    buttons: buttons(state),
+    buttons: dev ? devButtons(state) : buttons(state),
   };
 }
 

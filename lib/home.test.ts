@@ -1,16 +1,13 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   DESCRIPTION,
-  PILLARS,
   REPO,
   SITE,
-  _resetLoadHomeCacheForTests,
   downloadLink,
   platformLinks,
   homeMetadata,
   isDeployed,
   isWebEnabled,
-  loadHome,
   parseFeed,
   windowsInstallerUrl,
 } from "./home";
@@ -132,67 +129,6 @@ describe("platformLinks", () => {
     const links = platformLinks(null, null);
     expect(links.map((l) => l.platform)).toEqual(["mac", "ios"]);
     expect(links[0]).toMatchObject({ href: REPO, label: "Get Weft on GitHub", track: "github" });
-  });
-});
-
-describe("loadHome", () => {
-  // loadHome caches its first successful import at module scope, so each test must reset it to a clean slate.
-  beforeEach(() => _resetLoadHomeCacheForTests());
-
-  // The default export the home page uses today; a function we can recognize.
-  const stub = () => null;
-
-  it("resolves the default export of the importer", async () => {
-    const result = await loadHome(() => Promise.resolve({ default: stub }));
-    expect("Home" in result).toBe(true);
-    if ("Home" in result) expect(result.Home).toBe(stub);
-  });
-
-  it("caches the resolved component across calls so it imports once", async () => {
-    let calls = 0;
-    const importer = () => {
-      calls += 1;
-      return Promise.resolve({ default: stub });
-    };
-    const a = await loadHome(importer);
-    const b = await loadHome(importer);
-    expect(calls).toBe(1);
-    expect("Home" in a && "Home" in b).toBe(true);
-  });
-
-  it("returns an error result with the file and first message line when the import throws", async () => {
-    const importer = () => {
-      // The shape Next's dev overlay shows for a parse error: a multi-line message that includes the file and a
-      // "Parsing ecmascript source code failed" line. We only need the first line and the ./X:Y file pattern.
-      return Promise.reject(
-        new Error(
-          "./components/home/Home.tsx:64:1\nUnexpected token. Did you mean `{'}'}` or `&rbrace;`?\nParsing ecmascript source code failed",
-        ),
-      );
-    };
-    const result = await loadHome(importer);
-    expect("error" in result).toBe(true);
-    if ("error" in result) {
-      expect(result.error.file).toBe("components/home/Home.tsx");
-      expect(result.error.message).toBe("./components/home/Home.tsx:64:1");
-    }
-  });
-
-  it("returns an error when the module has no default export", async () => {
-    const importer = () => Promise.resolve({ default: undefined }) as unknown as Promise<{ default: () => null }>;
-    const result = await loadHome(importer);
-    expect("error" in result).toBe(true);
-    if ("error" in result) {
-      expect(result.error.message).toMatch(/no default export/);
-      expect(result.error.file).toBeNull();
-    }
-  });
-});
-
-describe("PILLARS", () => {
-  it("lists the five things Weft stands on, each with a kicker, title and body", () => {
-    expect(PILLARS.map((p) => p.kicker)).toEqual(["Code review", "Copilot", "Social", "Connectors", "Vault"]);
-    for (const p of PILLARS) expect(p.title && p.body).toBeTruthy();
   });
 });
 

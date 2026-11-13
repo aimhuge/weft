@@ -222,7 +222,7 @@ port.
   background, and a notification (click it for the Software Update window, or **Restart Now**) and the Weft menu offer
   **Restart to Update**. With threads running it asks: **Restart When Idle** (the default) waits for them to finish,
   **Restart Now** cuts them off. Left alone, Weft restarts into the update by itself once no thread is running and
-  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… (or File → Check for Updates…) opens the Software Update window (versions, last check, release notes, the next step). The first time Weft opens on a new version, a short **What's new** splash says what changed in a few lines (sometimes with a video), written by the Copywriter when the release is cut. Between versions, **server patches** bring a newer board and server without a new app: signed, checked against the app's own packages, and switched in by restarting only the server once nobody's using it (a patch that fails to start rolls back by itself). What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
+  nobody has touched the Mac for 10 minutes. Weft → Check for Updates… (or File → Check for Updates…) opens the Software Update window (versions, last check, release notes, the next step). The first time Weft opens on a new version, a short **What's new** splash says what changed in a few lines (sometimes with a video), written by the Copywriter when the release is cut. Between versions, **server patches** bring a newer board and server without a new app: signed, checked against the app's own packages, and switched in by restarting only the server once nobody's using it (a patch that fails to start rolls back by itself). Run from a checkout (dev mode), Weft follows main on GitHub instead: the same window lists the new commits, **Update Now** fast-forwards them in (your uncommitted work stays), and it offers a restart only when Electron's own code changed. What changed is in [CHANGELOG.md](CHANGELOG.md); releasing is in docs/architecture/updates.md.
 - If the server crashes, it restarts on its own; its output is in `~/Library/Logs/Weft/server.log`
   (Help → Open Logs Folder). If the dev server dies repeatedly (4 times in 2 minutes) while the
   board is up, a small bar at the bottom-left offers **Restart server**, **Open logs**, and
@@ -1049,6 +1049,10 @@ once), and drop phones that uninstalled the app. Settings → Sync → **Phones*
 QR code once, with **Email me an invite**, which has Apple send the beta invite to your account's email. Pair a phone in
 Settings → Sync has the link too (docs/architecture/mobile.md#testflight).
 
+**Star Weft, once.** After ten threads have finished, Weft asks once whether you're enjoying it. **Star aimhuge/weft** stars the
+repo in one click through the `gh` CLI you're signed in to (no gh, it opens GitHub instead); **Later** asks again in two weeks,
+and anyone who has already starred is never asked. Settings → General → Reset tips brings it back.
+
 **A worker's simulator in the pane.** A worker streams its simulator to the card's pane, marked "streaming from" the worker.
 On the desktop board you can drive it without asking the thread: **📱 Start simulator** on a React Native or Expo card, a device
 menu to switch simulators, **Resume** when the 10 minutes run out, and a Low / Medium / High quality menu for the WebRTC video
@@ -1545,12 +1549,9 @@ The same Next.js app, deployed on Vercel, is Weft's website: with `VERCEL` set a
 (`components/home/Home.tsx`, what it says in `lib/home.ts`) instead of the board, which has no CLIs to run there. On your
 Mac the page is at `/home` (`WEFT_HOME=1` shows it at `/` too). Its download button reads the latest release's
 `update.json` from GitHub Releases once an hour and links the dmg; until the first release it points at the repo. The
-shared-link picture is `app/opengraph-image.tsx`. The page is one screen, on purpose: the steel weave emblem and the twin suns scene from
-`electron/assets/` (through `next/image`), one sentence, the download button, a real screenshot of the board in
-`public/brand/board.png`, and the narrated welcome tour under it (`components/home/Tour.tsx`); retake that one when the board changes a lot (`mcp__board_view__screenshot` with the thread
-panel and drawers closed).
+shared-link picture is `app/opengraph-image.tsx`. The page shows the product without a screenshot to go stale: under the headline ("Every card builds it, then shows you.") an open card is drawn in CSS and loops through a thread's three turns with the pane beside it (plan, running app, review tour: `components/home/CardDemo.tsx`), then why this board and not another (`Why.tsx`), a small board whose card travels Backlog → Done (`MiniBoard.tsx`), the game and public `weft.zip/@you` profiles (`Game.tsx`), where the source is (`OpenSource.tsx`), the narrated welcome tour (`Tour.tsx`), the plans and the downloads once more. What those sections say is `lib/home-story.ts`.
 
-Under the five pillars sits a short FAQ (`components/home/FaqTeaser.tsx`, six questions in `FAQ_HIGHLIGHTS` in
+Under the plans sits a short FAQ (`components/home/FaqTeaser.tsx`, six questions in `FAQ_HIGHLIGHTS` in
 `lib/faq.ts`), each linking to its full answer on `weft.zip/faq`. That page renders `docs/FAQ.md` itself
 (`app/faq/page.tsx`, `components/home/FaqDoc.tsx`) with the home page's nav and footer, so the repo and the site never
 drift; the FAQ's pictures live in `public/brand/faq/` so GitHub and the site show the same files.

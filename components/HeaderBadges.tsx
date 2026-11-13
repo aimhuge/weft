@@ -17,11 +17,12 @@ const LeagueBadge = guarded(() => import("./LeagueBadge"), { inline: true, what:
 const WelcomeDialog = guarded(() => import("./WelcomeDialog"), { inline: true, what: "welcome" });
 const SyncPromptDialog = guarded(() => import("./SyncPromptDialog"), { inline: true, what: "sync prompt" });
 const PhonePrompt = guarded(() => import("./PhonePrompt"), { inline: true, what: "phone app prompt" });
+const StarPrompt = guarded(() => import("./StarPrompt"), { inline: true, what: "star ask" });
 const ReleaseSplash = guarded(() => import("./ReleaseSplash"), { inline: true, what: "what's new" });
 const SnapshotAge = guarded(() => import("./SnapshotAge"), { inline: true, what: "snapshot age" });
 
 // The header's badges for the project in view: code quality, the uncommitted pile, the Backlog, your streak
-// and level, your league, first launch's welcome beside the streak it introduces, the ask to sync the project in view, the phone app's TestFlight, and the "What's new" splash after an update. They refresh whenever a turn ends or a card ships somewhere, so they follow the threads' work.
+// and level, your league, first launch's welcome beside the streak it introduces, the ask to sync the project in view, the phone app's TestFlight, the ask for a GitHub star after a few finished threads, and the "What's new" splash after an update. They refresh whenever a turn ends or a card ships somewhere, so they follow the threads' work.
 // Regular mode keeps only the dialogs. `start` begins a card (an improvement, a commit walk, a "Set it up"); it rejects when that fails.
 // On a worker's project the reads come from the snapshot it published, with its age when it's stale (H4 of
 // docs/architecture/project-hosts.md); the streak and the sync ask are this Mac's own, so they take only its folders.
@@ -63,6 +64,7 @@ export default function HeaderBadges({
       <WelcomeDialog onError={notify} />
       <SyncPromptDialog cwd={local} cards={cards} toast={toast} />
       <PhonePrompt cards={cards} />
+      <StarPrompt cards={cards} />
       <ReleaseSplash />
     </>
   );

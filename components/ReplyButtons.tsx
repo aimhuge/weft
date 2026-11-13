@@ -53,7 +53,7 @@ export default function ReplyButtons({
   }, [open]);
 
   return (
-    <div ref={root} className="relative ml-1 flex shrink-0 items-center gap-1">
+    <div ref={root} className="relative ml-auto flex shrink-0 items-center gap-1 pl-1">
       {live && (
         <Tip text={<span className="flex items-center gap-1.5">Stop this turn <KeyCaps spec={STOP_KEY} small /></span>} className="inline-flex">
           <button

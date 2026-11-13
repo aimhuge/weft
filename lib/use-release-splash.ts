@@ -10,6 +10,10 @@ import { loadWelcome } from "./welcome-client";
 type Shown = { version: string; splash: ReleaseSplash };
 let decision: Promise<Shown | null> | null = null;
 let closedThisLaunch = false;
+let shownThisLaunch = false;
+
+// Whether the splash opens this launch, so the star ask (lib/use-star-prompt.ts) waits for another one.
+export const splashShownThisLaunch = () => shownThisLaunch;
 
 function decide(version: string): Promise<Shown | null> {
   decision ??= loadWelcome().then(
@@ -17,6 +21,7 @@ function decide(version: string): Promise<Shown | null> {
       const { show, record } = decideSplash({ version, seen: seenVersion(), welcomed: Boolean(view.welcome) });
       // Recorded as it's decided, not on closing: a window closed with the splash up doesn't bring it back.
       if (record) recordSeen(version);
+      if (show) shownThisLaunch = true;
       return show ? { version, splash: show } : null;
     },
     // No answer about the welcome: decide again on the next mount rather than greet a fresh install with release notes.
@@ -53,4 +58,5 @@ export function useReleaseSplash(version: string | undefined = process.env.NEXT_
 export function resetDecidedForTests() {
   decision = null;
   closedThisLaunch = false;
+  shownThisLaunch = false;
 }

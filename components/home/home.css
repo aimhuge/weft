@@ -81,34 +81,7 @@
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5));
 }
 
-/* Hero: the twin suns scene, full bleed; the text over the sky. */
-.wz-hero {
-  position: relative;
-  overflow: hidden;
-  isolation: isolate;
-}
-
-.wz-photo {
-  object-fit: cover;
-  object-position: 50% 72%;
-}
-
-.wz-scrim {
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(90deg, rgb(21 26 41 / 0.9) 0%, rgb(21 26 41 / 0.6) 40%, rgb(21 26 41 / 0) 75%),
-    linear-gradient(180deg, rgb(21 26 41 / 0.5) 0%, rgb(21 26 41 / 0) 30%, rgb(21 26 41 / 0) 65%, rgb(21 26 41 / 1) 100%);
-}
-
-.wz-heroInner {
-  position: relative;
-  z-index: 1;
-  padding-top: 160px;
-  padding-bottom: 200px;
-}
-
-/* The category line over the h1: carries "agentic engineering" so the headline can stay short. */
+/* The category line over the h1, so the headline can stay short. */
 .wz-eyebrow {
   margin: 0 0 18px;
   font-size: 13px;
@@ -272,29 +245,8 @@
 }
 
 /* The real board, in a window, rising out of the hero. */
-.wz-shotWrap {
-  position: relative;
-  z-index: 2;
-  margin-top: -120px;
-}
 
-.wz-shot {
-  border-radius: 14px;
-  overflow: hidden;
-  border: 1px solid rgb(236 229 216 / 0.16);
-  background: #0f131c;
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.5),
-    0 60px 120px -40px rgb(0 0 0 / 0.9);
-}
-
-.wz-shot img {
-  display: block;
-  width: 100%;
-  height: auto;
-}
-
-/* The narrated tour (components/home/Tour.tsx), framed like the screenshot above it. */
+/* The narrated tour (components/home/Tour.tsx), in a window frame. */
 .wz-tour {
   padding-top: 112px;
 }
@@ -324,11 +276,7 @@
   }
 }
 
-/* The five pillars (PILLARS in lib/home.ts): review and copilot wide on top, social, connectors and vault below. */
-.wz-pillars {
-  padding-top: 112px;
-}
-
+/* Section headings, shared by every section of the home and the FAQ. */
 .wz-h2 {
   margin: 0 0 40px;
   max-width: 14em;
@@ -344,50 +292,6 @@
   font-style: italic;
   color: var(--clay-2);
   font-variation-settings: "SOFT" 100, "WONK" 1, "opsz" 144;
-}
-
-.wz-pillarGrid {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 16px;
-}
-
-.wz-pillar {
-  grid-column: span 2;
-  padding: 26px 26px 28px;
-  border-radius: 14px;
-  border: 1px solid rgb(236 229 216 / 0.1);
-  background: linear-gradient(180deg, rgb(236 229 216 / 0.045), rgb(236 229 216 / 0.01));
-}
-
-.wz-pillar:nth-child(-n + 2) {
-  grid-column: span 3;
-}
-
-.wz-pillarKicker {
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--clay-2);
-}
-
-.wz-pillarTitle {
-  margin: 12px 0 0;
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: 26px;
-  line-height: 1.1;
-  letter-spacing: -0.015em;
-  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 72;
-}
-
-.wz-pillarBody {
-  margin: 10px 0 0;
-  font-size: 15.5px;
-  color: var(--thread-2);
-  text-wrap: pretty;
 }
 
 .wz-footer {
@@ -418,38 +322,9 @@
   }
 }
 
-/* Narrower than the photo's sky: the text sits over the suns and the car, so the scrim darkens top to bottom. */
-@media (max-width: 960px) {
-  .wz-scrim {
-    background: linear-gradient(180deg, rgb(21 26 41 / 0.88) 0%, rgb(21 26 41 / 0.75) 55%, rgb(21 26 41 / 0.3) 80%, rgb(21 26 41 / 1) 100%);
-  }
-
-  .wz-heroInner {
-    padding-top: 128px;
-    padding-bottom: 160px;
-  }
-
-  .wz-shotWrap {
-    margin-top: -90px;
-  }
-
-  .wz-pillarGrid {
-    grid-template-columns: 1fr 1fr;
-  }
-
-  .wz-pillar,
-  .wz-pillar:nth-child(-n + 2) {
-    grid-column: span 1;
-  }
-
-  .wz-pillar:last-child {
-    grid-column: 1 / -1;
-  }
-}
-
 /* ─── Plans ────────────────────────────────────────────────────────────────────
-   The pricing section between the pillars and the FAQ (components/home/Plans.tsx).
-   Same card language as the pillars, but a three-up grid since there are three plans,
+   The pricing section between the tour and the FAQ (components/home/Plans.tsx):
+   a three-up grid since there are three plans,
    and Pro sits a step brighter because it's the one the page is steering at. */
 .wz-plans {
   padding-top: 112px;
@@ -579,63 +454,7 @@
   text-wrap: pretty;
 }
 
-/* The access row under the plans (components/home/AccessPlans.tsx): Startups, Open source, Education, Regional pricing,
-   two by two, since four across would squeeze each to ~280px on a 13" screen. Quieter than the plan cards
-   (no gradient, smaller type) since each is a way into Free, Pro or Team, not a plan. */
-.wz-accessGrid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 16px;
-  margin-top: 16px;
-}
-
-.wz-access {
-  padding: 20px 22px 22px;
-  border-radius: 14px;
-  border: 1px dashed rgb(236 229 216 / 0.16);
-}
-
-.wz-accessName {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin: 0;
-  font-family: var(--mono);
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--clay-2);
-}
-
-.wz-accessSoon {
-  padding: 2px 8px;
-  border-radius: 99px;
-  border: 1px solid rgb(236 229 216 / 0.16);
-  font-size: 10.5px;
-  color: var(--thread-3);
-}
-
-.wz-accessHeadline {
-  margin: 10px 0 0;
-  font-family: var(--display);
-  font-weight: 500;
-  font-size: 22px;
-  letter-spacing: -0.02em;
-  font-variation-settings: "SOFT" 50, "WONK" 1, "opsz" 144;
-}
-
-.wz-accessBody {
-  margin: 8px 0 0;
-  font-size: 14.5px;
-  color: var(--thread-2);
-  text-wrap: pretty;
-}
-
 @media (max-width: 960px) {
-  .wz-accessGrid {
-    grid-template-columns: 1fr;
-  }
-
   .wz-planGrid {
     grid-template-columns: 1fr 1fr;
   }
@@ -656,16 +475,6 @@
 }
 
 @media (max-width: 600px) {
-  .wz-pillars {
-    padding-top: 72px;
-  }
-
-  .wz-pillarGrid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 600px) {
   .wz-root {
     font-size: 16px;
   }
@@ -673,19 +482,6 @@
   .wz-wrap {
     padding-left: 20px;
     padding-right: 20px;
-  }
-
-  .wz-heroInner {
-    padding-top: 112px;
-    padding-bottom: 120px;
-  }
-
-  .wz-shotWrap {
-    margin-top: -70px;
-  }
-
-  .wz-shot {
-    border-radius: 8px;
   }
 }
 

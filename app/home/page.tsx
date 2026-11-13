@@ -1,5 +1,6 @@
 import HomeErrorFallback from "@/components/HomeErrorFallback";
-import { homeMetadata, loadHome } from "@/lib/home";
+import { homeMetadata } from "@/lib/home";
+import { loadHome } from "@/lib/home-loader";
 
 // The weft.zip home page, reachable on any Weft at /home; on the deployed Weft, app/page.tsx serves it at / too.
 // Loaded through loadHome() so a parse error in components/home/Home.tsx leaves the rest of the app reachable

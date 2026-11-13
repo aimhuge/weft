@@ -101,13 +101,17 @@ export function resolveLocalPath(raw: string, home = os.homedir()): string | nul
 // A page the pane showed, often `file:///…/.weft/show/x/index.html#step-2`: the file to upload plus
 // the #hash, kept verbatim so the ref reads `blob:sha256:<hex>#step-2` (paneFromUrl in
 // lib/share-types.ts parses that). The whole string is tried first, since a file name may hold a '#'.
+// A ?query counts too (`index.html?v=2#founders`, a thread's cache-buster): left in the path, the file
+// isn't found, the page stays a file:// URL and a share link shows only the pane capture.
 export function resolvePage(raw: string, home = os.homedir()): { local: string; hash: string } | null {
   const whole = resolveLocalPath(raw, home);
   if (whole) return { local: whole, hash: "" };
-  const at = raw.indexOf("#");
-  if (at <= 0) return null;
-  const local = resolveLocalPath(raw.slice(0, at), home);
-  return local ? { local, hash: raw.slice(at) } : null;
+  const cuts = [raw.indexOf("?"), raw.indexOf("#")].filter((at) => at > 0).sort((a, b) => a - b);
+  for (const at of cuts) {
+    const local = resolveLocalPath(raw.slice(0, at), home);
+    if (local) return { local, hash: raw.slice(at) };
+  }
+  return null;
 }
 
 // Collects every local-path substring a markdown body's image / link targets point at, in

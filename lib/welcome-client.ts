@@ -2,6 +2,7 @@ import { apiFetch, API_HEADERS } from "./api-client";
 import { resetIntros } from "./feature-intros";
 import { resetSplash } from "./release-splash";
 import { resetPhonePrompt } from "./phone-prompt";
+import { resetStarPrompt } from "./star-prompt";
 import { resetSyncPrompt } from "./sync-prompt";
 // The welcome's shapes come from lib/welcome-types.ts (types only), not from the server modules that
 // hold them: naming a server module's type still makes Turbopack resolve that module (node:fs,
@@ -46,6 +47,7 @@ export function resetOnboarding() {
   resetSyncPrompt();
   resetSplash();
   resetPhonePrompt();
+  resetStarPrompt();
 }
 
 // Replay the welcome (avatar menu, command palette): the dialog again as a preview, and the welcomes after it too.

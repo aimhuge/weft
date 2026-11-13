@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Board from "@/components/Board";
 import UpgradeDialog from "@/components/UpgradeDialog";
 import HomeErrorFallback from "@/components/HomeErrorFallback";
-import { homeMetadata, isDeployed, loadHome } from "@/lib/home";
+import { homeMetadata, isDeployed } from "@/lib/home";
+import { loadHome } from "@/lib/home-loader";
 
 // The board on your Mac; the weft.zip home page on the deployed Weft (Vercel), which has no CLIs to run
 // (lib/home.ts). VERCEL is set at build time, so each build renders one or the other. The home is loaded

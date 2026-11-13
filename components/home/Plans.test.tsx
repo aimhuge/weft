@@ -95,15 +95,9 @@ describe("Plans", () => {
     expect(screen.getByText(`Puku threads on the free tier: ${freeTierCapLabel()}`)).toBeTruthy();
   });
 
-  it("draws the access row under the plans, each marked Coming soon", () => {
+  it("asks for Cloud Workers requests under the plans, with no coming-soon plans", () => {
     const { container } = render(<Plans />);
-    const names = Array.from(container.querySelectorAll(".wz-accessName")).map((n) => n.firstChild?.textContent);
-    expect(names).toEqual(["Startups", "Open source", "Education", "Regional pricing"]);
-    expect(container.querySelectorAll(".wz-accessSoon")).toHaveLength(4);
-  });
-
-  it("asks for Cloud Workers requests under the access row", () => {
-    const { container } = render(<Plans />);
-    expect(container.querySelector("#wz-access + #wz-cloud form")?.getAttribute("action")).toBe("/api/cloud-workers/request");
+    expect(container.querySelector("#wz-cloud form")?.getAttribute("action")).toBe("/api/cloud-workers/request");
+    expect(container.querySelector("#wz-access")).toBeNull();
   });
 });

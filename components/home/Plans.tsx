@@ -1,9 +1,8 @@
 import { catalog, freeTierCapLabel, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type BlastcpTier, type PlanId } from "@/lib/billing/plans";
 import { planLink } from "@/lib/billing/plan-link";
-import AccessPlans from "./AccessPlans";
 import CloudWorkers from "./CloudWorkers";
 
-// The pricing section under the pillars (docs/architecture/billing.md). The three plans come from the catalog
+// The pricing section under the tour (docs/architecture/billing.md). The three plans come from the catalog
 // in lib/billing/plans.ts, so a price change there moves this page too — the numbers below are read, not typed.
 // Each card ends in its way in: Free downloads the app, Pro and Team go through /billing to the upgrade dialog and
 // Stripe Checkout (lib/billing/plan-link.ts). A server component with no client JS, like the rest of the home page.
@@ -110,7 +109,7 @@ export default function Plans({ download = null }: { download?: PlanCta | null }
   return (
     <section className="wz-wrap wz-plans" aria-labelledby="wz-plansTitle">
       <h2 id="wz-plansTitle" className="wz-h2">
-        A plan for <em>every loom.</em>
+        Free to start. <em>Pro when you ship daily.</em>
       </h2>
       <div className="wz-planGrid">
         {cards(download).map((c) => (
@@ -134,7 +133,6 @@ export default function Plans({ download = null }: { download?: PlanCta | null }
           </article>
         ))}
       </div>
-      <AccessPlans />
       <CloudWorkers />
       <p className="wz-planNote">
         Weft is free to download and open source. Plans are per workspace, charged on weft.zip, and cancel any time.

@@ -1,60 +1,71 @@
-import Image from "next/image";
-import twinSuns from "@/electron/assets/splash-speeder.jpg";
-import { TAGLINE, downloadLink, platformLinks } from "@/lib/home";
+import { platformLinks, downloadLink } from "@/lib/home";
 import { latestRelease } from "@/lib/home-release";
+import { HERO } from "@/lib/home-story";
 import { testflightPublicUrl } from "@/lib/testflight";
-import board from "@/public/brand/board.png";
+import CardDemo from "./CardDemo";
 import Downloads from "./Downloads";
 import FaqTeaser from "./FaqTeaser";
+import Game from "./Game";
 import { HomeFooter, HomeNav } from "./HomeChrome";
-import Pillars from "./Pillars";
+import MiniBoard from "./MiniBoard";
+import OpenSource from "./OpenSource";
 import Plans from "./Plans";
 import Tour from "./Tour";
+import Why from "./Why";
 import "./home.css";
+import "./story.css";
 
-// The weft.zip home page (lib/home.ts has what it says and links to): the name, one
-// sentence, the download, a real screenshot of the board (public/brand/board.png) over the start screen's
-// twin suns, the narrated tour video, the five pillars, then a short FAQ (the whole one is /faq). A server component with no client JS. Fraunces for display, Instrument Sans for text.
+// The weft.zip home page (lib/home.ts and lib/home-story.ts hold what it says and links to). It leads with the thing
+// no other agent board has, an open card whose pane shows what the thread made (CardDemo), then says why that matters
+// (Why), shows the board small and moving (MiniBoard), the game and public profiles (Game), the source (OpenSource),
+// the narrated tour, the plans, a short FAQ and the downloads once more. Everything on it is drawn in CSS, so no
+// screenshot goes stale. A server component with no client JS. Fraunces for display, Instrument Sans for text.
 export default async function Home() {
   const release = await latestRelease();
   const download = downloadLink(release);
+  const links = platformLinks(release, testflightPublicUrl());
   return (
-    <>
-      <div className="wz-root">
-        <HomeNav />
+    <div className="wz-root">
+      <HomeNav />
 
-        <header className="wz-hero">
-          <Image src={twinSuns} alt="" fill priority sizes="100vw" className="wz-photo" />
-          <div className="wz-scrim" />
-          <div className="wz-wrap wz-heroInner">
-            <p className="wz-eyebrow wz-rise">Agentic engineering, on your Mac</p>
-            <h1 className="wz-h1 wz-rise">
-              {TAGLINE},<br /> <em>one thread at a time.</em>
-            </h1>
-            <p className="wz-lede wz-rise wz-d1">
-              A Mac kanban board where every card is a Claude Code thread. You bring the idea; Weft plans it, builds it and shows it to you.
-            </p>
-            <Downloads links={platformLinks(release, testflightPublicUrl())} />
-            <p className="wz-note wz-rise wz-d2">{download.note}</p>
-          </div>
-        </header>
-
-        <div className="wz-wrap wz-shotWrap wz-rise wz-d3">
-          <div className="wz-shot">
-            <Image src={board} alt="The Weft board: Backlog, Running, Needs you, Review and Done, each card a thread" priority sizes="(max-width: 1216px) 100vw, 1104px" />
-          </div>
+      <header className="wz-top">
+        <div className="wz-wrap wz-heroInner">
+          <p className="wz-eyebrow wz-rise">{HERO.eyebrow}</p>
+          <h1 className="wz-h1 wz-rise">
+            {HERO.title}
+            <br /> <em>{HERO.titleEm}</em>
+          </h1>
+          <p className="wz-lede wz-rise wz-d1">{HERO.lede}</p>
+          <Downloads links={links} />
+          <p className="wz-note wz-rise wz-d2">{release ? HERO.note : download.note}</p>
         </div>
+        <div className="wz-wrap wz-rise wz-d3">
+          <CardDemo />
+        </div>
+      </header>
 
-        <Tour />
+      <Why />
 
-        <Pillars />
+      <MiniBoard />
 
-        <Plans download={{ label: download.label, href: download.href }} />
+      <Game />
 
-        <FaqTeaser />
+      <OpenSource />
 
-        <HomeFooter />
-      </div>
-    </>
+      <Tour />
+
+      <Plans download={{ label: download.label, href: download.href }} />
+
+      <FaqTeaser />
+
+      <section className="wz-wrap wz-closing" aria-labelledby="wz-closingTitle">
+        <h2 id="wz-closingTitle" className="wz-h2">
+          Give it one idea. <em>Watch it show you.</em>
+        </h2>
+        <Downloads links={links} />
+      </section>
+
+      <HomeFooter />
+    </div>
   );
 }

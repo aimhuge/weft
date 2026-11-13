@@ -67,7 +67,7 @@ export default function ComposerBottomBar({
   const { upload } = useThreadTransport();
   return (
     <>
-      <div className="flex shrink-0 items-center gap-0.5 px-1.5 pb-1.5 pt-0.5">
+      <div className="flex shrink-0 flex-wrap items-center gap-x-0.5 gap-y-1 px-1.5 pb-1.5 pt-0.5">
         <ToolButton
           icon="paperclip"
           label="Attach images, videos, or files"
