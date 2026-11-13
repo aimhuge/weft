@@ -44,7 +44,7 @@ export default function DictationPill() {
       .catch(() => setSaid("copied"))
       .finally(() => setSending(false));
   });
-  const { state, seconds, level, error } = dictation;
+  const { state, seconds, level, error, opening } = dictation;
 
   // The window is transparent: only the pill shows.
   useEffect(() => {
@@ -71,15 +71,13 @@ export default function DictationPill() {
     [],
   );
 
-  // A chime as the mic opens and as it stops.
-  const was = useRef(state);
+  // A chime once the mic is really capturing (so it means "talk now"), and as it stops.
+  const listening = state === "recording" && !opening;
+  const was = useRef(listening);
   useEffect(() => {
-    if (sounds.current && state !== was.current) {
-      if (state === "recording") playDictationChime("start");
-      else if (was.current === "recording") playDictationChime("stop");
-    }
-    was.current = state;
-  }, [state]);
+    if (sounds.current && listening !== was.current) playDictationChime(listening ? "start" : "stop");
+    was.current = listening;
+  }, [listening]);
 
   // State and time on every change; loudness ten times a second.
   const lastSent = useRef(0);
@@ -126,7 +124,7 @@ export default function DictationPill() {
           />
           <span className="relative flex items-center gap-2">
             <Icon name="stop" size={14} />
-            <span className="font-mono tabular-nums">{clock(seconds)}</span>
+            <span className="font-mono tabular-nums">{opening ? "Opening mic…" : clock(seconds)}</span>
           </span>
         </button>
       ) : busy ? (

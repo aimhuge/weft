@@ -829,6 +829,10 @@ When a new doc lands in this folder, add it here on the same change.
 - `lib/import.ts`, `lib/search.ts`: pick up `~/.claude/projects` sessions as cards; search index.
 - `lib/hotkeys.ts` + `lib/shortcut-catalog.ts`: the keyboard shortcut registry and what the `?` sheet lists; tooltips, key badges,
   right-click menus and `ModifierHint` read their keys from it (docs/architecture/keyboard-shortcuts.md).
+- `lib/mic.ts` + `components/DictationMicPicker.tsx`: dictation's microphone. The chosen input (localStorage, shared by the
+  board and the pill), else the first non-Bluetooth one when a Bluetooth mic is around; the stream stays open `WARM_MS` (30s)
+  after a kept recording so the next one captures at once, and closes on cancel or unmount. `useDictation` reports `opening`
+  until the recorder starts.
 - `lib/shortcuts.ts` + `lib/use-dictation.ts` + `lib/use-composer-keys.ts`: the one rebindable binding (dictation, `⌥'` by
   default) and the mic it starts. The binding is a set of modifiers, so `⌥'` also fires on `⌘⌥'`; the hook reads a ref, so a
   second press while the microphone is opening cancels the recording instead of opening a second one

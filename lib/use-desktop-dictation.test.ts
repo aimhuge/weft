@@ -9,7 +9,7 @@ import { useDesktopDictation } from "./use-desktop-dictation";
 type Bridge = NonNullable<ShellBridge["dictation"]>;
 
 function local() {
-  return { state: "idle" as const, error: "local error", seconds: 9, level: 0.4, toggle: vi.fn(), cancel: vi.fn(), clearError: vi.fn() };
+  return { state: "idle" as const, error: "local error", seconds: 9, level: 0.4, opening: false, toggle: vi.fn(), cancel: vi.fn(), clearError: vi.fn() };
 }
 
 let listener: ((update: PillUpdate) => void) | null;

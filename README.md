@@ -285,6 +285,9 @@ The new-thread dialog (⌘N) and every card's reply box use the same editor:
   in Settings → Shortcuts. On a Mac it needs `brew install whisper-cpp ffmpeg` and a
   model (on Windows whisper ships inside Weft, and the model downloads from Settings → Dictation → Advanced); it uses superwhisper's or Homebrew's models, or the one in `WEFT_WHISPER_MODEL`. In a
   normal browser tab without whisper it falls back to the browser's speech recognition.
+  It shows "Opening mic…" until it's really listening (the start chime means talk now), keeps the mic open for
+  30 seconds after a recording so the next one starts at once, and skips Bluetooth mics unless you pick one in
+  Settings → General → Dictation → Microphone.
   Settings → General → Dictation picks its language (naming it is faster than detecting it), takes a
   vocabulary of names and terms whisper should expect, and turns on **Advanced dictation**: Weft
   downloads large-v3-turbo if this Mac has none and keeps it warm in `whisper-server`, so text is back

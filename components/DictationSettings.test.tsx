@@ -6,6 +6,7 @@ import type { DictationSettingsView } from "@/lib/dictation-types";
 
 const api = vi.hoisted(() => ({ dictationSettings: vi.fn(), setDictationSettings: vi.fn() }));
 vi.mock("@/lib/client", () => ({ api }));
+vi.mock("./DictationMicPicker", () => ({ default: () => null }));
 
 const { default: DictationSettings, advancedLine } = await import("./DictationSettings");
 
