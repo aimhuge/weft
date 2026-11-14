@@ -5,6 +5,7 @@ import { replayLastAchievement } from "@/lib/achievement-replay";
 import { showProgress, subscribeBoardPrefs } from "@/lib/board-prefs";
 import type { useCloudSync } from "@/lib/use-cloud-sync";
 import { replayWelcome } from "@/lib/welcome-client";
+import { useUiText } from "@/lib/ui-language";
 import AccountPlan from "./AccountPlan";
 import AccountSync from "./AccountSync";
 import { openTeamPage } from "./board-palette";
@@ -28,6 +29,7 @@ export default function AccountMenu({
   sync: ReturnType<typeof useCloudSync>;
   project: string | null;
 }) {
+  const t = useUiText();
   const progress = useSyncExternalStore(subscribeBoardPrefs, showProgress, () => true);
   const pick = (act: () => void) => () => {
     onClose();
@@ -37,11 +39,11 @@ export default function AccountMenu({
     <div id={id} role="menu" className="absolute right-0 top-full z-40 mt-1.5 w-[240px] rounded-lg border border-line bg-panel p-1 shadow-lg">
       <AccountPlan onClose={onClose} />
       <AccountSync sync={sync} project={project} />
-      <MenuItem icon="sliders" label="Settings…" onClick={pick(onOpenSettings)} />
-      {onShareBoard && <MenuItem icon="share" label="Share the board…" onClick={pick(onShareBoard)} />}
-      <MenuItem icon="globe" label="Your team" sub="Invite teammates on weft.zip" onClick={pick(openTeamPage)} />
-      <MenuItem icon="play" label="Replay the welcome" onClick={pick(replayWelcome)} />
-      {progress && <MenuItem icon="sparkles" label="Replay last achievement" onClick={pick(replayLastAchievement)} />}
+      <MenuItem icon="sliders" label={t("Settings…")} onClick={pick(onOpenSettings)} />
+      {onShareBoard && <MenuItem icon="share" label={t("Share the board…")} onClick={pick(onShareBoard)} />}
+      <MenuItem icon="globe" label={t("Your team")} sub={t("Invite teammates on weft.zip")} onClick={pick(openTeamPage)} />
+      <MenuItem icon="play" label={t("Replay the welcome")} onClick={pick(replayWelcome)} />
+      {progress && <MenuItem icon="sparkles" label={t("Replay last achievement")} onClick={pick(replayLastAchievement)} />}
     </div>
   );
 }

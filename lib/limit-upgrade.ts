@@ -1,5 +1,6 @@
 import { clearModelLimit, modelLimits } from "./model-limit";
 import { usageWindow } from "./turn";
+import type { Backend } from "./types";
 import type { PlanRateLimits } from "./limit-kind";
 
 // Detecting that the user upgraded their Claude plan.
@@ -53,8 +54,8 @@ function familyWindows(limits: PlanRateLimits): Array<{ family: string; used: nu
 // A cap whose window has already passed is not here (the store drops those on its own), and a cap
 // with no known end is only released when the CLI reports that family's window with room AND that
 // window is the one that is open — a window that has already reset is not evidence of anything.
-export function releasedModels(limits: PlanRateLimits, now = Date.now()): string[] {
-  const held = modelLimits(now);
+export function releasedModels(limits: PlanRateLimits, now = Date.now(), backend: Backend = "claude"): string[] {
+  const held = modelLimits(now).filter((cap) => cap.backend === backend);
   if (!held.length) return [];
   const windows = familyWindows(limits);
   if (!windows.length) return [];
@@ -77,8 +78,8 @@ export function releasedModels(limits: PlanRateLimits, now = Date.now()): string
 // This is the store's own "forget a model" (lib/model-limit.ts), called when the PLAN changed rather
 // than when the model's window ran out. It returns the models it freed, so the caller can wake the
 // cards parked on them.
-export function releaseUpgradedModels(limits: PlanRateLimits, now = Date.now()): string[] {
-  const released = releasedModels(limits, now);
-  for (const model of released) clearModelLimit(model);
+export function releaseUpgradedModels(limits: PlanRateLimits, now = Date.now(), backend: Backend = "claude"): string[] {
+  const released = releasedModels(limits, now, backend);
+  for (const model of released) clearModelLimit(model, backend);
   return released;
 }

@@ -147,7 +147,7 @@ describe("useStartGate", () => {
   });
 
   it("answers with the model's own cap", async () => {
-    plans({ plans: {}, models: [{ model: "opus", at: NOW, resetsAt: RESET_AT }] });
+    plans({ plans: {}, models: [{ backend: "claude", model: "opus", at: NOW, resetsAt: RESET_AT }] });
     await loadGates();
     const { result } = renderHook(() => useStartGate("claude", "opus"));
     expect(result.current).toEqual({ at: RESET_AT, kind: "model", subject: "opus" });
@@ -203,7 +203,7 @@ describe("useThreadGate", () => {
   });
 
   it("answers with the model's own cap", async () => {
-    plans({ plans: {}, models: [{ model: "opus", at: NOW, resetsAt: RESET_AT }] });
+    plans({ plans: {}, models: [{ backend: "claude", model: "opus", at: NOW, resetsAt: RESET_AT }] });
     await loadGates();
     const { result } = renderHook(() => useThreadGate(undefined, undefined, "claude", "opus"));
     expect(result.current).toEqual({ at: RESET_AT, kind: "model", subject: "opus" });
@@ -237,7 +237,7 @@ describe("useThreadGate", () => {
     //
     // A per-model cap is in the model store and not in the plan windows (lib/limit-kind.ts), so
     // picking another model has nothing left to hold it back.
-    plans({ plans: {}, models: [{ model: "opus", at: NOW, resetsAt: RESET_AT }] });
+    plans({ plans: {}, models: [{ backend: "claude", model: "opus", at: NOW, resetsAt: RESET_AT }] });
     await loadGates();
     const { result } = renderHook(() => useThreadGate(undefined, undefined, "claude", "opus"));
     expect(result.current).toEqual({ at: RESET_AT, kind: "model", subject: "opus" });

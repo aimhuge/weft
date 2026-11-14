@@ -4,6 +4,7 @@
 // the terminal drawer when it's open.
 import type { footerFor } from "@/lib/board-derive";
 import { NO_DRAG } from "@/lib/no-drag";
+import { useUiText } from "@/lib/ui-language";
 import { guarded } from "./guarded";
 
 const BoardFooter = guarded(() => import("./BoardFooter"), { what: "footer" });
@@ -18,14 +19,15 @@ export interface BoardBottomProps {
 }
 
 export default function BoardBottom({ footer, onHelp, terminal }: BoardBottomProps) {
+  const t = useUiText();
   return (
     <>
       <BoardFooter stats={footer.stats} cwd={footer.cwd} backend={footer.backend} onHelp={onHelp} />
       {/* After the footer so an open card can stop just above it; z-40 keeps it over the card's backdrop. */}
       {terminal.open && terminal.away && (
         <div style={NO_DRAG} className="relative z-40 m-3 flex items-center justify-between rounded-md border border-line bg-panel px-3 py-2 text-[12px] text-muted">
-          <span>The terminal isn&apos;t available for cards on {terminal.away} yet: it would open a shell on this Mac.</span>
-          <button onClick={terminal.onClose} className="text-faint hover:text-ink" aria-label="Close terminal">
+          <span>{t("The terminal isn't available for cards on")} {terminal.away} {t("yet: it would open a shell on this Mac.")}</span>
+          <button onClick={terminal.onClose} className="text-faint hover:text-ink" aria-label={t("Close terminal")}>
             ✕
           </button>
         </div>

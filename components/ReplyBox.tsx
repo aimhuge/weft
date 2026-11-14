@@ -10,6 +10,7 @@ import { useReplySchedule } from "@/lib/use-reply-schedule";
 import { useReplyContinue } from "@/lib/use-reply-continue";
 import { useReplyQueue } from "@/lib/use-reply-queue";
 import { useNow } from "@/lib/use-now";
+import { gateNote } from "@/lib/limit-reset";
 import { useThreadGate } from "@/lib/use-start-gate";
 import { replyBoxMode, type ReplyAction } from "@/lib/reply-mode";
 import type { Backend, CacheState, LimitWindow, ScheduledMessage } from "@/lib/types";
@@ -306,6 +307,7 @@ export default function ReplyBox({
     fiveHour,
     sendLater: sendLater && { planReset: sendLater.resets.fiveHour },
     limitResetAt: gate?.at,
+    limitReason: gateNote(gate),
     cutOff,
     canFresh,
     // No prior assistant context when the card has no live session: a model/CLI was just switched

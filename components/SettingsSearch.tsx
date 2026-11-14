@@ -115,7 +115,7 @@ export default function SettingsSearch({ onPick }: { onPick: (hit: SettingsHit) 
                 <span className="min-w-0 truncate text-ink">{t(hit.title ?? hit.pageLabel)}</span>
                 <span className="shrink-0 text-[11px] text-faint">{t(hit.title ? hit.pageLabel : "Page")}</span>
               </span>
-              <span className="line-clamp-2 text-[11.5px] leading-snug text-muted">{hit.hint}</span>
+              <span className="line-clamp-2 text-[11.5px] leading-snug text-muted">{t(hit.hint)}</span>
             </li>
           ))}
         </ul>

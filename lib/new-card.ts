@@ -66,7 +66,7 @@ export function createCardFromBody(body: Record<string, unknown>, id?: string): 
   // A model that has hit its limit is a bad place to start a thread: the first turn would fail on
   // it. The card starts on the backup model instead (lib/model-fallback.ts), and the CLI moves with
   // it when the backup lives on another one.
-  const fallback = fallbackFor(model);
+  const fallback = fallbackFor(model, Date.now(), backend);
   const startBackend = fallback?.backend ?? backend;
   const startModel = fallback?.model ?? model;
 

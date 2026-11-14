@@ -5,6 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { readLastAchievement, REPLAY_ACHIEVEMENT_EVENT, saveLastAchievement } from "@/lib/achievement-replay";
 import { apiFetch } from "@/lib/api-client";
 import { showProgress, subscribeBoardPrefs } from "@/lib/board-prefs";
+import { useUiText } from "@/lib/ui-language";
 import { toAnnounce, type Announced } from "@/lib/game-badges";
 import type { GameState } from "@/lib/game-server";
 import type { Achievement } from "./AchievementPopup";
@@ -37,6 +38,7 @@ export default function GameBadge({
   refresh?: unknown;
   onStart: (cwd: string, prompt: string, title: string) => void;
 }) {
+  const t = useUiText();
   const enabled = useSyncExternalStore(subscribeBoardPrefs, showProgress, () => true);
   const [game, setGame] = useState<GameState | null>(null);
   const [open, setOpen] = useState<LoomTab | null>(null);
@@ -83,18 +85,18 @@ export default function GameBadge({
   const tip = (
     <span className="flex w-[220px] flex-col gap-1">
       <b>
-        {streak.current}-day streak{streak.atRisk ? ": ship something today to keep it" : ""}
+        {t("Streak")}: {streak.current}{t(" days")}{streak.atRisk ? `: ${t("ship something today to keep it")}` : ""}
       </b>
       <span>
-        Best {streak.best} · {streak.freezes} streak freeze{streak.freezes === 1 ? "" : "s"}
+        {t("Best")} {streak.best} · {streak.freezes} {t(streak.freezes === 1 ? "streak freeze" : "streak freezes")}
       </span>
       <span>
-        Lv {level.level} {level.title} · {(level.next - game.xp).toLocaleString()} XP to the next level
+        {t("Level")} {level.level} {t(level.title)} · {(level.next - game.xp).toLocaleString()} {t("XP to the next level")}
       </span>
       <span>
-        Today: {game.today.cards} started, {game.today.done} shipped, {game.today.xp} XP
+        {t("Today")}: {game.today.cards} {t("started")}, {game.today.done} {t("shipped")}, {game.today.xp} XP
       </span>
-      <span className="text-muted">Click for your wefter card, badges and projects.</span>
+      <span className="text-muted">{t("Click for your wefter card, badges and projects.")}</span>
     </span>
   );
   return (
@@ -102,7 +104,7 @@ export default function GameBadge({
       <Tip text={tip}>
         <button
           onClick={() => setOpen("you")}
-          aria-label={`Wefter Profile: ${streak.current}-day streak, level ${level.level}`}
+          aria-label={`${t("Wefter Profile")}：${t("Streak")} ${streak.current}${t(" days")}，${t("Level")} ${level.level}`}
           className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] text-muted hover:bg-hover"
         >
           <span className={streak.atRisk || streak.current === 0 ? "opacity-40 grayscale" : ""}>🔥</span>

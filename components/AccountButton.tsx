@@ -6,6 +6,7 @@ import { useBillingPrefetch } from "@/lib/use-billing-status";
 import { avatarPollMs, useCloudSync } from "@/lib/use-cloud-sync";
 import { useEscape } from "@/lib/use-escape";
 import { useTeamPrefetch } from "@/lib/use-team";
+import { useUiText } from "@/lib/ui-language";
 import AccountMenu from "./AccountMenu";
 import { SyncDot } from "./AccountSync";
 import Avatar from "./Avatar";
@@ -29,6 +30,7 @@ function useSharedSync(given: ReturnType<typeof useCloudSync> | undefined, signe
 // loading, on errors, and in builds without a Supabase key, so it never costs header room for nothing. `teamError` is why
 // the last read of teammates' cards failed (lib/use-team-board.ts); it rides on the avatar's tooltip, no new chip.
 export default function AccountButton({ onOpenSettings, onShareBoard, project = null, sync: given, teamError }: { onOpenSettings: () => void; onShareBoard?: () => void; project?: string | null; sync?: ReturnType<typeof useCloudSync>; teamError?: string }) {
+  const t = useUiText();
   const { state, busy, waiting, error, signIn } = useAccount();
   const [menuOpen, setMenuOpen] = useState(false);
   const signedIn = !!signedInId(state);
@@ -51,7 +53,7 @@ export default function AccountButton({ onOpenSettings, onShareBoard, project = 
 
   const user = state.view.user;
   if (user) {
-    const title = avatarTitle(user.name ?? user.email ?? "your account", teamError);
+    const title = avatarTitle(user.name ?? user.email ?? "your account", teamError, t);
     return (
       <div ref={menuRef} className="relative flex shrink-0 items-center gap-1">
         <ShareBoardIcon onShareBoard={onShareBoard} />
@@ -79,29 +81,30 @@ export default function AccountButton({ onOpenSettings, onShareBoard, project = 
     <button
       onClick={() => void signIn("github")}
       disabled={busy !== null}
-      title={error ?? (waiting ? "Finish signing in with GitHub in your browser" : "Sign in with GitHub")}
-      aria-label="Sign in with GitHub"
+      title={error ?? (waiting ? t("Finish signing in with GitHub in your browser") : t("Sign in with GitHub"))}
+      aria-label={t("Sign in with GitHub")}
       className={`flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-[12.5px] disabled:opacity-60 ${error ? "border-danger text-danger" : "border-line-strong text-ink hover:bg-sunken"}`}
     >
       {pending ? <Spinner size={13} /> : <Icon name="github" size={14} />}
-      {waiting ? "Signing in…" : "Sign in"}
+      {waiting ? t("Signing in…") : t("Sign in")}
     </button>
   );
 }
 
 // The avatar's tooltip: who you're signed in as, then why teammates' cards failed to load, if they did.
-function avatarTitle(who: string, teamError?: string) {
-  return `Signed in as ${who}${teamError ? `. Teammates' cards couldn't load: ${teamError}` : ""}`;
+function avatarTitle(who: string, teamError: string | undefined, t: (text: string) => string) {
+  return `${t("Signed in as")} ${who}${teamError ? `. ${t("Teammates' cards couldn't load:")} ${teamError}` : ""}`;
 }
 
 // One click to Share the board, beside the avatar; nothing when the board doesn't offer it.
 function ShareBoardIcon({ onShareBoard }: { onShareBoard?: () => void }) {
+  const t = useUiText();
   if (!onShareBoard) return null;
   return (
     <button
       onClick={onShareBoard}
-      title="Share the board"
-      aria-label="Share the board"
+      title={t("Share the board")}
+      aria-label={t("Share the board")}
       className="rounded-md p-1.5 text-muted hover:bg-sunken hover:text-ink"
     >
       <Icon name="share" size={15} />

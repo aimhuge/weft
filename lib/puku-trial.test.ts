@@ -122,7 +122,7 @@ describe("currentTrialToken and trialOptions", () => {
 
   it("gives a thread the base URL, helper TTL and a cat helper", async () => {
     writeJson(tokenFile(), (await goodToken()).token);
-    const opts = trial.trialOptions();
+    const opts = trial.trialOptions(NOW, "darwin");
     expect(opts?.env).toEqual({ PUKU_AI_BASE_URL: trial.TRIAL_URL, PUKU_CLI_API_KEY_HELPER_TTL_MS: String(trial.HELPER_TTL_MS) });
     expect(opts?.settings.apiKeyHelper).toBe(`/bin/cat '${tokenFile()}'`);
   });
@@ -132,7 +132,15 @@ describe("currentTrialToken and trialOptions", () => {
     vi.resetModules();
     trial = await import("./puku-trial");
     writeJson(tokenFile(), (await goodToken()).token);
-    expect(trial.trialOptions()?.settings.apiKeyHelper).toContain("'\\''");
+    expect(trial.trialOptions(NOW, "darwin")?.settings.apiKeyHelper).toContain("'\\''");
+  });
+
+  it("reads the trial file through PowerShell on Windows", async () => {
+    writeJson(tokenFile(), (await goodToken()).token);
+    const helper = trial.trialOptions(NOW, "win32")?.settings.apiKeyHelper;
+    expect(helper).toMatch(/^powershell\.exe -NoProfile -NonInteractive -EncodedCommand /);
+    const script = Buffer.from(helper!.split(" ").at(-1)!, "base64").toString("utf16le");
+    expect(script).toContain(`[IO.File]::ReadAllText('${tokenFile().replace(/'/g, "''")}')`);
   });
 
   it("steps aside for a Puku login of your own", async () => {
@@ -185,7 +193,7 @@ describe("fetchTrialToken", () => {
     expect(trial.trialJustFetched()).toBe(false);
     expect(await trial.fetchTrialToken()).toEqual({ ok: true });
     expect(fs.readFileSync(tokenFile(), "utf8")).toBe(token);
-    expect(fs.statSync(tokenFile()).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(fs.statSync(tokenFile()).mode & 0o777).toBe(0o600);
     expect(fetchMock).toHaveBeenCalledWith(`${trial.TRIAL_URL}/trial-token`, { method: "POST", headers: { authorization: "Bearer acc" } });
     expect(trial.trialJustFetched()).toBe(true);
     expect(trial.trialJustFetched(Date.now() + trial.RETRY_WINDOW_MS + 1)).toBe(false);

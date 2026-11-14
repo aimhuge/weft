@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { cardMenu, columnMenu, humanOnlyItem, resumeCommand, type MenuItem } from "./card-menu";
+import { cardMenu, columnMenu, humanOnlyItem, resumeCommand, translateMenuItems, type MenuItem } from "./card-menu";
 import { BUILT_IN_AGENTS } from "./agents";
+import { uiText } from "./ui-language";
 import type { Card } from "./types";
 
 function card(over: Partial<Card> = {}): Card {
@@ -150,6 +151,28 @@ describe("columnMenu archived toggle", () => {
   it("reads Hide Archived while archived cards are shown", () => {
     expect(item(columnMenu("done", { count: 0, archived: 2, showArchived: true }), "toggle-archived")?.label).toBe("Hide Archived");
     expect(item(columnMenu("done", { count: 0, archived: 2, showArchived: false }), "toggle-archived")?.label).toBe("Show 2 Archived");
+  });
+});
+
+describe("translateMenuItems", () => {
+  const zh = (text: string) => uiText("zh-CN", text);
+
+  it("translates card actions and dynamic labels without changing their actions or shortcuts", () => {
+    const menu = translateMenuItems(cardMenu(card({ rateLimitHit: true })), zh);
+    expect(item(menu, "open")).toMatchObject({ label: "打开线程", accelerator: "O" });
+    expect(item(menu, "mode:default")?.label).toBe("权限：每次询问");
+    expect(item(menu, "switch:github-copilot")?.label).toBe("切换到 GitHub Copilot（已达到套餐限额）");
+    expect(item(menu, "agent:builder")?.label).toBe("智能体：🛠 构建者");
+    expect(item(menu, "skill:weft:done")?.label).toBe("运行 /weft:done");
+    expect(item(menu, "switch:github-copilot")?.accelerator).toBe("Ctrl+Shift+J");
+  });
+
+  it("translates dynamic archive actions and leaves English unchanged", () => {
+    const menu = columnMenu("done", { count: 3, archived: 2, showArchived: false });
+    const translated = translateMenuItems(menu, zh);
+    expect(item(translated, "toggle-archived")?.label).toBe("显示 2 个已归档");
+    expect(item(translated, "archive-done")?.label).toBe("归档已完成列中的全部 3 张卡片");
+    expect(translateMenuItems(menu, (text) => text)).toEqual(menu);
   });
 });
 

@@ -12,6 +12,7 @@
 // for each.
 
 import { GOOSE_PROVIDERS, PUKU_GOOSE, type GooseProviderView } from "@/lib/goose-provider";
+import { useUiText } from "@/lib/ui-language";
 import { useGooseProviders } from "@/lib/use-goose";
 import { useGooseSelection } from "@/lib/use-goose-selection";
 import GooseKeyRow from "./GooseKeyRow";
@@ -46,6 +47,7 @@ function rowsFrom(providers: GooseProviderView[]): GooseProviderView[] {
 }
 
 export default function GooseProviderKey({ providerId, modelId, baseUrl }: GooseProviderKeyProps) {
+  const t = useUiText();
   const { providers, error, busy, setKey, forget } = useGooseProviders();
   const selection = useGooseSelection({ providerId, modelId, baseUrl });
   const rows = rowsFrom(providers);
@@ -56,26 +58,24 @@ export default function GooseProviderKey({ providerId, modelId, baseUrl }: Goose
   return (
     <section className="flex flex-col gap-3">
       <div className="flex flex-col gap-0.5">
-        <h3 className="text-[13px] font-medium text-ink">Bring your own key</h3>
+        <h3 className="text-[13px] font-medium text-ink" data-settings-section="Bring your own key">{t("Bring your own key")}</h3>
         <p className="text-[12.5px] text-muted">
-          {error ??
-            selection.error ??
-            "The provider and model new Goose threads use. Paste a key and Weft keeps it in your Keychain — it never reaches the board."}
+          {error ?? selection.error ?? t("The provider and model new Goose threads use. Paste a key and Weft keeps it in your Keychain — it never reaches the board.")}
         </p>
       </div>
 
       <label className="flex items-center gap-2">
-        <span className="w-[70px] shrink-0 text-[11.5px] text-muted">Provider</span>
+        <span className="w-[70px] shrink-0 text-[11.5px] text-muted">{t("Provider")}</span>
         <select
           value={open?.id ?? ""}
           onChange={(e) => selection.setProvider(e.target.value)}
-          aria-label="Goose provider"
+          aria-label={t("Goose provider")}
           className="rounded-md border border-line-strong bg-canvas px-2.5 py-[7px] text-[12.5px] text-ink outline-none focus:border-accent"
         >
           {rows.map((r) => (
             <option key={r.id} value={r.id}>
               {r.label}
-              {r.hasKey ? " — key saved" : ""}
+              {r.hasKey ? ` — ${t("key saved")}` : ""}
             </option>
           ))}
         </select>
@@ -84,8 +84,8 @@ export default function GooseProviderKey({ providerId, modelId, baseUrl }: Goose
           onClick={() => selection.setAll(PUKU_GOOSE)}
           disabled={busy || selection.busy}
           className="shrink-0 rounded-md border border-line-strong px-2 py-[6px] text-[11.5px] text-muted hover:text-ink disabled:opacity-40"
-          aria-label="Use Puku"
-          title="Use Puku's gateway: the Anthropic provider, api-cli.puku.sh and puku-ai-2.8"
+          aria-label={t("Use Puku")}
+          title={t("Use Puku's gateway: the Anthropic provider, api-cli.puku.sh and puku-ai-2.8")}
         >
           {PUKU_GOOSE.label}
         </button>

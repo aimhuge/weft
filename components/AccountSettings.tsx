@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUiText } from "@/lib/ui-language";
 import { type AccountBusy, type AccountWaiting, PROVIDER_LABELS, useAccount } from "@/lib/use-account";
 import { EVERYWHERE_QUESTION } from "@/lib/sign-out-everywhere";
 import type { AccountProvider, AccountUser } from "@/lib/types";
@@ -16,8 +17,9 @@ const BUTTON =
 
 function SignedIn(props: { user: AccountUser; busy: AccountBusy; onSignOut: () => void; onSignOutEverywhere: () => void }) {
   const { user, busy, onSignOut } = props;
+  const t = useUiText();
   const label = user.name ?? user.email ?? "?";
-  const via = user.provider ? `via ${PROVIDER_NAMES[user.provider] ?? user.provider}` : "Signed in";
+  const via = user.provider ? `${t("via")} ${PROVIDER_NAMES[user.provider] ?? user.provider}` : t("Signed in");
   return (
     <div className="flex items-center gap-3 rounded-md border border-line px-3 py-2.5">
       <Avatar user={user} size={28} />
@@ -29,7 +31,7 @@ function SignedIn(props: { user: AccountUser; busy: AccountBusy; onSignOut: () =
       </span>
       <button onClick={onSignOut} disabled={busy !== null} className={BUTTON}>
         {busy === "signout" && <Spinner size={11} />}
-        Sign out
+        {t("Sign out")}
       </button>
       <button
         onClick={() => window.confirm(EVERYWHERE_QUESTION) && props.onSignOutEverywhere()}
@@ -51,6 +53,7 @@ function SignInForm(props: {
   onProvider: (provider: AccountProvider) => void;
   onEmail: (email: string) => void;
 }) {
+  const t = useUiText();
   const { busy, waiting } = props;
   const [email, setEmail] = useState("");
   return (
@@ -59,7 +62,7 @@ function SignInForm(props: {
         {(Object.keys(PROVIDER_LABELS) as AccountProvider[]).map((id) => (
           <button key={id} onClick={() => props.onProvider(id)} disabled={busy !== null} className={BUTTON}>
             {busy === id && <Spinner size={11} />}
-            Continue with {PROVIDER_LABELS[id]}
+            {t("Continue with")} {PROVIDER_LABELS[id]}
           </button>
         ))}
       </div>
@@ -74,21 +77,21 @@ function SignInForm(props: {
           type="email"
           value={email}
           placeholder="you@example.com"
-          aria-label="Email for a sign-in link"
+          aria-label={t("Email for a sign-in link")}
           onChange={(e) => setEmail(e.target.value)}
           className="w-[220px] rounded-md border border-line-strong bg-canvas px-2.5 py-1 text-[12.5px] text-ink outline-none focus:border-accent"
         />
         <button type="submit" disabled={busy !== null || !email.trim()} className={BUTTON}>
           {busy === "email" && <Spinner size={11} />}
-          Email me a link
+          {t("Email me a link")}
         </button>
       </form>
       {waiting && (
         <p className="flex items-center gap-2 text-[12.5px] text-muted">
           <Spinner size={11} />
           {waiting.email
-            ? `Sent a link to ${waiting.what}. Open it on this Mac to finish.`
-            : `Finish signing in with ${waiting.what} in your browser.`}
+            ? `${t("Sent a sign-in link to")} ${waiting.what}. ${t("Open it on this Mac to finish.")}`
+            : `${t("Finish signing in with")} ${waiting.what} ${t("in your browser.")}`}
         </p>
       )}
     </div>
@@ -97,20 +100,21 @@ function SignInForm(props: {
 
 // The Weft account section of Settings. Optional: the board works the same signed out.
 export default function AccountSettings({ titleClass, hintClass }: { titleClass: string; hintClass: string }) {
+  const t = useUiText();
   const { state, busy, waiting, error, signIn, sendLink, signOut, signOutEverywhere } = useAccount();
 
   function body() {
     if (state.kind === "loading") {
       return (
         <div className="flex items-center gap-2 py-2 text-[12.5px] text-muted">
-          <Spinner size={12} /> Checking your account
+          <Spinner size={12} /> {t("Checking your account")}
         </div>
       );
     }
     if (state.kind === "error") {
-      return <p className="break-words text-[12.5px] text-danger">Couldn&apos;t check your account: {state.error}</p>;
+      return <p className="break-words text-[12.5px] text-danger">{t("Couldn't check your account:")} {state.error}</p>;
     }
-    if (!state.view.configured) return <p className="text-[12.5px] text-muted">Sign-in isn&apos;t set up in this build yet.</p>;
+    if (!state.view.configured) return <p className="text-[12.5px] text-muted">{t("Sign-in isn't set up in this build yet.")}</p>;
     if (state.view.user) {
       return (
         <SignedIn
@@ -127,8 +131,8 @@ export default function AccountSettings({ titleClass, hintClass }: { titleClass:
   return (
     <section className="flex flex-col gap-2">
       <div className="flex flex-col gap-0.5">
-        <h3 className={titleClass}>Weft account</h3>
-        <p className={hintClass}>Optional. Signing in turns on cloud features like page sync and share links.</p>
+        <h3 className={titleClass} data-settings-section="Weft account">{t("Weft account")}</h3>
+        <p className={hintClass}>{t("Optional. Signing in turns on cloud features like page sync and share links.")}</p>
       </div>
       {body()}
       {state.kind !== "loading" && state.kind !== "error" && state.view.configured && state.view.user && <BillingStatus />}

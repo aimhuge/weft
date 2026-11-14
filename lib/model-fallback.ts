@@ -26,9 +26,9 @@ export interface Fallback {
 // The model the thread should run on instead of `model`, when `model` is exhausted.
 // Returns undefined when there's nothing to do: no model, the model is fine, or no backup model
 // is set to fall back to.
-export function fallbackFor(model: string | undefined, now = Date.now()): Fallback | undefined {
+export function fallbackFor(model: string | undefined, now = Date.now(), owner = model ? backendFor(model) : undefined): Fallback | undefined {
   if (!model) return undefined;
-  if (!isModelLimited(model, now)) return undefined;
+  if (!isModelLimited(model, now, owner)) return undefined;
   const backup = backupModel();
   if (!backup) return undefined;
   // The backup model has to be one a CLI serves, and it can't be the model that's exhausted.
@@ -44,7 +44,7 @@ export function modelWithFallback(
   model: string | undefined,
   now = Date.now(),
 ): { backend: Backend; model?: string; switched: boolean } {
-  const fallback = fallbackFor(model, now);
+  const fallback = fallbackFor(model, now, backend);
   if (!fallback?.model) return { backend, model: modelOn(backend, model), switched: false };
   return { backend: fallback.backend ?? backend, model: fallback.model, switched: true };
 }
@@ -58,7 +58,7 @@ export function fallbackLine(from: string, to: string): string {
 // lib/limit-reset.ts has the same line for every place that asks "when does this free up?"; this
 // one is kept here so a caller that only wants the fallback doesn't need the plan log too.
 export function limitNote(model: string | undefined, now = Date.now()): string | undefined {
-  const limit = modelLimit(model, now);
+  const limit = modelLimit(model, now, model ? backendFor(model) : undefined);
   if (!limit) return undefined;
   return `limit until ${new Date(limit.resetsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 }

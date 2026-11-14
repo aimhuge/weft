@@ -63,12 +63,22 @@ export function currentTrialToken(now = Date.now()): string | null {
 }
 
 // What a puku thread starts with to use the trial, or null when it signs in on its own or has no token.
-export function trialOptions(now = Date.now()): { env: Record<string, string>; settings: { apiKeyHelper: string } } | null {
+export function trialOptions(now = Date.now(), platform = process.platform): { env: Record<string, string>; settings: { apiKeyHelper: string } } | null {
   if (hasOwnPukuLogin() || !currentTrialToken(now)) return null;
+  const apiKeyHelper = platform === "win32"
+    ? windowsTrialHelper(TOKEN_FILE)
+    : `/bin/cat '${TOKEN_FILE.replace(/'/g, "'\\''")}'`;
   return {
     env: { PUKU_AI_BASE_URL: TRIAL_URL, PUKU_CLI_API_KEY_HELPER_TTL_MS: String(HELPER_TTL_MS) },
-    settings: { apiKeyHelper: `/bin/cat '${TOKEN_FILE.replace(/'/g, "'\\''")}'` },
+    settings: { apiKeyHelper },
   };
+}
+
+function windowsTrialHelper(file: string) {
+  const literal = file.replace(/'/g, "''");
+  // Encode the script so cmd.exe cannot expand characters in the Windows path.
+  const script = `[Console]::Write([IO.File]::ReadAllText('${literal}').Trim())`;
+  return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${Buffer.from(script, "utf16le").toString("base64")}`;
 }
 
 // True when Weft got a token moments ago, so a thread failing again needs Puku's own login instead.
