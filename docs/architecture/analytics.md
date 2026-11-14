@@ -90,7 +90,21 @@ The one exception to "a local Weft never calls home": the welcome's steps, as an
   `components/WelcomeLoop.tsx` (sign-in), `components/WelcomeIntro.tsx` (CLI log in), `components/WelcomeDialog.tsx`
   (projects answered, first thread, skip).
 
-The rest of the desktop funnel (first card, first Done) still isn't tracked.
+## Desktop activation
+
+The funnel past the welcome, over the same anonymous path and switch (`lib/activation.ts` `trackActivation()`, allow-listed
+in `lib/telemetry-events.ts`):
+
+- `activation_first_card` (`backend`): once per Mac, from `POST /api/cards`.
+- `activation_first_done` (`minutes_since_first_card`, -1 when unknown): once per Mac, from a `PATCH /api/cards/[id]`
+  that moves a card to Done.
+- `desktop_active_day` (`has_done`): once per local day, from the board's `GET /api/cards`, so desktop retention shows
+  for Macs that never make an account.
+
+A file in Weft's data folder (`ACTIVATION_FILE`) keeps what was sent, marked before the send so two quick calls can't
+both send it. A new event name needs weft.zip redeployed before its collector takes it. Tests never send:
+`test/activation-setup.ts` stubs the module for every file, and `lib/activation.test.ts` tests the real one through
+`vi.importActual`.
 
 ## Key files
 
@@ -98,5 +112,6 @@ The rest of the desktop funnel (first card, first Done) still isn't tracked.
 - `lib/analytics-server.ts`: `serverPosthogConfig()`.
 - `lib/consent.ts`: `readConsent()`, `writeConsent()`, `whenConsented()`; `components/ConsentBanner.tsx`, `components/ConsentChoice.tsx`.
 - `lib/analytics.ts`: `startAnalytics()`, `analyticsOn()`, `track()`, `trackClick()`.
+- `lib/activation.ts`: `trackActivation()`, the desktop's first card, first Done and active days.
 - `instrumentation-client.ts`, `instrumentation.ts`, `lib/ai-observability.ts`.
 - `components/GoogleAnalytics.tsx`, `app/layout.tsx`, `components/home/Home.tsx` (the download button's `data-track`).

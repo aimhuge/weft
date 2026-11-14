@@ -13,6 +13,10 @@ export const ONBOARDING_EVENTS = {
   onboarding_projects_answered: ["brought", "count_history", "start_empty"],
   onboarding_first_thread: ["backend", "used_starter", "replay"],
   onboarding_skipped: ["step", "replay"],
+  // Past onboarding (lib/activation.ts): each once per Mac, the last once a day.
+  activation_first_card: ["backend"],
+  activation_first_done: ["minutes_since_first_card"],
+  desktop_active_day: ["has_done"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type OnboardingEvent = keyof typeof ONBOARDING_EVENTS;

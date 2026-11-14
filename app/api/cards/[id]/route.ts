@@ -1,4 +1,5 @@
 import { elevated, fail, guard } from "@/lib/guard";
+import { trackActivation } from "@/lib/activation";
 import { hostFail, needsElevation, requireCard, runVerb, type CardPatch } from "@/lib/host-api";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -15,6 +16,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     // A mode change or a read grant widens what the thread may do: only Weft's own window, not a thread's curl.
     const loose = needsElevation("card.update", { id, body }) ? elevated(req) : null;
     if (loose) return loose;
+    if (body.column === "done") void trackActivation("done");
     return Response.json(await runVerb("card.update", { id, body }));
   } catch (err) {
     return hostFail(err);

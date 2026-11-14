@@ -45,7 +45,8 @@ maxWorkers: Number(process.env.MAX_WORKERS) || 2,
     execArgv: [`--max-old-space-size=${Number(process.env.WORKER_HEAP) || 768}`],
     // A worker whose run died (its parent killed mid-test) ends itself instead of running on under PID 1.
     // jsdom-storage-setup: jsdom files get jsdom's localStorage, not Node 25+'s own (test/jsdom-storage-setup.ts).
-    setupFiles: ["test/orphan-guard-setup.ts", "test/jsdom-storage-setup.ts"],
+    // activation-setup: no test sends the desktop activation stats (test/activation-setup.ts).
+    setupFiles: ["test/orphan-guard-setup.ts", "test/jsdom-storage-setup.ts", "test/activation-setup.ts"],
     env: {
       WEFT_DATA: path.join(sandbox, "data"),
       CLAUDE_CONFIG_DIR: path.join(sandbox, "claude"),

@@ -7,6 +7,7 @@ import { deskClient } from "@/lib/turn-env";
 import { warmHostFacts } from "@/lib/host-facts";
 import { startWorkerThread, type WorkerThreadInput } from "@/lib/worker-new-thread";
 import { isWorkerProject } from "@/lib/worker-project";
+import { trackActivation } from "@/lib/activation";
 import { watchWorkerRun } from "@/lib/worker-refused";
 
 // The board's cards and worktree roots are the card.list verb (lib/host-api/card-list.ts); home is this Mac's own.
@@ -17,6 +18,8 @@ export async function GET(req: Request) {
   prewarm();
   // The <weft-env> block's commit and behind count, read once in the background (lib/host-facts.ts).
   void warmHostFacts();
+  // One anonymous ping per day the board is open, for desktop retention (lib/activation.ts).
+  void trackActivation("day");
   const { cards, roots } = await runVerb("card.list", undefined);
   return Response.json({ cards, home: os.homedir(), roots });
 }
@@ -45,6 +48,7 @@ export async function POST(req: Request) {
     // Who asked, for its first turn's <weft-env> block; set here, whatever the body said (lib/turn-client.ts). The id is
     // this host's to pick (""), as it always was.
     const args = { ...body, id: "", client: deskClient(elevated(req) === null), start: Boolean(body.start) };
+    void trackActivation("card", { backend: body.backend });
     return Response.json(await runVerb("card.create", args, { local: true }));
   } catch (err) {
     return hostFail(err);
