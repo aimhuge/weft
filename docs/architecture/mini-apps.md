@@ -11,6 +11,11 @@ A mini app is a page from the browser pane, saved so it is one click away on the
 - **Save button.** `components/SaveAppButton.tsx` is the grid button in the pane's toolbar (`components/BrowserPane.tsx`).
   It saves the page under its title (`appNameFrom`: title, else host, else the file's name). On a page that already is an
   app it is lit and removes it. It is disabled for anything `cleanAppUrl` refuses (about:, data:, weft:).
+- **Edit button.** `components/AppEditButton.tsx`, the pencil beside Share on the board's pane, shows for a saved app that
+  is a local page. It opens the New thread dialog on the page's own folder (`~/.weft/apps/<slug>/` for a data app) with a
+  draft naming the app and its files (`appEditTarget` in `lib/app-edit.ts`), so the user only types what to change. The
+  ask is a window event, `requestNewThread` in `lib/new-thread-request.ts`, that `lib/use-board-actions.ts` answers by
+  putting the draft in the dialog's remembered draft and opening it. A web or dev-server app has no files here: no pencil.
 - **Tile.** The name's first grapheme on a steady hue (`tagHue`), or the emoji the name starts with (`appGlyph`).
 - **Right-click** (`appMenu`, popped through `window.weft.popupMenu`): Open, Rename… (in place, Enter keeps it,
   Escape drops it), Share…, Move up, Move down, Copy address, Remove app.

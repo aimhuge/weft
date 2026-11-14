@@ -8,7 +8,8 @@ import { api, type NewCardInput } from "./client";
 import { startPileReview } from "./pile-review";
 import { lastFolder } from "./board-helpers";
 import { onOpenCardRequest } from "./open-card";
-import { backendFor, cardModel } from "./new-thread";
+import { onNewThreadRequest } from "./new-thread-request";
+import { backendFor, cardModel, DRAFT, remember } from "./new-thread";
 import { hostOf } from "./project-host";
 import { isWorkerProject, localPath } from "./worker-project";
 import { dropPending, drawPending, matchByPrompt, pendingCard } from "./worker-pending-cards";
@@ -92,6 +93,16 @@ export function useBoardActions({
 
   // A thread asked to open another card ("Continue in new card"): it replaces this one in the panel.
   useEffect(() => onOpenCardRequest((id) => select(id)), [select]);
+
+  // Something on the board asked for a New thread with a draft (the pane's Edit app button): the dialog opens with it.
+  useEffect(
+    () =>
+      onNewThreadRequest(({ folder, draft }) => {
+        if (draft) remember(DRAFT, draft);
+        openNew(folder);
+      }),
+    [openNew],
+  );
 
   const create = useCallback(async (input: NewCardInput) => {
     const { start } = await createCard(input);

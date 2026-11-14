@@ -39,6 +39,8 @@ app in October 2026 (the live numbers are the app's, not this doc's):
 | `supabase/migrations/20261018054110_growth_reads.sql` | The account-level reads (`growth_overview`, `growth_signups_by_day`, `growth_active_by_day`, `growth_retention`, `growth_funnel`) |
 | `supabase/migrations/20261103033051_growth_items_at_covering.sql` | A covering index on `cloud_thread_items (at) include (org_id, card_id, kind)`, so the activity scans run index-only: `growth_active_by_day` went from ~17 s (past the statement timeout) to ~2 s |
 | `supabase/migrations/20261024041130_growth_in_app_reads.sql` | The in-app reads (`growth_cards_by_day`, `growth_engagement_by_day`, `growth_engagement_overview`, `growth_retention_in_app`) and the two helpers behind them |
+| `supabase/migrations/20261114170813_growth_card_item_days.sql` | `private.growth_card_item_days`: one row per card per UTC day it synced items, with `items` and `turns`, kept by statement-level triggers on `cloud_thread_items` (insert and update add, delete takes back). `growth_activity`, `growth_engagement_activity` and `growth_engagement_by_day` read it instead of the items: the 374k-row scan took 8–12 s on this database and the API cut every activity panel at 8 s |
+| `supabase/migrations/20261114171015_growth_active_by_day_rollup.sql` | `growth_active_by_day` sums its `items` from the same rollup (8.2 s → well under a second) |
 | `supabase/migrations/20261029075755_app_versions.sql` | `app_versions`, the Mac's `app_version_submit` and the `growth_versions` read |
 | `lib/app-version-sync.ts` | The signed-in Mac's once-a-day version report, on the league sync's timer |
 | `~/.weft/app-grants.json` | The grant: the app's folder and env, the vault names its reads need, and the hash of its manifest that voids it when the manifest changes |
@@ -76,8 +78,9 @@ the only key that can, and only Weft's main process holds it.
 name reads oddly in SQL (`where card_column = 'done'`) and that is the price.
 
 `private.growth_engagement_activity(since timestamptz)` is the other helper: the days an account did **real
-work**. A card pushed (its `created_day`), a card moved (its `moved_day`), or a turn run — a row in
-`public.cloud_thread_items` with `kind in ('assistant','user')`, joined back to `cloud_cards` for `owner_user`.
+work**. A card pushed (its `created_day`), a card moved (its `moved_day`), or a turn run — a day in
+`private.growth_card_item_days` with `turns > 0` (items of `kind in ('assistant','user')`), joined back to `cloud_cards`
+for `owner_user`.
 This is the definition the in-app retention and the engagement counts both use.
 
 ### The four in-app reads

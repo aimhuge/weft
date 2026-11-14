@@ -12,6 +12,7 @@ import { onAddressFocus } from "@/lib/pane-new-tab";
 import { useMiniApps } from "@/lib/use-mini-apps";
 import Icon, { Spinner } from "./Icon";
 import { PaneFindField, usePaneFind } from "./PaneFind";
+import AppEditButton from "./AppEditButton";
 import AppShareButton from "./AppShareButton";
 import PaneTabs, { NewTabButton } from "./PaneTabs";
 import SaveAppButton from "./SaveAppButton";
@@ -176,12 +177,13 @@ export default function BrowserPane({
   );
 }
 
-// Save as app: the page joins the left rail below Services (components/AppsRail.tsx). Share an app: shown for a saved
-// app on the board's own pane (no card actions).
+// Save as app: the page joins the left rail below Services (components/AppsRail.tsx). Edit and Share an app: shown for
+// a saved app on the board's own pane (no card actions); Edit only for a local page (components/AppEditButton.tsx).
 function AppButtons({ url, title, app, share }: { url: string; title: string; app: ReturnType<typeof appFor> | undefined; share: boolean }) {
   return (
     <>
       <SaveAppButton url={url} title={title} />
+      {share && <AppEditButton app={app} />}
       {share && <AppShareButton app={app} />}
     </>
   );
