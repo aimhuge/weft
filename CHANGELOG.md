@@ -11,6 +11,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Added
 
 - **📈 Desktop activation in the stats.** The anonymous stats now cover past the welcome: the first card a Mac starts, its first card moved to Done (with the minutes between), and one ping per day Weft is used. That shows desktop retention for people who never make an account. These use the same allow-list, hashed ID and Settings → Security switch as the onboarding stats (`lib/activation.ts`, `app/api/cards`).
+- **Every website download is counted, cookie-free.** All of weft.zip's download links (Mac, Windows x64 and ARM, and the new `/download/ios` for TestFlight) now go through the `/download` redirect routes with `?from=` naming the button. After the redirect, the route captures an anonymous `download_redirected` event in PostHog (platform, arch, version, button, referrer host, utm tags), with no person profile, no IP and no cookie. Bots and HEAD requests are skipped. The funnel's top step no longer has to rely on GitHub's raw asset count. Main files: `lib/download-track.ts`, `app/download/*`, `lib/home.ts`, `app/privacy/page.tsx`.
 
 ### Fixed
 
