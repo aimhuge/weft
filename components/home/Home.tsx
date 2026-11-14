@@ -22,8 +22,8 @@ import "./story.css";
 // screenshot goes stale. A server component with no client JS. Fraunces for display, Instrument Sans for text.
 export default async function Home() {
   const release = await latestRelease();
-  const download = downloadLink(release);
-  const links = platformLinks(release, testflightPublicUrl());
+  const download = downloadLink(release, "plans");
+  const testflight = testflightPublicUrl();
   return (
     <div className="wz-root">
       <HomeNav />
@@ -36,7 +36,7 @@ export default async function Home() {
             <br /> <em>{HERO.titleEm}</em>
           </h1>
           <p className="wz-lede wz-rise wz-d1">{HERO.lede}</p>
-          <Downloads links={links} />
+          <Downloads links={platformLinks(release, testflight, "hero")} />
           <p className="wz-note wz-rise wz-d2">{release ? HERO.note : download.note}</p>
         </div>
         <div className="wz-wrap wz-rise wz-d3">
@@ -62,7 +62,7 @@ export default async function Home() {
         <h2 id="wz-closingTitle" className="wz-h2">
           Give it one idea. <em>Watch it show you.</em>
         </h2>
-        <Downloads links={links} />
+        <Downloads links={platformLinks(release, testflight, "closing")} />
       </section>
 
       <HomeFooter />

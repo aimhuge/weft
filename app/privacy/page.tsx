@@ -94,6 +94,11 @@ export default function PrivacyPage() {
           works and to fix what doesn&apos;t. More in <a href="#cookies">Cookies</a>.
         </p>
         <p>
+          <strong>Download counts.</strong> When you download Weft from weft.zip, our server counts it without a
+          cookie: the platform and version, which button you used, the site that linked you (its domain only) and any
+          campaign tags in the link. It isn&apos;t tied to you, your IP address or any other visit.
+        </p>
+        <p>
           <strong>Desktop onboarding stats.</strong> The app reports which welcome steps you went through, as
           anonymous events tied to a hashed device id: never a prompt, project name, path, email or card. They&apos;re
           on by default; switch them off in the app under Settings → Security.

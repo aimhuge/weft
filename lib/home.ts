@@ -71,12 +71,13 @@ export function parseFeed(feed: unknown): Release | null {
   return null;
 }
 
-// What the download button says and where it goes: the dmg when a release exists, the repo until then.
-export function downloadLink(release: Release | null): { label: string; href: string; note: string } {
+// What the download button says and where it goes: weft.zip/download (which counts it, then redirects to the dmg) when
+// a release exists, the repo until then. from names the button (hero, plans…) for the download_redirected event.
+export function downloadLink(release: Release | null, from = "site"): { label: string; href: string; note: string } {
   if (release) {
     return {
       label: `Download Weft ${release.version} for Mac`,
-      href: release.dmg,
+      href: `/download?from=${from}`,
       note: "Your Mac's AI Workflow.",
     };
   }
@@ -87,8 +88,8 @@ export function downloadLink(release: Release | null): { label: string; href: st
   };
 }
 
-// One of the hero's download buttons: Mac (the dmg), Windows (app/download/windows, with an ARM link beside it) and
-// iPhone (the phone app's public TestFlight link). href null renders a "coming soon" chip instead of a link.
+// One of the hero's download buttons: Mac (app/download), Windows (app/download/windows, with an ARM link beside it) and
+// iPhone (app/download/ios, to the phone app's public TestFlight link). Each passes through weft.zip so it's counted. href null renders a "coming soon" chip instead of a link.
 export interface PlatformLink {
   platform: "mac" | "windows" | "ios";
   label: string;
@@ -99,8 +100,8 @@ export interface PlatformLink {
 }
 
 // The hero's buttons. Windows waits for a release like the dmg; iPhone waits for TESTFLIGHT_PUBLIC_URL.
-export function platformLinks(release: Release | null, testflightUrl: string | null): PlatformLink[] {
-  const mac = downloadLink(release);
+export function platformLinks(release: Release | null, testflightUrl: string | null, from = "hero"): PlatformLink[] {
+  const mac = downloadLink(release, from);
   const v = release?.version ?? "github";
   const links: PlatformLink[] = [
     { platform: "mac", label: release ? "Download for Mac" : mac.label, sub: release ? `${release.version} · Apple silicon` : "Clone and run", href: mac.href, track: v },
@@ -110,14 +111,14 @@ export function platformLinks(release: Release | null, testflightUrl: string | n
       platform: "windows",
       label: "Download for Windows",
       sub: `${release.version} · x64`,
-      href: "/download/windows",
+      href: `/download/windows?from=${from}`,
       track: `${v}-windows`,
-      alt: { label: "ARM", href: "/download/windows?arch=arm64", track: `${v}-windows-arm64` },
+      alt: { label: "ARM", href: `/download/windows?arch=arm64&from=${from}`, track: `${v}-windows-arm64` },
     });
   }
   links.push(
     testflightUrl
-      ? { platform: "ios", label: "Get it on iPhone", sub: "TestFlight beta", href: testflightUrl, track: "ios-testflight" }
+      ? { platform: "ios", label: "Get it on iPhone", sub: "TestFlight beta", href: `/download/ios?from=${from}`, track: "ios-testflight" }
       : { platform: "ios", label: "iPhone app", sub: "Coming soon", href: null, track: "ios-soon" },
   );
   return links;

@@ -92,10 +92,12 @@ describe("parseFeed", () => {
 });
 
 describe("downloadLink", () => {
-  it("points at the dmg when there is a release", () => {
-    const link = downloadLink({ version: "0.3.0", dmg: "https://x/Weft.dmg", page: "https://x/tag" });
+  it("points at weft.zip/download, which counts and redirects to the dmg, when there is a release", () => {
+    const release = { version: "0.3.0", dmg: "https://x/Weft.dmg", page: "https://x/tag" };
+    const link = downloadLink(release);
     expect(link.label).toBe("Download Weft 0.3.0 for Mac");
-    expect(link.href).toBe("https://x/Weft.dmg");
+    expect(link.href).toBe("/download?from=site");
+    expect(downloadLink(release, "plans").href).toBe("/download?from=plans");
     expect(link.note).toBe("Your Mac's AI Workflow.");
   });
 
@@ -113,11 +115,12 @@ describe("platformLinks", () => {
 
   it("offers Mac, Windows (with ARM) and iPhone once there is a release and a TestFlight link", () => {
     const [mac, win, ios] = platformLinks(release, tf);
-    expect(mac).toMatchObject({ platform: "mac", label: "Download for Mac", href: "https://x/Weft.dmg", track: "0.7.6" });
+    expect(mac).toMatchObject({ platform: "mac", label: "Download for Mac", href: "/download?from=hero", track: "0.7.6" });
     expect(mac?.sub).toMatch(/0\.7\.6/);
-    expect(win).toMatchObject({ platform: "windows", href: "/download/windows", track: "0.7.6-windows" });
-    expect(win?.alt).toEqual({ label: "ARM", href: "/download/windows?arch=arm64", track: "0.7.6-windows-arm64" });
-    expect(ios).toMatchObject({ platform: "ios", href: tf, sub: "TestFlight beta" });
+    expect(win).toMatchObject({ platform: "windows", href: "/download/windows?from=hero", track: "0.7.6-windows" });
+    expect(win?.alt).toEqual({ label: "ARM", href: "/download/windows?arch=arm64&from=hero", track: "0.7.6-windows-arm64" });
+    expect(ios).toMatchObject({ platform: "ios", href: "/download/ios?from=hero", sub: "TestFlight beta" });
+    expect(platformLinks(release, tf, "closing")[0]?.href).toBe("/download?from=closing");
   });
 
   it("shows iPhone as coming soon without a TestFlight link", () => {

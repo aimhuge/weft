@@ -370,13 +370,15 @@ The folder picker lists your recent projects, the git repos in `~/dev` and other
 clones it into `~/dev`, with a progress bar that follows git (receiving objects, resolving deltas, checking out). **New project…** names an empty folder in `~/dev` and starts the thread there. You can also paste a path or browse for a folder. A new thread starts on the CLI, model and effort set in Settings → Models (the dialog remembers your last pick the same way). The dialog's one model menu is also its CLI picker, the same menu as Settings → Models: each CLI is a heading with its own default first, picking a model moves the thread to the CLI that serves it, and Goose lists only the models a saved provider key serves. Cards are titled from the
 prompt's first line (click the title in the open thread to rename it), and new threads start in the default permission mode from Settings → Security (Auto at first: a classifier
 approves safe calls and blocks risky ones, and a blocked call comes to Needs you with the classifier's reason and
-**Allow once and retry** / **Keep denied**; an MCP server that asks you to confirm something, like the Supabase MCP before
+**Allow once and retry** / **Keep denied**; a block on a skill's folder or a `.claude/settings*.json` file asks once
+per card instead, **Allow writes to the research skill for this card**, and later writes there go through, except
+ones that change permissions, hooks or a skill's `allowed-tools`, which still ask every time; an MCP server that asks you to confirm something, like the Supabase MCP before
 destructive SQL, comes to Needs you too, with **Accept** / **Decline** and any form it asks for. A database prompt shows the
 SQL behind it, folded with its destructive lines marked, and a second model's verdict above the buttons: **Safe**,
 **Changes access**, **Deletes data** or **Can't tell**, each destructive statement in plain words, what's lost and what
 looks wrong; until it says Safe, **Decline** is the primary button, with a line saying why. SQL a Bash command runs
 through `psql` or `prisma db execute` gets the same review. **Allow safe SQL on this card** beside Accept does it for
-one card, and **Auto on this card** on a Bash prompt switches that card to Auto, so safe commands run without asking. **Settings → Security → Database changes** can let a Safe one through without asking; the thread notes it); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy), or one of your own. **Settings → Agents** (or **Manage agents…** at the bottom of that menu) is where you make them: an emoji, a name, a line saying what it's for, its soul (the start of every system prompt its threads get) and the skills it turns off. Built-ins can be edited too, and **Reset** pulls a built-in's latest text from Weft's repo on GitHub. Pick a default agent for each project there, and new threads in that project start as it. Share one of yours with a Weft team (**Share with…** under it), and every teammate's pickers offer it with your team's name beside it; they can duplicate it to make their own copy. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and the agent's emoji in the card's footer says who it is (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
+one card, and **Auto on this card** on a Bash prompt switches that card to Auto, so safe commands run without asking. **Settings → Security → Database changes** can let a Safe one through without asking; the thread notes it); the mode menu beside the model and effort menus changes that per thread, and says under each mode what it does. The **Agent** menu picks who the thread is: **🛠 Builder**, Weft's own soul that plans, builds, tests and ships, **✍️ Copywriter**, who writes in Weft's voice (pages, feature intros, changelog entries, UI copy), **🔬 Researcher**, who works a question out with you and keeps the answer on one page in the browser pane that grows a round at a time (a few living blocks for the answer, the plan or the diagram, a short round per turn, earlier rounds folded, and the pane gliding to what changed), or one of your own. **Settings → Agents** (or **Manage agents…** at the bottom of that menu) is where you make them: an emoji, a name, a line saying what it's for, its soul (the start of every system prompt its threads get) and the skills it turns off. Built-ins can be edited too, and **Reset** pulls a built-in's latest text from Weft's repo on GitHub. Pick a default agent for each project there, and new threads in that project start as it. Share one of yours with a Weft team (**Share with…** under it), and every teammate's pickers offer it with your team's name beside it; they can duplicate it to make their own copy. Right-click a card → **Agent: …** to switch it between turns: its conversation carries on under the new soul, and the agent's emoji in the card's footer says who it is (`lib/agents.ts`, docs/architecture/agents.md). Effort starts at High and
 then follows whatever the last new thread used. To change it later, even mid-turn,
 use the mode menu in the open thread's header or the card's right-click menu. Sessions picked up from
 Claude Code keep the mode they last ran in (say `auto`).
@@ -446,7 +448,13 @@ whenever cards are waiting in it.
 The board comes in two modes. **Regular** is just your threads: columns, cards with their folder and age, the
 browser pane, and ★ and 🔐 on the rail. **Advanced** is everything: the tool rail, the header's badges, list view,
 sorting, each card's stage and model, and the footer's stats. A new install starts on Regular, a board that was
-already in use stays on Advanced, and Settings → General → Advanced mode switches between them.
+already in use stays on Advanced, and Settings → General → Simple mode switches between them.
+
+Simple mode (Regular) also turns on four pieces you can keep or drop one by one under the switch: a **full-page
+pane** (the show rail folds into a `⧉ N` pill, and a live line, the pending ask and the reply box with its mic sit
+under the page, like the phone), **a turn's steps folded** into one "Weft ran N steps" line, a **one-box new card**
+(the controls behind More) and **three piles** (Needs you · Working · Ready, with Backlog and Done folded). See
+docs/architecture/simple-mode.md.
 
 Any column folds out of the way: click the chevron in its header and it becomes a thin strip with its name and
 count. Click the strip to open it again; you can still drop cards on it. When the board has room, the fullest
@@ -598,8 +606,16 @@ list below, a thread's name (a card's CLI, its dev server) opens its card too.
 
 Dev servers aren't kept inside threads. A thread starts one through Weft (`mcp__devservers__start`, which
 `/weft:preview` uses), so it keeps running after the thread's CLI closes and doesn't hold the CLI open. Its row
-has its url (opens in the browser pane), Restart, and Start once it stopped. A server a thread still starts with
-Bash in the background shows too, stop-only, and stays out of the thread's task strip.
+has its url (opens in the browser pane), Restart, and Start once it stopped. Starting one from Bash in the background
+(`&`, `run_in_background`, nohup, Monitor and the like) is refused, with the `mcp__devservers__start` call to make
+instead; a foreground smoke test with a timeout is fine.
+
+Idle dev servers stop themselves. Once a minute Weft looks at who is connected to each server (one `netstat`, a few
+milliseconds): a server with no visitor but Weft's own status checks and no turn on its card for 30 minutes is stopped,
+and starts again when a thread or the review tour asks for it, or with Start. Dev servers Weft didn't start (your own
+terminal's, an old thread's) show in the list as untracked; an idle one gets a toast with **Undo** 90 seconds before
+it's stopped. With the drawer open each dev server's memory is its real footprint (RAM plus compressed plus swapped,
+not just RSS), in red over 3 GB, and its row says how long it has been idle.
 
 ## No waiting for CLIs to start
 
@@ -997,8 +1013,10 @@ seam hides only what the Mac owns (the browser and terminal panes, the local Set
 the desktop board reaches the web board with it.
 A click opens the card framed over the board like on the Mac, its browser pane's page on the right (synced pages sandboxed, a
 localhost page as its last capture) and the thread on the left the way the desktop draws it, oldest first with tool runs folded, Markdown, screenshots and tool outputs loading when you
-open them. **New thread** on the web board starts a card on your Mac: pick one of your synced folders, write the prompt, and the Mac that
-owns the folder makes the card and runs it, then the board opens it (the Mac has to be on and running Weft). The open card's reply
+open them. **New thread** on the web board starts a card on your Mac: it is the desktop's own New thread dialog (rich text, pasted and
+dropped files, the mic, `@` and `/`, model, effort, mode, Shared or a worktree, Backlog), with your synced folders, grouped by Mac and
+worker, in place of the folder picker. At phone width it is the phone app's design instead: a chip row, Hold to talk, ⊕ for photos and
+files, and ⋯ for Backlog. The Mac that owns the folder makes the card and runs it, then the board opens it (the Mac has to be on and running Weft). The open card's reply
 box is the desktop's own and sends to that Mac too: your message goes into the thread as if typed there (held until the running
 turn ends, or **Send now** to stop it first), a permission request or question the thread is waiting on can be answered right there,
 ■ stops the turn, and what the thread says comes back within about a second. Your own cards act there as on the desktop:
@@ -1151,7 +1169,11 @@ here, and its card on this board records the prompt and which worker took it. Wh
 and on a worker, its menu has **Pull Uncommitted Work from <worker>**: the worker sends what it hasn't committed and
 this Mac's checkout picks it up, or says why it won't (docs/architecture/wip-sync.md). Between two of your Macs it's
 **Pull Uncommitted Work from <Mac>**, once you've paired them in Settings → Devices → Your other Macs (copy one's code,
-paste it on the other); each pull asks Touch ID. A Weft desktop that syncs a folder
+paste it on the other); each pull asks Touch ID. Or tick **Keep in Sync with <worker>** (Touch ID once): the two
+checkouts then stay one folder while Weft is open, every change crossing the session line in a second or two, the side
+with threads running winning a clash and the other keeping its copy as `name.conflict-<machine>.ext`
+(docs/architecture/folder-sync.md). **Move to <worker>** hands the project over in one step: this Mac's uncommitted
+work goes across, winning any clash, and new threads start on the worker. A Weft desktop that syncs a folder
 lists itself there too, as a **headed** worker (browser pane, vault and all), so a team sees every box that can run
 its cards, and a run sent to another of your Macs starts a card in the synced folder of that name. More in
 [docs/architecture/weft-worker.md](docs/architecture/weft-worker.md).
@@ -1571,7 +1593,9 @@ drift; the FAQ's pictures live in `public/brand/faq/` so GitHub and the site sho
 `app/privacy/page.tsx`), linked from the footer. Google Analytics and PostHog (with session replay) load on weft.zip only
 after a visitor presses Accept in a small corner banner (`components/ConsentBanner.tsx`, the choice in `lib/consent.ts`);
 the privacy page's Cookies section switches it back (`components/ConsentChoice.tsx`). One rule for every visitor, no
-geo check. A local Weft never shows the banner, because it never loads either tool.
+geo check. A local Weft never shows the banner, because it never loads either tool. Downloads are counted without
+a cookie: every download link goes through `weft.zip/download` (`/windows`, `/ios`), which redirects first and then
+captures an anonymous `download_redirected` in PostHog on the server (`lib/download-track.ts`; no IP, bots skipped).
 
 `weft.zip/login` is a real sign-in page (GitHub only) so a visitor can leave the marketing site with
 a Weft account without the desktop app first. It has its own cookie session (`/auth/sign-in`, `/auth/callback`,

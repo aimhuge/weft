@@ -2,7 +2,8 @@ import type { PlatformLink } from "@/lib/home";
 
 // The hero's download row: one button per platform from platformLinks (lib/home.ts). Mac is the primary button;
 // Windows and iPhone sit beside it as outlined ones, and iPhone is a quiet "coming soon" chip until the TestFlight
-// link is set. Every link is a download_clicked in GA and PostHog (lib/analytics.ts trackClick).
+// link is set. Every link goes through a weft.zip redirect route, which counts it cookie-free (lib/download-track.ts),
+// and is also a download_clicked in GA and PostHog for visitors who said yes to cookies (lib/analytics.ts trackClick).
 
 const ICONS: Record<PlatformLink["platform"], React.ReactNode> = {
   mac: (

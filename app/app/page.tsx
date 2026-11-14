@@ -22,7 +22,7 @@ async function AppBody() {
   // shell still renders when the cookie is missing so a deep link doesn't
   // bounce the visitor.
   const identity = await readSessionIdentity();
-  const download = downloadLink(await latestRelease());
+  const download = downloadLink(await latestRelease(), "signed-in");
   const who = identity?.name ?? identity?.email ?? "your Weft account";
   return (
     <div className="wz-app wz-auth">

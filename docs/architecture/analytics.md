@@ -57,6 +57,7 @@ under the same name. On a local board both are absent and it does nothing.
 | Event | Where | Props |
 |---|---|---|
 | `download_clicked` | home page download button | `version` (`github` before the first release), `href` |
+| `download_redirected` | server side, `/download`, `/download/windows`, `/download/ios` (no consent needed) | `platform`, `arch`, `version`, `from`, `referrer_host`, `utm_source`/`utm_medium`/`utm_campaign`, `source: website` |
 | `thread_started` | New thread (desktop and web board) | `backend`, `model`, `effort` |
 | `thread_reply_sent` | reply box (desktop and web board) | `reply_type`: `message` or `continue` |
 | `project_created` | New project form | none |
@@ -65,6 +66,19 @@ under the same name. On a local board both are absent and it does nothing.
 Server components can't take click handlers, so a link opts in with attributes:
 `data-track="download_clicked" data-track-version="0.4.0"`. `startAnalytics()` adds one capturing click
 listener (`trackClick`) that reads them, `data-track-*` becoming camelCased props, plus `href` on links.
+
+## Downloads, cookie-free
+
+`download_clicked` only reaches PostHog from visitors who said yes to cookies, so it undercounts. The real count is
+`download_redirected`: every download link on weft.zip (`platformLinks` and `downloadLink` in `lib/home.ts`) points at
+a redirect route, `/download` (the dmg), `/download/windows?arch=` (the exe) or `/download/ios` (TestFlight), with
+`?from=` naming the button (`hero`, `closing`, `plans`, `signed-in`). The route redirects first, then `after()` from
+`next/server` runs `captureDownload()` (`lib/download-track.ts`), so PostHog never slows the download. It captures
+with posthog-node through `serverPosthogConfig()`: a random distinct id per download, `$process_person_profile: false`,
+GeoIP off (the request comes from the server, so no visitor IP reaches PostHog), only the referrer's host, and short
+lowercase labels for `from` and the utm tags (anything else is dropped). HEAD requests and bot user agents (crawlers,
+link unfurlers, curl, empty UA) aren't counted. Bare `weft.zip/download` links in READMEs and posts are counted too,
+with `from` null.
 
 ## Desktop onboarding stats
 
@@ -101,6 +115,13 @@ in `lib/telemetry-events.ts`):
 - `desktop_active_day` (`has_done`): once per local day, from the board's `GET /api/cards`, so desktop retention shows
   for Macs that never make an account.
 
+Weft asks you to sign in twice: the welcome's sign-in screen (`components/WelcomeAccount.tsx`) and "Sign in to Weft?"
+after the first finished thread (`components/SyncPromptDialog.tsx`). `lib/use-signin-ask-stats.ts` measures both with
+`where` = `welcome` or `first_thread`: `signin_ask_shown` once it opens signed out, `signin_ask_clicked` on the GitHub
+button, `signin_ask_declined` (`never` when "Don't show me again" is ticked) on Not now, and `signin_ask_completed`
+when the account turns up while it's open. The welcome's Not now stays `onboarding_account_deferred`. Read together,
+these tell people who skip the account apart from installs that never open Weft.
+
 A file in Weft's data folder (`ACTIVATION_FILE`) keeps what was sent, marked before the send so two quick calls can't
 both send it. A new event name needs weft.zip redeployed before its collector takes it. Tests never send:
 `test/activation-setup.ts` stubs the module for every file, and `lib/activation.test.ts` tests the real one through
@@ -110,6 +131,7 @@ both send it. A new event name needs weft.zip redeployed before its collector ta
 
 - `lib/analytics-gate.ts`: `posthogConfig()`, `isLocalHost()`.
 - `lib/analytics-server.ts`: `serverPosthogConfig()`.
+- `lib/download-track.ts`: `captureDownload()`, `isBotRequest()`, `downloadProps()`; `app/download/route.ts`, `app/download/windows/route.ts`, `app/download/ios/route.ts`.
 - `lib/consent.ts`: `readConsent()`, `writeConsent()`, `whenConsented()`; `components/ConsentBanner.tsx`, `components/ConsentChoice.tsx`.
 - `lib/analytics.ts`: `startAnalytics()`, `analyticsOn()`, `track()`, `trackClick()`.
 - `lib/activation.ts`: `trackActivation()`, the desktop's first card, first Done and active days.
