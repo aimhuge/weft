@@ -4,7 +4,7 @@ const latestWindowsInstaller = vi.fn();
 const captureDownload = vi.fn();
 vi.mock("@/lib/home-release", () => ({ latestWindowsInstaller }));
 vi.mock("@/lib/download-track", async (real) => ({ ...(await real<typeof import("@/lib/download-track")>()), captureDownload }));
-vi.mock("next/server", () => ({ after: (fn: () => unknown) => fn() }));
+vi.mock("next/server", () => ({ after: (fn: () => unknown) => fn(), connection: () => Promise.resolve() }));
 
 afterEach(() => {
   latestWindowsInstaller.mockReset();

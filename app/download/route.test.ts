@@ -5,7 +5,7 @@ const captureDownload = vi.fn();
 vi.mock("@/lib/home-release", () => ({ latestRelease }));
 vi.mock("@/lib/download-track", () => ({ captureDownload }));
 // after() runs its callback once the response is sent; here, right away.
-vi.mock("next/server", () => ({ after: (fn: () => unknown) => fn() }));
+vi.mock("next/server", () => ({ after: (fn: () => unknown) => fn(), connection: () => Promise.resolve() }));
 
 afterEach(() => {
   latestRelease.mockReset();
