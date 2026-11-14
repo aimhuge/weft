@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Added
+
+- **📈 Desktop activation in the stats.** The anonymous stats now cover past the welcome: the first card a Mac starts, its first card moved to Done (with the minutes between), and one ping per day Weft is used. That shows desktop retention for people who never make an account. These use the same allow-list, hashed ID and Settings → Security switch as the onboarding stats (`lib/activation.ts`, `app/api/cards`).
+
 ### Fixed
 
 - **Weft's server no longer outlives the app.** A quit, crash or update could leave the packaged app's server running under launchd. With nobody reading its log, each write failed and looped through Next's error logger at ~100% CPU for days, and it kept its claude CLIs alive. Now the server ends itself, and its CLIs, as soon as Weft is gone, its log pipe breaks, or a SIGTERM's graceful close takes longer than 5 seconds. It ships as a server patch, so installed apps get it without a new download (`lib/parent-watch.ts`, `instrumentation.ts`).
