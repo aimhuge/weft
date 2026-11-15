@@ -255,11 +255,13 @@ window instead of the native panel, which can only show text. `showAboutWindow()
 instance and focuses it if it is already open. The page is a bundled `file://` file with a
 `script-src 'self'` CSP, so it opens even when the server is down. It is a sandboxed,
 fixed-size window on its own `about` session, and navigation and `window.open` are denied.
-`about.js` renders everything with `textContent`.
+`about.js` renders everything with `textContent`. The heading and the window title carry the release
+("Weft™ v0.8.3", from `appVersion`); the line under it adds the full build ("Build 0.8.3+e4e94043")
+only when a server patch is running, then the arch.
 
 `registerAboutBridge({ tagline, dataDir, getServer })` (called from `app.whenReady`) answers three
 `weft-about:*` ipc channels, each checking that the caller is the About window:
-- `info`: version, arch, packaged or not, Electron/Chromium/Node versions, data folder, the app's
+- `info`: version (with its server patch), appVersion (the plain release), arch, packaged or not, Electron/Chromium/Node versions, data folder, the app's
   PID, and the server's port and PID from `server.port` / `server.pid`.
 - `open`: `"data"` or `"logs"` only; the page never passes a path.
 - `copy`: writes the page's plain-text twin to the clipboard (capped at 20k characters).

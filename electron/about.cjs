@@ -61,6 +61,8 @@ function registerAboutBridge({ tagline, dataDir, getServer }) {
     return {
       // With its server patch when one runs, "0.6.7+abc123" (server-patch.cjs).
       version: require("./server-patch.cjs").versionLabel(app),
+      // The plain release, "0.6.7": the heading's "Weft™ v0.6.7".
+      appVersion: app.getVersion(),
       tagline: options.tagline,
       arch: process.arch,
       platform: process.platform,

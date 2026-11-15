@@ -34,7 +34,11 @@
   $("logs").addEventListener("click", function () { api.open("logs"); });
 
   api.info().then(function (info) {
-    $("version").textContent = "Version " + info.version + " · " + archLabel(info);
+    // "Weft™ v0.8.3" up top; the line under it names the exact build when a server patch adds to it.
+    $("name").textContent = "Weft™ v" + info.appVersion;
+    document.title = "About Weft v" + info.appVersion;
+    $("version").textContent =
+      (info.version === info.appVersion ? "" : "Build " + info.version + " · ") + archLabel(info);
     $("tagline").textContent = info.tagline;
     lines.push("Weft " + info.version + " (" + archLabel(info) + ")", "");
     row("Data", info.dataDir, { label: "Open", run: function () { api.open("data"); } });
