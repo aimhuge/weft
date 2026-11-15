@@ -51,13 +51,13 @@ export interface KeyStatus {
 // or a grant for an older version only, which a revoked device may hold).
 export function sealLine(status: KeyStatus | null, id: string): { sealed: boolean; text: string } {
   const w = status?.workers[id];
-  if (w && w.version >= w.latest) return { sealed: true, text: `Threads sealed (key v${w.version})` };
-  return { sealed: false, text: "Threads in the clear" };
+  if (w && w.version >= w.latest) return { sealed: true, text: `Threads encrypted (key v${w.version})` };
+  return { sealed: false, text: "Threads not encrypted" };
 }
 
 export function sealOutcome(name: string, r: { version?: number; denied?: boolean }): string {
-  if (r.denied) return `Not sealed: ${name} keeps publishing in the clear.`;
-  return `${name} now holds key v${r.version ?? 0}: it seals what it publishes from now on.`;
+  if (r.denied) return `Not encrypted: ${name} keeps publishing in the clear.`;
+  return `${name} now holds key v${r.version ?? 0}: it encrypts what it publishes from now on.`;
 }
 
 export type RepairResult = { denied: true } | { approval: string; command: string; fingerprint: string };
@@ -161,7 +161,7 @@ export function useDevices({ pairing, hosts }: Bridges = bridgesHere()) {
         if (w?.id && hosts.grantKey && (await hosts.keyStatus?.())?.sealOn) {
           const sealed = await hosts.grantKey(w.id).catch((err: unknown) => ({ error: err instanceof Error ? err.message : String(err) }));
           // Read again: the Touch ID took a while, and Settings may have closed meanwhile.
-          if (isLive(live)) setNote(`${workerOutcome(r)} ${"error" in sealed ? `Not sealed: ${sealed.error}` : sealOutcome(w.name, sealed)}`);
+          if (isLive(live)) setNote(`${workerOutcome(r)} ${"error" in sealed ? `Not encrypted: ${sealed.error}` : sealOutcome(w.name, sealed)}`);
         }
         await reload();
       });

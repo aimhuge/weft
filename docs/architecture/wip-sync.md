@@ -1,5 +1,9 @@
 # Pulling a worker's uncommitted work
 
+> The menu items named here now sit in a group per machine ([machines.md](machines.md)): Pull Uncommitted Work is
+> **Bring Its Uncommitted Work Here**, Keep in Sync with <worker> is **Keep in Sync with This Mac**, Move to <worker> is
+> **Move <project> There**.
+
 Status: **first step built** (2026-11-12). The same project often lives twice on one board: `weft` on this Mac and
 `weft` on a Weft Worker (the "weft m1mini" chip). Their commits meet on GitHub; their uncommitted work didn't meet at
 all. A project's right-click menu now has **Pull Uncommitted Work from <worker>**: you sit down at this Mac, ask the
@@ -72,7 +76,7 @@ fetchWip + applyWip, as from a worker ◀──
 
 - **Why a pairing.** A Mac takes no host-level verb from the network, because a Supabase session is all a row proves.
   Making A push its tree on a row alone would let a stolen session send any Mac's uncommitted work to a remote. So A
-  answers only with an approval signed by a Mac you paired with it by hand: Settings → Devices → **Your other Macs**.
+  answers only with an approval signed by a Mac you paired with it by hand: Settings → Devices → the other Mac's row → **Share work…** (machines.md).
   Copy the asking Mac's code (`weft-mac1:`: its device id, its name, its desktop approval public key), paste it on the
   answering Mac, and approve with Touch ID (`electron/mac-pair.cjs`). The code holds no secret; carrying it by hand is
   what makes it trusted. Pair both ways to pull in both directions.

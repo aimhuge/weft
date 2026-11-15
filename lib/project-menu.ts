@@ -20,6 +20,8 @@ export type ProjectAction =
   | `pull-wip:${string}`
   | `sync-tree:${string}`
   | `move-tree:${string}`
+  // A machine's name as a heading, on a shell that can't draw submenus. Never enabled, so never picked.
+  | `machine:${string}`
   | "pin"
   | "unpin"
   | "hide"
@@ -46,10 +48,24 @@ export interface ProjectMenuState {
   onWorker: boolean;
   // Folders added to the project (lib/project-folders.ts), each with a Remove item under Add Folder….
   folders?: string[];
-  // The Weft Workers that hold this project too, each a "Pull Uncommitted Work from <worker>" item (lib/wip-pull.ts).
-  twins?: { path: string; name: string; offline: boolean }[];
-  // The worker twins, each a "Keep in Sync with <worker>" item, checked while this Mac syncs it (lib/tree-sync-menu.ts).
-  syncTwins?: { path: string; name: string; offline: boolean; on: boolean }[];
+  // Each other machine that holds this project (lib/machines.ts), one group apiece. A machine that takes new threads
+  // replaces the two Run on items.
+  machines?: MenuMachine[];
+  // The shell draws submenus (electron/main-menu-popup.cjs); an older one gets each machine's items under a heading.
+  submenus?: boolean;
+}
+
+// One other machine in a project's menu, and what this Mac can do with the project there. Each part is offered only
+// when that machine can do it: one way to pull per machine, never two.
+export interface MenuMachine {
+  name: string;
+  offline: boolean;
+  // Bring its uncommitted work here: the `from` of a pull (a worker's project path, or mac:<device>/<folder>).
+  pull?: string;
+  // Keep both checkouts as one folder, and Move (this Mac's work goes there): the worker's project path.
+  sync?: { path: string; on: boolean };
+  // New threads in this project start there (Run on Worker), ticked when they do.
+  runThere?: boolean;
 }
 
 const SEPARATOR: MenuItem = { type: "separator" };
@@ -76,15 +92,43 @@ const KEYS: Record<string, string> = {
 
 const base = (folder: string) => folder.split("/").filter(Boolean).pop() ?? folder;
 
-const offline = (t: { offline: boolean }) => (t.offline ? { detail: "offline" } : {});
+// One machine's items. Inside its submenu the machine goes unnamed ("There"); on a flat menu each item names it.
+function machineActions(project: string, m: MenuMachine, sub: boolean): MenuItem[] {
+  const items: MenuItem[] = [];
+  if (m.pull) items.push({ id: `pull-wip:${m.pull}`, label: `Bring ${sub ? "Its" : `${m.name}'s`} Uncommitted Work Here`, enabled: !m.offline });
+  if (m.sync) {
+    items.push(
+      { id: `sync-tree:${m.sync.path}`, label: `Keep in Sync with ${sub ? "This Mac" : m.name}`, checked: m.sync.on },
+      { id: `move-tree:${m.sync.path}`, label: `Move ${project} ${sub ? "There" : `to ${m.name}`}`, enabled: !m.offline, detail: "Sends this Mac's work, then new threads start there" },
+    );
+  }
+  if (m.runThere !== undefined) {
+    if (items.length) items.push(SEPARATOR);
+    // Ticked, picking it brings new threads back to this Mac.
+    items.push({ id: m.runThere ? "run-here" : "run-worker", label: `Start New Threads ${sub ? "There" : `on ${m.name}`}`, checked: m.runThere });
+  }
+  return items;
+}
 
-// The project on another machine: Pull Uncommitted Work from…, Keep in Sync with… and Move to… for each twin.
-function twinItems(s: ProjectMenuState): MenuItem[] {
-  return [
-    ...(s.twins ?? []).map((t) => ({ id: `pull-wip:${t.path}`, label: `Pull Uncommitted Work from ${t.name}`, enabled: !t.offline, ...offline(t) })),
-    ...(s.syncTwins ?? []).map((t) => ({ id: `sync-tree:${t.path}`, label: `Keep in Sync with ${t.name}`, checked: t.on, ...offline(t) })),
-    ...(s.syncTwins ?? []).map((t) => ({ id: `move-tree:${t.path}`, label: `Move to ${t.name}`, enabled: !t.offline, ...offline(t) })),
-  ] as MenuItem[];
+// Every other machine: a submenu each, or on an older shell its name as a heading over the same items.
+function machineItems(project: string, machines: MenuMachine[], submenus: boolean): MenuItem[] {
+  return machines.flatMap((m): MenuItem[] => {
+    const status = m.offline ? { detail: "offline" } : {};
+    if (submenus) return [{ label: m.name, submenu: machineActions(project, m, true), ...status }];
+    return [{ id: `machine:${m.name}`, label: m.name, enabled: false, ...status }, ...machineActions(project, m, false)];
+  });
+}
+
+// Where new threads run and the project's other machines: the machine groups.
+function placeItems(name: string, s: ProjectMenuState): MenuItem[] {
+  const run: MenuItem[] = [
+    { id: "run-here", label: "Run on This Machine", checked: !s.onWorker },
+    { id: "run-worker", label: "Run on Worker", checked: s.onWorker, enabled: s.syncable || s.onWorker },
+  ];
+  const machines = s.machines ?? [];
+  // A machine that takes new threads carries the tick itself; with none that does, the two plain items stay.
+  const covered = machines.some((m) => m.runThere !== undefined);
+  return [...(covered ? [] : run), ...machineItems(name, machines, s.submenus === true)];
 }
 
 export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
@@ -107,9 +151,7 @@ export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
     // Share…: the workspace's web board link and invites; the project starts syncing first so it's on that board.
     { id: "share", label: `Share ${name}…`, enabled: s.syncable || s.synced },
     { id: "sync", label: s.synced ? `Don't Sync ${name}` : `Sync ${name}`, enabled: s.syncable || s.synced, detail: s.syncStatus },
-    { id: "run-here", label: "Run on This Machine", checked: !s.onWorker },
-    { id: "run-worker", label: "Run on Worker", checked: s.onWorker, enabled: s.syncable || s.onWorker },
-    ...twinItems(s),
+    ...placeItems(name, s),
     SEPARATOR,
     s.pinned ? { id: "unpin", label: "Unpin from Bar" } : { id: "pin", label: "Pin to Bar" },
     s.hidden ? { id: "show", label: "Show in Bar" } : { id: "hide", label: "Hide from Bar" },

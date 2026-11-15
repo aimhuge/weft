@@ -3,6 +3,7 @@
 // work root, which is the repo's name for a project cloned there (lib/worker-handoff.ts sends a Mac folder's basename),
 // so the twin is the Mac folder of that name. What is per repo rather than per machine (the vault, the Vercel and
 // Supabase links, the GitHub repo) reads the twin for a worker project. Pure, so the board and the server share it.
+import { looksScratch } from "./scratch";
 import { parseWorkerProject } from "./worker-project";
 
 const baseName = (folder: string) => folder.split("/").filter(Boolean).pop()?.toLowerCase() ?? "";
@@ -28,3 +29,28 @@ export function twinByRepo(project: string | null | undefined, vaults: readonly 
   const name = worker.folder.toLowerCase();
   return vaults.find((v) => baseName(v.label) === name)?.folder ?? null;
 }
+
+// Which worker projects the board folds into a local project's chip: worker path -> the one non-scratch local path with
+// the same folder name (case-insensitive). Two local folders sharing the name leave it unmerged, since a name is a guess.
+export function twinMap(local: readonly string[], workers: readonly string[]): Map<string, string> {
+  const byName = new Map<string, Set<string>>();
+  for (const path of local) {
+    if (parseWorkerProject(path) || looksScratch(path)) continue;
+    const name = baseName(path);
+    byName.set(name, (byName.get(name) ?? new Set()).add(path));
+  }
+  const out = new Map<string, string>();
+  for (const w of workers) {
+    const parsed = parseWorkerProject(w);
+    const found = parsed ? byName.get(parsed.folder.toLowerCase()) : undefined;
+    const only = found?.size === 1 ? [...found][0] : undefined;
+    if (only) out.set(w, only);
+  }
+  return out;
+}
+
+// A card's project: its root, or the local project its worker twin folds into.
+export const projectKeyOf = (map: ReadonlyMap<string, string>, rootOf: (cwd: string) => string) => (cwd: string): string => {
+  const root = rootOf(cwd);
+  return map.get(root) ?? root;
+};

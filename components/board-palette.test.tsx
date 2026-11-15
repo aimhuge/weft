@@ -40,6 +40,7 @@ function state(over: Partial<PaletteState> = {}): PaletteState {
     archivedCount: 0,
     showArchived: false,
     rootOf: (cwd) => cwd,
+    projectOf: (cwd) => cwd,
     ...over,
   };
 }
@@ -47,6 +48,12 @@ function state(over: Partial<PaletteState> = {}): PaletteState {
 const ids = (items: { id: string }[]) => items.map((i) => i.id);
 
 describe("boardPaletteItems", () => {
+  it("files a card under its project, where a worker's twin folds into the local one", () => {
+    const card = makeCard({ id: "w", cwd: "worker://w1/weft" });
+    const items = boardPaletteItems(state({ cards: [card], projectOf: () => "/dev/weft" }), actions());
+    expect(items.find((i) => i.id === "card-w")).toMatchObject({ root: "/dev/weft" });
+  });
+
   it("lists the board's commands, All projects, and no thread commands with nothing open", () => {
     const items = boardPaletteItems(state(), actions());
     expect(ids(items)).toContain("cmd-new");

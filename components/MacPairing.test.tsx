@@ -2,13 +2,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import "./test-utils";
-import { MacPairing } from "./MacPairing";
+import { ShareWork } from "./MacPairing";
 
 function bridge(over: Record<string, unknown> = {}) {
   const b = {
     code: vi.fn(() => Promise.resolve("weft-mac1:abc")),
     trust: vi.fn(() => Promise.resolve({ id: "x", name: "Studio" } as { id: string; name: string } | null)),
-    list: vi.fn(() => Promise.resolve([{ id: "x", name: "Studio", pairedAt: "t" }])),
+    list: vi.fn(() => Promise.resolve([] as { id: string; name: string; pairedAt: string }[])),
     forget: vi.fn(() => Promise.resolve(true)),
     ...over,
   };
@@ -19,70 +19,76 @@ afterEach(() => {
   delete (window as unknown as { weft?: unknown }).weft;
   vi.restoreAllMocks();
 });
+const openIt = () => fireEvent.click(screen.getByText("Share work…"));
 
-describe("MacPairing", () => {
+describe("ShareWork", () => {
   it("draws nothing without the desktop bridge", () => {
-    const { container } = render(<MacPairing />);
+    const { container } = render(<ShareWork id="x" name="Studio" />);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("lists the paired Macs and forgets one", async () => {
-    const b = bridge();
-    render(<MacPairing />);
-    expect(await screen.findByText(/Studio/)).toBeInTheDocument();
-    b.list.mockResolvedValue([]);
-    fireEvent.click(screen.getByLabelText("Forget Studio"));
-    await waitFor(() => expect(b.forget).toHaveBeenCalledWith("x"));
-    expect(await screen.findByText("Studio can no longer ask this Mac for its work.")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByLabelText("Forget Studio")).toBeNull());
-  });
-
-  it("copies this Mac's code", async () => {
+  it("copies this Mac's code, with the direction said right", async () => {
     const b = bridge();
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
-    render(<MacPairing />);
-    fireEvent.click(screen.getByText("Copy This Mac's Code"));
-    expect(await screen.findByText(/Copied this Mac's code/)).toBeInTheDocument();
+    render(<ShareWork id="x" name="Studio" />);
+    expect(screen.queryByText("Copy code for Studio")).toBeNull();
+    openIt();
+    expect(screen.getByText("Paste it in Weft on Studio so this Mac can pull Studio's uncommitted work.")).toBeInTheDocument();
+    expect(screen.getByText("Paste Studio's code so Studio can pull this Mac's uncommitted work.")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Copy code for Studio"));
+    expect(await screen.findByText("Copied.")).toBeInTheDocument();
     expect(b.code).toHaveBeenCalled();
     expect(writeText).toHaveBeenCalledWith("weft-mac1:abc");
   });
 
   it("says why copying failed", async () => {
     bridge({ code: vi.fn(() => Promise.reject(new Error("Error invoking remote method 'mac-pair:code': Error: no key"))) });
-    render(<MacPairing />);
-    fireEvent.click(screen.getByText("Copy This Mac's Code"));
+    render(<ShareWork id="x" name="Studio" />);
+    openIt();
+    fireEvent.click(screen.getByText("Copy code for Studio"));
     expect(await screen.findByText("no key")).toBeInTheDocument();
   });
 
-  it("pairs a pasted code, then clears the field", async () => {
+  it("allows a pasted code, then clears the field and shows the pin", async () => {
     const b = bridge();
-    render(<MacPairing />);
-    const pair = screen.getByText("Pair");
-    expect(pair).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Another Mac's code"), { target: { value: "weft-mac1:zzz" } });
-    fireEvent.click(pair);
-    expect(await screen.findByText("Studio can now ask this Mac for its uncommitted work.")).toBeInTheDocument();
-    expect(b.trust).toHaveBeenCalledWith("weft-mac1:zzz");
-    expect(screen.getByLabelText("Another Mac's code")).toHaveValue("");
+    render(<ShareWork id="x" name="Studio" />);
+    openIt();
+    const allow = screen.getByText("Allow");
+    expect(allow).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Studio's code"), { target: { value: "weft-mac1:zzz" } });
+    b.list.mockResolvedValue([{ id: "x", name: "Studio", pairedAt: "t" }]);
+    fireEvent.click(allow);
+    await waitFor(() => expect(b.trust).toHaveBeenCalledWith("weft-mac1:zzz"));
+    expect(await screen.findByText(/Studio can pull this Mac's work/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Studio's code")).toHaveValue("");
   });
 
   it("keeps the code when Touch ID is refused, and shows a refused code's reason", async () => {
     const b = bridge({ trust: vi.fn(() => Promise.resolve(null)) });
-    render(<MacPairing />);
-    const input = screen.getByLabelText("Another Mac's code");
+    render(<ShareWork id="x" name="Studio" />);
+    openIt();
+    const input = screen.getByLabelText("Studio's code");
     fireEvent.change(input, { target: { value: "c" } });
-    fireEvent.click(screen.getByText("Pair"));
+    fireEvent.click(screen.getByText("Allow"));
     await waitFor(() => expect(b.trust).toHaveBeenCalled());
     expect(input).toHaveValue("c");
     b.trust.mockRejectedValueOnce("That code names no Mac.");
-    fireEvent.click(screen.getByText("Pair"));
+    fireEvent.click(screen.getByText("Allow"));
     expect(await screen.findByText("That code names no Mac.")).toBeInTheDocument();
   });
 
-  it("survives a failing list", async () => {
+  it("shows a pin for this Mac's id only, and stops it", async () => {
+    const b = bridge({ list: vi.fn(() => Promise.resolve([{ id: "other", name: "Other", pairedAt: "t" }, { id: "x", name: "Studio", pairedAt: "t" }])) });
+    render(<ShareWork id="x" name="Studio" />);
+    fireEvent.click(await screen.findByLabelText("Stop Studio pulling this Mac's work"));
+    await waitFor(() => expect(b.forget).toHaveBeenCalledWith("x"));
+  });
+
+  it("shows no pin for an unpinned or id-less Mac, and survives a failing list", async () => {
     bridge({ list: vi.fn(() => Promise.reject(new Error("x"))) });
-    render(<MacPairing />);
-    expect(await screen.findByText("Your other Macs")).toBeInTheDocument();
+    render(<ShareWork id={null} name="Studio" />);
+    expect(await screen.findByText("Share work…")).toBeInTheDocument();
+    expect(screen.queryByText(/can pull this Mac's work/)).toBeNull();
   });
 });

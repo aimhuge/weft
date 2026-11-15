@@ -60,13 +60,19 @@ export const offlineMessage = (worker: string) => `${worker} is offline, so this
 
 // The local projects with the workers' beside them: a worker project with no cards yet gets a row of its own, and
 // each one says which worker it's on.
-export function withWorkerProjects(summaries: ProjectSummary[], projects: WorkerProject[]): ProjectSummary[] {
+export function withWorkerProjects(summaries: ProjectSummary[], projects: WorkerProject[], twins: ReadonlyMap<string, string> = new Map()): ProjectSummary[] {
   const byPath = new Map(projects.map((p) => [p.path, p]));
   const known = new Set(summaries.map((s) => s.path));
-  const empty = projects.filter((p) => !known.has(p.path)).map((p): ProjectSummary => ({ path: p.path, lastActivity: 0, cards: 0, running: 0, needsYou: 0 }));
+  const empty = projects.filter((p) => !known.has(p.path) && !twins.has(p.path)).map((p): ProjectSummary => ({ path: p.path, lastActivity: 0, cards: 0, running: 0, needsYou: 0 }));
+  // A merged worker project shows on its local twin's chip, as a line in the tooltip.
+  const alsoOn = new Map<string, ProjectWorker[]>();
+  for (const p of projects) {
+    const local = twins.get(p.path);
+    if (local) alsoOn.set(local, [...(alsoOn.get(local) ?? []), { name: p.worker, status: p.status }]);
+  }
   return [...summaries, ...empty].map((s) => {
     const p = byPath.get(s.path);
-    if (!p) return s;
+    if (!p) return alsoOn.has(s.path) ? { ...s, twins: alsoOn.get(s.path) } : s;
     return { ...s, worker: { name: p.worker, status: p.status }, ...(p.pinned ? { pinned: true } : {}), ...(p.hidden ? { hidden: true } : {}) };
   });
 }

@@ -102,6 +102,15 @@ describe("withWorkerProjects", () => {
     expect(out).toHaveLength(1);
     expect(out[0]).toMatchObject({ cards: 2, worker: { name: "m1mini", status: "online" } });
   });
+  it("folds a worker project into its local twin: no row of its own, the worker named on the local one", () => {
+    const wp = { path: "worker://w1/ling", workerId: "w1", worker: "m1mini", folder: "ling", status: "online" as const, pinned: true };
+    const twins = new Map([[wp.path, "/dev/ling"]]);
+    const out = withWorkerProjects([summary({ path: "/dev/ling", cards: 3 })], [wp], twins);
+    expect(out).toEqual([expect.objectContaining({ path: "/dev/ling", cards: 3, twins: [{ name: "m1mini", status: "online" }] })]);
+    expect(out[0]).not.toHaveProperty("pinned");
+    expect(withWorkerProjects([], [wp], twins)).toEqual([]);
+  });
+
 });
 
 describe("workerProjectMenu", () => {

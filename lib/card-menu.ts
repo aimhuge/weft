@@ -5,13 +5,15 @@ import { BACKENDS } from "./new-thread";
 
 // The right-click menus on the board, as plain data: the board builds them, the desktop shell
 // shows them natively (electron/main.cjs) and hands back the id of the item picked.
-// Everything is one click: no submenus.
+// A card's menu is one click per item; a project's groups each other machine's items in a submenu.
 
 // checked shows a tick (the card's current permission mode). accelerator is the item's key (an Electron
 // accelerator, e.g. "Shift+A"): drawn beside it, and pressing it while the menu is open picks the item.
 // detail is a dimmer second line on the item (Electron's sublabel), for the status a menu item carries.
 export type MenuItem =
   | { id: string; label: string; enabled?: boolean; checked?: boolean; accelerator?: string; detail?: string }
+  // A submenu: its own items, one level deep (electron/main-menu-popup.cjs). It has no id: only its items are picked.
+  | { label: string; submenu: MenuItem[]; enabled?: boolean; detail?: string }
   | { type: "separator" };
 
 export type CardAction =

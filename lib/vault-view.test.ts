@@ -183,7 +183,7 @@ describe("vault view", () => {
   });
 
   it("offers reveal and copy only for secrets with a value, and a copy to each other project", () => {
-    const ids = (items: ReturnType<typeof secretMenu>) => items.map((i) => ("id" in i ? i.id : i.type));
+    const ids = (items: ReturnType<typeof secretMenu>) => items.map((i) => ("id" in i ? i.id : "type" in i ? i.type : i.label));
     expect(secretMenu({ missing: true })).toEqual([{ id: "edit", label: "Fill In Value…" }, { type: "separator" }, { id: "remove", label: "Remove from Vault…" }]);
     expect(ids(secretMenu({ missing: false }))).toEqual(["reveal", "copy", "edit", "separator", "remove"]);
     const menu = secretMenu({ missing: false }, [{ folder: "/b", label: "o/b" }, { folder: "/c", label: "c" }]);

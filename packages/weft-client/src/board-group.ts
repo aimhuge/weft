@@ -42,6 +42,7 @@ export interface ProjectSummary {
   pinned?: boolean; // always a chip, ahead of the recent ones (the app's lib/project-menu.ts)
   hidden?: boolean; // no chip until it's used again; "More" still lists it
   worker?: ProjectWorker; // it lives on a Weft Worker, not on this Mac (the app's lib/worker-project.ts)
+  twins?: ProjectWorker[]; // the same repo on Weft Workers, folded into this chip (its tooltip says "Also on …")
   folders?: string[]; // folders added to it ("Add Folder…", lib/project-folders.ts)
 }
 

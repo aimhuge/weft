@@ -1,8 +1,8 @@
 "use client";
-// Settings → Devices → "Your other Macs": pairing two of your Macs so one can pull the other's uncommitted work
-// (docs/architecture/wip-sync.md#mac-to-mac). Copy this Mac's code on the Mac that will ask, paste it on the one that
-// will answer; main pins it after Touch ID (electron/mac-pair.cjs). Desktop only: in a browser tab there's no bridge,
-// so it draws nothing.
+// Settings → Devices, on another Mac's row: "Share work…" pairs two of your Macs so one can pull the other's uncommitted
+// work (docs/architecture/wip-sync.md#mac-to-mac). Copy THIS Mac's code and paste it in Weft on the other Mac (so this Mac
+// can pull from it); paste THAT Mac's code here (so it can pull from this one). Main pins a pasted code after Touch ID
+// (electron/mac-pair.cjs). Desktop only: in a browser tab there's no bridge, so it draws nothing.
 import { useCallback, useEffect, useState } from "react";
 
 type PairedMac = { id: string; name: string; pairedAt: string };
@@ -21,8 +21,10 @@ const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] t
 
 const said = (err: unknown) => (err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, "") : String(err));
 
-export function MacPairing() {
+// `id` is the other Mac's device id (its registry host); `name` is how the row calls it.
+export function ShareWork({ id, name }: { id: string | null; name: string }) {
   const [macs, setMacs] = useState<PairedMac[]>([]);
+  const [open, setOpen] = useState(false);
   const [code, setCode] = useState("");
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -33,17 +35,17 @@ export function MacPairing() {
   useEffect(reload, [reload]);
   if (!pair) return null;
 
+  const pinned = id ? macs.find((m) => m.id === id) : undefined;
   const copy = async () => {
     await navigator.clipboard.writeText(await pair.code());
-    setNote("Copied this Mac's code. Paste it here on your other Mac.");
+    setNote("Copied.");
   };
   const trust = async () => {
     setBusy(true);
     try {
-      const mac = await pair.trust(code);
-      if (mac) {
+      if (await pair.trust(code)) {
         setCode("");
-        setNote(`${mac.name} can now ask this Mac for its uncommitted work.`);
+        setNote(null);
         reload();
       }
     } catch (err) {
@@ -52,48 +54,53 @@ export function MacPairing() {
       setBusy(false);
     }
   };
-  const forget = async (mac: PairedMac) => {
-    await pair.forget(mac.id);
-    setNote(`${mac.name} can no longer ask this Mac for its work.`);
+  const stop = async () => {
+    if (pinned) await pair.forget(pinned.id);
     reload();
   };
 
   return (
-    <div className="mt-4 flex flex-col gap-2 border-t border-line pt-4">
-      <div className="text-[13px] text-ink">Your other Macs</div>
-      <p className={SUBTLE}>
-        To pull this Mac&apos;s uncommitted work from another Mac, copy that Mac&apos;s code and paste it here. This Mac then answers its requests,
-        each one approved with Touch ID over there. Nothing else is trusted.
-      </p>
-      <div className="flex flex-wrap items-center gap-2">
-        <button type="button" className={BUTTON} onClick={() => void copy().catch((err: unknown) => setNote(said(err)))}>
-          Copy This Mac&apos;s Code
-        </button>
-        <input
-          aria-label="Another Mac's code"
-          placeholder="Paste another Mac's code"
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          className="min-w-0 flex-1 rounded-md border border-line-strong bg-transparent px-2 py-1 font-mono text-[12px] text-ink"
-        />
-        <button type="button" className={BUTTON} disabled={!code.trim() || busy} onClick={() => void trust()}>
-          Pair
+    <div className="mt-1 flex w-full flex-col gap-1.5">
+      {pinned && (
+        <div className={SUBTLE}>
+          {name} can pull this Mac&apos;s work ·{" "}
+          <button type="button" className="text-ink underline-offset-2 hover:underline" onClick={() => void stop()} aria-label={`Stop ${name} pulling this Mac's work`}>
+            Stop
+          </button>
+        </div>
+      )}
+      <div>
+        <button type="button" className={BUTTON} aria-expanded={open} onClick={() => setOpen(!open)} aria-label={`Share work with ${name}`}>
+          Share work…
         </button>
       </div>
-      {note && <p className="text-[12.5px] text-ink">{note}</p>}
-      {macs.length > 0 && (
-        <ul className="flex flex-col gap-1">
-          {macs.map((m) => (
-            <li key={m.id} className="flex items-center justify-between gap-2">
-              <span className="truncate text-[13px] text-ink">
-                {m.name} <span className={SUBTLE}>· can ask for this Mac&apos;s work</span>
-              </span>
-              <button type="button" className={BUTTON} onClick={() => void forget(m)} aria-label={`Forget ${m.name}`}>
-                Forget
+      {open && (
+        <div className="flex flex-col gap-2 rounded-md border border-line p-3">
+          <div className="flex flex-col gap-1">
+            <div>
+              <button type="button" className={BUTTON} onClick={() => void copy().catch((err: unknown) => setNote(said(err)))}>
+                Copy code for {name}
               </button>
-            </li>
-          ))}
-        </ul>
+            </div>
+            <p className={SUBTLE}>Paste it in Weft on {name} so this Mac can pull {name}&apos;s uncommitted work.</p>
+          </div>
+          <div className="flex flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <input
+                aria-label={`${name}'s code`}
+                placeholder={`Paste ${name}'s code`}
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className="min-w-0 flex-1 rounded-md border border-line-strong bg-transparent px-2 py-1 font-mono text-[12px] text-ink"
+              />
+              <button type="button" className={BUTTON} disabled={!code.trim() || busy} onClick={() => void trust()}>
+                Allow
+              </button>
+            </div>
+            <p className={SUBTLE}>Paste {name}&apos;s code so {name} can pull this Mac&apos;s uncommitted work.</p>
+          </div>
+          {note && <p className="text-[12.5px] text-ink">{note}</p>}
+        </div>
       )}
     </div>
   );

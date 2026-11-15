@@ -54,11 +54,17 @@ describe("DevicesSettings", () => {
   it("lists every kind in one place with what each holds", async () => {
     render(<DevicesSettings />);
     expect(await screen.findByText("m1mini")).toBeInTheDocument();
-    expect(screen.getByText("Mac · reads sealed threads · this Mac · Online")).toBeInTheDocument();
-    expect(screen.getByText("Worker · paired · Seen 5m ago · Threads in the clear")).toBeInTheDocument();
-    expect(screen.getByText("Phone · approves with Face ID · Seen 5m ago")).toBeInTheDocument();
-    expect(screen.getByText("Phone · reads sealed threads · Never seen")).toBeInTheDocument();
-    expect(screen.getByText("Browser · reads sealed threads · Revoked 2h ago")).toBeInTheDocument();
+    expect(screen.getByText("Mac · this Mac · Online")).toBeInTheDocument();
+    expect(screen.getAllByText("can open your encrypted threads")).toHaveLength(2);
+    expect(screen.getByText("paired · Threads not encrypted")).toBeInTheDocument();
+    expect(screen.getByText("Worker · Seen 5m ago")).toBeInTheDocument();
+    expect(screen.getByText("Phone · Seen 5m ago")).toBeInTheDocument();
+    expect(screen.getByText("approves with Face ID")).toBeInTheDocument();
+    expect(screen.getByText("Phone · Never seen")).toBeInTheDocument();
+    // Revoked rows wait in a closed list at the bottom.
+    const revoked = screen.getByText("Revoked (1)").closest("details")!;
+    expect(revoked).not.toHaveAttribute("open");
+    expect(revoked).toHaveTextContent("Browser · Revoked 2h ago · can open your encrypted threads");
     expect(screen.queryByRole("button", { name: "Revoke Chrome" })).toBeNull();
     expect(screen.getByText("Browser runs without sandbox: it runs as root.")).toBeInTheDocument();
     expect(screen.queryByText("a revoked device's note stays off")).toBeNull();
@@ -69,8 +75,8 @@ describe("DevicesSettings", () => {
       ok({ signedIn: true, devices: [dev({ build: "0.7.0+15388b1ffff" }), dev({ id: "w1", kind: "worker", name: "m1mini", hasSignKey: true, here: false, build: "0.6.6+abc1234" })] }),
     );
     render(<DevicesSettings />);
-    expect(await screen.findByText("Mac · reads sealed threads · this Mac · Online · 0.7.0 (15388b1)")).toBeInTheDocument();
-    expect(screen.getByText("Worker · paired · Online · 0.6.6 (abc1234, older) · Threads in the clear")).toBeInTheDocument();
+    expect(await screen.findByText("Mac · this Mac · Online · 0.7.0 (15388b1)")).toBeInTheDocument();
+    expect(screen.getByText("Worker · Online · 0.6.6 (abc1234, older)")).toBeInTheDocument();
   });
 
   it("revokes a phone this Mac pinned through main, and anything else through the registry", async () => {
@@ -121,7 +127,7 @@ describe("DevicesSettings", () => {
     expect(group).toHaveTextContent("weft-worker forget");
     expect(group).toHaveTextContent("weft-worker restart");
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("group")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Forget m1mini?" })).toBeNull();
     expect(apiFetch).not.toHaveBeenCalledWith("/api/devices?id=w1", { method: "DELETE" });
     await userEvent.click(screen.getByRole("button", { name: "Forget m1mini" }));
     await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
@@ -249,5 +255,50 @@ describe("use-devices helpers", () => {
     await userEvent.click(screen.getByRole("button", { name: "go" }));
     expect(hosts.start).not.toHaveBeenCalled();
     unmount();
+  });
+});
+
+describe("DevicesSettings → one row per machine", () => {
+  const key = dev({ id: "k1", host: null, name: "Weft on m1mini.local", here: false, status: "offline", build: "0.8.3+abc1234" });
+  const hb = dev({ id: "h1", host: "h1", name: "m1mini", here: false, status: "online", build: "0.8.3+abc1234" });
+  const wk = dev({ id: "w9", kind: "worker", name: "m1mini-worker", host: "worker:w9", hasSignKey: true, here: false, status: "online" });
+  const show = (devices: DeviceView[]) => apiFetch.mockImplementation((url: string) => (url.includes("?id=") ? ok({ ok: true, kind: "worker" }) : ok({ signedIn: true, devices })));
+
+  it("folds a heartbeat row, a key row and a worker into one machine with labelled actions", async () => {
+    show([base, hb, key, wk].map((d) => (d.id === "w9" ? { ...d, name: "m1mini" } : d)));
+    render(<DevicesSettings />);
+    expect(await screen.findByText("Mac and worker · Online · 0.8.3 (abc1234)")).toBeInTheDocument();
+    expect(screen.getAllByText("m1mini")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Revoke m1mini" })).toHaveTextContent("Revoke app key");
+    expect(screen.getByRole("button", { name: "Forget m1mini" })).toHaveTextContent("Forget worker");
+    // The extra key row is a live row of its own, with its own Revoke.
+    expect(screen.getByRole("button", { name: "Revoke Weft on m1mini.local" })).toBeInTheDocument();
+  });
+
+  it("sends Revoke app key to the Mac row and nothing else", async () => {
+    show([base, hb, { ...wk, name: "m1mini" }]);
+    render(<DevicesSettings />);
+    await userEvent.click(await screen.findByRole("button", { name: "Revoke m1mini" }));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith("/api/devices?id=h1", { method: "DELETE" }));
+    expect(apiFetch).not.toHaveBeenCalledWith("/api/devices?id=w9", { method: "DELETE" });
+  });
+
+  it("opens the revoked list on demand", async () => {
+    show([base, dev({ id: "gone", kind: "phone", name: "Lost phone", revokedAt: "2026-11-02T10:00:00Z", here: false })]);
+    render(<DevicesSettings />);
+    await userEvent.click(await screen.findByText("Revoked (1)"));
+    expect(screen.getByText("Lost phone")).toBeVisible();
+  });
+});
+
+describe("DevicesSettings → Share work on another Mac's row", () => {
+  it("offers Share work… on a live Mac that isn't this one, never on this Mac", async () => {
+    const macPair = { code: vi.fn(), trust: vi.fn(), list: vi.fn(() => Promise.resolve([])), forget: vi.fn() };
+    (window as unknown as { weft: unknown }).weft = { pairing, hostPairing: hosts, macPair };
+    apiFetch.mockImplementation(() => ok({ signedIn: true, devices: [base, dev({ id: "m2", host: "h2", name: "Studio", here: false })] }));
+    render(<DevicesSettings />);
+    expect(await screen.findByLabelText("Share work with Studio")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Share work with MacBook")).toBeNull();
+    expect(screen.queryByText("Your other Macs")).toBeNull();
   });
 });

@@ -1163,12 +1163,12 @@ A worker's card can browse like a local one: it opens a site or the worker's own
 Paste a screenshot or a PDF into a worker card's reply, or into a new thread for a worker, and it goes along: the worker saves its own copy before the turn starts, so the thread can read it. Images and PDFs up to 25 MB travel; anything else says it can't go.
 A worker updates itself: when Weft has a new commit and no card is running there, it installs it, tests that it loads and restarts, and goes back on its own if the new code is bad. A push to main reaches it in seconds. Its row in Settings shows what it runs, which cards are holding an update, and **Update now** to ask by hand.
 **Send a run** queues a prompt in a project folder on the worker, and it clones the repo the first time. The card runs on the box with the same engine as your Mac and syncs back to the
-web board, where you can reply to it, answer it or stop it. Right-click a project chip and tick **Run on Worker**
+web board, where you can reply to it, answer it or stop it. A project that is on this Mac and on a worker is one chip, and its right-click menu has one group per other machine (**m1mini ▸** Bring Its Uncommitted Work Here, Keep in Sync with This Mac, Move weft There, Start New Threads There; docs/architecture/machines.md). In the paragraphs below, **Run on Worker**, **Pull Uncommitted Work**, **Keep in Sync with** and **Move to** are those items. Right-click a project chip and tick **Run on Worker**
 (or back to **Run on This Machine**): every new thread in that project then goes to your worker instead of starting
 here, and its card on this board records the prompt and which worker took it. When the same project is on this Mac
 and on a worker, its menu has **Pull Uncommitted Work from <worker>**: the worker sends what it hasn't committed and
 this Mac's checkout picks it up, or says why it won't (docs/architecture/wip-sync.md). Between two of your Macs it's
-**Pull Uncommitted Work from <Mac>**, once you've paired them in Settings → Devices → Your other Macs (copy one's code,
+**Pull Uncommitted Work from <Mac>**, once you've paired them in Settings → Devices → the other Mac's row → Share work… (copy one's code,
 paste it on the other); each pull asks Touch ID. Or tick **Keep in Sync with <worker>** (Touch ID once): the two
 checkouts then stay one folder while Weft is open, every change crossing the session line in a second or two, the side
 with threads running winning a clash and the other keeping its copy as `name.conflict-<machine>.ext`

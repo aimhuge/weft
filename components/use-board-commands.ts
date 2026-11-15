@@ -45,6 +45,7 @@ export interface BoardCommandsInput {
   archivedCount: number;
   showArchived: boolean;
   rootOf: (cwd: string) => string;
+  projectOf: (cwd: string) => string;
   // Restart when idle's state (lib/restart-when-idle.ts): armed means it waits for the running threads.
   restart: { armed?: boolean } | null;
   openNew: () => void;
@@ -138,7 +139,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
   function paletteItems(): PaletteItem[] {
     if (!c.dialogs.showPalette) return [];
     return boardPaletteItems(
-      { cards, selected: c.selected, projectSummaries: c.projectSummaries, home: c.home, doneToArchive: c.doneToArchive, lastArchived: c.lastArchived, archivedCount: c.archivedCount, showArchived: c.showArchived, rootOf: c.rootOf, restartArmed: Boolean(c.restart?.armed) },
+      { cards, selected: c.selected, projectSummaries: c.projectSummaries, home: c.home, doneToArchive: c.doneToArchive, lastArchived: c.lastArchived, archivedCount: c.archivedCount, showArchived: c.showArchived, rootOf: c.rootOf, projectOf: c.projectOf, restartArmed: Boolean(c.restart?.armed) },
       {
         openNew: c.openNew,
         focusFilter,
@@ -169,7 +170,7 @@ export function useBoardCommands(c: BoardCommandsInput) {
   // The prompts the user wrote that match a query, as palette items that open their card.
   async function findPrompts(query: string): Promise<PaletteItem[]> {
     const { hits } = await api.searchPrompts(query);
-    return promptItems([...hits, ...workerPromptHits(cards, query)], cards, c.rootOf, openCard);
+    return promptItems([...hits, ...workerPromptHits(cards, query)], cards, c.projectOf, openCard);
   }
 
   return { openPalette, paletteItems, findPrompts };

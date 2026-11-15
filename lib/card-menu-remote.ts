@@ -15,7 +15,7 @@ export interface SignedMenu {
   skip?: boolean;
 }
 
-const isSeparator = (item: MenuItem) => !("id" in item);
+const isSeparator = (item: MenuItem) => "type" in item;
 
 export function remoteMenu(items: MenuItem[], signed: SignedMenu = {}): MenuItem[] {
   const kept: MenuItem[] = [];

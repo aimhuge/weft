@@ -55,8 +55,8 @@ describe("a worker's sealing in Settings → Devices", () => {
     render(<DevicesSettings />);
     await userEvent.click(await screen.findByRole("button", { name: "Seal m1mini's threads" }));
     expect(hosts.grantKey).toHaveBeenCalledWith("w1");
-    expect(await screen.findByText("m1mini now holds key v3: it seals what it publishes from now on.")).toBeInTheDocument();
-    expect(await screen.findByText("Worker · paired · Seen 5m ago · Threads sealed (key v3)")).toBeInTheDocument();
+    expect(await screen.findByText("m1mini now holds key v3: it encrypts what it publishes from now on.")).toBeInTheDocument();
+    expect(await screen.findByText("paired · Threads encrypted (key v3)")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Seal m1mini's threads" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Forget m1mini" }));
     await userEvent.click(screen.getByRole("button", { name: "Forget now" }));
@@ -69,7 +69,7 @@ describe("a worker's sealing in Settings → Devices", () => {
     render(<DevicesSettings />);
     await userEvent.click(await screen.findByRole("button", { name: "Add a worker" }));
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
-    expect(await screen.findByText("Added box. box now holds key v3: it seals what it publishes from now on.")).toBeInTheDocument();
+    expect(await screen.findByText("Added box. box now holds key v3: it encrypts what it publishes from now on.")).toBeInTheDocument();
     expect(hosts.grantKey).toHaveBeenCalledWith("w2");
   });
 
@@ -80,7 +80,7 @@ describe("a worker's sealing in Settings → Devices", () => {
     render(<DevicesSettings />);
     await userEvent.click(await screen.findByRole("button", { name: "Add a worker" }));
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));
-    expect(await screen.findByText("Added box. Not sealed: Touch ID failed")).toBeInTheDocument();
+    expect(await screen.findByText("Added box. Not encrypted: Touch ID failed")).toBeInTheDocument();
     status = { sealOn: false, workers: {} };
     await userEvent.click(await screen.findByRole("button", { name: "Add a worker" }));
     await act(() => vi.advanceTimersByTimeAsync(POLL_MS));

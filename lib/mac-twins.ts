@@ -3,22 +3,12 @@
 // (lib/widen-signer.ts) over the project's name, its GitHub repo and the Mac's name, the same args the row carries.
 import { apiFetch } from "./api-client";
 import type { DevicesView } from "./device-registry";
-import { macSource } from "./mac-host-verbs-source";
 import { signWiden } from "./widen-signer";
 
-export interface MacTwin {
-  path: string;
-  name: string;
-  offline: boolean;
-}
-
-// Every other Mac of yours, as a menu twin for the project folder `name`. [] when signed out or the read fails: the
-// menu must open regardless.
-export async function otherMacs(name: string, read: () => Promise<DevicesView> = readDevices): Promise<MacTwin[]> {
-  const view = await read().catch(() => null);
-  return (view?.devices ?? [])
-    .filter((d) => d.kind === "mac" && !d.here && !d.revokedAt && d.host)
-    .map((d) => ({ path: macSource(d.host as string, name), name: d.name, offline: d.status !== "online" && d.status !== "busy" }));
+// Every device of yours, for a project menu's machine groups (lib/project-machines.ts). [] when signed out or the read
+// fails: the menu must open regardless.
+export async function myDevices(read: () => Promise<DevicesView> = readDevices): Promise<DevicesView["devices"]> {
+  return (await read().catch(() => null))?.devices ?? [];
 }
 
 async function readDevices(): Promise<DevicesView> {

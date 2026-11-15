@@ -10,11 +10,11 @@ describe("bridgesHere", () => {
 });
 
 describe("a worker's sealing, in words", () => {
-  it("says sealed only under the workspace's newest key, and what a Seal… did", () => {
-    expect(sealOutcome("m1mini", { denied: true })).toBe("Not sealed: m1mini keeps publishing in the clear.");
-    expect(sealOutcome("m1mini", {})).toBe("m1mini now holds key v0: it seals what it publishes from now on.");
+  it("says encrypted only under the workspace's newest key, and what a Seal… did", () => {
+    expect(sealOutcome("m1mini", { denied: true })).toBe("Not encrypted: m1mini keeps publishing in the clear.");
+    expect(sealOutcome("m1mini", {})).toBe("m1mini now holds key v0: it encrypts what it publishes from now on.");
     // A grant for an older version only is in the clear: a device revoked since may hold that key.
-    expect(sealLine({ sealOn: true, workers: { w1: { version: 2, latest: 3 } } }, "w1")).toEqual({ sealed: false, text: "Threads in the clear" });
+    expect(sealLine({ sealOn: true, workers: { w1: { version: 2, latest: 3 } } }, "w1")).toEqual({ sealed: false, text: "Threads not encrypted" });
     expect(sealLine(null, "w1").sealed).toBe(false);
   });
 });

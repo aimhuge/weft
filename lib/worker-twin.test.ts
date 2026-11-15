@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { twinByRepo, twinOf, twinsOf } from "./worker-twin";
+import { projectKeyOf, twinByRepo, twinMap, twinOf, twinsOf } from "./worker-twin";
 import { workerProjectPath } from "./worker-project";
 
 const project = workerProjectPath("w1", "Weft");
@@ -29,5 +29,31 @@ describe("twinByRepo", () => {
     expect(twinByRepo(project, vaults)).toBe("/b/code");
     expect(twinByRepo(workerProjectPath("w1", "nope"), vaults)).toBeNull();
     expect(twinByRepo(undefined, vaults)).toBeNull();
+  });
+});
+
+describe("twinMap", () => {
+  const w1 = workerProjectPath("w1", "Weft");
+  const w2 = workerProjectPath("w2", "ling");
+  it("maps a worker path to the one local folder of that name, ignoring case", () => {
+    expect(twinMap(["/dev/weft", "/dev/app"], [w1, w2])).toEqual(new Map([[w1, "/dev/weft"]]));
+  });
+  it("leaves a name unmerged when two local folders share it, and skips scratch and worker paths", () => {
+    expect(twinMap(["/a/weft", "/b/weft"], [w1]).size).toBe(0);
+    expect(twinMap(["/tmp/weft", w1], [w1]).size).toBe(0);
+    expect(twinMap(["/a/weft", "/tmp/weft"], [w1]).get(w1)).toBe("/a/weft");
+  });
+  it("ignores a non-worker path in the workers", () => {
+    expect(twinMap(["/dev/weft"], ["/dev/weft"]).size).toBe(0);
+  });
+});
+
+describe("projectKeyOf", () => {
+  it("maps a card's root through the twins, else the root itself", () => {
+    const w = workerProjectPath("w1", "weft");
+    const key = projectKeyOf(new Map([[w, "/dev/weft"]]), (c) => (c.startsWith("/dev/weft") ? "/dev/weft" : c));
+    expect(key(w)).toBe("/dev/weft");
+    expect(key("/dev/weft/.wt")).toBe("/dev/weft");
+    expect(key("/other")).toBe("/other");
   });
 });

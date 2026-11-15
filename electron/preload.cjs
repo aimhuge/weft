@@ -52,6 +52,8 @@ contextBridge.exposeInMainWorld("weft", {
   revealFolder: (folder) => ipcRenderer.send("shell:reveal", folder),
   openIn: (folder, target) => ipcRenderer.invoke("shell:openIn", folder, target),
   popupMenu: (items) => ipcRenderer.invoke("menu:popup", items),
+  // This shell draws a menu item's `submenu` (electron/main-menu-popup.cjs); an older one would drop it.
+  menuSubmenus: true,
   setBadge: (count) => ipcRenderer.send("badge:set", count),
   copilot: {
     toggle: () => ipcRenderer.send("copilot:toggle"),

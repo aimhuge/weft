@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipProjects, filterProjects, folderName, plural, shortPath, statusLabel } from "./project-bar";
+import { alsoOnLine, chipProjects, filterProjects, folderName, plural, shortPath, statusLabel } from "./project-bar";
 import type { ProjectSummary } from "./board-view";
 
 describe("folderName", () => {
@@ -101,5 +101,13 @@ describe("chipProjects", () => {
   it("adds a selected project past the recent count, or one not on the list at all", () => {
     expect(paths(chipProjects(rows, "/e", 2))).toEqual(["/c", "/a", "/e"]);
     expect(chipProjects(rows, "/new", 1).at(-1)).toEqual(row("/new"));
+  });
+});
+
+describe("alsoOnLine", () => {
+  it("names the workers a merged chip also runs on, and is empty otherwise", () => {
+    expect(alsoOnLine({ twins: [{ name: "m1mini", status: "online" }, { name: "box", status: "busy" }] })).toBe("\nAlso on m1mini, box");
+    expect(alsoOnLine({})).toBe("");
+    expect(alsoOnLine({ twins: [] })).toBe("");
   });
 });

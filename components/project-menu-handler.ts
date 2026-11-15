@@ -7,9 +7,12 @@ import { projectMenu, type ProjectAction } from "@/lib/project-menu";
 import { projectSyncLine } from "@/lib/sync-menu";
 import { hostOf } from "@/lib/project-host";
 import { parseMacSource } from "@/lib/mac-host-verbs-source";
-import { otherMacs, signMacAsk, type MacTwin } from "@/lib/mac-twins";
+import { myDevices, signMacAsk } from "@/lib/mac-twins";
+import { menuMachines } from "@/lib/project-machines";
+import type { MenuMachine } from "@/lib/project-menu";
 import { isMoveTree, moveToWorker, isTreeSync, syncedFolders, syncTwins, toggleTreeSync, type SyncTwin } from "@/lib/tree-sync-menu";
-import { parseWorkerProject, workerProjectMenu } from "@/lib/worker-project";
+import { isWorkerCard, workerProjectMenu, type WorkerProject } from "@/lib/worker-project";
+import { twinMap } from "@/lib/worker-twin";
 import { setWorkerMarks } from "@/lib/worker-project-marks";
 import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
 import type { ProjectSummary } from "@/lib/board-view";
@@ -20,8 +23,10 @@ import type { Card } from "@/lib/types";
 export interface ProjectMenuDeps {
   projects: ProjectSummary[];
   cards: Card[];
-  // A card's folder to its project (worktrees count toward their main repo).
-  rootOf: (cwd: string) => string;
+  // A card's project: worktrees count toward their main repo, a worker's twin toward the local project (lib/worker-twin.ts).
+  projectOf: (cwd: string) => string;
+  // The Weft Workers' projects: the twins of a local one are found here, since a merged one is no chip of its own.
+  workerProjects: WorkerProject[];
   openNew: (cwd?: string) => void;
   chooseProject: (path: string | null) => void;
   openDrawer: (panel: RailPanel) => void;
@@ -48,7 +53,7 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
     e.preventDefault();
     e.stopPropagation();
     const project = deps.projects.find((p) => p.path === path);
-    const mine = deps.cards.filter((c) => deps.rootOf(c.cwd) === path && !c.archived);
+    const mine = deps.cards.filter((c) => deps.projectOf(c.cwd) === path && !c.archived);
     const done = mine.filter((c) => c.column === "done");
     const live = mine.filter(isLive);
     const name = folderName(path);
@@ -66,14 +71,15 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
       // Keep the last known state.
     }
     const synced = folders.includes(path);
-    const workers = twinsOf(name, deps.projects);
-    const [onWorker, macs, liveSynced] = await Promise.all([
+    const workers = twinsOf(path, deps.workerProjects);
+    const [onWorker, devices, liveSynced] = await Promise.all([
       api.workerFolders().then((r) => r.folders.includes(path), () => false),
-      // Your other Macs answer only for a project they sync too, so a project this Mac doesn't sync lists none.
-      synced ? otherMacs(name) : Promise.resolve([] as MacTwin[]),
+      myDevices(),
       workers.length ? syncedFolders() : Promise.resolve([]),
     ]);
     const syncs = syncTwins(workers, liveSynced);
+    // One group per other machine, each with one way to pull (lib/project-machines.ts).
+    const machines = menuMachines({ name, synced, devices, workerTwins: workers, syncTwins: syncs, onWorker });
     const menu = projectMenu(name, {
       pinned: Boolean(project?.pinned),
       hidden: Boolean(project?.hidden),
@@ -85,13 +91,13 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
       syncStatus: projectSyncLine(path, status, folders, Date.now()).text,
       onWorker,
       folders: project?.folders,
-      twins: [...workers, ...macs],
-      syncTwins: syncs,
+      machines,
+      submenus: "menuSubmenus" in shell,
     });
     const picked = (await shell.popupMenu(menu)) as ProjectAction | null;
     if (!picked) return false;
     const actions = projectActions(path, name, { ...deps, shell, done, live, syncFolders: folders, syncStatus: status });
-    const run = twinAction(picked, { path, name, deps, macs, syncs }) ?? actions[picked as keyof typeof actions];
+    const run = twinAction(picked, { path, name, deps, machines, syncs }) ?? actions[picked as keyof typeof actions];
     if (!run) return false;
     Promise.resolve(run()).catch(deps.notify);
     return true;
@@ -138,14 +144,15 @@ async function removeFolder(path: string, name: string, folder: string, deps: Pr
 
 // The Weft Workers' projects with this one's folder name: the same repo on another machine (lib/worker-handoff.ts sends
 // a project there under its folder's name).
-function twinsOf(name: string, projects: ProjectSummary[]) {
-  return projects.flatMap((p) => (p.worker && parseWorkerProject(p.path)?.folder === name ? [{ path: p.path, name: p.worker.name, offline: p.worker.status === "offline" }] : []));
+function twinsOf(path: string, workers: readonly WorkerProject[]) {
+  const twins = twinMap([path], workers.map((w) => w.path));
+  return workers.flatMap((w) => (twins.has(w.path) ? [{ path: w.path, name: w.worker, offline: w.status === "offline" }] : []));
 }
 
 // The items named by a folder or a twin: Remove <folder>, Pull Uncommitted Work from…, Keep in Sync with…, Move to….
-function twinAction(picked: ProjectAction, c: { path: string; name: string; deps: ProjectMenuDeps; macs: MacTwin[]; syncs: SyncTwin[] }): (() => unknown) | null {
+function twinAction(picked: ProjectAction, c: { path: string; name: string; deps: ProjectMenuDeps; machines: MenuMachine[]; syncs: SyncTwin[] }): (() => unknown) | null {
   if (isRemoveFolder(picked)) return () => removeFolder(c.path, c.name, picked.slice("remove-folder:".length), c.deps);
-  if (isPullWip(picked)) return () => pullWip(c.path, picked.slice("pull-wip:".length), c.deps, c.macs);
+  if (isPullWip(picked)) return () => pullWip(c.path, picked.slice("pull-wip:".length), c.deps, c.machines);
   if (isTreeSync(picked)) return () => toggleSync(c.syncs, picked.slice("sync-tree:".length), c.deps);
   if (isMoveTree(picked)) return () => moveTo(c.path, c.syncs, picked.slice("move-tree:".length), c.deps);
   return null;
@@ -170,7 +177,7 @@ const isPullWip = (id: ProjectAction): id is `pull-wip:${string}` => id.startsWi
 
 // "Pull Uncommitted Work from <worker>": the worker snapshots and pushes on request, this Mac checks it out (lib/wip-pull.ts).
 // Another Mac's needs your Touch ID first, over its name and this project's GitHub repo (lib/mac-twins.ts).
-async function pullWip(path: string, from: string, deps: ProjectMenuDeps, macs: MacTwin[]) {
+async function pullWip(path: string, from: string, deps: ProjectMenuDeps, machines: MenuMachine[]) {
   const mac = parseMacSource(from);
   let ask: Awaited<ReturnType<typeof signMacAsk>> | undefined;
   if (mac) {
@@ -179,7 +186,7 @@ async function pullWip(path: string, from: string, deps: ProjectMenuDeps, macs: 
       deps.toast(`${folderName(path)} has no GitHub remote to meet your other Mac on.`);
       return;
     }
-    ask = await signMacAsk(mac.device, mac.folder, origin, macs.find((m) => m.path === from)?.name ?? "your other Mac");
+    ask = await signMacAsk(mac.device, mac.folder, origin, machines.find((m) => m.pull === from)?.name ?? "your other Mac");
   }
   deps.toast("Asking for its uncommitted work…");
   deps.toast((await api.pullWip(path, from, ask)).note);
@@ -246,7 +253,7 @@ function projectActions(path: string, name: string, c: ActionContext): Record<Ex
     "add-folder": () => addFolder(path, name, c),
     "archive-done": () => c.archive(c.done),
     "stop-running": async () => {
-      await Promise.all(c.live.map((card) => stopNow(card.id)));
+      await Promise.all(c.live.map((card) => (isWorkerCard(card) ? stopNow(card.id, () => hostOf(card).act("card.stop", { id: card.id })) : stopNow(card.id))));
       c.toast(`Stopped ${c.live.length === 1 ? "1 card" : `${c.live.length} cards`} in ${name}.`);
     },
   };

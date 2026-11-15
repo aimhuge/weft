@@ -73,34 +73,54 @@ describe("projectMenu", () => {
   it("offers Add Folder…, and a Remove item for each folder already added", () => {
     expect(item("add-folder")).toEqual({ id: "add-folder", label: "Add Folder…", accelerator: "O" });
     expect(item("remove-folder:/Users/me/api", { folders: ["/Users/me/api"] })).toEqual({ id: "remove-folder:/Users/me/api", label: "Remove api", detail: "/Users/me/api" });
+    expect(item("remove-folder:/", { folders: ["/"] })).toMatchObject({ label: "Remove /" });
+  });
+});
+
+describe("projectMenu, other machines", () => {
+  const mini = { name: "m1mini", offline: false, pull: "worker://w/weft", sync: { path: "worker://w/weft", on: true }, runThere: false };
+  const air = { name: "MacBook-Air-3", offline: true, pull: "mac:abcdef0123/weft" };
+  const menu = (s: Partial<ProjectMenuState>) => projectMenu("weft", { ...base, ...s });
+
+  it("groups each machine's items in a submenu, and its tick replaces the two Run on items", () => {
+    const items = menu({ machines: [mini, air], submenus: true });
+    expect(items.flatMap((i) => ("id" in i ? [i.id] : []))).not.toContain("run-here");
+    const groups = items.filter((i) => "submenu" in i);
+    expect(groups).toEqual([
+      {
+        label: "m1mini",
+        submenu: [
+          { id: "pull-wip:worker://w/weft", label: "Bring Its Uncommitted Work Here", enabled: true },
+          { id: "sync-tree:worker://w/weft", label: "Keep in Sync with This Mac", checked: true },
+          { id: "move-tree:worker://w/weft", label: "Move weft There", enabled: true, detail: "Sends this Mac's work, then new threads start there" },
+          { type: "separator" },
+          { id: "run-worker", label: "Start New Threads There", checked: false },
+        ],
+      },
+      { label: "MacBook-Air-3", detail: "offline", submenu: [{ id: "pull-wip:mac:abcdef0123/weft", label: "Bring Its Uncommitted Work Here", enabled: false }] },
+    ]);
   });
 
-  it("offers a pull from each worker that holds the project too, greyed out while it's offline", () => {
-    const twins = [
-      { path: "worker://w1/weft", name: "m1mini", offline: false },
-      { path: "worker://w2/weft", name: "vps", offline: true },
-    ];
-    expect(item("pull-wip:worker://w1/weft", { twins })).toEqual({ id: "pull-wip:worker://w1/weft", label: "Pull Uncommitted Work from m1mini", enabled: true });
-    expect(item("pull-wip:worker://w2/weft", { twins })).toEqual({ id: "pull-wip:worker://w2/weft", label: "Pull Uncommitted Work from vps", enabled: false, detail: "offline" });
-    expect(item("pull-wip:worker://w1/weft")).toBeUndefined();
+  it("a ticked machine sends new threads back here when picked", () => {
+    const [group] = menu({ machines: [{ name: "m1mini", offline: false, runThere: true }], submenus: true, onWorker: true }).filter((i) => "submenu" in i);
+    expect(group).toEqual({ label: "m1mini", submenu: [{ id: "run-here", label: "Start New Threads There", checked: true }] });
   });
 
-  it("offers Keep in Sync with each worker twin, checked when it syncs, and says when it's offline", () => {
-    const syncTwins = [
-      { path: "worker://w1/weft", name: "m1mini", offline: false, on: true },
-      { path: "worker://w2/weft", name: "vps", offline: true, on: false },
-    ];
-    expect(item("sync-tree:worker://w1/weft", { syncTwins })).toEqual({ id: "sync-tree:worker://w1/weft", label: "Keep in Sync with m1mini", checked: true });
-    expect(item("sync-tree:worker://w2/weft", { syncTwins })).toEqual({ id: "sync-tree:worker://w2/weft", label: "Keep in Sync with vps", checked: false, detail: "offline" });
-    expect(item("sync-tree:worker://w1/weft")).toBeUndefined();
+  it("keeps the plain Run on items when no machine takes new threads", () => {
+    expect(ids({ machines: [air], submenus: true })).toEqual(expect.arrayContaining(["run-here", "run-worker"]));
   });
 
-  it("offers Move to each worker twin, off while it's offline", () => {
-    const syncTwins = [
-      { path: "worker://w1/weft", name: "m1mini", offline: false, on: false },
-      { path: "worker://w2/weft", name: "vps", offline: true, on: false },
-    ];
-    expect(item("move-tree:worker://w1/weft", { syncTwins })).toEqual({ id: "move-tree:worker://w1/weft", label: "Move to m1mini", enabled: true });
-    expect(item("move-tree:worker://w2/weft", { syncTwins })).toEqual({ id: "move-tree:worker://w2/weft", label: "Move to vps", enabled: false, detail: "offline" });
+  it("on a shell without submenus, names the machine as a heading and in each item", () => {
+    const items = menu({ machines: [mini], submenus: false });
+    const at = items.findIndex((i) => "id" in i && i.id === "machine:m1mini");
+    expect(items.slice(at, at + 6)).toEqual([
+      { id: "machine:m1mini", label: "m1mini", enabled: false },
+      { id: "pull-wip:worker://w/weft", label: "Bring m1mini's Uncommitted Work Here", enabled: true },
+      { id: "sync-tree:worker://w/weft", label: "Keep in Sync with m1mini", checked: true },
+      { id: "move-tree:worker://w/weft", label: "Move weft to m1mini", enabled: true, detail: "Sends this Mac's work, then new threads start there" },
+      { type: "separator" },
+      // Top-level items keep their keys.
+      { id: "run-worker", label: "Start New Threads on m1mini", checked: false, accelerator: "W" },
+    ]);
   });
 });

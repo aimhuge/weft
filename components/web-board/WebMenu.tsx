@@ -112,9 +112,9 @@ function WebMenu({ items, x, y, pick }: Open) {
             </span>
             {item.accelerator && <span className="shrink-0 pl-3 text-[11px] opacity-60">{item.accelerator}</span>}
           </button>
-        ) : (
+        ) : "type" in item ? (
           <div key={`sep-${i}`} role="separator" className="my-1 border-t border-line" />
-        ),
+        ) : null,
       )}
     </div>
   );

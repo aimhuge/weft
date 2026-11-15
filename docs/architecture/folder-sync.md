@@ -1,5 +1,9 @@
 # Synced folders over the session line
 
+> The menu items named here now sit in a group per machine ([machines.md](machines.md)): Pull Uncommitted Work is
+> **Bring Its Uncommitted Work Here**, Keep in Sync with <worker> is **Keep in Sync with This Mac**, Move to <worker> is
+> **Move <project> There**.
+
 Status: **first version built** (2026-11-14), this Mac ↔ a Weft Worker. The same project often lives on both: `weft` on
 this Mac and `weft` on the worker. "Pull Uncommitted Work" ([wip-sync.md](wip-sync.md)) moves the work once, when you
 ask, through the git remote. A synced folder keeps the two checkouts as one folder instead: a change on either side

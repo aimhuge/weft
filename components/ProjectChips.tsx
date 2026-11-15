@@ -3,7 +3,7 @@
 // in view. Right-clicking a chip opens its menu (components/project-menu-handler.ts).
 import { useUiText } from "@/lib/ui-language";
 import { type RefObject } from "react";
-import { chipProjects, folderName, shortPath, statusLabel } from "@/lib/project-bar";
+import { alsoOnLine, chipProjects, folderName, shortPath, statusLabel } from "@/lib/project-bar";
 import { parseWorkerProject, workerLabel } from "@/lib/worker-project";
 import { routeLabel, useWorkerRoutes } from "@/lib/worker-route";
 import Icon from "./Icon";
@@ -64,7 +64,7 @@ export default function ProjectChips({
             onClick={() => onSelect(project.path)}
             onContextMenu={onProjectMenu && ((e) => onProjectMenu(project.path, e))}
             aria-pressed={on}
-            title={`${project.worker ? workerLabel(project.worker, routeLabel(routes.get(parseWorkerProject(project.path)?.workerId ?? ""))) : shortPath(project.path, home)}${stepHint}`}
+            title={`${project.worker ? workerLabel(project.worker, routeLabel(routes.get(parseWorkerProject(project.path)?.workerId ?? ""))) : shortPath(project.path, home)}${alsoOnLine(project)}${stepHint}`}
             className={`${CHIP} ${on ? CHIP_ON : CHIP_OFF} ${project.worker?.status === "offline" ? "opacity-60" : ""}`}
           >
             <ProjectStatusDot project={project} />

@@ -24,6 +24,8 @@ export interface PaletteState {
   archivedCount: number;
   showArchived: boolean;
   rootOf: (cwd: string) => string;
+  // A card's project, where a worker's twin folds into the local one (lib/worker-twin.ts); `rootOf` is the folder to act on.
+  projectOf: (cwd: string) => string;
   // A restart is waiting for the running threads (lib/restart-when-idle.ts).
   restartArmed?: boolean;
 }
@@ -162,7 +164,7 @@ export function boardPaletteItems(s: PaletteState, a: PaletteActions): PaletteIt
     label: card.title,
     project: folderName(card.cwd),
     column: card.column,
-    root: s.rootOf(card.cwd),
+    root: s.projectOf(card.cwd),
     // The id too, so a card named by its short id ("42c9805c") in another card's reply is found by it.
     keywords: [card.id, card.prompt, card.stage, card.remaining, folderName(card.cwd)].filter(Boolean).join(" "),
     mentions: card.lastLine,

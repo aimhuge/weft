@@ -6,20 +6,26 @@ function createMenuPopup({ ipcMain, Menu, BrowserWindow }) {
   ipcMain.handle("menu:popup", (e, items) =>
     new Promise((resolve) => {
       let picked = null;
-      const template = (Array.isArray(items) ? items : []).map((item) =>
-        item.type === "separator"
-          ? { type: "separator" }
-          : {
-              label: String(item.label),
-              enabled: item.enabled !== false,
-              ...(typeof item.checked === "boolean" ? { type: "checkbox", checked: item.checked } : {}),
-              // A dimmer second line on the item (Electron's sublabel), for the status it carries.
-              ...(item.detail ? { sublabel: String(item.detail) } : {}),
-              // Drawn beside the item, and live while the menu is open (a popup's keys go away with it).
-              ...(item.accelerator ? { accelerator: String(item.accelerator) } : {}),
-              click: () => (picked = String(item.id)),
-            },
-      );
+      // One item of the template. A submenu holds items of its own (one level is all the board builds); picking
+      // any of them resolves the same way.
+      const toItem = (item) => {
+        if (item.type === "separator") return { type: "separator" };
+        const base = {
+          label: String(item.label),
+          enabled: item.enabled !== false,
+          // A dimmer second line on the item (Electron's sublabel), for the status it carries.
+          ...(item.detail ? { sublabel: String(item.detail) } : {}),
+        };
+        if (Array.isArray(item.submenu)) return { ...base, submenu: item.submenu.map(toItem) };
+        return {
+          ...base,
+          ...(typeof item.checked === "boolean" ? { type: "checkbox", checked: item.checked } : {}),
+          // Drawn beside the item, and live while the menu is open (a popup's keys go away with it).
+          ...(item.accelerator ? { accelerator: String(item.accelerator) } : {}),
+          click: () => (picked = String(item.id)),
+        };
+      };
+      const template = (Array.isArray(items) ? items : []).map(toItem);
       Menu.buildFromTemplate(template).popup({
         window: BrowserWindow.fromWebContents(e.sender) ?? undefined,
         callback: () => setTimeout(() => resolve(picked), 0),

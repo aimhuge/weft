@@ -67,6 +67,7 @@ function input(over: Partial<BoardCommandsInput> = {}): BoardCommandsInput {
     archivedCount: 2,
     showArchived: false,
     rootOf: (cwd) => cwd,
+    projectOf: (cwd) => cwd,
     restart: { armed: true },
     openNew: vi.fn(),
     openCard: vi.fn(),
@@ -218,6 +219,6 @@ describe("palette", () => {
     const { c, result } = run();
     await expect(result.findPrompts("login")).resolves.toEqual([{ id: "p" }]);
     expect(m.searchPrompts).toHaveBeenCalledWith("login");
-    expect(m.promptItems).toHaveBeenCalledWith(["h"], c.cards, c.rootOf, c.openCard);
+    expect(m.promptItems).toHaveBeenCalledWith(["h"], c.cards, c.projectOf, c.openCard);
   });
 });

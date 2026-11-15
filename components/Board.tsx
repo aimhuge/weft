@@ -8,12 +8,8 @@ import { useShortcutHint } from "@/lib/hotkeys";
 import { preloadChimes } from "@/lib/chimes";
 import { useWorkspaceLayout } from "@/lib/use-workspace-layout";
 import { onOpenFile } from "@/lib/open-file";
-import {
-  groupByColumn,
-  hitPlanLimit,
-  latestLimits,
-  summarizeProjects,
-} from "@/lib/board-view";
+import { hitPlanLimit, latestLimits } from "@/lib/board-view";
+import { useProjectTwins } from "@/lib/use-project-twins";
 import { useBoardLive } from "@/lib/board-live";
 import { useProjectRoots } from "@/lib/use-project-roots";
 import { useBoardDialogs } from "@/lib/use-board-dialogs";
@@ -43,7 +39,7 @@ import { useEscapeTogglesView } from "@/lib/use-escape-view";
 import { useViewHint } from "@/lib/use-view-hint";
 import { guarded } from "./guarded";
 import { useBoardCommands } from "./use-board-commands";
-import { filterCards, railPinned, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
+import { railPinned, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
 import { TagColors } from "./TagPill";
 import { useTagCatalog } from "./use-tag-catalog";
 import { useBoardMenus } from "./use-board-menus";
@@ -52,7 +48,7 @@ import { useSwitchAll } from "./switch-all-button";
 import { folderName } from "./ProjectBar";
 import { CLOSED_BROWSER, showPage } from "@/lib/board-helpers";
 import { openWorkerThread, useBoardWorkers } from "@/lib/use-worker-board";
-import { localPath, withWorkerProjects } from "@/lib/worker-project";
+import { localPath } from "@/lib/worker-project";
 import { projectFolders } from "@/lib/board-folders";
 import { useTerminalDrawer } from "@/lib/use-terminal-drawer";
 import { useWorkerNotices } from "@/lib/card-notice";
@@ -149,7 +145,13 @@ export default function Board() {
   // Drag/drop, tag, and the "skip my own move's chime" ref (used by useBoardEvents below).
   const { ownMoves, move, drop, reorder, tagCard } = useBoardCardActions({ cards, remote: workers.cards, setCards, setDragOver, notify });
   // Project filter and sort, persisted to a cookie; the card filter clears when the project changes.
-  const { project, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
+  const { project: selectedProject, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
+  // One chip per project: a worker's checkout folds into its local twin (lib/use-project-twins.ts).
+  const { projectOf, project, summaries: projectSummaries, byColumn, archivedCount } = useProjectTwins({
+    selected: selectedProject, projects, cards: boardCards, workerProjects: workers.projects, rootOf, railFilter,
+    view: { query, sort, showArchived, reviewFilter },
+  });
+
   // The board's layout: cards in columns or in one list (lib/use-view-mode.ts).
   const { mode: viewMode, choose: chooseView } = useViewMode();
   // Simple mode's three piles draw the board as a sidebar list instead (components/BoardSidebar.tsx).
@@ -199,11 +201,6 @@ export default function Board() {
   const { filtering, view } = filterState(project, query, railFilter);
   const expandedColumns = expanded.view === view ? expanded.columns : [];
 
-  const byColumn = useMemo(
-    () => groupByColumn(filterCards(boardCards, railFilter), { project, query, sort, showArchived, reviewFilter }, rootOf),
-    [boardCards, railFilter, project, query, sort, showArchived, reviewFilter, rootOf],
-  );
-  const archivedCount = boardCards.filter((c) => c.archived && (!project || rootOf(c.cwd) === project)).length;
   // The Done cards on screen that Shift+E and "Archive all" file away.
   const doneToArchive = (byColumn.get("done") ?? []).filter((c) => !c.archived && c.column === "done");
   const { resume, all: resumeAll } = resumeActions(byColumn.get("review") ?? [], notify);
@@ -213,7 +210,6 @@ export default function Board() {
     (c) => c.id !== "backlog" || backlogOn || boardCards.some((card) => card.column === "backlog" && !card.archived),
   );
 
-  const projectSummaries = useMemo(() => withWorkerProjects(summarizeProjects(projects, boardCards, rootOf), workers.projects), [projects, boardCards, rootOf, workers.projects]);
   const localProject = localPath(project);
 
   // The 🔐 drawer's vaults: every project's on the board, so you can add secrets to any of them and copy
@@ -241,7 +237,7 @@ export default function Board() {
   const { openPalette, paletteItems, findPrompts } = useBoardCommands({
     cards: boardCards, selected, selectedId, lastOpenId, projectSummaries, project, sort, home, columns: visibleColumns, query, boardKeys,
     dialogs: { showNew, showSettings, showHelp, showPalette, login },
-    doneToArchive, lastArchived, archivedCount, showArchived, rootOf, restart: restartView.restart,
+    doneToArchive, lastArchived, archivedCount, showArchived, rootOf, projectOf, restart: restartView.restart,
     openNew: () => openNew(), openCard, select, toggleCopilot, toggleBrowser, toggleTerminal: terminal.toggle, toggleColumn: workspace.toggle,
     setShowPalette, setPaletteQuery, setShowHelp, setShowSettings, setSharingBoard, setLibraryOpen, setShowArchived,
     archiveTarget, archiveCards, unarchive, toggleArchive, chooseSort, chooseProject, move, notify, toast: setToast,
@@ -294,7 +290,7 @@ export default function Board() {
     notify,
   });
   const onProjectMenu = projectMenuHandler({
-    projects: projectSummaries, cards: boardCards, rootOf, openNew, chooseProject, openDrawer: setLibraryOpen, archive: archiveCards, toast: setToast, notify,
+    projects: projectSummaries, cards: boardCards, projectOf, workerProjects: workers.projects, openNew, chooseProject, openDrawer: setLibraryOpen, archive: archiveCards, toast: setToast, notify,
     syncFolders: sync.folders, syncStatus: sync.status, readSync: sync.read, shareBoard: () => setSharingBoard(true),
   });
   const onTag = (tag: string) => setRailFilter((f) => toggleTag(f, tag));

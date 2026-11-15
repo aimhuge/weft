@@ -46,3 +46,6 @@ export function chipProjects(projects: ProjectSummary[], selected: string | null
   const extra = projects.find((p) => p.path === selected) ?? { path: selected, lastActivity: 0, cards: 0, running: 0, needsYou: 0 };
   return [...chips, extra];
 }
+
+// A merged chip's tooltip line naming the workers that run the same project too ("\nAlso on m1mini").
+export const alsoOnLine = (p: Pick<ProjectSummary, "twins">) => (p.twins?.length ? `\nAlso on ${p.twins.map((t) => t.name).join(", ")}` : "");

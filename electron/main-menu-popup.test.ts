@@ -69,4 +69,21 @@ describe("createMenuPopup", () => {
     await new Promise((r) => setTimeout(r, 5));
     await expect(promise).resolves.toBeNull();
   });
+  it("draws a submenu, and picking one of its items resolves to that item's id", async () => {
+    const { handler } = makeHandler();
+    const promise = handler({ sender: "wc" }, [
+      { label: "m1mini", detail: "offline", submenu: [{ id: "pull-wip:x", label: "Bring Its Work Here" }, { type: "separator" }, { id: "run-on:w", label: "Start New Threads There", checked: true }] },
+    ]);
+    const template = buildFromTemplate.mock.calls[0]?.[0] as { label: string; sublabel?: string; click?: unknown; submenu: { label?: string; type?: string; checked?: boolean; click?: () => void }[] }[];
+    const group = template[0];
+    if (!group) throw new Error("no submenu item");
+    expect(group).toMatchObject({ label: "m1mini", sublabel: "offline", enabled: true });
+    // The group itself is never picked: only its items carry a click.
+    expect(group.click).toBeUndefined();
+    expect(group.submenu[1]).toEqual({ type: "separator" });
+    expect(group.submenu[2]).toMatchObject({ type: "checkbox", checked: true });
+    group.submenu[0]?.click?.();
+    (popup.mock.calls[0]?.[0] as { callback: () => void }).callback();
+    expect(await promise).toBe("pull-wip:x");
+  });
 });
