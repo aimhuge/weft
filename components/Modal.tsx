@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useId, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useId, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { coverIntros } from "@/lib/intro-cover";
 import { NO_DRAG } from "@/lib/no-drag";
@@ -21,6 +21,15 @@ const PLACEMENT = {
 // "front" is above all of it, for the achievement popup, which can arrive (and start talking) at any
 // moment. Only confetti and tooltips go higher.
 const LAYER = { normal: "z-50", top: "z-[90]", palette: "z-[92]", front: "z-[94]" };
+type Layer = keyof typeof LAYER;
+const Z: Record<Layer, number> = { normal: 50, top: 90, palette: 92, front: 94 };
+
+// Where the dialog this one was opened from stacks. A dialog never stacks under the one that opened it:
+// Settings is on "top", and the vault's Share… dialog (a plain one) opened from Settings → Secrets used to
+// come up at z-50, under Settings' backdrop, so the button looked dead. It takes the opener's layer when
+// that is the higher one, and one step above it, so the order of the two hosts on the body (which
+// StrictMode's double-mount can swap) doesn't decide who is on top.
+const OpenedFrom = createContext<{ layer: Layer; z: number } | null>(null);
 
 // The chrome every dialog shares: a dimmed backdrop over the whole window, a panel, a header with the
 // title and a close button, and Escape. Escape always closes the newest dialog; so does a click on the
@@ -44,15 +53,16 @@ const LAYER = { normal: "z-50", top: "z-[90]", palette: "z-[92]", front: "z-[94]
 // The host is made in a lazy initializer, but StrictMode runs an initializer twice on the same mount,
 // and its double-mount also runs the cleanup, which takes the host off the body. The second call must
 // therefore find the first call's host and put it back: a portal into a detached node draws nothing,
-// which is why Settings (a dialog) would not open. The host is left marked as waiting for its twin;
-// a host still waiting when the turn ends was not claimed, so it is forgotten rather than adopted by a
-// later dialog.
-const WAITING = "weftModalWaiting";
+// which is why Settings (a dialog) would not open. The host is left marked as waiting for its twin,
+// under the dialog's own id: without StrictMode there is no twin, and a dialog opened from this one in
+// the same render (Settings arriving with Share… already up) must not take its host for one, or closing
+// it would take Settings off the page too. A host still waiting when the turn ends was not claimed.
+const WAITING = "data-weft-modal-waiting";
 
-function makeHost(): HTMLElement {
-  const waiting = document.querySelector<HTMLElement>(`[data-${WAITING}]`);
+function makeHost(id: string): HTMLElement {
+  const waiting = [...document.querySelectorAll<HTMLElement>(`[${WAITING}]`)].find((el) => el.getAttribute(WAITING) === id);
   if (waiting) {
-    waiting.removeAttribute(`data-${WAITING}`);
+    waiting.removeAttribute(WAITING);
     // The strict-mode cleanup took it off the body; the portal needs it back.
     if (!waiting.isConnected) document.body.appendChild(waiting);
     return waiting;
@@ -63,10 +73,38 @@ function makeHost(): HTMLElement {
   return made;
 }
 
-function offerHost(made: HTMLElement) {
-  made.setAttribute(`data-${WAITING}`, "");
+function offerHost(made: HTMLElement, id: string) {
+  made.setAttribute(WAITING, id);
   // The second StrictMode call comes before the turn ends; a host still waiting then was not claimed.
-  queueMicrotask(() => made.removeAttribute(`data-${WAITING}`));
+  queueMicrotask(() => made.removeAttribute(WAITING));
+}
+
+// The host this dialog draws into: a div of its own on the body (see the note above). The initializer
+// leaves the host it made waiting, so the second call under StrictMode takes that same host rather than
+// making a second one.
+function useHost(id: string): HTMLElement {
+  const [host] = useState(() => {
+    const made = makeHost(id);
+    offerHost(made, id);
+    return made;
+  });
+  // StrictMode's double-mount runs this cleanup between the two mounts, which takes the host off the
+  // body; the second mount puts it back. A portal into a detached node draws nothing, which is why
+  // the dialog would not open.
+  useEffect(() => {
+    if (!host.isConnected) document.body.appendChild(host);
+    return () => host.remove();
+  }, [host]);
+  return host;
+}
+
+// Where this dialog stacks: its own layer, or its opener's when that is higher, and a step above the opener.
+function useStacking(layer: Layer): { at: Layer; z: number; style: CSSProperties } {
+  const opener = useContext(OpenedFrom);
+  if (!opener) return { at: layer, z: Z[layer], style: NO_DRAG };
+  const at = Z[opener.layer] > Z[layer] ? opener.layer : layer;
+  const z = Math.max(Z[at], opener.z + 1);
+  return { at, z, style: { ...NO_DRAG, zIndex: z } };
 }
 
 export default function Modal({
@@ -86,7 +124,7 @@ export default function Modal({
   onClose: () => void;
   placement?: keyof typeof PLACEMENT;
   keepOnBackdrop?: boolean;
-  layer?: keyof typeof LAYER;
+  layer?: Layer;
   // Width and height for the panel, e.g. "w-full max-w-[560px]".
   className?: string;
   style?: CSSProperties;
@@ -95,30 +133,16 @@ export default function Modal({
   children: ReactNode;
 }) {
   const titleId = useId();
-  // The host the dialog draws into: a div of its own on the body (see the note above).
-  //
-  // The initializer leaves the host it made in `pending`, so the second call under StrictMode takes
-  // that same host rather than making a second one.
-  const [host] = useState(() => {
-    const made = makeHost();
-    offerHost(made);
-    return made;
-  });
+  const { at, z, style: stacked } = useStacking(layer);
+  const host = useHost(titleId);
   useEscape(true, onClose);
   useEffect(coverIntros, []);
   useOverlay(true);
-  // StrictMode's double-mount runs this cleanup between the two mounts, which takes the host off the
-  // body; the second mount puts it back. A portal into a detached node draws nothing, which is why
-  // the dialog would not open.
-  useEffect(() => {
-    if (!host.isConnected) document.body.appendChild(host);
-    return () => host.remove();
-  }, [host]);
 
   const dialog = (
     <div
-      style={NO_DRAG}
-      className={`fixed inset-0 ${LAYER[layer]} bg-black/40 ${PLACEMENT[placement]}`}
+      style={stacked}
+      className={`fixed inset-0 ${LAYER[at]} bg-black/40 ${PLACEMENT[placement]}`}
       onMouseDown={keepOnBackdrop ? undefined : onClose}
     >
       <div
@@ -149,7 +173,7 @@ export default function Modal({
           </div>
         )}
         <CrashGuard what="dialog" name={typeof title === "string" ? title : label} className="m-4">
-          {children}
+          <OpenedFrom.Provider value={{ layer: at, z }}>{children}</OpenedFrom.Provider>
         </CrashGuard>
       </div>
     </div>

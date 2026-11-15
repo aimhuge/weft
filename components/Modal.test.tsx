@@ -31,6 +31,48 @@ describe("Modal layer", () => {
   });
 });
 
+describe("Modal opened from another dialog", () => {
+  const backdropOf = (name: string) => screen.getByRole("dialog", { name }).parentElement!;
+
+  it("stacks one step above the dialog it was opened from, whatever its own layer", () => {
+    render(
+      <Modal label="Settings" layer="top" onClose={() => {}}>
+        <Modal label="Share this vault?" onClose={() => {}}>body</Modal>
+      </Modal>,
+    );
+    const inner = backdropOf("Share this vault?");
+    expect(inner.className).toContain("z-[90]");
+    expect(inner.className).not.toContain("z-50");
+    // Above Settings by z-index, not by which host comes later on the body.
+    expect(inner.style.zIndex).toBe("91");
+    expect(backdropOf("Settings").style.zIndex).toBe("");
+  });
+
+  it("gets a host of its own when both arrive in one render, so closing it leaves the opener on the page", () => {
+    const both = (inner: boolean) => (
+      <Modal label="Settings" layer="top" onClose={() => {}}>
+        {inner ? <Modal label="Share this vault?" onClose={() => {}}>body</Modal> : "body"}
+      </Modal>
+    );
+    const { rerender } = render(both(true));
+    expect(document.querySelectorAll("[data-weft-modal]")).toHaveLength(2);
+    rerender(both(false));
+    expect(document.querySelectorAll("[data-weft-modal]")).toHaveLength(1);
+    expect(backdropOf("Settings").isConnected).toBe(true);
+  });
+
+  it("keeps its own layer when that is the higher one", () => {
+    render(
+      <Modal label="Settings" layer="top" onClose={() => {}}>
+        <Modal label="Log in" layer="front" onClose={() => {}}>body</Modal>
+      </Modal>,
+    );
+    expect(backdropOf("Log in").className).toContain("z-[94]");
+    expect(backdropOf("Log in").style.zIndex).toBe("94");
+    expect(backdropOf("Settings").className).toContain("z-[90]");
+  });
+});
+
 describe("Modal over a feature intro", () => {
   it("tells the intros it came over them once, as it opens", () => {
     const covered = vi.fn();
