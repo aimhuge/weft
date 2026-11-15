@@ -10,6 +10,7 @@ import { createBlobStore, type BlobStoreBundle } from "./blob-store";
 import type { BlobStore } from "./cloud-sync-types";
 import { startCloudInbox } from "./cloud-inbox";
 import { queueFolder, startCloudSync } from "./cloud-sync";
+import { startMacPresence } from "./mac-presence";
 import { startSyncRepos } from "./cloud-sync-repos";
 import { startTeamSync } from "./cloud-sync-team";
 import { startTeamAgentsSync } from "./team-agents";
@@ -34,7 +35,10 @@ export function startAccountCloudSync(): () => void {
   const stopSettings = startAccountSettingsPush();
   // Your teams' agents in, and your shared ones out after each edit (lib/team-agents.ts).
   const stopTeamAgents = startTeamAgentsSync();
+  // This Mac's idle time, so a phone push waits while you're at it (lib/mac-presence.ts).
+  const stopPresence = startMacPresence();
   return () => {
+    stopPresence();
     stopTeamAgents();
     stopSettings();
     stopTeam();

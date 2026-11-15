@@ -24,6 +24,11 @@ describe("paneRoutes", () => {
       "POST /vercel/status", "POST /supabase/status", "POST /vercel/env-push", "POST /account-settings/sign", "POST /lan-line/keys", "POST /lan-line/sign"]) expect(keys).toContain(key);
   });
 
+  it("reports the system idle time in whole seconds", () => {
+    expect(make({ idleSeconds: () => 42.4 }).routes["POST /system/idle"]!({})).toEqual({ idleSeconds: 42 });
+    expect(make({ idleSeconds: () => Number.NaN }).routes["POST /system/idle"]!({})).toEqual({ idleSeconds: 0 });
+  });
+
   it("hands a thread's BlastCP request to main's forward, and says unavailable before BlastCP is set up", async () => {
     const forward = vi.fn(() => Promise.resolve({ state: "ok", result: {} }));
     const { routes } = make({ blastcpApi: () => ({ forward }) });

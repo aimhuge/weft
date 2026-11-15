@@ -48,7 +48,7 @@ function onWorker(dataDir, worker, name) {
   return worker ? ` on ${workerLabel(pinsFor(dataDir), worker, name)}` : "";
 }
 
-function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, pairing = () => null, cardFor = () => "" }) {
+function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electron").systemPreferences, shell, window, board, sendMenu, updater, vault, vercelEnv, vercelApi, supabaseApi, blastcpApi = () => null, gooseApi = () => null, slackApi = () => null, pairing = () => null, cardFor = () => "", idleSeconds = () => require("electron").powerMonitor.getSystemIdleTime() }) {
   // This Mac's device key, opened once for the settings and LAN-offer signatures.
   const deviceKey = desktopSignerFor(dataDir);
   return {
@@ -66,6 +66,9 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
     "POST /folder-access/ask": ({ folder }) => createFolderAccess({ app, dialog, shell, window }).ask(folder),
     // The server's restart when idle, once nothing runs.
     "POST /app/restart": ({ then }) => restartFor({ then, updater: updater(), app }),
+    // Seconds since the keyboard or mouse was last touched, for the server's presence beat (lib/mac-presence.ts):
+    // a phone push waits while you're at this Mac.
+    "POST /system/idle": () => ({ idleSeconds: Math.max(0, Math.round(Number(idleSeconds()) || 0)) }),
     // mcp__webhooks__ask_add: the board opens 🪝 on a recorded webhook.
     "POST /webhooks/ask-add": ({ folder, id }) => {
       sendMenu("add-webhook", JSON.stringify({ folder, id }));

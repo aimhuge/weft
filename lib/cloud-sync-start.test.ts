@@ -37,6 +37,9 @@ vi.mock("./cloud-sync-team", () => ({ startTeamSync: (queue: unknown) => startTe
 const stopSettings = vi.fn();
 const startAccountSettingsPush = vi.fn(() => stopSettings);
 vi.mock("./account-settings", () => ({ startAccountSettingsPush: () => startAccountSettingsPush() }));
+const stopPresence = vi.fn();
+const startMacPresence = vi.fn(() => stopPresence);
+vi.mock("./mac-presence", () => ({ startMacPresence: () => startMacPresence() }));
 
 const { startAccountCloudSync } = await import("./cloud-sync-start");
 
@@ -53,7 +56,9 @@ describe("startAccountCloudSync", () => {
     expect(startSyncRepos).toHaveBeenCalledTimes(1);
     expect(startTeamSync).toHaveBeenCalledWith(queueFolder);
     expect(startAccountSettingsPush).toHaveBeenCalledTimes(1);
+    expect(startMacPresence).toHaveBeenCalledTimes(1);
     end();
+    expect(stopPresence).toHaveBeenCalledTimes(1);
     expect(stopSettings).toHaveBeenCalledTimes(1);
     expect(stop).toHaveBeenCalledTimes(1);
     expect(stopInbox).toHaveBeenCalledTimes(1);

@@ -450,7 +450,7 @@ browser pane, and ★ and 🔐 on the rail. **Advanced** is everything: the tool
 sorting, each card's stage and model, and the footer's stats. A new install starts on Regular, a board that was
 already in use stays on Advanced, and Settings → General → Simple mode switches between them.
 
-Simple mode (Regular) also turns on four pieces you can keep or drop one by one under the switch: a **full-page
+A board already in use moves to Simple mode once, with a toast and a Switch back button. Simple mode (Regular) also turns on four pieces you can keep or drop one by one under the switch: a **full-page
 pane** (the show rail folds into a `⧉ N` pill, and a live line, the pending ask and the reply box with its mic sit
 under the page, like the phone), **a turn's steps folded** into one "Weft ran N steps" line, a **one-box new card**
 (the controls behind More) and **three piles** (Needs you · Working · Ready, with Backlog and Done folded). See
@@ -1065,8 +1065,8 @@ or folders. More in
 [docs/architecture/profiles.md](docs/architecture/profiles.md).
 
 **Phone push.** Sign in on the Weft phone app and it pairs itself: when one of your synced cards moves into Needs you or
-Review, the phone buzzes with the card's title and its question ("Wants to run pnpm test", "Ready for review"), whichever Mac
-moved it. A database trigger and a Supabase Edge Function send it through Expo, once per move (a card flapping columns buzzes
+Review while you're away from your Macs and the app, the phone buzzes with the card's title and enough to decide from
+("Bash: pnpm test", "Write: lib/auth.ts", "Ready for review", secrets scrubbed), whichever Mac moved it. A database trigger and a Supabase Edge Function send it through Expo, once per move (a card flapping columns buzzes
 once), and drop phones that uninstalled the app. Settings → Sync → **Phones** lists the paired phones with **Remove**
 (docs/architecture/mobile.md#push).
 

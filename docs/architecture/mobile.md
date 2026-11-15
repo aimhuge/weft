@@ -91,6 +91,7 @@ Mac outbox ──upsert──▶ public.cloud_cards
                           ▼
               Edge Function push-card         checks the secret (public.push_hook_ok),
                           │                   rereads the card, still in that column?
+                          │                   user away? (away.ts: device_presence + push_devices.foreground_at)
                           ▼
               https://exp.host/--/api/v2/push/send  → every push_devices row of the card's owner
                           │
@@ -109,6 +110,7 @@ Mac outbox ──upsert──▶ public.cloud_cards
 | `platform` | text | `ios` or `android` |
 | `device_name` | text, ≤ 120 | what Settings → Sync → Phones shows |
 | `created_at`, `last_seen_at` | timestamptz | |
+| `foreground_at` | timestamptz, null | when the app was last in the foreground; null once backgrounded |
 
 RLS: a signed-in user selects, inserts, updates and deletes only rows where `user_id = auth.uid()`.
 
@@ -122,6 +124,15 @@ It upserts on `expo_token`, bumps `last_seen_at`, and moves the token to whoever
 changes accounts would otherwise trip the unique constraint on a row RLS hides). On sign-out, delete your row
 (`from("push_devices").delete().eq("expo_token", token)`).
 
+**Foreground (the phone app).** On app foreground and background, and once a minute while active:
+
+```ts
+await supabase.rpc("touch_push_device", { p_expo_token: token, p_foreground: AppState.currentState === "active" });
+```
+
+Security definer, touches only the caller's own row: `foreground_at = now()` when foreground, `null` when not, and
+`last_seen_at = now()`. Returns whether a row matched. Errors are the app's to swallow.
+
 ### The push
 
 Built by `supabase/functions/push-card/message.ts` (pure, tested by `message.test.ts`), sent by `index.ts`:
@@ -131,19 +142,50 @@ Built by `supabase/functions/push-card/message.ts` (pure, tested by `message.tes
   "to": "ExponentPushToken[…]",
   "title": "<card title>",
   "body": "<see below>",
-  "data": { "cardId": "<card id>", "org": "<org slug>", "orgId": "<org uuid>", "column": "needs_you" },
+  "data": { "cardId": "<card id>", "org": "<org slug>", "orgId": "<org uuid>", "column": "needs_you",
+            "pendingId": "<card.pending.id>", "kind": "permission" },
   "sound": "default",
   "priority": "high",
   "categoryId": "needs_you"
 }
 ```
 
-- **body**: in Review, `Ready for review`. In Needs you: the first question the thread asked (`pending.questions`),
-  else `Asks you to choose` / the form's title for an MCP form, else `Wants to run <pending.title or toolName>` for a
-  held tool, else the card's BOARD STATUS `remaining`, its last line, or `Needs you`. Clipped to 178 characters.
-- **categoryId** `needs_you` only when the card holds a prompt (`card.pending`): the app registers that iOS category
-  with its Approve / Answer actions. A plain Needs you (a question in prose) just opens the card.
+- **kind** (only with a held prompt in Needs you): `permission` for a held tool, `question` when the thread asked
+  questions (`pending.questions`), `form` for an MCP elicitation. **pendingId** is `card.pending.id`, so the phone's
+  answer goes to the very prompt it showed. A plain Needs you and every Review push carry neither.
+- **categoryId** `needs_you` only for kind `permission`: the app puts **Allow / Deny** on that iOS category.
+  Questions and forms carry no category; tapping opens the card.
+- **body**: in Review, `Ready for review`. In Needs you, enough to decide from the lock screen:
+  - a held tool names the tool and its key input from `pending.input`: Bash → `Bash: <command>`; Write, Edit, Read →
+    `Write: <file_path>`; WebFetch → `WebFetch: <url>`; an MCP tool → `<server> <tool>: <first string argument>`
+    (`supabase apply_migration: push_presence`). Another tool → `<tool>: <pending.title>`, else `Wants to run <tool>`.
+  - questions → the first question; a form → its title or `Asks you to choose`; no prompt → the BOARD STATUS
+    `remaining`, the last line, or `Needs you`.
+  - every body goes through `scrubSecrets` (the lock screen is public): the value of any `NAME=value` assignment,
+    `Authorization:` / `Cookie:` / `x-api-key:` header values, `Bearer …` tokens, `sk-…`/`ghp_…`/`xox…-`/`AKIA…` keys,
+    JWTs, long hex, and long mixed-case-and-digit runs become `•••`. Then newlines are flattened and it's clipped to
+    178 characters.
+- **title** is the card title (`Weft` when it has none), clipped to 80.
 - **data** is what the app deep-links on: `org` is the workspace slug, as in `weft.zip/<org>/board`.
+
+### Only when you're away
+
+`supabase/functions/push-card/away.ts` (pure, tested by `away.test.ts`) decides; `index.ts` reads the rows. A push
+for Needs you or Review, held tool or not, goes only when **both**:
+
+1. no Mac of yours wrote `public.device_presence` in the last **3 minutes** with `idle_seconds` under **300**, and
+2. no phone of yours has `push_devices.foreground_at` in the last **2 minutes**.
+
+No presence rows at all (the Mac is off, or its Weft predates this) counts as away, so missing presence never loses
+a push. The function answers `{ sent: 0, skipped: "present on mac" | "present on phone" }` when it holds one.
+
+`public.device_presence` (`supabase/migrations/20261115052031_push_presence.sql`): `user_id`, `device_id` (this Mac's
+`lib/device-id.ts`), `idle_seconds`, `updated_at` (stamped by the database's clock in a trigger, never the Mac's),
+primary key `(user_id, device_id)`, RLS owner only. **The Mac writes it**: `lib/mac-presence.ts`, started with cloud
+sync (`lib/cloud-sync-start.ts`), every 60 s while a folder syncs and an account is signed in, reads the system idle
+time from Electron main (`POST /system/idle` on the control server, `electron/pane-routes.cjs`, which calls
+`powerMonitor.getSystemIdleTime()`) and upserts its row with the account client. Sync off, signed out, offline or no
+desktop shell (a Weft Worker): the beat is skipped quietly.
 
 ### Debounce and staleness
 

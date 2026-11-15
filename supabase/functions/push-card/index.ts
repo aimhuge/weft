@@ -2,9 +2,11 @@
 // (supabase/migrations/20261029104224_push_devices.sql) posts { org_id, card_id, column } with the Vault secret in
 // x-weft-push-secret whenever a synced card moves into needs_you or review. This checks the secret, rereads the card
 // with the service role (so the body only names a card, never says what's in it), sends an Expo push to every phone
-// of the card's owner, and drops the tokens Expo reports as DeviceNotRegistered. Deployed with verify_jwt off: the
-// caller is the database, which has no user JWT; the secret is the check.
+// of the card's owner when they're away from their Macs and phone (./away.ts), and drops the tokens Expo reports as
+// DeviceNotRegistered. Deployed with verify_jwt off: the caller is the database, which has no user JWT; the secret
+// is the check.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { presentOn, type MacPresence, type PhonePresence } from "./away.ts";
 import { batches, buildMessages, deadTokens, isPushColumn, type ExpoTicket, type PushCard } from "./message.ts";
 
 const EXPO_SEND = "https://exp.host/--/api/v2/push/send";
@@ -34,12 +36,17 @@ Deno.serve(async (req) => {
   const card = row?.card as PushCard & { column?: string } | undefined;
   if (!row || row.deleted || !row.owner_user || !card || card.column !== column) return json({ sent: 0, skipped: "moved" });
 
-  const [{ data: devices }, { data: org }] = await Promise.all([
-    db.from("push_devices").select("expo_token").eq("user_id", row.owner_user),
+  const [{ data: devices }, { data: org }, { data: macs }] = await Promise.all([
+    db.from("push_devices").select("expo_token, foreground_at").eq("user_id", row.owner_user),
     db.from("orgs").select("id, slug").eq("id", body.org_id).maybeSingle(),
+    db.from("device_presence").select("idle_seconds, updated_at").eq("user_id", row.owner_user),
   ]);
-  const tokens = (devices ?? []).map((d: { expo_token: string }) => d.expo_token);
+  const phones = (devices ?? []) as ({ expo_token: string } & PhonePresence)[];
+  const tokens = phones.map((d) => d.expo_token);
   if (!tokens.length || !org) return json({ sent: 0 });
+  // Only when the user is away (./away.ts): at a Mac they're using, or with the app open, the board already shows it.
+  const present = presentOn((macs ?? []) as MacPresence[], phones, Date.now());
+  if (present) return json({ sent: 0, skipped: `present on ${present}` });
 
   const messages = buildMessages({ ...card, id: body.card_id }, column, org, tokens);
   const headers: Record<string, string> = { "Content-Type": "application/json", Accept: "application/json" };
