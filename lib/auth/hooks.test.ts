@@ -12,6 +12,7 @@ const api = vi.hoisted(() => ({
   signIn: vi.fn(() => Promise.resolve({ url: "https://github.com/login/oauth/authorize" })),
   magicLink: vi.fn(() => Promise.resolve({ ok: true as const })),
   signOut: vi.fn(() => Promise.resolve({ ok: true as const })),
+  signOutEverywhere: vi.fn(() => Promise.resolve({ ok: true as const })),
 }));
 vi.mock("../client", () => ({ api }));
 
@@ -108,5 +109,21 @@ describe("useAuth", () => {
     expect(api.signOut).toHaveBeenCalledOnce();
     expect(events.length).toBeGreaterThan(0);
     window.removeEventListener("weft:account", onAccount);
+  });
+
+  it("signOutEverywhere calls the global sign-out and surfaces its error", async () => {
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.state.kind).toBe("ready"));
+    await act(async () => {
+      await result.current.signOutEverywhere();
+    });
+    expect(api.signOutEverywhere).toHaveBeenCalledOnce();
+    expect(api.signOut).not.toHaveBeenCalled();
+    api.signOutEverywhere.mockRejectedValueOnce(new Error("This change needs Weft's own window"));
+    await act(async () => {
+      await result.current.signOutEverywhere();
+    });
+    expect(result.current.error).toBe("This change needs Weft's own window");
+    expect(result.current.busy).toBeNull();
   });
 });

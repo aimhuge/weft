@@ -27,7 +27,8 @@ export const WORKER_TOOLS: Record<string, ServerCaps> = {
   devservers: { "*": true },
   board_view: { "*": "it drives Weft's own window, which is on the user's Mac, not this worker" },
   board: {
-    restart_weft_when_idle: "there's no Weft app to restart on a worker",
+    // Here it updates the worker to the newest main once idle (lib/restart-tool.ts), so it works.
+    restart_weft_when_idle: true,
     request_folder_access: "macOS folder prompts are the Mac's; a worker's threads work in its own checkouts",
     "*": true,
   },

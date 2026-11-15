@@ -134,9 +134,11 @@ export async function finishSignIn(code: string): Promise<AccountUser> {
   return toAccountUser(data.user);
 }
 
-export async function signOut(): Promise<void> {
-  // Local scope: signing out here leaves your other devices signed in.
-  const { error } = await client().auth.signOut({ scope: "local" });
+// "local" (Sign out) ends this Mac's session and leaves your other devices signed in. "global" (Sign out
+// everywhere) revokes every refresh token the account holds, this Mac's and any stolen copy of
+// ~/.weft/account.json included; an access token already handed out lives on until it expires (an hour at most).
+export async function signOut(scope: "local" | "global" = "local"): Promise<void> {
+  const { error } = await client().auth.signOut({ scope });
   if (error) throw error;
   changed();
 }

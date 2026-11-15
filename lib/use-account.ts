@@ -48,7 +48,7 @@ export function announceAccountChange() {
 }
 
 export function useAccount() {
-  const { state: authState, busy: authBusy, error, waiting, signInWithOAuth, signOut } = useAuth();
+  const { state: authState, busy: authBusy, error, waiting, signInWithOAuth, signOut, signOutEverywhere } = useAuth();
   const [emailBusy, setEmailBusy] = useState<"email" | null>(null);
   const [emailWaiting, setEmailWaiting] = useState<string | null>(null);
 
@@ -85,6 +85,7 @@ export function useAccount() {
     signIn,
     sendLink,
     signOut,
+    signOutEverywhere,
   };
 }
 

@@ -26,6 +26,7 @@ import { pairWorker, workerSignKeys } from "../lib/worker-pair";
 import { RTC_PURPOSE } from "../lib/rtc-signal";
 import { CLAUDE_TOKEN, GITHUB_PURPOSE, LOGIN_PURPOSE, newSealKeys, open } from "../lib/worker-seal";
 import { createUpdater, updatesOn } from "../lib/worker-update";
+import { NO_UPDATER } from "../lib/worker-update-loop";
 import { listenForKeyGrants, listenForPushes, listenForWakes } from "../lib/worker-wake";
 import { joinPresence } from "../lib/worker-presence";
 import { browserSandboxNote } from "../lib/worker-chromium";
@@ -183,7 +184,7 @@ async function startCommand() {
     () => import("../lib/webhooks"),
     () => import("../lib/cron-run"),
   ] as const);
-  const boardLink = { workerId: config.workerId, root, cards: reg.boardCards, newCard: reg.newCard, setLists: reg.setLists, macCrons: reg.macCrons, macs: reg.macs };
+  const boardLink = { workerId: config.workerId, root, cards: reg.boardCards, newCard: reg.newCard, setLists: reg.setLists, macCrons: reg.macCrons, macs: reg.macs, macProjects: reg.macProjects, shareCard: reg.shareCard };
   setBoardLink(boardLink);
   const lists = createListsPublisher(boardLink, { crons: listCrons, webhooks: () => listWebhooks() });
   subscribe((event) => {
@@ -289,6 +290,9 @@ async function startCommand() {
     },
   });
   const stop = daemon.start();
+  // mcp__board__restart_weft_when_idle here: once every turn has ended, update to the newest main and exit into it
+  // (lib/restart-when-idle.ts). A box that doesn't update itself says so, and the held work goes on.
+  (await import("../lib/restart-when-idle")).restartWith(() => daemon.checkForUpdate() ?? Promise.resolve(NO_UPDATER));
   // Each folder's header reads, for the desktop board's badges (lib/worker-projects.ts).
   const projects = createProjectPublisher({
     folders: () => listProjectFolders(root),

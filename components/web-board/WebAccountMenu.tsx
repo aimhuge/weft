@@ -2,10 +2,11 @@
 
 // The avatar at the right end of the weft.zip board's header, where the desktop keeps its AccountButton: a menu with
 // who's signed in, the workspaces to switch to (each opens that workspace's board), Team, Billing and Sign out, which
-// is the same plain POST to /auth/sign-out the workspace sidebar uses. The sidebar steps aside on the board, so this
-// is where its parts went.
+// is the same plain POST to /auth/sign-out the workspace sidebar uses (Sign out everywhere adds scope=global). The
+// sidebar steps aside on the board, so this is where its parts went.
 import { useRef, useState } from "react";
-import { Check, CreditCard, LogOut, Users } from "lucide-react";
+import { Check, CreditCard, LogOut, ShieldOff, Users } from "lucide-react";
+import { EVERYWHERE_QUESTION } from "@/lib/sign-out-everywhere";
 import type { TeamContext } from "@/lib/teams";
 import { formatOrgLabel, orgInitial, useClickOutside, userDisplayName, userInitials } from "../team/WorkspaceHeader";
 
@@ -57,6 +58,18 @@ export function WebAccountMenu({ user, orgs, orgSlug }: { user: WebUser; orgs: r
             <form method="post" action="/auth/sign-out">
               <button type="submit" role="menuitem" className={ITEM}>
                 <LogOut size={14} className="text-muted" aria-hidden /> Sign out
+              </button>
+            </form>
+            <form
+              method="post"
+              action="/auth/sign-out"
+              onSubmit={(e) => {
+                if (!window.confirm(EVERYWHERE_QUESTION)) e.preventDefault();
+              }}
+            >
+              <input type="hidden" name="scope" value="global" />
+              <button type="submit" role="menuitem" className={ITEM}>
+                <ShieldOff size={14} className="text-muted" aria-hidden /> Sign out everywhere
               </button>
             </form>
           </div>

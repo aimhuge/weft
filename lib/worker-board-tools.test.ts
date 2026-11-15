@@ -109,6 +109,15 @@ describe("workerCreateCard", () => {
     expect(text).toMatch(/^Sent to your Mac for mac:\/\/mini\/Users\/me\/app \(command cmd-1\)/);
   });
 
+  it("sends to a Mac project with no cards yet, named as ~/<path>, from the Mac's published projects", async () => {
+    const macs = () => Promise.resolve([{ device: "mac-1", name: "MacBook-Air-3" }]);
+    const macProjects = () => Promise.resolve([{ device: "mac-1", home: "/Users/me", folders: ["/Users/me/dev/weft-mobile"] }]);
+    setBoardLink({ workerId: "w1", root, cards: () => Promise.resolve(rows), newCard, setLists: () => Promise.resolve(null), macs, macProjects });
+    const text = await workerCreateCard({ prompt: "Fix", folder: "~/dev/weft-mobile" }, deps());
+    expect(newCard).toHaveBeenCalledWith("mac-1", "/Users/me/dev/weft-mobile", { prompt: "Fix" });
+    expect(text).toMatch(/^Sent to your Mac for mac:\/\/MacBook-Air-3\/Users\/me\/dev\/weft-mobile/);
+  });
+
   it("names Macs by id until the worker can read their names", async () => {
     rows.push(macRow());
     setBoardLink({ workerId: "w1", root, cards: () => Promise.resolve(rows), newCard, setLists: () => Promise.resolve(null), macs: () => Promise.reject(new Error("no function")) });

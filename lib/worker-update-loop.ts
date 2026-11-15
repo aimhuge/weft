@@ -36,6 +36,8 @@ export interface UpdateLoopDeps {
   firstFetchMs?: number;
 }
 
+export const NO_UPDATER = "This worker doesn't update itself: auto-update is off, or it isn't running from its own clone.";
+
 const name = ({ title, asking }: Holder) => `“${title.slice(0, TITLE_MAX)}”${asking ? " (needs your answer)" : ""}`;
 
 // The row's line: the cards you can act on first, since an answer is what frees it.
@@ -64,31 +66,37 @@ export function createUpdateLoop(deps: UpdateLoopDeps) {
   let fallback: ReturnType<typeof setInterval> | null = null;
   let every = 0;
 
-  async function check() {
+  // What came of it, for a thread that asked (lib/restart-when-idle.ts): null once it's restarting into the new code,
+  // otherwise why it isn't. A check already running answers that it's busy, and runs again after.
+  async function check(): Promise<string | null> {
     if (checking) {
       again = true;
-      return;
+      return "An update check is already running.";
     }
     if (pingTimer) clearTimeout(pingTimer);
     pingTimer = null;
     checking = true;
     nextFetch = Date.now() + gap;
+    let outcome: string | null = null;
     try {
       const tick = await update.tick(() => {
         updating = idle();
         return updating;
       });
       held = tick.held ?? null;
-      await show(held ? holdNote(held, holders()) : tick.note);
+      const note = held ? holdNote(held, holders()) : tick.note;
+      await show(note);
       // Still updating: nothing may start between here and the exit.
       if (tick.restart) {
         update.restart();
-        return;
+        return null;
       }
+      outcome = note ?? "This worker is already on the newest commit of main.";
     } catch (err) {
       held = null;
       // Usually no network. The row keeps what it last said, and the next check tries again.
       log(`Weft Worker: update check: ${(err as Error).message}`);
+      outcome = `The update check failed: ${(err as Error).message}`;
     } finally {
       checking = false;
     }
@@ -100,6 +108,7 @@ export function createUpdateLoop(deps: UpdateLoopDeps) {
       again = false;
       ping();
     }
+    return outcome;
   }
 
   // A ping inside the limit isn't dropped: a stranger's ping just before a real push mustn't swallow it, so it checks

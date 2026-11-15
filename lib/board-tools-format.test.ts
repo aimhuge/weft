@@ -32,6 +32,8 @@ describe("describeBoardTool", () => {
     expect(describeBoardTool("mcp__board__answer_permission", { card_id: "c1", allow: true })).toBe("Allow run ls on “Fix it”");
     expect(describeBoardTool("mcp__board__answer_permission", { card_id: "zz", allow: false })).toBe("Deny its request on zz");
     expect(describeBoardTool("mcp__board__restart_weft_when_idle", {})).toBe("Restart Weft once the running threads finish");
+    expect(describeBoardTool("mcp__board__share_card", {})).toMatch(/^Publish this card at a public weft.zip link/);
+    expect(describeBoardTool("mcp__board__share_card", { public: false })).toBe("Make this card's share link private");
     expect(describeBoardTool("mcp__board__list_cards", {})).toBeNull();
   });
 

@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   signIn: vi.fn(() => Promise.resolve({ url: "https://github.com/login/oauth" })),
   magicLink: vi.fn(() => Promise.resolve({ ok: true })),
   signOut: vi.fn(() => Promise.resolve({ ok: true })),
+  signOutEverywhere: vi.fn(() => Promise.resolve({ ok: true })),
   billingStatus: vi.fn(() => Promise.resolve(null)),
 }));
 vi.mock("@/lib/client", () => ({ api }));
@@ -79,5 +80,21 @@ describe("AccountSettings", () => {
     await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
     expect(api.signOut).toHaveBeenCalled();
     await waitFor(() => expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument());
+  });
+
+  it("signs out everywhere once you confirm", async () => {
+    api.account.mockResolvedValue({ configured: true, user: ada });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    setup();
+    const everywhere = await screen.findByRole("button", { name: "Sign out everywhere" });
+    await userEvent.click(everywhere);
+    expect(api.signOutEverywhere).not.toHaveBeenCalled();
+    api.account.mockResolvedValue({ configured: true, user: null });
+    await userEvent.click(everywhere);
+    expect(confirm).toHaveBeenCalledTimes(2);
+    expect(api.signOutEverywhere).toHaveBeenCalledOnce();
+    expect(api.signOut).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByRole("button", { name: "Continue with GitHub" })).toBeInTheDocument());
+    confirm.mockRestore();
   });
 });

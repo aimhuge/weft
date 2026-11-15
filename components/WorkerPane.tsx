@@ -36,13 +36,22 @@ export interface WorkerPaneProps {
   onClose: () => void;
 }
 
+// Whether the pane is on this Mac's simulator. A card switched to Local Simulator reads as off until this Mac's answer
+// comes back (every mount: opening the card, coming back to it). Loading the card's own page then would land on the
+// live view the Mac's watch put in the same native pane, and the simulator was gone for good. So until the answer, a
+// card with a Mac device keeps the pane as it is.
+function simulatorHere(local: { on: boolean; ready: boolean }, desktop: boolean, qaDevice: string | null | undefined): boolean {
+  return local.on || (desktop && Boolean(qaDevice) && !local.ready);
+}
+
 export default function WorkerPane({ card, worker, url, browser, marks, onClose }: WorkerPaneProps) {
   const local = useLocalSimulator(card);
+  const here = simulatorHere(local, browser.desktop, card.qaDevice);
   const pane = paneFromUrl(url);
-  const native = browser.desktop && !local.on ? nativePageUrl(pane, window.location.origin) : null;
+  const native = browser.desktop && !here ? nativePageUrl(pane, window.location.origin) : null;
   useNativePage(card.id, native, browser.state.url);
   const onScreenInput = (input: BoardInput) => sendWorkerAction({ action: "input", cardId: card.id, input }).then(() => {});
-  if (local.on || native) {
+  if (here || native) {
     // The native pane's own Save as app saves its page: a worker card's goes back to its blob ref.
     const save = native ? undefined : pane?.kind === "blob" && <SaveAppButton url={url} title={card.title} />;
     const actions = (

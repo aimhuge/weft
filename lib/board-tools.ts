@@ -15,6 +15,8 @@ import { cronTools } from "./cron-tools";
 import { skillTools } from "./skill-tools";
 import { folderAccessTool } from "./folder-access-tool";
 import { restartTool } from "./restart-tool";
+import { shareTool } from "./share-tool";
+import { workerLogTool } from "./worker-log-tool";
 import { cleanTitle, titleFromPrompt } from "./format";
 import { defaultPermissionMode, touchProject } from "./settings";
 import { createCard, getCard, listCards } from "./store";
@@ -137,6 +139,8 @@ export function weftMcpServer(
           }),
       ),
       restartTool(getCardId),
+      shareTool(getCardId),
+      ...(onWorker() ? [workerLogTool()] : []),
       folderAccessTool(),
       ...changelogTools(getCardId, getCwd),
       ...cronTools(getCardId),

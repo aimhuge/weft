@@ -132,6 +132,8 @@ export function prewarm() {
   void import("./cron-run").then((m) => m.startCronClock(), (err: unknown) => console.error("[weft] cron clock failed to start:", err));
   // And publish a summary of them for the threads on your Weft Workers to list (lib/mac-crons.ts).
   void import("./mac-crons").then((m) => m.startMacCronsPublish(), (err: unknown) => console.error("[weft] Mac crons publish failed to start:", err));
+  // And the projects Sync is on for, so a worker thread's create_card finds one with no cards yet (lib/mac-projects.ts).
+  void import("./mac-projects").then((m) => m.startMacProjectsPublish(), (err: unknown) => console.error("[weft] Mac projects publish failed to start:", err));
   // Sync the GitHub issues of the folders that opted in, every 5 minutes (lib/github-issues.ts).
   startIssueSync();
   // Park a few starter cards in a project's Backlog the first time it lands on the board (lib/project-seed-run.ts).

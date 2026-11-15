@@ -67,4 +67,16 @@ describe("webSignOut", () => {
     expect(client.auth.signOut).toHaveBeenCalledWith({ scope: "local" });
     expect(result).toEqual({ kind: "redirect", url: "https://weft.zip/login" });
   });
+
+  it("signs out everywhere with scope:'global'", async () => {
+    const { webSignOut } = await load();
+    const client = buildClient();
+    client.auth.signOut.mockResolvedValue({ error: null });
+    await webSignOut(client as unknown as SupabaseClient, {
+      request: makeRequest("https://weft.zip/auth/sign-out"),
+      loginPath: "/login",
+      scope: "global",
+    });
+    expect(client.auth.signOut).toHaveBeenCalledWith({ scope: "global" });
+  });
 });

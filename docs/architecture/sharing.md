@@ -82,6 +82,37 @@ the whole thread, as one of three kinds:
 - `local`: only reachable on the owner's Mac (localhost, a file that didn't upload). The viewer shows the card's pane
   capture instead: the thumbnail `lib/show.ts` takes after each turn, which the outbox now uploads as a blob too.
 
+## share_card: a thread shares its own card
+
+Built 2026-11-16. A thread that recorded a demo needed a public link for a PR and had to stop and ask the user to click
+Share. `mcp__board__share_card` (`lib/share-tool.ts`, in every board thread's tools) makes the same link and returns it.
+
+```
+share_card {public?, show_chat?, page?}
+  ├─ PreToolUse: lib/share-consent.ts ── first public share of this card? ─ ask (every mode, bypass too)
+  │                                     └ card.shareConsent, or public: false ─ allow
+  ├─ page given? must be the pane's newest page (leadPage), else "open_url it first"
+  ├─ stamps card.shareConsent
+  ├─ Mac:    setCardShare(card, {mode, showChat})    (the dialog's PUT; waits out `pending` up to ~18 s)
+  └─ worker: worker_share_card(key, card, mode, show_chat, id, slugs)   (boardLink().shareCard)
+```
+
+- **Consent.** One confirmation per card, not a setting: a setting would let every later thread publish unasked. The
+  hook's `ask` reaches the card's permission prompt even in bypassPermissions (as the folder gate's does); the prompt reads
+  "Publish this card at a public weft.zip link (the browser pane only, chat hidden)? Asked once per card."
+  (`describeBoardTool`). Once allowed the tool stamps `card.shareConsent`, which no card PATCH can set. Taking a link private
+  never asks.
+- **Defaults.** Public, chat hidden: what a PR wants is the demo, not the transcript. `show_chat: true` shares the thread too.
+- **The lead page** is what the pane shows last (`paneFor`), live, as for every share, so `page` is a check, not a pin: the
+  thread `open_url`s the page or video first.
+- **A worker card.** A worker has no account session, so it calls `worker_share_card`
+  (`supabase/migrations/20261116040000_worker_share_card.sql`) with its key: only a live `cloud_cards` row it published
+  itself, only `public` or `private`, `created_by` its owner (so the address is theirs and the Mac's Share dialog shows the
+  same row), the first free slug of the candidates it sends. A card the publisher hasn't put up yet answers
+  `card not published yet` and the tool retries.
+- **Guidance.** The board thread prompt (`lib/thread-prompt.ts`) and AGENTS.md tell threads to use it instead of asking the
+  user to click Share, and only for what the task needs shown.
+
 ## A worker card
 
 Built 2026-11-02. A Weft Worker's card (project-hosts.md) isn't in this Mac's store, but its rows already are in

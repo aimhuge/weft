@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { type AccountBusy, type AccountWaiting, PROVIDER_LABELS, useAccount } from "@/lib/use-account";
+import { EVERYWHERE_QUESTION } from "@/lib/sign-out-everywhere";
 import type { AccountProvider, AccountUser } from "@/lib/types";
 import Avatar from "./Avatar";
 import BillingStatus from "./BillingStatus";
@@ -13,7 +14,8 @@ const PROVIDER_NAMES: Record<string, string> = { ...PROVIDER_LABELS, email: "ema
 const BUTTON =
   "flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50";
 
-function SignedIn({ user, busy, onSignOut }: { user: AccountUser; busy: AccountBusy; onSignOut: () => void }) {
+function SignedIn(props: { user: AccountUser; busy: AccountBusy; onSignOut: () => void; onSignOutEverywhere: () => void }) {
+  const { user, busy, onSignOut } = props;
   const label = user.name ?? user.email ?? "?";
   const via = user.provider ? `via ${PROVIDER_NAMES[user.provider] ?? user.provider}` : "Signed in";
   return (
@@ -28,6 +30,16 @@ function SignedIn({ user, busy, onSignOut }: { user: AccountUser; busy: AccountB
       <button onClick={onSignOut} disabled={busy !== null} className={BUTTON}>
         {busy === "signout" && <Spinner size={11} />}
         Sign out
+      </button>
+      <button
+        onClick={() => window.confirm(EVERYWHERE_QUESTION) && props.onSignOutEverywhere()}
+        disabled={busy !== null}
+        aria-label="Sign out everywhere"
+        title="Sign out on every device, this one included: use it if someone else may hold your sign-in"
+        className="flex shrink-0 items-center gap-1 text-[12px] text-muted hover:text-danger hover:underline disabled:opacity-50"
+      >
+        {busy === "signout-everywhere" && <Spinner size={11} />}
+        Everywhere
       </button>
     </div>
   );
@@ -85,7 +97,7 @@ function SignInForm(props: {
 
 // The Weft account section of Settings. Optional: the board works the same signed out.
 export default function AccountSettings({ titleClass, hintClass }: { titleClass: string; hintClass: string }) {
-  const { state, busy, waiting, error, signIn, sendLink, signOut } = useAccount();
+  const { state, busy, waiting, error, signIn, sendLink, signOut, signOutEverywhere } = useAccount();
 
   function body() {
     if (state.kind === "loading") {
@@ -99,7 +111,16 @@ export default function AccountSettings({ titleClass, hintClass }: { titleClass:
       return <p className="break-words text-[12.5px] text-danger">Couldn&apos;t check your account: {state.error}</p>;
     }
     if (!state.view.configured) return <p className="text-[12.5px] text-muted">Sign-in isn&apos;t set up in this build yet.</p>;
-    if (state.view.user) return <SignedIn user={state.view.user} busy={busy} onSignOut={() => void signOut()} />;
+    if (state.view.user) {
+      return (
+        <SignedIn
+          user={state.view.user}
+          busy={busy}
+          onSignOut={() => void signOut()}
+          onSignOutEverywhere={() => void signOutEverywhere()}
+        />
+      );
+    }
     return <SignInForm busy={busy} waiting={waiting} onProvider={(p) => void signIn(p)} onEmail={(e) => void sendLink(e)} />;
   }
 
