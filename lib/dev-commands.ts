@@ -12,7 +12,7 @@ export const MAX_COMMANDS = 3;
 // Script names that start a server, best first.
 const SCRIPT_ORDER = ["dev", "start", "serve", "develop", "preview", "storybook"];
 // A script by another name that still runs one ("web": "next dev").
-const SERVER_RE = /\b(next dev|vite(?:\s+(?:dev|serve)\b|\s+--|\s*$)|astro dev|nuxt dev|remix (?:vite:)?dev|wrangler dev|webpack(?:-dev-server| serve)|react-scripts start|gatsby develop|ng serve|expo start|vercel dev|hugo server|eleventy --serve|storybook dev|nodemon|tsx watch)/;
+export const SERVER_RE = /\b(next dev|vite(?:\s+(?:dev|serve)\b|\s+--|\s*$)|astro dev|nuxt dev|remix (?:vite:)?dev|wrangler dev|webpack(?:-dev-server| serve)|react-scripts start|gatsby develop|ng serve|expo start|vercel dev|hugo server|eleventy --serve|storybook dev|nodemon|tsx watch)/;
 
 // A framework's own port when the script doesn't name one, first match wins.
 const DEFAULT_PORTS: [RegExp, number][] = [

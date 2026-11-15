@@ -41,6 +41,19 @@ A booted simulator costs gigabytes (an iOS 26 simulator is ~150 processes and ~2
 through react-native-web, live and clickable with hot reload, with no device booted. A simulator is for what
 needs native code (push, camera, native modules, native gestures) and for a final check.
 
+## The simulator guard
+
+The prompt alone didn't hold: a card booted its simulator with `xcrun simctl boot` and ran Metro with Bash in the
+background, Metro stopped at the background time limit, and the app's switches went dead (127.0.0.1:8081 refused)
+while the user couldn't watch the device (2026-11-16). `lib/simulator-guard.ts`, in every thread's guard set
+(thread-guards.md), turns away from Bash: booting a device (`xcrun simctl boot`, `open -a Simulator`, `emulator -avd`),
+starting Metro (`expo start`, `react-native start`, `metro serve`), `expo run:ios|android` and `react-native
+run-ios|android` without `--no-bundler`/`--no-packager` (they start their own Metro), and any dev server sent to the
+background. Its refusals name the way in: `mcp__simulator__boot`, then install, launch and watch; Metro through
+`mcp__devservers__start` on :8081; a native build with `npx expo run:ios --no-bundler --device "<name>"`. Package
+scripts are read through, so `pnpm start` running `expo start` is caught too. Other `simctl` commands (list,
+install, shutdown) stay open.
+
 ## The tools
 
 | Tool | iOS | Android |

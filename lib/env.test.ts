@@ -5,6 +5,7 @@ import { GIT_GUARD_MATCHER } from "./git-guard";
 import { IMPORT_GUARD_MATCHER } from "./import-check";
 import { ROUTE_IMPORT_GUARD_MATCHER } from "./route-import-guard";
 import { SECRET_GUARD_MATCHER } from "./secret-guard";
+import { SIMULATOR_GUARD_MATCHER } from "./simulator-guard";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -144,7 +145,7 @@ describe("cliEnv", () => {
 });
 
 describe("guardedCli", () => {
-  it("starts a thread with the stripped env, the secret guard, the restart guard, the git guard, the check guard, the route import guard, the import guard, the folder gate, symbol claims for edits and Bash, and the changelog stamp", () => {
+  it("starts a thread with the stripped env, the secret guard, the restart guard, the git guard, the check guard, the simulator guard, the route import guard, the import guard, the folder gate, symbol claims for edits and Bash, and the changelog stamp", () => {
     vi.stubEnv("WEFT_SHELL_TOKEN", "secret");
     const opts = guardedCli(() => 0, () => undefined);
     expect(opts.env).not.toHaveProperty("WEFT_SHELL_TOKEN");
@@ -158,11 +159,12 @@ describe("guardedCli", () => {
     expect(pre[1]?.matcher).toBe("Bash");
     expect(pre[2]).toBe(GIT_GUARD_MATCHER);
     expect(pre[3]).toBe(CHECK_GUARD_MATCHER);
-    expect(pre[4]).toBe(ROUTE_IMPORT_GUARD_MATCHER);
-    expect(pre[5]?.matcher).toBe("Read|Edit|MultiEdit|Write|NotebookEdit|Glob|Grep|LS|Bash"); // the folder gate
-    expect(pre[6]?.matcher).toBe("Edit|MultiEdit|Write|NotebookEdit");
-    expect(pre[7]?.matcher).toBe("Bash"); // Bash claims
-    expect(pre[8]?.matcher).toBe("Bash"); // the changelog stamp's HEAD before a commit
+    expect(pre[4]).toBe(SIMULATOR_GUARD_MATCHER);
+    expect(pre[5]).toBe(ROUTE_IMPORT_GUARD_MATCHER);
+    expect(pre[6]?.matcher).toBe("Read|Edit|MultiEdit|Write|NotebookEdit|Glob|Grep|LS|Bash"); // the folder gate
+    expect(pre[7]?.matcher).toBe("Edit|MultiEdit|Write|NotebookEdit");
+    expect(pre[8]?.matcher).toBe("Bash"); // Bash claims
+    expect(pre[9]?.matcher).toBe("Bash"); // the changelog stamp's HEAD before a commit
     expect(post[3]?.matcher).toBe("Bash"); // and its stamp after
   });
 

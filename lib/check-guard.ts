@@ -34,7 +34,7 @@ export function checkTool({ name, args }: Step): { tool: string; args: string[] 
 }
 
 // The scripts of the nearest package.json at or above dir, or null.
-function scriptsAbove(dir: string): Record<string, string> | null {
+export function scriptsAbove(dir: string): Record<string, string> | null {
   try {
     return (JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")) as { scripts?: Record<string, string> }).scripts ?? {};
   } catch {
