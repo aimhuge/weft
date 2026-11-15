@@ -221,6 +221,8 @@ export interface Card {
   tasks?: CardTask[];
   // Its share link as last read from Supabase (lib/card-share.ts), so the Share dialog draws at once and refreshes after.
   share?: CardShareMemo;
+  // The user allowed this card's thread to publish it with mcp__board__share_card (lib/share-consent.ts): asked once.
+  shareConsent?: boolean;
   createdAt: number;
   updatedAt: number;
 }

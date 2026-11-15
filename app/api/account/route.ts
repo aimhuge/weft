@@ -1,7 +1,7 @@
 import { after, connection } from "next/server";
 import { accountView, sendMagicLink, signOut, startSignIn } from "@/lib/account";
 import { emitPostHogLog, flushPostHogLogs } from "@/instrumentation";
-import { fail, guard } from "@/lib/guard";
+import { elevated, fail, guard } from "@/lib/guard";
 import { isDeployed } from "@/lib/home";
 import type { AccountProvider } from "@/lib/types";
 import { webUser } from "@/lib/web-session";
@@ -44,7 +44,8 @@ function origin(req: Request) {
 }
 
 // { action: "oauth", provider } returns the page to open in the system browser; "email" sends a
-// magic link; "signout" forgets the session here. Both come back to ./callback.
+// magic link; "signout" forgets the session here. Both come back to ./callback. "signout-everywhere" revokes
+// every session the account holds, so only Weft's own window may ask for it (a thread's curl can't).
 export async function POST(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
@@ -68,6 +69,13 @@ export async function POST(req: Request) {
         await signOut();
         logAccountLifecycle("account_signed_out", { authentication_mode: isDeployed() ? "web" : "desktop" });
         return Response.json({ ok: true });
+      case "signout-everywhere": {
+        const notOwnWindow = elevated(req);
+        if (notOwnWindow) return notOwnWindow;
+        await signOut("global");
+        logAccountLifecycle("account_signed_out", { authentication_mode: "desktop", scope: "global" });
+        return Response.json({ ok: true });
+      }
       default:
         throw new Error("Unknown account action.");
     }

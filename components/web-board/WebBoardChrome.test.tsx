@@ -48,6 +48,12 @@ describe("WebBoard desktop chrome", () => {
     expect(menu.getByRole("menuitem", { name: "Team" })).toHaveAttribute("href", "/ada/team");
     expect(menu.getByRole("menuitem", { name: "Billing" })).toHaveAttribute("href", "/ada/billing");
     expect(menu.getByRole("menuitem", { name: "Sign out" }).closest("form")).toHaveAttribute("action", "/auth/sign-out");
+    const everywhere = menu.getByRole("menuitem", { name: "Sign out everywhere" }).closest("form")!;
+    expect(everywhere).toHaveAttribute("action", "/auth/sign-out");
+    expect(everywhere.querySelector("input[name=scope]")).toHaveValue("global");
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    expect(fireEvent.submit(everywhere)).toBe(false);
+    confirm.mockRestore();
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
     expect(screen.queryByRole("menu")).toBeNull();
   });

@@ -6,10 +6,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { formatProjectAddress, isWorkerPath, localAddress, parseProjectAddress, workerAddress } from "./host/address";
-import { findMac, isMacPath, macLabels, macPath, parseMacPath, type MacRow } from "./worker-board-macs";
+import { expandOnMac, findMac, isMacPath, isTilde, macLabels, macPath, parseMacPath, sameMac, type MacProjectsRow, type MacRow } from "./worker-board-macs";
 import { isSealed, SEALED_CARD_FIELDS, SEALED_TITLE } from "./sync-seal";
 import type { Card } from "./types";
-import type { BoardRow, MacCronsRow } from "./worker-registry";
+import type { BoardRow, MacCronsRow, WorkerShareArgs, WorkerShareRow } from "./worker-registry";
 
 export interface BoardLink {
   workerId: string;
@@ -22,6 +22,10 @@ export interface BoardLink {
   macCrons?(): Promise<MacCronsRow[]>;
   // The owner's Macs and their names, for mac:// paths (lib/worker-board-macs.ts); absent on an older wiring.
   macs?(): Promise<MacRow[]>;
+  // Each Mac's synced projects and home (lib/mac-projects.ts), so a project with no cards yet is found; absent on an older wiring.
+  macProjects?(): Promise<MacProjectsRow[]>;
+  // share_card on this worker's own card (lib/share-tool.ts); absent on an older wiring.
+  shareCard?(share: WorkerShareArgs): Promise<WorkerShareRow>;
 }
 
 let link: BoardLink | null = null;
@@ -57,6 +61,24 @@ export async function boardMacs(l: Pick<BoardLink, "macs"> = boardLink()): Promi
   } catch {
     return [];
   }
+}
+
+// The Macs' published projects, or none when this worker's wiring or the database predates worker_mac_projects: a Mac
+// project is then found by its cards alone, as before.
+export async function boardMacProjects(l: Pick<BoardLink, "macProjects"> = boardLink()): Promise<MacProjectsRow[]> {
+  if (!l.macProjects) return [];
+  try {
+    return await l.macProjects();
+  } catch {
+    return [];
+  }
+}
+
+// A Mac's published projects as rows with no card, so a project with no cards yet matches like one with cards, by
+// path, name or ~ path.
+export function projectRows(projects: MacProjectsRow[]): BoardRow[] {
+  const row = (device: string, folder: string): BoardRow => ({ card_id: "", folder, owner_device: device, owner_worker: null, card: null, updated_at: "" });
+  return projects.flatMap((p) => p.folders.map((f) => row(p.device, f)));
 }
 
 // The label each Mac on the board goes by in mac:// paths.
@@ -137,36 +159,62 @@ const macTarget = (device: string, folder: string, labels: Labels): RemoteTarget
 
 // The Mac a mac:// path names, and its folder: a project name becomes the one folder of that Mac's cards with that
 // name (two is an error listing both), else goes as written for the Mac to resolve among its synced folders (so a
-// project with no cards yet works too).
-function macNamed(text: string, rows: BoardRow[], labels: Labels, macs: MacRow[]): RemoteTarget {
+// project with no cards yet works too). A ~ path is under the home that Mac's cards' folders show.
+function macNamed(text: string, rows: BoardRow[], labels: Labels, macs: MacRow[], homes: Map<string, string>): RemoteTarget {
   const { mac, folder } = parseMacPath(text);
   const device = findMac(mac, labels, macs);
+  const own = rows.filter((r) => !r.owner_worker && r.owner_device === device);
+  if (isTilde(folder)) {
+    const home = homes.get(device);
+    const full = expandOnMac(folder, home ? [home] : own.map((r) => r.folder));
+    if (!full) throw new Error(`Can't tell where ~ is on that Mac from its cards: pass the full path, like mac://${labels.get(device) as string}/Users/<you>${folder.slice(1)}.`);
+    return macTarget(device, full, labels);
+  }
   if (folder.startsWith("/")) return macTarget(device, folder, labels);
-  const named = new Set(rows.filter((r) => !r.owner_worker && r.owner_device === device && path.basename(r.folder) === folder).map((r) => r.folder));
+  const named = new Set(own.filter((r) => path.basename(r.folder) === folder).map((r) => r.folder));
   const choices = [...named].map((f) => macPath(labels.get(device) as string, f));
   if (choices.length > 1) throw new Error(`“${text}” is more than one project on that Mac. Pass one of these as the folder: ${choices.join(", ")}.`);
   return macTarget(device, choices.length ? ([...named][0] as string) : folder, labels);
 }
 
+// A synced row's folder matches a path, a project name or, on a Mac, a ~ path under that Mac's home (the one it published,
+// else the one the folder sits in).
+const matches = (r: BoardRow, text: string, home?: string) =>
+  r.folder === text || path.basename(r.folder) === text || (!r.owner_worker && isTilde(text) && expandOnMac(text, [home ?? r.folder]) === r.folder);
+
+// One Mac seen under two device ids (a re-pair) is one choice, not two: sameMac picks the live one for each folder.
+function oneMacPerFolder(hits: RemoteTarget[], macs: MacRow[]): RemoteTarget[] {
+  const byFolder = new Map<string, RemoteTarget[]>();
+  for (const t of hits) if (t.where === "Mac") byFolder.set(t.folder, [...(byFolder.get(t.folder) ?? []), t]);
+  const drop = new Set<RemoteTarget>();
+  for (const same of byFolder.values()) {
+    const keep = same.length > 1 ? sameMac(same.map((t) => t.target), macs) : null;
+    if (keep) for (const t of same) if (t.target !== keep) drop.add(t);
+  }
+  return hits.filter((t) => !drop.has(t));
+}
+
 // Where a project on another host is: worker://<id>/<name> or mac://<Mac>/<path> as given, else the synced cards'
-// folders that match it by path or by name. One match or an error listing each choice as the string to pass.
-export function remoteTarget(folder: string, rows: BoardRow[], self: string, macs: MacRow[] = []): RemoteTarget {
+// folders and the Macs' published projects (with cards or not) that match it by path, name or ~ path (that Mac's home).
+// One match or an error listing each choice as the string to pass.
+export function remoteTarget(folder: string, cards: BoardRow[], self: string, macs: MacRow[] = [], projects: MacProjectsRow[] = []): RemoteTarget {
   const text = folder.trim();
   const named = workerOf(text);
   if (named) return workerTarget(named.id, named.repo);
+  const rows = [...cards, ...projectRows(projects)];
+  const homes = new Map(projects.filter((p) => p.home.startsWith("/")).map((p) => [p.device, p.home.replace(/\/+$/, "")]));
   const labels = rowLabels(rows, macs);
-  if (isMacPath(text)) return macNamed(text, rows, labels, macs);
+  if (isMacPath(text)) return macNamed(text, rows, labels, macs, homes);
   const found = new Map<string, RemoteTarget>();
   for (const r of rows) {
     if (r.owner_worker === self) continue;
-    const hit = r.folder === text || path.basename(r.folder) === text;
-    if (!hit) continue;
+    if (!matches(r, text, homes.get(r.owner_device))) continue;
     const t = r.owner_worker ? workerTarget(r.owner_worker, r.folder) : macTarget(r.owner_device, r.folder, labels);
     found.set(t.address, t);
   }
-  const hits = [...found.values()];
+  const hits = oneMacPerFolder([...found.values()], macs);
   if (hits.length === 1) return hits[0] as RemoteTarget;
   if (hits.length > 1) throw new Error(`“${text}” is more than one project on your board. Pass one of these as the folder: ${hits.map((t) => t.address).join(", ")}.`);
   const known = [...new Set(rows.filter((r) => r.owner_worker !== self).map((r) => rowPath(r, labels)))];
-  throw new Error(`No project “${text}” on this worker or on your board.${known.length ? ` Projects with cards: ${known.slice(0, 12).join(", ")}.` : ""} A project on this worker is a folder under ${boardLink().root}; one on a Mac with no cards yet is mac://<Mac>/<path>.`);
+  throw new Error(`No project “${text}” on this worker or on your board.${known.length ? ` Projects: ${known.slice(0, 12).join(", ")}.` : ""} A project on this worker is a folder under ${boardLink().root}; one on a Mac is mac://<Mac>/<path>, and shows here once Sync is on for it (Settings → Sync on that Mac).`);
 }

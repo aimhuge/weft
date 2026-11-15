@@ -21,7 +21,7 @@ export type UseAuthOptions = {
   defaultNext?: string;
 };
 
-export type AuthBusy = AuthProvider | "signout" | null;
+export type AuthBusy = AuthProvider | "signout" | "signout-everywhere" | null;
 
 export type AuthState =
   | { kind: "loading" }
@@ -127,11 +127,12 @@ export function useAuth(options: UseAuthOptions = {}) {
     [defaultNext],
   );
 
-  const signOut = useCallback(async () => {
-    setBusy("signout");
+  // Sign out here, or (everywhere) on every device the account is signed in on.
+  const endSession = useCallback(async (everywhere: boolean) => {
+    setBusy(everywhere ? "signout-everywhere" : "signout");
     setError(null);
     try {
-      await api.signOut();
+      await (everywhere ? api.signOutEverywhere() : api.signOut());
       announceChange();
     } catch (err) {
       setError(message(err));
@@ -139,6 +140,8 @@ export function useAuth(options: UseAuthOptions = {}) {
       setBusy(null);
     }
   }, []);
+  const signOut = useCallback(() => endSession(false), [endSession]);
+  const signOutEverywhere = useCallback(() => endSession(true), [endSession]);
 
-  return { state, busy, error, waiting, signInWithOAuth, signOut };
+  return { state, busy, error, waiting, signInWithOAuth, signOut, signOutEverywhere };
 }

@@ -3,20 +3,18 @@
 // summary: the name, schedule, fork or fresh, on or off, next run and project name, and the prompt only when it's short.
 // Never the folder's full path, the source card, the fork's session or the runs. Written to cloud_mac_crons with the
 // account's own session (owner-only), a moment after any `crons` event, and every 10 minutes in case the sign-in
-// changed; signed out, or a database without the table yet, it publishes nothing.
+// changed (lib/mac-publish.ts); signed out, or a database without the table yet, it publishes nothing.
 import os from "node:os";
 import path from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
-import { subscribe } from "./bus";
 import { listCrons } from "./cron-store";
 import type { Cron, CronMode } from "./cron-types";
 import { deviceId } from "./device-id";
+import { createMacPublisher, REPUBLISH_MS, startMacPublish } from "./mac-publish";
 
 export const MAC_PROMPT_MAX = 120;
 export const MAC_CRON_CAP = 200;
-export const PUBLISH_DELAY_MS = 2_000;
-export const REPUBLISH_MS = 10 * 60_000;
 
 export interface MacCronRow {
   id: string;
@@ -57,41 +55,11 @@ export interface MacCronsDeps {
   delayMs?: number;
 }
 
-// poke() after any change: the list goes once, delayMs later, however many changes came in between. A failure is
-// logged once until a publish works again, so a database without the table doesn't fill the log.
-export function createMacCronsPublisher({ read, put, log = console.warn, delayMs = PUBLISH_DELAY_MS }: MacCronsDeps) {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  let failing = false;
-  async function flush() {
-    if (timer) clearTimeout(timer);
-    timer = null;
-    try {
-      await put(macCronRows(read()));
-      failing = false;
-    } catch (err) {
-      if (!failing) log(`[weft] couldn't publish this Mac's crons for your workers: ${(err as Error).message}`);
-      failing = true;
-    }
-  }
-  return {
-    poke() {
-      timer ??= setTimeout(() => void flush(), delayMs);
-    },
-    flush,
-  };
-}
+// poke() after any change: the list goes once, a moment later (lib/mac-publish.ts).
+export const createMacCronsPublisher = ({ read, ...deps }: MacCronsDeps) => createMacPublisher({ what: "crons", read: () => macCronRows(read()), ...deps });
 
 // Once per server process, from the board's prewarm (lib/copilot.ts). Answers the way to stop it.
 export function startMacCronsPublish(deps: Partial<MacCronsDeps> = {}, every = REPUBLISH_MS): () => void {
   const publisher = createMacCronsPublisher({ read: listCrons, put: (rows) => putMacCrons(rows), ...deps });
-  const off = subscribe((event) => {
-    if (event.type === "crons") publisher.poke();
-  });
-  void publisher.flush();
-  const tick = setInterval(() => void publisher.flush(), every);
-  tick.unref();
-  return () => {
-    off();
-    clearInterval(tick);
-  };
+  return startMacPublish(publisher, (event) => event.type === "crons", every);
 }

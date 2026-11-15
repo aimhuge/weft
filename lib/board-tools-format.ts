@@ -3,8 +3,13 @@
 // prompt reads. lib/board-tools.ts wires these into the MCP tools.
 
 import { asText, clip, firstLine, shortToolName } from "./format";
+import { shareQuestion } from "./share-consent";
 import { getCard, getThread } from "./store";
 import type { Card, ThreadItem } from "./types";
+
+// On a Weft Worker. Read here rather than from lib/worker-pane.ts, whose imports reach the settings store: this file
+// only formats, and every board-tools test would pay for that chain.
+const onWorker = () => process.env.WEFT_WORKER === "1";
 
 function boardCard(id: string): Card {
   const card = getCard(id);
@@ -69,7 +74,11 @@ export function describeBoardTool(toolName: string, input: Record<string, unknow
     case "answer_permission":
       return `${input.allow ? "Allow" : "Deny"} ${card?.pending?.title ?? "its request"} on ${label}`;
     case "restart_weft_when_idle":
-      return "Restart Weft once the running threads finish";
+      return onWorker() ? "Update this worker to the newest main once the running threads finish" : "Restart Weft once the running threads finish";
+    case "share_card":
+      return input.public === false ? "Make this card's share link private" : shareQuestion(input);
+    case "worker_log":
+      return "Read this worker's log, with key-shaped text hidden";
     default:
       return null;
   }

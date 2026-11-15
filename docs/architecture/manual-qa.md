@@ -44,6 +44,9 @@ it. `lib/qa-switch.ts` asks Electron main (`POST /qa/approve`, Touch ID, naming 
 sends a `qa` command. The worker writes `card.qaDevice`, the Mac's sync device id, and that comes back on the card's row. With it set and
 a grant here, `WorkerPane` (the worker card's pane column in `OpenCard`) draws the native `BrowserPane` in place of `WebPane`, because that's the pane with the window capture.
 The board's existing `setActive(selectedId)` already points it at the card.
+Until `readQa` answers on a mount (opening the card, coming back to it), `useQa` reads off. In that moment a card with `qaDevice` set
+keeps the native pane as it is, instead of loading the card's own worker page into it. Loading it would put that page over the live view the Mac's `watch` had
+opened under the same pane key, and the simulator would be gone until the next `watch` (`simulatorHere` in `components/WorkerPane.tsx`).
 
 weft.zip and the phone draw the chip without the Simulator on this Mac section: the yes has to be given on the machine the build runs on.
 

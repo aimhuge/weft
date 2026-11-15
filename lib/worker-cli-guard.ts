@@ -88,7 +88,7 @@ export function workerCliVerdict(command: string, cwd: string, clone = workerClo
   if (fs.existsSync(clone) && (all.some((s) => writesClone(s, clone)) || redirectsIntoClone(command, cwd, clone, all.map((s) => s.cwd)))) return CLONE_REFUSAL;
   const redirected = REDIRECTS_CLI.test(command) && all.some(readsStdin);
   if (!redirected && !all.some(runsWorkerCli) && !pipesInstaller(all) && !feedsRunner(all)) return null;
-  return "Refused: a thread can't run weft-worker (enrol, forget and the rest), the daemon's script or the worker installer. They decide which Mac a worker trusts with secrets, so the user runs them from a terminal on the box.";
+  return "Refused: a thread can't run weft-worker (enrol, forget and the rest), the daemon's script or the worker installer. They decide which Mac a worker trusts with secrets, so the user runs them from a terminal on the box. To update this worker, call mcp__board__restart_weft_when_idle (it updates to the newest main once every turn has ended); for what `weft-worker status` says and the worker's log, mcp__board__worker_log.";
 }
 
 export const workerCliGuard: HookCallback = (input) => {

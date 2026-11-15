@@ -4,6 +4,8 @@ import { COPILOT_ID, type Card } from "./types";
 
 const db = vi.hoisted(() => ({ cards: new Map<string, Card>(), projects: [] as Array<{ path: string }> }));
 
+// Prewarm starts this Mac's projects publish; its imports reach the settings store, which the store mock below has no data folder for.
+vi.mock("./mac-projects", () => ({ startMacProjectsPublish: vi.fn() }));
 vi.mock("./store", () => ({
   getCard: vi.fn((id: string) => db.cards.get(id)),
   listCards: vi.fn(() => [...db.cards.values()]),

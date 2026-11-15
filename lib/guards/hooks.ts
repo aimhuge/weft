@@ -13,6 +13,7 @@ import { IMPORT_GUARD_MATCHER } from "../import-check";
 import { restartGuardMatcher } from "../restart-guard";
 import { ROUTE_IMPORT_GUARD_MATCHER } from "../route-import-guard";
 import { secretGuardMatcher } from "../secret-guard";
+import { shareConsentMatcher } from "../share-consent";
 import { SIMULATOR_GUARD_MATCHER } from "../simulator-guard";
 import { WORKER_CLI_GUARD_MATCHER } from "../worker-cli-guard";
 
@@ -40,7 +41,7 @@ export function guardHooks(otherTurns: () => number, cardId: () => string | unde
   const bash = bashClaimHooks(cardId);
   const stamp = changelogStampHooks(cardId);
   return {
-    PreToolUse: [secretGuardMatcher(cardId), restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, DEVSERVER_GUARD_MATCHER, SIMULATOR_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId), clipboardGuardMatcher(), WORKER_CLI_GUARD_MATCHER, WORKER_TOOL_GATE],
+    PreToolUse: [secretGuardMatcher(cardId), restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, DEVSERVER_GUARD_MATCHER, SIMULATOR_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId), clipboardGuardMatcher(), WORKER_CLI_GUARD_MATCHER, WORKER_TOOL_GATE, shareConsentMatcher(cardId)],
     PostToolUse: [IMPORT_GUARD_MATCHER, claims.post, bash.post, stamp.post],
     PostToolUseFailure: [bash.post],
   };

@@ -6,7 +6,7 @@ import type { HostResult } from "./host-command";
 import type { PackedLimits } from "./limits-wire";
 import type { WorkerConfig } from "./worker-config";
 import type { GithubState } from "./worker-github";
-import type { MacRow } from "./worker-board-macs";
+import type { MacProjectsRow, MacRow } from "./worker-board-macs";
 import type { SyncedRow } from "./worker-settings-sync";
 
 // supabase-js's rpc, narrowed to what the worker needs, so tests hand in a fake.
@@ -28,6 +28,23 @@ export interface MacCronsRow {
   label: string;
   crons: unknown[];
   updated_at: string;
+}
+
+// worker_share_card's arguments and answer (lib/share-tool.ts): a worker shares only its own card, public or private.
+export interface WorkerShareArgs {
+  cardId: string;
+  mode: "public" | "private";
+  showChat: boolean;
+  shareId: string;
+  slugs: string[];
+}
+
+export interface WorkerShareRow {
+  id: string;
+  mode: string;
+  slug: string | null;
+  show_chat: boolean;
+  username: string | null;
 }
 
 export type WorkerStatus = "online" | "busy" | "offline";
@@ -117,6 +134,12 @@ export function registry(rpc: Rpc, key: string) {
     // The owner's Macs by device id and name, for create_card's mac:// paths (lib/worker-board-macs.ts,
     // supabase/migrations/*_worker_board_macs.sql).
     macs: async () => (await call<MacRow[] | null>(rpc, "worker_board_macs", { p_key: key })) ?? [],
+    // Each Mac's synced projects and home, so create_card finds one with no cards yet (lib/mac-projects.ts,
+    // supabase/migrations/*_mac_projects_for_workers.sql).
+    macProjects: async () => (await call<MacProjectsRow[] | null>(rpc, "worker_mac_projects", { p_key: key })) ?? [],
+    // A thread's share_card on its own card (lib/share-tool.ts, supabase/migrations/*_worker_share_card.sql).
+    shareCard: (share: WorkerShareArgs) =>
+      call<WorkerShareRow>(rpc, "worker_share_card", { p_key: key, p_card_id: share.cardId, p_mode: share.mode, p_show_chat: share.showChat, p_share_id: share.shareId, p_slugs: share.slugs }),
     // Whether the Mac this worker was paired with has been revoked (lib/worker-mac-revocation.ts), and every passkey head
     // its Mac published (lib/passkey-head.ts): supabase/migrations/*_worker_pairing_mac.sql, *_worker_passkey_heads.sql.
     macState: () => call<unknown>(rpc, "worker_mac_state", { p_key: key }),

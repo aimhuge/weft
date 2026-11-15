@@ -973,6 +973,26 @@ webhook" in a board nobody sees. Now the tools that write the board reach the us
   (the Mac checks it's switched on in Settings → Sync); a bare name is that Mac's one card folder of that name (two is an
   error listing both), else goes for the Mac to resolve (`syncFolderFor`). This Mac's own `create_card` never had the problem: its ambiguity error
   already lists `worker://` paths, and it doesn't send cards to another Mac at all.
+- **One Mac under two ids, and `~`.** A Mac that re-paired or reinstalled gets a new device id while the old one's cards
+  stay synced, so one path used to match twice ("Mac (/Users/me/dev/weft), Mac (/Users/me/dev/weft)") with nothing to
+  pass to pick one. `remoteTarget` now collapses Mac matches for the same folder with `sameMac`: when only one of the
+  ids is still a live Mac of the owner's (`worker_board_macs` leaves out the revoked) or the live ones share a name,
+  they're one Mac and the one seen last wins (`worker_board_macs` orders by `last_seen_at`). Really different Macs
+  still get the error with each `mac://` choice. A `~/<path>`, bare or after `mac://<Mac>/`, is that Mac's home: the one
+  it publishes (`lib/mac-projects.ts`), else the one home its cards' folders sit in (`expandOnMac`), else an error asking
+  for the full path. The Mac itself never expands `~` (`syncFolderFor` matches exact paths or names).
+- **A Mac project with no cards yet.** A worker used to know a Mac's projects only by its synced cards' folders, so a
+  project just added on the Mac (`~/dev/weft-mobile`) was "No project … Projects with cards: …". Each Mac now publishes
+  the folders Sync is on for, the only ones its inbox takes a card for, and its home folder (`lib/mac-projects.ts`,
+  started from `prewarm` in `lib/copilot.ts`, debounced by `lib/mac-publish.ts`, which `lib/mac-crons.ts` shares). It
+  checks every minute and writes only on a change or every 10 minutes, since the Sync switch fires no bus event. The
+  rows go to `cloud_mac_projects` with the account's own session, and the worker reads them through
+  `worker_mac_projects` (key-checked: the owner's unrevoked Macs in the worker's workspace, absolute paths only;
+  `supabase/migrations/20261106150000_mac_projects_for_workers.sql`). `remoteTarget` adds each published folder as a
+  row with no card (`projectRows`), so a path, a name, a `~` path (that Mac's published home) and the same-Mac collapse
+  all work as they do for a folder with cards, and the no-match error lists them under "Projects". A folder with Sync
+  off never leaves the Mac. When the worker's wiring or the database predates this (`boardMacProjects` reads as none),
+  matching uses the cards alone, as before.
 - **A worker's card never runs unasked elsewhere.** A worker key belongs to a box, and a thread's prompt can be injected,
   so `worker_new_card` treats both as untrusted: it rebuilds the payload from `prompt`, `title`, `tags` and
   `start: false` alone (no mode, agent, model, repo or attachments) and stamps it `fromWorker: <id>`, which only the

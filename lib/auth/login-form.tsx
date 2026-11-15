@@ -14,7 +14,7 @@
 // path that opens the system browser.
 import { useState, type SubmitEvent } from "react";
 import { api } from "../client";
-import { useAuth, type AuthProvider } from "./hooks";
+import { useAuth, type AuthBusy, type AuthProvider } from "./hooks";
 
 export type LoginFormProps = {
   defaultNext?: string;
@@ -53,7 +53,7 @@ function webSignInHref(provider: AuthProvider, next: string): string {
 // The magic-link email row, lifted out of LoginForm to keep that function under the
 // complexity cap. Catches the API error and shows it inline so a server restart doesn't
 // surface as an unhandled rejection.
-function EmailMagicLink({ busy }: { busy: AuthProvider | "signout" | null }) {
+function EmailMagicLink({ busy }: { busy: AuthBusy }) {
   const [email, setEmail] = useState("");
   const [emailError, setEmailError] = useState<string | null>(null);
 

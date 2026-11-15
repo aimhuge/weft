@@ -24,7 +24,7 @@ import type { Publisher } from "./worker-publish";
 import type { Sealed } from "./worker-seal";
 import type { SealedAnswer } from "./rtc-signal";
 import { HEALTHY_AFTER_MS } from "./worker-update";
-import { createUpdateLoop, type Holder } from "./worker-update-loop";
+import { createUpdateLoop, NO_UPDATER, type Holder } from "./worker-update-loop";
 import type { Registry, WorkerStatus } from "./worker-registry";
 import type { Tick } from "./worker-update";
 import type { WakeHooks } from "./worker-wake";
@@ -141,7 +141,7 @@ export function createDaemon(deps: DaemonDeps) {
 
   // Not awaited: this pass counts as busy, so the check holds until the pass has reported this command.
   function askForUpdate(): null {
-    if (!updates) throw new Error("This worker doesn't update itself: auto-update is off, or it isn't running from its own clone.");
+    if (!updates) throw new Error(NO_UPDATER);
     void updates.check();
     return null;
   }

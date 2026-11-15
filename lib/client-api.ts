@@ -361,6 +361,8 @@ export const api = {
     call<{ url: string }>("POST", "/api/account", { action: "oauth", provider, ...(next ? { next } : {}) }),
   magicLink: (email: string) => call<{ ok: true }>("POST", "/api/account", { action: "email", email }),
   signOut: () => call<{ ok: true }>("POST", "/api/account", { action: "signout" }),
+  // Revokes every session the account holds, on every device (needs Weft's own window).
+  signOutEverywhere: () => call<{ ok: true }>("POST", "/api/account", { action: "signout-everywhere" }),
   // The signed-in user's billing status (lib/billing-client.ts); null when signed out, { error } on a failure.
   billingStatus: () => call<BillingClientView>("GET", "/api/account/billing"),
   // A Stripe Checkout for the workspace (the upgrade dialog): its url goes to the system browser.

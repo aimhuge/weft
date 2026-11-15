@@ -3,6 +3,13 @@ Read SOUL.md first: it says who Weft is, what it values, and where things live.
 <!-- Goose reads this file on its own, and imports other files as @./path. CLAUDE.md pulls in SOUL.md. -->
 @./CLAUDE.md
 
+## Public links to your own card
+
+When your work needs a link anyone can open (a demo video or page for a PR, an issue or a message), `open_url` it in the
+pane and call `mcp__board__share_card`; don't stop to ask the user to click Share. It publishes this card only, pane only
+unless you pass `show_chat: true`, and the first public share of a card asks the user once (lib/share-consent.ts). Share only
+what the task needs shown: a public link can be cached or indexed the moment it exists. `public: false` takes it back.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

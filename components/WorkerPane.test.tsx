@@ -20,8 +20,8 @@ vi.mock("./web-board/WebPane", () => ({
     return null;
   },
 }));
-const qa = vi.hoisted(() => ({ on: false }));
-vi.mock("./use-local-simulator", () => ({ useLocalSimulator: () => ({ on: qa.on, ready: true, approved: null, devices: [], busy: false, problem: "", send: vi.fn() }) }));
+const qa = vi.hoisted(() => ({ on: false, ready: true }));
+vi.mock("./use-local-simulator", () => ({ useLocalSimulator: () => ({ on: qa.on, ready: qa.ready, approved: null, devices: [], busy: false, problem: "", send: vi.fn() }) }));
 vi.mock("./web-board/HostChip", () => ({
   HostChip: (props: Record<string, unknown>) => {
     seen.set("host chip", props);
@@ -51,6 +51,7 @@ afterEach(() => {
   cleanup();
   seen.clear();
   qa.on = false;
+  qa.ready = true;
   open.mockClear();
 });
 
@@ -90,6 +91,34 @@ describe("WorkerPane", () => {
     expect(seen.get("host chip")).toMatchObject({ local: { on: true } });
     expect(seen.get("host chip")!.onScreenInput).toBeUndefined();
     expect(seen.get("save app")).toEqual({ url: `blob:sha256:${SHA}`, title: "App" });
+  });
+
+  it("doesn't load the card's page over the live view while it waits to hear Local Simulator is on", () => {
+    // Every mount reads the switch afresh, so for a moment it reads off: the Mac's watch page must survive that.
+    qa.ready = false;
+    const mac = { ...card, qaDevice: "mac-1" } as Card;
+    const { rerender } = render(<WorkerPane card={mac} url={`blob:sha256:${SHA}`} browser={browser} marks={null} onClose={vi.fn()} />);
+    expect(seen.get("browser pane")).toMatchObject({ expanded: true, desktop: true });
+    expect(open).not.toHaveBeenCalled();
+    // The answer: still on. The pane stays on the live view.
+    qa.ready = true;
+    qa.on = true;
+    rerender(<WorkerPane card={mac} url={`blob:sha256:${SHA}`} browser={browser} marks={null} onClose={vi.fn()} />);
+    expect(open).not.toHaveBeenCalled();
+    // The answer: off after all (the approval lapsed). Now the card's page loads.
+    qa.on = false;
+    rerender(<WorkerPane card={mac} url={`blob:sha256:${SHA}`} browser={browser} marks={null} onClose={vi.fn()} />);
+    expect(open).toHaveBeenCalledWith(`${window.location.origin}/api/worker-board/page/${SHA}`, "w1");
+  });
+
+  it("waits for nothing on a card that never asked for this Mac's simulator, or off the desktop", () => {
+    qa.ready = false;
+    render(<WorkerPane card={card} url={`blob:sha256:${SHA}`} browser={browser} marks={null} onClose={vi.fn()} />);
+    expect(open).toHaveBeenCalledTimes(1);
+    cleanup();
+    seen.clear();
+    render(<WorkerPane card={{ ...card, qaDevice: "mac-1" }} url={`blob:sha256:${SHA}`} browser={web} marks={null} onClose={vi.fn()} />);
+    expect(seen.has("web pane")).toBe(true);
   });
 
   it("names no worker when it doesn't know which", () => {

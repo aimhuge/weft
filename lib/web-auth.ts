@@ -320,16 +320,17 @@ async function bumpProfile(client: SupabaseClient, env: WebAuthEnv = process.env
 
 /**
  * The /auth/sign-out handler. Signs the visitor out of this device only
- * (scope: "local" so a sign-in on another tab / phone survives), then 303s
- * to /login.
+ * (scope: "local" so a sign-in on another tab / phone survives), or with
+ * scope "global" (Sign out everywhere) revokes every session the account
+ * holds, the desktop app's included. Then 303s to /login.
  */
 export type WebSignOutResult = { kind: "redirect"; url: string };
 
 export async function webSignOut(
   client: SupabaseClient,
-  params: { request: Request; loginPath: string; origin?: string },
+  params: { request: Request; loginPath: string; origin?: string; scope?: "local" | "global" },
 ): Promise<WebSignOutResult> {
-  await client.auth.signOut({ scope: "local" });
+  await client.auth.signOut({ scope: params.scope ?? "local" });
   // Same origin rule as the callback: the sign-out clears the host-only cookies,
   // so it has to land on the host that holds them.
   const origin = params.origin ?? webCallbackOrigin(webRequestOrigin(params.request));

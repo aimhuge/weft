@@ -2,7 +2,8 @@
 // this device only (scope: "local" — a sign-in on another tab / phone
 // survives) and 303s to /login. A form submission from the /login banner
 // hits this route; a plain GET would let any link trigger a sign-out, so
-// the route only accepts POST.
+// the route only accepts POST. A form field scope=global (the web account
+// menu's Sign out everywhere) revokes every session the account holds.
 //
 // Only on the deployed site: a 404 in `next dev` keeps the desktop's
 // /api/account/signout (lib/account.ts `signOut`) the only one in the tree.
@@ -14,6 +15,8 @@ export async function POST(request: Request): Promise<Response> {
   // Sign-out clears the host-only cookies, so it lands on the host that holds them.
   // The Host header is that host; `request.url`'s host is normalized to localhost.
   const origin = webCallbackOrigin(webRequestOrigin(request));
-  const result = await webSignOut(await webClient(), { request, loginPath: "/login", origin });
+  const form = await request.formData().catch(() => null);
+  const scope = form?.get("scope") === "global" ? "global" : "local";
+  const result = await webSignOut(await webClient(), { request, loginPath: "/login", origin, scope });
   return Response.redirect(result.url, 303);
 }

@@ -17,7 +17,7 @@ import { listText, type ListOptions } from "./board-tools-format";
 import { agentElsewhereRefusal, defaultAgentNote, MAC_AGENT_UNKNOWN } from "./host-agent";
 import { getCard, listCards } from "./store";
 import type { Card, PermissionMode } from "./types";
-import { boardCards, boardLink, boardMacs, BOARD_READ, localFolder, remoteTarget } from "./worker-board-link";
+import { boardCards, boardLink, boardMacProjects, boardMacs, BOARD_READ, localFolder, remoteTarget } from "./worker-board-link";
 import { isMacCronId, MAC_CRON_REFUSED, macCronsSection } from "./worker-mac-crons";
 import { workerProjectPath } from "./worker-project";
 
@@ -100,8 +100,8 @@ export async function workerCreateCard(args: NewCardArgs, deps: WorkerBoardDeps)
 // A card for another host's project, as a new_card (a Mac) or run (a worker). It carries no agent, so a named one
 // passes only when it's that project's default, checked before anything is sent (lib/host-agent.ts).
 async function sendElsewhere(args: NewCardArgs, link: ReturnType<typeof boardLink>): Promise<string> {
-  const [rows, macs] = await Promise.all([link.cards(BOARD_READ), boardMacs(link)]);
-  const to = remoteTarget(args.folder ?? "", rows, link.workerId, macs);
+  const [rows, macs, projects] = await Promise.all([link.cards(BOARD_READ), boardMacs(link), boardMacProjects(link)]);
+  const to = remoteTarget(args.folder ?? "", rows, link.workerId, macs, projects);
   const project = to.where === "Mac" ? null : workerProjectPath(to.target.slice("worker:".length), to.folder);
   const refused = project ? agentElsewhereRefusal(args.agent, project) : args.agent?.trim() ? MAC_AGENT_UNKNOWN : null;
   if (refused) throw new Error(refused);

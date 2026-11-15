@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findMac, isMacPath, macLabels, macPath, parseMacPath } from "./worker-board-macs";
+import { expandOnMac, findMac, homeOf, isMacPath, isTilde, macLabels, macPath, parseMacPath, sameMac } from "./worker-board-macs";
 
 const air = "a".repeat(64);
 const air2 = "c".repeat(64);
@@ -78,5 +78,67 @@ describe("findMac", () => {
     expect(() => findMac("air", labels, macs)).toThrow("“air” is more than one of your Macs: pass one by its id instead (aaaaaaaaaaaa, cccccccccccc).");
     expect(() => findMac("bbb", labels, macs)).toThrow("No Mac “bbb” on your board. Your Macs: aaaaaaaaaaaa, cccccccccccc, mini.");
     expect(() => findMac("x", new Map(), [])).toThrow("Your Macs: none with cards or online yet.");
+  });
+});
+
+describe("sameMac", () => {
+  const old = "d".repeat(64);
+  const repaired = "e".repeat(64);
+  const other = "f".repeat(64);
+
+  it("is the live Mac when the other device id is a revoked one (a re-pair)", () => {
+    expect(sameMac([old, repaired], [{ device: repaired, name: "Mac" }])).toBe(repaired);
+  });
+
+  it("is the one seen last when the live ones share a name, case aside", () => {
+    expect(
+      sameMac(
+        [old, repaired],
+        [
+          { device: repaired, name: "Mac" },
+          { device: old, name: "mac " },
+        ],
+      ),
+    ).toBe(repaired);
+  });
+
+  it("is null for really different Macs, or when none is known to be live", () => {
+    expect(
+      sameMac(
+        [repaired, other],
+        [
+          { device: repaired, name: "Mac" },
+          { device: other, name: "Air" },
+        ],
+      ),
+    ).toBeNull();
+    expect(sameMac([old, repaired], [])).toBeNull();
+  });
+});
+
+describe("~ paths", () => {
+  it("knows a ~ path", () => {
+    expect(isTilde("~")).toBe(true);
+    expect(isTilde("~/dev/weft")).toBe(true);
+    expect(isTilde("~me/dev")).toBe(false);
+    expect(isTilde("/Users/me")).toBe(false);
+  });
+
+  it("finds the home a Mac path sits in", () => {
+    expect(homeOf("/Users/me/dev/weft")).toBe("/Users/me");
+    expect(homeOf("/home/me/app")).toBe("/home/me");
+    expect(homeOf("/opt/app")).toBeNull();
+  });
+
+  it("expands ~ to the one home the Mac's folders show, else null", () => {
+    expect(expandOnMac("~/dev/weft", ["/Users/me/app", "/opt/x"])).toBe("/Users/me/dev/weft");
+    expect(expandOnMac("~", ["/Users/me/app"])).toBe("/Users/me");
+    expect(expandOnMac("~/dev", [])).toBeNull();
+    expect(expandOnMac("~/dev", ["/Users/me/a", "/Users/you/b"])).toBeNull();
+  });
+
+  it("leaves a ~ path in a mac:// path as written", () => {
+    expect(parseMacPath("mac://mini/~/dev/weft")).toEqual({ mac: "mini", folder: "~/dev/weft" });
+    expect(parseMacPath("mac://mini/~")).toEqual({ mac: "mini", folder: "~" });
   });
 });

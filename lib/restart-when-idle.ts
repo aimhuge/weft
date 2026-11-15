@@ -43,7 +43,15 @@ interface Drain {
   requestedBy?: { id: string; title: string };
 }
 
-const state = globalSingleton("__weftRestart", () => ({ drain: undefined as Drain | undefined }));
+// On a Weft Worker there's no Electron to relaunch: the daemon hands in what a restart means there (lib/worker-daemon.ts,
+// update to the newest main and exit into it). It answers with why it didn't restart, or null when it's on its way out.
+type Fire = (then: RestartThen) => Promise<string | null>;
+
+const state = globalSingleton("__weftRestart", () => ({ drain: undefined as Drain | undefined, fire: undefined as Fire | undefined }));
+
+export function restartWith(fire: Fire | undefined) {
+  state.fire = fire;
+}
 
 // A drain inherited from a previous server process, whose restart already happened (or was lost when it died).
 // Cleared once on boot, before anything can read it, so it can't restart Weft a second time.
@@ -78,7 +86,7 @@ export function restartStatus(): RestartStatus {
 // `cardId` is the card whose thread asked for it, when one did (lib/restart-tool.ts): the board marks that card, so
 // you can see which one is waiting on a restart. A restart asked for from the menu or the palette has no card.
 export function armRestart(then: RestartThen = "relaunch", cardId?: string): RestartStatus {
-  if (!process.env.WEFT_SHELL_URL) throw new Error("Restarting Weft needs the desktop app.");
+  if (!process.env.WEFT_SHELL_URL && !state.fire) throw new Error("Restarting Weft needs the desktop app.");
   console.warn(`[weft] restart-when-idle armed (${then}), generation ${GENERATION}`);
   let drain = state.drain;
   if (drain) {
@@ -135,6 +143,13 @@ function check(drain: Drain) {
 
 // Stays armed while Electron quits, so nothing starts in the meantime.
 async function restartNow(drain: Drain) {
+  const fire = state.fire;
+  if (fire) {
+    // The drain stays armed while it updates, so nothing starts; a worker that stays up says why and lets work go on.
+    const why = await fire(drain.then).catch((err: unknown) => (err instanceof Error ? err.message : String(err)));
+    if (why && state.drain === drain) disarm(why);
+    return;
+  }
   try {
     console.warn(`[weft] restart-when-idle firing: asking Electron to ${drain.then} (generation ${drain.generation})`);
     await shell("/app/restart", { then: drain.then });

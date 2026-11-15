@@ -206,6 +206,14 @@ describe("registry: the board tools", () => {
     expect(await registry(fakeRpc().rpc, key).macs()).toEqual([]);
   });
 
+  it("reads the owner's Macs' published projects, an empty answer as none", async () => {
+    const rows = [{ device: "d1", home: "/Users/me", folders: ["/Users/me/app"] }];
+    const { rpc, calls } = fakeRpc({ data: rows });
+    expect(await registry(rpc, key).macProjects()).toEqual(rows);
+    expect(calls).toEqual([{ fn: "worker_mac_projects", args: { p_key: key } }]);
+    expect(await registry(fakeRpc().rpc, key).macProjects()).toEqual([]);
+  });
+
   it("reads its pairing Mac's state and its passkey heads, an empty answer as none", async () => {
     const { rpc, calls } = fakeRpc({ data: { mac: "m", revoked: false } });
     expect(await registry(rpc, key).macState()).toEqual({ mac: "m", revoked: false });

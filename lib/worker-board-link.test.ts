@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { boardCards, boardLink, boardMacs, localFolder, remoteTarget, rowCard, setBoardLink, type BoardLink } from "./worker-board-link";
+import { boardCards, boardLink, boardMacProjects, boardMacs, localFolder, projectRows, remoteTarget, rowCard, setBoardLink, type BoardLink } from "./worker-board-link";
 import type { Card } from "./types";
 import type { BoardRow } from "./worker-registry";
 
@@ -132,8 +132,8 @@ describe("remoteTarget", () => {
   });
 
   it("lists the projects it knows when none matches, and the work root", () => {
-    expect(() => remoteTarget("nope", [row(), row({ owner_worker: "w2", folder: "site" })], "w1")).toThrow(/Projects with cards: mac:\/\/mac-1\/Users\/me\/app, worker:\/\/w2\/site\. A project on this worker is a folder under/);
-    expect(() => remoteTarget("nope", [], "w1")).toThrow(/^No project “nope” on this worker or on your board\. A project.*mac:\/\/<Mac>\/<path>\.$/);
+    expect(() => remoteTarget("nope", [row(), row({ owner_worker: "w2", folder: "site" })], "w1")).toThrow(/Projects: mac:\/\/mac-1\/Users\/me\/app, worker:\/\/w2\/site\. A project on this worker is a folder under/);
+    expect(() => remoteTarget("nope", [], "w1")).toThrow(/^No project “nope” on this worker or on your board\. A project.*mac:\/\/<Mac>\/<path>, and shows here once Sync is on for it \(Settings → Sync on that Mac\)\.$/);
   });
 
   describe("mac://", () => {
@@ -169,9 +169,83 @@ describe("remoteTarget", () => {
       expect(remoteTarget("mac://mini/Users/me/app", [], "w1", macs).target).toBe(mini);
     });
 
+    it("expands a ~ path to that Mac's published home, else the home its cards show, else asks for the full path", () => {
+      expect(remoteTarget("mac://mini/~/dev/new", rows, "w1", macs, [{ device: mini, home: "/Users/pub/", folders: [] }])).toMatchObject({ target: mini, folder: "/Users/pub/dev/new" });
+      expect(remoteTarget("mac://mini/~/dev/site", rows, "w1", macs)).toMatchObject({ target: mini, folder: "/Users/me/dev/site" });
+      expect(() => remoteTarget("mac://mini/~/dev/site", [], "w1", macs)).toThrow("Can't tell where ~ is on that Mac from its cards: pass the full path, like mac://mini/Users/<you>/dev/site.");
+    });
+
+    it("matches a bare ~ path against the Macs' folders", () => {
+      expect(remoteTarget("~/dev/site", rows, "w1", macs)).toMatchObject({ target: mini, folder: "/Users/me/dev/site" });
+      expect(() => remoteTarget("~/app", rows, "w1", macs)).toThrow(/mac:\/\/MacBook-Air-3\/Users\/me\/app, mac:\/\/mini\/Users\/me\/app/);
+      expect(() => remoteTarget("~/site", [row({ owner_worker: "w2", folder: "site" })], "w1", macs)).toThrow(/No project “~\/site”/);
+    });
+
+    it("collapses one Mac seen under two device ids (a re-pair) to its live one", () => {
+      const old = "d".repeat(64);
+      const repaired = "e".repeat(64);
+      const twice = [row({ owner_device: old, folder: "/Users/me/dev/weft" }), row({ card_id: "c2", owner_device: repaired, folder: "/Users/me/dev/weft" })];
+      expect(remoteTarget("/Users/me/dev/weft", twice, "w1", [{ device: repaired, name: "Mac" }])).toMatchObject({ target: repaired, address: "mac://Mac/Users/me/dev/weft" });
+      const both = [
+        { device: repaired, name: "Mac" },
+        { device: old, name: "Mac" },
+      ];
+      expect(remoteTarget("~/dev/weft", twice, "w1", both)).toMatchObject({ target: repaired, address: "mac://eeeeeeeeeeee/Users/me/dev/weft" });
+      expect(() => remoteTarget("/Users/me/dev/weft", twice, "w1")).toThrow("mac://dddddddddddd/Users/me/dev/weft, mac://eeeeeeeeeeee/Users/me/dev/weft.");
+    });
+
     it("refuses a broken path and an unknown Mac, naming the Macs it knows", () => {
       expect(() => remoteTarget("mac://mini", rows, "w1", macs)).toThrow(/isn't a Mac project/);
       expect(() => remoteTarget("mac://nope/Users/me/app", rows, "w1", macs)).toThrow("No Mac “nope” on your board. Your Macs: MacBook-Air-3, mini.");
     });
+  });
+
+  describe("a Mac's published projects", () => {
+    const air = { device: "mac-1", name: "MacBook-Air-3" };
+    const fresh = [{ device: "mac-1", home: "/Users/me", folders: ["/Users/me/dev/weft-mobile", "/Users/me/app"] }];
+
+    it("finds a project with no cards by path, name or ~ path under that Mac's home", () => {
+      for (const name of ["/Users/me/dev/weft-mobile", "weft-mobile", "~/dev/weft-mobile", "~/dev/weft-mobile/"]) {
+        expect(remoteTarget(name, [], "w1", [air], fresh)).toEqual({ target: "mac-1", folder: "/Users/me/dev/weft-mobile", where: "Mac", address: "mac://MacBook-Air-3/Users/me/dev/weft-mobile" });
+      }
+    });
+
+    it("reads ~ as the Mac's published home, never this worker's", () => {
+      const other = [{ device: "mac-1", home: "/Users/alex", folders: ["/Users/alex/dev/weft-mobile"] }];
+      expect(remoteTarget("~/dev/weft-mobile", [], "w1", [air], other).folder).toBe("/Users/alex/dev/weft-mobile");
+      expect(remoteTarget("mac://MacBook-Air-3/~/dev/new", [], "w1", [air], other).folder).toBe("/Users/alex/dev/new");
+      expect(() => remoteTarget("~/dev/nope", [], "w1", [air], other)).toThrow(/No project “~\/dev\/nope”/);
+    });
+
+    it("is one project when it has cards too, and finds a name on a mac:// path among them", () => {
+      expect(remoteTarget("app", [row()], "w1", [air], fresh).address).toBe("mac://MacBook-Air-3/Users/me/app");
+      expect(remoteTarget("mac://MacBook-Air-3/weft-mobile", [], "w1", [air], fresh).folder).toBe("/Users/me/dev/weft-mobile");
+    });
+
+    it("lists the published projects when none matches", () => {
+      expect(() => remoteTarget("nope", [], "w1", [air], fresh)).toThrow(/Projects: mac:\/\/MacBook-Air-3\/Users\/me\/dev\/weft-mobile, mac:\/\/MacBook-Air-3\/Users\/me\/app\./);
+    });
+
+    it("falls back to the folder's own home when the Mac's isn't a path", () => {
+      expect(remoteTarget("~/app", [], "w1", [air], [{ device: "mac-1", home: "", folders: ["/Users/me/app"] }]).folder).toBe("/Users/me/app");
+    });
+
+    it("turns each folder into a row with no card", () => {
+      expect(projectRows(fresh)[0]).toEqual({ card_id: "", folder: "/Users/me/dev/weft-mobile", owner_device: "mac-1", owner_worker: null, card: null, updated_at: "" });
+    });
+  });
+});
+
+describe("boardMacProjects", () => {
+  it("is the link's projects, or none when the link predates them or the read fails", async () => {
+    const rows = [{ device: "mac-1", home: "/Users/me", folders: ["/Users/me/app"] }];
+    expect(await boardMacProjects({ macProjects: () => Promise.resolve(rows) })).toEqual(rows);
+    expect(await boardMacProjects({})).toEqual([]);
+    expect(await boardMacProjects({ macProjects: () => Promise.reject(new Error("no function")) })).toEqual([]);
+  });
+
+  it("reads the bound link by default", async () => {
+    setBoardLink({ ...link(), macProjects: () => Promise.resolve([]) });
+    expect(await boardMacProjects()).toEqual([]);
   });
 });

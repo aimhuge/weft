@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // The OAuth callback moved to /api/auth/callback (see app/api/auth/callback/route.test.ts).
 
 // No launch token on a test run, even on a Mac where Weft is running and wrote one.
-vi.mock("@/lib/shell-token", () => ({ shellToken: () => "" }));
+// signout-everywhere sets one to check it's elevated.
+const shell = vi.hoisted(() => ({ token: "" }));
+vi.mock("@/lib/shell-token", () => ({ shellToken: () => shell.token }));
 vi.mock("next/server", () => ({ connection: async () => {}, after: (task: () => unknown) => void task() }));
 vi.mock("@/lib/account", () => ({
   accountView: vi.fn(() => Promise.resolve({ configured: true, user: null })),
@@ -24,6 +26,7 @@ function post(body: unknown, headers: Record<string, string> = WRITE) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  shell.token = "";
 });
 
 describe("GET /account", () => {
@@ -65,6 +68,17 @@ describe("POST /account", () => {
     const res = await post({ action: "hack" });
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "Unknown account action." });
+  });
+
+  it("signs out everywhere only from Weft's own window", async () => {
+    shell.token = "launch-token";
+    const res = await post({ action: "signout-everywhere" });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: "This change needs Weft's own window" });
+    expect(account.signOut).not.toHaveBeenCalled();
+    const ok = await post({ action: "signout-everywhere" }, { ...WRITE, "x-weft-token": "launch-token" });
+    expect(ok.status).toBe(200);
+    expect(account.signOut).toHaveBeenCalledWith("global");
   });
 
   it("needs the write header", async () => {

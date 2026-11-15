@@ -16,7 +16,8 @@ describe("workerToolGap", () => {
     expect(workerToolGap("mcp__webhooks__relay")).toMatch(/tunnel/);
     expect(workerToolGap("mcp__board_view__click")).toMatch(/Weft's own window/);
     expect(workerToolGap("mcp__board__create_card")).toBeNull();
-    expect(workerToolGap("mcp__board__restart_weft_when_idle")).toMatch(/no Weft app/);
+    // On a worker it updates the worker to the newest main once idle (lib/restart-tool.ts), so it works there.
+    expect(workerToolGap("mcp__board__restart_weft_when_idle")).toBeNull();
   });
 
   it("leaves alone what isn't one of Weft's servers, and a server with no default", () => {
@@ -38,7 +39,7 @@ describe("workerToolsPrompt", () => {
     expect(text).toContain("- mcp__browser__* (all but open_url): the browser pane");
     expect(text).toContain("- mcp__secrets__fill_field: it types into the browser pane");
     expect(text).not.toContain("mcp__secrets__*");
-    expect(text).toContain("- mcp__board__restart_weft_when_idle:");
+    expect(text).not.toContain("- mcp__board__restart_weft_when_idle:");
     expect(text).toContain("- the gog CLI:");
     expect(text).toContain("create_card starts a card here");
     expect(workerToolsPrompt({ a: { "*": true } })).not.toContain("- ");

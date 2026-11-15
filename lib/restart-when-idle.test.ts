@@ -22,7 +22,7 @@ vi.mock("./bus", () => ({
   },
 }));
 
-const { armRestart, cancelRestart, COPILOT_HELD, holdForRestart, RERUN_HELD, restartArmed, restartStatus, SETTLE_MS } = await import(
+const { armRestart, cancelRestart, COPILOT_HELD, holdForRestart, RERUN_HELD, restartArmed, restartStatus, restartWith, SETTLE_MS } = await import(
   "./restart-when-idle"
 );
 
@@ -112,6 +112,43 @@ describe("armRestart", () => {
     busy.add("x");
     await vi.advanceTimersByTimeAsync(SETTLE_MS);
     expect(shell).not.toHaveBeenCalled();
+  });
+
+  it("on a worker, hands the restart to the daemon instead of Electron and stays armed while it updates", async () => {
+    const fire = vi.fn<(then: string) => Promise<string | null>>(() => Promise.resolve(null));
+    restartWith(fire);
+    try {
+      armRestart("update");
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+      expect(fire).toHaveBeenCalledWith("update");
+      expect(shell).not.toHaveBeenCalled();
+      expect(restartArmed()).toBe(true);
+    } finally {
+      restartWith(undefined);
+      cancelRestart();
+    }
+  });
+
+  it("on a worker that stays up, disarms with the daemon's reason, or with why the update threw", async () => {
+    const fire = vi.fn<(then: string) => Promise<string | null>>(() => Promise.resolve("This worker is already on the newest commit of main."));
+    restartWith(fire);
+    try {
+      armRestart("update");
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+      expect(restartArmed()).toBe(false);
+      expect(lastRestart()).toMatchObject({ error: "This worker is already on the newest commit of main." });
+      fire.mockRejectedValueOnce(new Error("no network"));
+      armRestart("update");
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+      expect(lastRestart()).toMatchObject({ error: "no network" });
+      fire.mockRejectedValueOnce("offline");
+      armRestart("update");
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+      expect(lastRestart()).toMatchObject({ error: "offline" });
+      expect(shell).not.toHaveBeenCalled();
+    } finally {
+      restartWith(undefined);
+    }
   });
 
   it("turns an armed relaunch into an update, never back", async () => {

@@ -74,6 +74,18 @@ describe("the update loop", () => {
     expect(l.tick).toHaveBeenCalledOnce();
   });
 
+  it("answers a request made while a check runs that one is running, and checks again after", async () => {
+    let finish: (t: Tick) => void = () => {};
+    const l = loop();
+    l.tick.mockImplementationOnce(() => new Promise<Tick>((done) => (finish = done)));
+    const first = l.updates.check();
+    expect(await l.updates.check()).toBe("An update check is already running.");
+    finish({ restart: false, note: null });
+    expect(await first).toBe("This worker is already on the newest commit of main.");
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(l.tick).toHaveBeenCalledTimes(2);
+  });
+
   it("lets a request by hand past the limit", async () => {
     const l = loop();
     await l.updates.check();

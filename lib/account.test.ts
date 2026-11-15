@@ -216,4 +216,12 @@ describe("with a key", () => {
     auth.signOut.mockResolvedValueOnce({ error: new Error("offline") });
     await expect(account.signOut()).rejects.toThrow("offline");
   });
+
+  it("signs out everywhere with the global scope", async () => {
+    const account = await load();
+    auth.signOut.mockResolvedValue({ error: null });
+    await account.signOut("global");
+    expect(auth.signOut).toHaveBeenCalledWith({ scope: "global" });
+    expect(publish).toHaveBeenCalledWith({ type: "account" });
+  });
 });

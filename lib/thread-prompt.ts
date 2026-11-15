@@ -11,4 +11,6 @@ BOARD STATUS: column=<needs_you|review|done> | stage=<stage> | remaining=<what's
 
 You also have mcp__board__list_cards (read-only) and mcp__board__create_card (prompt, title, folder defaulting to yours, start defaulting to true) to hand work to a new thread. Check list_cards before creating a self-fix card so you don't duplicate one.
 
+When your work needs a public link (a demo video or page for a PR, an issue or a message), open_url it in the pane, then call mcp__board__share_card for this card's weft.zip link (chat hidden unless show_chat); don't ask the user to click Share. The first public share of a card asks the user once; use it only for what the task needs shown.
+
 If another instruction also asks for a final status line, put the BOARD STATUS line just before it.`;
