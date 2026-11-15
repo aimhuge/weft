@@ -3,7 +3,9 @@
 // rebuilds in ~150 ms and the pane reloads. A build's own outputs (generated index.html, app.js, app.css, assets/,
 // the build record) are ignored so a build never triggers itself. Watcher errors are logged one line and never crash
 // the server, since a stray ENOENT in dev mode shouldn't take down the Next process. After a build, a shared app in that
-// folder goes up to weft.zip again (lib/app-share-republish.ts), so its hosted copy follows its sources.
+// folder goes up to weft.zip again (lib/app-share-republish.ts), so its hosted copy follows its sources. A hand-written
+// app (no App.tsx; its build record says "hand-written") has index.html, app.js, app.css and assets/ as its sources, so
+// a change to one of those schedules the republish straight away, with no build; the build record and .build/ never do.
 import fs from "node:fs";
 import path from "node:path";
 import { APPS_DIR, buildApp, isBuildOutput, readBuildInfo } from "./app-build";
@@ -15,6 +17,14 @@ const g = globalThis as unknown as { __weftAppBuildWatcher?: { stop(): void; reb
 
 const DEBOUNCE_MS = 150;
 const log = (line: string) => console.warn(`[weft/app-build] ${line}`);
+
+// True when a change to this build-output path is really a source edit: the folder's page is hand-written, so nothing
+// rebuilds it and its index.html (or app.js, app.css, assets/) is what weft.zip should serve. The build record and
+// .build/ are always the build's own, so they never count.
+export function isHandWrittenEdit(slug: string, parts: string[]): boolean {
+  if (parts.includes(".build") || parts[parts.length - 1] === ".weft-build.json") return false;
+  return readBuildInfo(slug)?.reason === "hand-written";
+}
 
 // The watcher factory. Tests inject `fs` and `build`; the production call takes them from the platform.
 export function startAppBuildWatcher({
@@ -66,8 +76,11 @@ export function startAppBuildWatcher({
       const parts = rel.split(/[/\\]/).filter(Boolean);
       const slug = parts[0];
       if (!slug) return;
-      if (isBuildOutput(appsDir, full)) return;
       if (slug.startsWith(".") || slug === "node_modules") return;
+      if (isBuildOutput(appsDir, full)) {
+        if (isHandWrittenEdit(slug, parts)) republish.schedule(slug);
+        return;
+      }
       rebuild(slug);
     });
     watcher.on("error", (err: unknown) => log(`watcher error: ${err instanceof Error ? err.message : String(err)}`));

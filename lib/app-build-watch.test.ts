@@ -205,6 +205,57 @@ describe("startAppBuildWatcher", () => {
     });
   });
 
+  it("republishes a hand-written app when its index.html changes, with no build", async () => {
+    const { fs, fire } = fakeFs();
+    fs.readdirSync.mockReturnValue([]);
+    const build = vi.fn(() => Promise.resolve({}));
+    const republish = { schedule: vi.fn(), stop: vi.fn() };
+    const m = await import("./app-build");
+    const spy = vi.spyOn(m, "readBuildInfo").mockReturnValue({ ok: "skipped", reason: "hand-written", at: 1, inputsHash: "h" });
+    const w = watchModule.startAppBuildWatcher({ fs: fs as never, build, debounceMs: 5, republish });
+    fire("growth/index.html");
+    fire("growth/assets/chart.svg");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(republish.schedule).toHaveBeenCalledWith("growth");
+    expect(build).not.toHaveBeenCalled();
+    w.stop();
+    spy.mockRestore();
+  });
+
+  it("never republishes from the build record or .build/, even for a hand-written app", async () => {
+    const { fs, fire } = fakeFs();
+    fs.readdirSync.mockReturnValue([]);
+    const build = vi.fn(() => Promise.resolve({}));
+    const republish = { schedule: vi.fn(), stop: vi.fn() };
+    const m = await import("./app-build");
+    const spy = vi.spyOn(m, "readBuildInfo").mockReturnValue({ ok: "skipped", reason: "hand-written", at: 1, inputsHash: "h" });
+    const w = watchModule.startAppBuildWatcher({ fs: fs as never, build, debounceMs: 5, republish });
+    fire("growth/.weft-build.json");
+    fire("growth/.build/entry.js");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(republish.schedule).not.toHaveBeenCalled();
+    expect(build).not.toHaveBeenCalled();
+    w.stop();
+    spy.mockRestore();
+  });
+
+  it("leaves a built app's own index.html alone, so a build never triggers a republish loop", async () => {
+    const { fs, fire } = fakeFs();
+    fs.readdirSync.mockReturnValue([]);
+    const build = vi.fn(() => Promise.resolve({}));
+    const republish = { schedule: vi.fn(), stop: vi.fn() };
+    const m = await import("./app-build");
+    const spy = vi.spyOn(m, "readBuildInfo").mockReturnValue({ ok: true, at: 1, inputsHash: "h" });
+    const w = watchModule.startAppBuildWatcher({ fs: fs as never, build, debounceMs: 5, republish });
+    fire("growth/index.html");
+    fire("growth/app.js");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(republish.schedule).not.toHaveBeenCalled();
+    expect(build).not.toHaveBeenCalled();
+    w.stop();
+    spy.mockRestore();
+  });
+
   it("covers the odd inputs: no filename, the apps dir itself, non-Error failures, a close that throws", async () => {
     const { fs, fire, emitError, watcher } = fakeFs();
     fs.readdirSync.mockReturnValue([]);

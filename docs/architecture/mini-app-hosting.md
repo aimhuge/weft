@@ -60,6 +60,12 @@ own origin.
   synced once too, so an edit made while Weft was closed goes up (an unchanged link costs one row read). Keys
   aren't pushed from here, since that can ask for Touch ID; Share… still does. Before this, the 📈 Growth app's
   seven new reads answered 404 "isn't in the manifest" on weft.zip until someone re-ran the share by hand.
+  A hand-written app (no App.tsx; `.weft-build.json` says `"reason": "hand-written"`) has no build to wait for: its
+  `index.html`, `app.js`, `app.css` and `assets/` are its sources, so `lib/app-build-watch.ts`
+  (`isHandWrittenEdit`) schedules the republish straight from a change to them. For a built app those files are
+  the build's own output and still trigger nothing, and the build record and `.build/` never count, so a build
+  never triggers itself. Before this, Growth's `index.html` edits never went up, and the phone kept a broken,
+  half-finished page until its `weft-app.json` was touched.
 
 ### Where it lives: under its owner
 
@@ -250,7 +256,7 @@ says "weft.zip will be able to use this key with api.stripe.com" before one goes
 `access` is the link's gate. Any mode is allowed, public included, even for an app that uses the author's
 secrets (decided 2026-10-19): a value never reaches a visitor, but whoever passes the gate can make the
 calls the policy allows with it, so a public link lets anyone read what the key reads or spend what it
-spends. Growth lives at `weft.zip/aimhuge/apps/growth`, open to the AimHuge workspace only.
+spends. Growth lives at `weft.zip/@fotoflo/apps/growth`, public (the owner's call on 2026-11-16, so it opens on the phone without a sign-in), though its reads list every account's name and email. A page served there runs in a sandboxed frame with an opaque origin, where `localStorage` throws: an app that remembers choices wraps it in a try (Growth's `store`).
 
 The fetch route rate-limits per app (`lib/app-fetch-limit.ts`), caps body size and time, and logs each
 call (host, path, status; never the value). Super-admins can switch an app's secrets off.
