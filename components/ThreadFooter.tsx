@@ -5,7 +5,8 @@
 // nothing can be sent. Both read what they can offer from the thread's transport (lib/thread-transport.ts): Wait,
 // and "!" commands only where the Mac itself runs the card; a folder grant goes inside the answer on any other machine.
 import type { TrackSend } from "@/lib/use-pending-sends";
-import type { ReactNode } from "react";
+import { useContext, type ReactNode } from "react";
+import { ReplyElsewhereContext, ReplyLookContext } from "@/lib/reply-elsewhere";
 import type { PlanResets } from "@/lib/schedule";
 import { turnCutOff } from "@/lib/reply-mode";
 import { modelOn } from "@/lib/new-thread";
@@ -31,7 +32,14 @@ const ReplyBox = guarded(() => import("./ReplyBox"), { what: "reply box", classN
 
 // The request under the thread, with its answers unless the thread is read-only here. answer(allow) marks it answered;
 // an MCP server's form (lib/elicitation.ts) answers with its values too.
-export function PermissionRequest({ card, readOnly, answered, answer }: { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>, grant?: GrantScope) => void }) {
+type PermissionProps = { card: Card; readOnly: boolean; answered: boolean; answer: (allow: boolean, answers?: Record<string, string>, grant?: GrantScope) => void };
+
+// Simple mode's full-page pane asks under the whole card instead (lib/reply-elsewhere.ts).
+export function PermissionRequest(props: PermissionProps) {
+  return useContext(ReplyElsewhereContext) ? null : <PermissionAsk {...props} />;
+}
+
+function PermissionAsk({ card, readOnly, answered, answer }: PermissionProps) {
   const { grantFolder, grantInAnswer, waitPermission, putFirst, putHolderFirst, allowSafeSql, setMode } = useThreadTransport();
   const pending = card.pending;
   if (!pending || pending.questions) return null;
@@ -137,11 +145,14 @@ export function ThreadReply({ card, show, live, placeholder, question, schedulin
   const { send, bar } = useMentionSend(card, onSend, transport.desktop && !pilot);
   // Off this Mac (a worker's card, weft.zip) the plan limits are the card's own, from the CLI that runs it there.
   const { modelPicker, status } = replyControls(card, transport.desktop, show);
+  // Simple mode's full-page pane has the card's one reply box, under the whole card (lib/reply-elsewhere.ts).
+  const look = useContext(ReplyLookContext);
+  if (useContext(ReplyElsewhereContext)) return null;
   if (!show) return <div className="shrink-0 border-t border-line px-4 py-1.5">{status}</div>;
   return (
     <>
     {bar}
-    <ReplyBox key={card.id} question={question} cardId={card.id} cwd={card.cwd} live={live} placeholder={placeholder} suggestion={card.suggestion}
+    <ReplyBox key={card.id} question={question} cardId={card.id} cwd={card.cwd} live={live} placeholder={placeholder} suggestion={card.suggestion} look={look}
       midTurn={!pilot && (card.backend === "claude" || card.backend === "puku")}
       sendLater={scheduling && { backend: card.backend, resets: scheduling.resets, scheduled: card.scheduled ?? [] }}
       status={status}

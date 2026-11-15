@@ -67,6 +67,8 @@ export interface NewCardInput {
   branch?: string;
   // Who the thread is (lib/agents.ts); left out, Builder.
   agent?: ThreadAgent;
+  // A local page (file://) its pane opens on before the first turn (lib/host-api/card-create.ts).
+  page?: string;
   start: boolean;
 }
 
@@ -284,9 +286,10 @@ export const api = {
   devAction: (id: string, action: "start" | "restart" | "stop") =>
     call<{ status: DevServerStatus }>("POST", `/api/cards/${id}/dev`, { action }),
   // The rail's Services drawer: every process Weft spawned (thread CLIs, dev servers, terminals), with CPU and memory.
-  services: () => call<{ services: ServiceEntry[]; launchers?: DevLauncher[]; workers?: WorkerDevGroup[]; machine?: MachineInfo }>("GET", "/api/services"),
+  // footprint: also read each dev server's real memory (a `top`, ~0.4 s), which the drawer asks for only while open.
+  services: (footprint = false) => call<{ services: ServiceEntry[]; launchers?: DevLauncher[]; workers?: WorkerDevGroup[]; machine?: MachineInfo }>("GET", footprint ? "/api/services?footprint=1" : "/api/services"),
   launchDev: (cwd: string, command: string) => call<{ ok: true; result: "started" | "restarted"; id: string }>("POST", "/api/services", { action: "launch", cwd, command }),
-  serviceAction: (body: { action: "kill"; id?: string; pid?: number } | { action: "restart"; id: string }) =>
+  serviceAction: (body: { action: "kill"; id?: string; pid?: number } | { action: "restart" | "keep"; id: string }) =>
     call<{ ok: true }>("POST", "/api/services", body),
   copilot: () => call<{ card: Card }>("GET", "/api/copilot"),
   resetCopilot: () => call<{ card: Card }>("POST", "/api/copilot/reset"),

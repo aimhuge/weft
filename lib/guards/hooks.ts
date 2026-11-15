@@ -7,6 +7,7 @@ import { WORKER_TOOL_GATE } from "../worker-tools";
 import { folderGuardMatcher } from "../folder-guard";
 import { CHECK_GUARD_MATCHER } from "../check-guard";
 import { commitHeldHook } from "../commit-held-guard";
+import { DEVSERVER_GUARD_MATCHER } from "../devserver-guard";
 import { GIT_GUARD_MATCHER } from "../git-guard";
 import { IMPORT_GUARD_MATCHER } from "../import-check";
 import { restartGuardMatcher } from "../restart-guard";
@@ -28,7 +29,8 @@ import { WORKER_CLI_GUARD_MATCHER } from "../worker-cli-guard";
 // which also drop claims on files gone clean and tell a failed check whose failures are another card's), the folder
 // gate, which asks before a tool reaches outside the card's project, and the changelog stamp, which marks the card's
 // changelog entries committed when its own commit lands, and the one that keeps other cards' lines of a shared doc
-// out of this card's commit.sh (cardId names the session's card, once it has one), and the one that won't run the
+// out of this card's commit.sh, the one that won't start a dev server in the background outside the
+// Services drawer's tracker (lib/devserver-guard.ts) (cardId names the session's card, once it has one), and the one that won't run the
 // Weft Worker's own command line (lib/worker-cli-guard.ts), which decides which Mac a worker trusts with secrets, and
 // the one that sends simulator boots and Metro through Weft's own tools instead of the shell (lib/simulator-guard.ts).
 export type GuardHooks = Partial<Record<HookEvent, HookCallbackMatcher[]>>;
@@ -38,7 +40,7 @@ export function guardHooks(otherTurns: () => number, cardId: () => string | unde
   const bash = bashClaimHooks(cardId);
   const stamp = changelogStampHooks(cardId);
   return {
-    PreToolUse: [secretGuardMatcher(cardId), restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, SIMULATOR_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId), clipboardGuardMatcher(), WORKER_CLI_GUARD_MATCHER, WORKER_TOOL_GATE],
+    PreToolUse: [secretGuardMatcher(cardId), restartGuardMatcher(otherTurns), GIT_GUARD_MATCHER, CHECK_GUARD_MATCHER, DEVSERVER_GUARD_MATCHER, SIMULATOR_GUARD_MATCHER, ROUTE_IMPORT_GUARD_MATCHER, folderGuardMatcher(cardId), claims.pre, bash.pre, stamp.pre, commitHeldHook(cardId), clipboardGuardMatcher(), WORKER_CLI_GUARD_MATCHER, WORKER_TOOL_GATE],
     PostToolUse: [IMPORT_GUARD_MATCHER, claims.post, bash.post, stamp.post],
     PostToolUseFailure: [bash.post],
   };

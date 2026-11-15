@@ -9,7 +9,10 @@ import { startButton } from "@/lib/new-thread";
 import type { Card } from "@/lib/types";
 import { formatAt } from "@/lib/schedule";
 import { alsoHereLine } from "@/lib/overlap";
+import type { Backend } from "@/lib/types";
+import type { NewCardTransport } from "@/lib/new-card-transport";
 import Icon, { Spinner } from "./Icon";
+import StatusStrip from "./StatusStrip";
 
 export function NewCardDialogFooter({
   error,
@@ -20,6 +23,8 @@ export function NewCardDialogFooter({
   // When this thread can't start yet: the reset it waits for (lib/start-gate.ts).
   waitsUntil,
   waitsFor,
+  canBacklog = true,
+  minimal = false,
   onSubmit,
 }: {
   error: string | null;
@@ -30,6 +35,10 @@ export function NewCardDialogFooter({
   // The reset time (unix ms) this thread waits for, and why it waits.
   waitsUntil?: number;
   waitsFor?: string;
+  // false where the place can't hold a card in Backlog (a worker's start when they're made).
+  canBacklog?: boolean;
+  // Simple mode's one-box dialog: just the error (or the wait) and Start; no Backlog, no hints.
+  minimal?: boolean;
   onSubmit: (start: boolean) => void;
 }) {
   const t = useUiText();
@@ -44,7 +53,7 @@ export function NewCardDialogFooter({
           <span className="text-warn" title="This thread waits for the window to open, then runs on its own.">
             {waitsFor ?? "At its limit"} · starts at {formatAt(waitsUntil)}
           </span>
-        ) : alsoHere.length > 0 ? (
+        ) : minimal ? null : alsoHere.length > 0 ? (
           <span
             className="flex min-w-0 items-center gap-1.5 text-warn"
             title={`These threads share this folder's working tree:\n${alsoHere.map((c) => c.title).join("\n")}`}
@@ -63,19 +72,7 @@ export function NewCardDialogFooter({
           </span>
         )}
       </p>
-      <button
-        onClick={() => onSubmit(false)}
-        disabled={!!busy}
-        className="flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink hover:bg-sunken disabled:cursor-wait disabled:opacity-40 disabled:hover:bg-transparent"
-      >
-        {busy === "backlog" && <Spinner size={12} />}
-        {busy === "backlog" ? t("Adding…") : t("Add to backlog")}
-        {busy !== "backlog" && (
-          <kbd aria-hidden="true" className="font-sans opacity-60">
-            ⌘B
-          </kbd>
-        )}
-      </button>
+      <BacklogButton shown={!minimal} busy={busy} canBacklog={canBacklog} onAdd={() => onSubmit(false)} />
       <button
         onClick={() => onSubmit(true)}
         disabled={!!busy}
@@ -96,5 +93,38 @@ export function NewCardDialogFooter({
         )}
       </button>
     </div>
+  );
+}
+
+// Under the footer: the board's footer sits under this dialog, so its folder and plan limits show here instead (or,
+// on weft.zip, its note). Left out in simple mode's one-box dialog (shown false).
+export function DialogStatus({ shown, host, cwd, backend }: { shown: boolean; host: NewCardTransport; cwd: string; backend: Backend }) {
+  if (!shown) return null;
+  return host.local ? (
+    <StatusStrip cwd={cwd} backend={backend} className="shrink-0 border-t border-line px-5 py-1.5" />
+  ) : (
+    <p className="shrink-0 border-t border-line px-5 py-1.5 text-[11.5px] text-faint">{host.note}</p>
+  );
+}
+
+// Add to backlog (⌘B), left out of simple mode's one-box dialog, where ⌘B still does it.
+function BacklogButton({ shown, busy, canBacklog, onAdd }: { shown: boolean; busy: false | "start" | "backlog"; canBacklog: boolean; onAdd: () => void }) {
+  const t = useUiText();
+  if (!shown) return null;
+  return (
+    <button
+      onClick={onAdd}
+      disabled={!!busy || !canBacklog}
+      title={canBacklog ? undefined : t("A worker has no Backlog yet: its threads start when they're made.")}
+      className="flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong px-3 py-1.5 text-[13px] text-ink hover:bg-sunken disabled:cursor-wait disabled:opacity-40 disabled:hover:bg-transparent"
+    >
+      {busy === "backlog" && <Spinner size={12} />}
+      {busy === "backlog" ? t("Adding…") : t("Add to backlog")}
+      {busy !== "backlog" && (
+        <kbd aria-hidden="true" className="font-sans opacity-60">
+          ⌘B
+        </kbd>
+      )}
+    </button>
   );
 }

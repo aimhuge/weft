@@ -42,6 +42,12 @@ describe("newCardCommand", () => {
     expect(newCardCommand(target, { prompt: "x", permissionMode: "default" })?.payload).toEqual({ prompt: "x", permissionMode: "default" });
   });
 
+  it("carries a worktree and its branch, and no branch without one", () => {
+    expect(newCardCommand(target, { prompt: "x", isolated: true, branch: " feat/x " })?.payload).toEqual({ prompt: "x", isolated: true, branch: "feat/x" });
+    expect(newCardCommand(target, { prompt: "x", isolated: true, branch: "" })?.payload).toEqual({ prompt: "x", isolated: true });
+    expect(newCardCommand(target, { prompt: "x", isolated: false, branch: "feat/x" })?.payload).toEqual({ prompt: "x" });
+  });
+
   it("leaves out a model no CLI serves and an empty pick", () => {
     expect(newCardCommand(target, { prompt: "x", model: "gpt-9", effort: "" })?.payload).toEqual({ prompt: "x" });
     expect(newCardCommand(target, { prompt: "x", model: "" })?.payload).toEqual({ prompt: "x" });
@@ -49,6 +55,12 @@ describe("newCardCommand", () => {
 });
 
 describe("newCardBody", () => {
+  it("carries a worktree and its branch, only when it asks for one", () => {
+    expect(newCardBody({ folder: "/a", payload: { prompt: "p", isolated: true, branch: "feat/x" } })).toMatchObject({ isolated: true, branch: "feat/x" });
+    expect(newCardBody({ folder: "/a", payload: { prompt: "p", isolated: true, branch: 3 } as unknown as CloudCommandRow["payload"] })).not.toHaveProperty("branch");
+    expect(newCardBody({ folder: "/a", payload: { prompt: "p", isolated: "yes" } as unknown as CloudCommandRow["payload"] })).not.toHaveProperty("isolated");
+  });
+
   it("is the request body of POST /api/cards, in the command's folder", () => {
     expect(newCardBody({ folder: "/dev/app", payload: { prompt: "p", title: "t", backend: "puku", model: "opus-4.8", effort: "low", tags: ["a", "b"] } })).toEqual({
       prompt: "p",

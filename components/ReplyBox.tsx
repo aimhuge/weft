@@ -16,9 +16,11 @@ import type { Backend, CacheState, LimitWindow, ScheduledMessage } from "@/lib/t
 import Composer, { type ComposerHandle } from "./Composer";
 import QuestionForm, { type QuestionFormHandle, type QuestionProps } from "./QuestionForm";
 import ReplyBoxActions from "./ReplyBoxActions";
+import ReplyPhoneActions from "./ReplyPhoneActions";
 import { ModeChip, modeBorder } from "./ReplyModeChip";
 import { ReplyQueue } from "./ReplyQueue";
 import { track } from "@/lib/analytics";
+import { voiceAction } from "@/lib/voice-mode";
 
 // Board threads can take a message to send at a set time; the copilot can't, so it leaves this out.
 // resets are the plan's next 5-hour and weekly resets, the default times on a Claude thread.
@@ -61,6 +63,7 @@ export default function ReplyBox({
   onShell,
   noShell,
   onStop,
+  look,
 }: {
   cardId: string;
   cwd: string;
@@ -94,6 +97,8 @@ export default function ReplyBox({
   onShell?: (command: string) => Promise<void>;
   noShell?: string;
   onStop: () => Promise<void>;
+  // Simple mode's phone look (components/Composer.tsx look): round Send / Stop, Continue and Done as words, voice mode.
+  look?: "phone";
 }) {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -375,20 +380,35 @@ export default function ReplyBox({
         className={modeBorder(view.tone)}
         header={view.chip && <ModeChip tone={view.tone} text={view.chip} />}
         modelPicker={modelPicker}
+        look={look}
+        // A spoken message goes as Enter would, read before its words went in (lib/voice-mode.ts voiceAction).
+        onVoiceSubmit={() => onAction(voiceAction(view.primary.action))}
         actions={
-          <ReplyBoxActions
-            view={view}
-            live={live}
-            sending={busy}
-            sendLater={sendLater ? { backend: sendLater.backend, resets: sendLater.resets } : undefined}
-            laterOpen={laterOpen}
-            setLaterOpen={setLaterOpen}
-            now={now}
-            onPick={(at) => void scheduleAt(at)}
-            onAction={onAction}
-            onStop={onStop}
-            onStopError={setErrorWrap}
-          />
+          look === "phone" ? (
+            <ReplyPhoneActions
+              view={view}
+              live={live}
+              sending={busy}
+              empty={empty}
+              question={Boolean(question)}
+              onAction={onAction}
+              onStop={() => void Promise.resolve().then(onStop).catch(setErrorWrap)}
+            />
+          ) : (
+            <ReplyBoxActions
+              view={view}
+              live={live}
+              sending={busy}
+              sendLater={sendLater ? { backend: sendLater.backend, resets: sendLater.resets } : undefined}
+              laterOpen={laterOpen}
+              setLaterOpen={setLaterOpen}
+              now={now}
+              onPick={(at) => void scheduleAt(at)}
+              onAction={onAction}
+              onStop={onStop}
+              onStopError={setErrorWrap}
+            />
+          )
         }
       />
       {status && <div className="mt-1.5 px-1">{status}</div>}

@@ -50,7 +50,7 @@ describe("making and editing agents", () => {
     expect(store.projectAgents()).toEqual({});
     fs.writeFileSync(file(), JSON.stringify({ agents: [{ id: "a-x" }, null, { id: "a-1", name: "Kept", soul: "s" }] }));
     store.forgetAgents();
-    expect(store.listAgents().map((a) => a.name)).toEqual(["Builder", "Copywriter", "Kept"]);
+    expect(store.listAgents().map((a) => a.name)).toEqual(["Builder", "Copywriter", "Researcher", "Kept"]);
   });
 
   it("adds one of yours after the built-ins, with an id of its own, and keeps it on disk", () => {
@@ -58,7 +58,7 @@ describe("making and editing agents", () => {
     expect(made).toMatchObject({ name: "Reviewer", tagline: "Reviews code", soul: "You review." });
     expect(made.id).toMatch(/^a-[0-9a-f]{8}$/);
     store.forgetAgents();
-    expect(store.listAgents().map((a) => a.name)).toEqual(["Builder", "Copywriter", "Reviewer"]);
+    expect(store.listAgents().map((a) => a.name)).toEqual(["Builder", "Copywriter", "Researcher", "Reviewer"]);
     expect(store.savedAgentsHash()).toMatch(/^[0-9a-f]{12}$/);
   });
 
@@ -76,7 +76,7 @@ describe("making and editing agents", () => {
     expect(edited).toMatchObject({ builtIn: true, changed: "you", soul: "My soul." });
     const mine = store.createAgent(reviewer);
     expect(store.updateAgent(mine.id, { ...reviewer, soul: "Stricter." }).soul).toBe("Stricter.");
-    expect(store.listAgents()).toHaveLength(3);
+    expect(store.listAgents()).toHaveLength(4);
     expect(() => store.updateAgent("a-none", reviewer)).toThrow("No such agent.");
   });
 
@@ -85,7 +85,7 @@ describe("making and editing agents", () => {
     h.cards = [{ id: "c1", agent: mine.id }, { id: "c2", agent: "copywriter" }];
     store.setProjectAgent("/dev/app", mine.id);
     store.deleteAgent(mine.id);
-    expect(store.listAgents()).toHaveLength(2);
+    expect(store.listAgents()).toHaveLength(3);
     expect(h.updated).toEqual([["c1", { agent: undefined }]]);
     expect(store.projectAgents()).toEqual({});
     expect(() => store.deleteAgent("copywriter")).toThrow("built in: reset it instead");

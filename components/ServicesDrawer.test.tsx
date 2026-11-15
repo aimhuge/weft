@@ -249,4 +249,13 @@ describe("ServicesDrawer", () => {
     expect(screen.queryByRole("region", { name: "Dev servers" })).toBeNull();
     expect(screen.queryByText("Dev servers")).toBeNull();
   });
+
+  it("flags a heavy dev server and keeps an idle untracked one", async () => {
+    const keep = vi.fn(() => Promise.resolve());
+    const heavy = svc({ id: "untracked:9", kind: "other", label: "pnpm dev", untracked: true, stopAt: Date.now() + 60_000, footprintKb: 5 * 1024 * 1024 });
+    render(<ServicesDrawer {...props({ services: [heavy], keep })} />);
+    expect(screen.getByText("5.0 GB").className).toContain("text-danger");
+    await userEvent.click(screen.getByText("Keep"));
+    await waitFor(() => expect(keep).toHaveBeenCalledWith("untracked:9"));
+  });
 });

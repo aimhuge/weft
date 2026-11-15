@@ -15,7 +15,7 @@ import WorkerDevServers from "./WorkerDevServers";
 import { Note } from "./VaultParts";
 
 type Services = ReturnType<typeof useServices>;
-type Props = Pick<Services, "services" | "loaded" | "error" | "kill" | "restart" | "refreshMs"> & Partial<Pick<Services, "launchers" | "launch" | "workers">> & {
+type Props = Pick<Services, "services" | "loaded" | "error" | "kill" | "restart" | "refreshMs"> & Partial<Pick<Services, "launchers" | "launch" | "workers" | "keep">> & {
   // This Mac's cores and RAM, once the first list arrives.
   machine?: MachineInfo;
   // The top bar's project, or null for every project.
@@ -33,7 +33,7 @@ const BUTTON = "rounded px-1.5 py-0.5 text-muted hover:bg-sunken disabled:opacit
 // workers' (WorkerDevServers), then how busy the Mac is, then everything Weft spawned, one row per thread CLI, dev
 // server, terminal or other command, with its CPU and memory. A thread's row names its card, which a click opens.
 // Expand a row for its processes; ✕ ends a service or one process.
-export default function ServicesDrawer({ services, launchers = [], workers = [], launch, machine, loaded, error, kill, restart, refreshMs, project, cards = [], onOpenCard, onOpenUrl, notify }: Props) {
+export default function ServicesDrawer({ services, launchers = [], workers = [], launch, keep, machine, loaded, error, kill, restart, refreshMs, project, cards = [], onOpenCard, onOpenUrl, notify }: Props) {
   const now = useNow();
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -92,13 +92,7 @@ export default function ServicesDrawer({ services, launchers = [], workers = [],
               <div className="flex items-center gap-2">
                 <span className={`size-1.5 shrink-0 rounded-full ${STATE_TONE[row.state]}`} title={row.state} />
                 <ServiceName service={s} name={row.name} onOpen={card && onOpenCard && (() => onOpenCard(card))} />
-                {row.canKill ? (
-                  <button type="button" disabled={busy === row.key} onClick={act(row.key, () => kill({ id: s.id }))} aria-label={`End ${row.name}`} title="End" className="shrink-0 rounded p-0.5 text-faint opacity-0 hover:bg-panel hover:text-danger focus:opacity-100 group-hover:opacity-100 disabled:opacity-50">
-                    <Icon name="x" size={10} />
-                  </button>
-                ) : (
-                  <span className="w-[14px] shrink-0" />
-                )}
+                <EndButton show={row.canKill} name={row.name} disabled={busy === row.key} onEnd={act(row.key, () => kill({ id: s.id }))} />
               </div>
               <div className="flex items-center gap-1 pl-3.5 text-[11px] text-muted">
                 {s.procs.length > 1 && (
@@ -119,7 +113,16 @@ export default function ServicesDrawer({ services, launchers = [], workers = [],
                   </button>
                 )}
                 {row.cpu && <span className="w-9 shrink-0 text-right font-mono text-[10.5px] tabular-nums">{row.cpu}</span>}
-                {row.mem && <span className="w-[52px] shrink-0 text-right font-mono text-[10.5px] tabular-nums">{row.mem}</span>}
+                {row.canKeep && keep && (
+                  <button type="button" disabled={busy === row.key} onClick={act(row.key, () => keep(s.id))} title="Don't stop this idle dev server" className={`shrink-0 ${BUTTON} hover:text-ink`}>
+                    Keep
+                  </button>
+                )}
+                {row.mem && (
+                  <span title={row.memTitle} className={`w-[52px] shrink-0 text-right font-mono text-[10.5px] tabular-nums ${row.heavy ? "font-semibold text-danger" : ""}`}>
+                    {row.mem}
+                  </span>
+                )}
                 <span className="w-[14px] shrink-0" />
               </div>
               {row.note && <div className="pl-3.5 text-[10.5px] text-faint">{row.note}</div>}
@@ -168,5 +171,15 @@ function ProcList({ service, busy, onKill }: { service: ServiceEntry; busy: stri
         </li>
       ))}
     </ul>
+  );
+}
+
+// A row's End (x), shown on hover; a spacer when the service can't be ended, so the names stay aligned.
+function EndButton({ show, name, disabled, onEnd }: { show: boolean; name: string; disabled: boolean; onEnd: () => void }) {
+  if (!show) return <span className="w-[14px] shrink-0" />;
+  return (
+    <button type="button" disabled={disabled} onClick={onEnd} aria-label={`End ${name}`} title="End" className="shrink-0 rounded p-0.5 text-faint opacity-0 hover:bg-panel hover:text-danger focus:opacity-100 group-hover:opacity-100 disabled:opacity-50">
+      <Icon name="x" size={10} />
+    </button>
   );
 }

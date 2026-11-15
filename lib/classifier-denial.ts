@@ -6,6 +6,8 @@ import { pendingView } from "./runner-pending";
 import { backToAuto, retried, stepOut, untilBackInAuto } from "./retry-window";
 import { appendThread, replaceThreadItem } from "./store";
 import type { Column } from "./types";
+import { grantButton, grantScope, grantWrites, writeGranted } from "./write-grant";
+import { scopeLabel, type WriteScope } from "./write-scope";
 
 // Auto mode's classifier denies some calls itself (a migration it reads as a production deploy, say):
 // the CLI never calls canUseTool for them, so without this the card showed nothing while the thread
@@ -78,32 +80,54 @@ export function askAboutDenials(cardId: string, session: Session, denials: SDKPe
   session.retryGrants = undefined;
   void backToAuto(session);
   if (!ask) return false;
-  const seen = new Set<string>();
-  for (const d of noted) {
-    const input = denials.find((x) => x.tool_use_id === d.toolUseId)?.tool_input ?? {};
-    const key = callKey(d.toolName, input);
-    if (seen.has(key)) continue;
-    seen.add(key);
-    session.pending.push(denialPrompt(cardId, session, d, input, column));
-  }
+  for (const block of blocks(session, noted, denials)) session.pending.push(denialPrompt(cardId, session, block, column));
   const first = session.pending[0];
   if (!first) return false;
   safeUpdate(cardId, { column: "needs_you", pending: pendingView(first), lastLine: first.title });
   return true;
 }
 
-function denialPrompt(cardId: string, session: Session, d: ClassifierDenial, input: Record<string, unknown>, column: Column): Pending {
+// What one prompt asks about: a blocked call, with any other blocked writes into the same skill folder or
+// settings file folded in (so a skill built over six files asks once, not six times), and the scope allowing it grants.
+interface Block {
+  denial: ClassifierDenial;
+  input: Record<string, unknown>;
+  keys: string[];
+  scope?: WriteScope;
+}
+
+function blocks(session: Session, noted: ClassifierDenial[], denials: SDKPermissionDenial[]): Block[] {
+  const out: Block[] = [];
+  const seen = new Set<string>();
+  for (const denial of noted) {
+    const input = denials.find((x) => x.tool_use_id === denial.toolUseId)?.tool_input ?? {};
+    const key = callKey(denial.toolName, input);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const scope = grantScope(session, denial.toolName, input);
+    const same = scope && out.find((b) => b.scope?.path === scope.path);
+    if (same) same.keys.push(key);
+    else out.push({ denial, input, keys: [key], scope });
+  }
+  return out;
+}
+
+function denialPrompt(cardId: string, session: Session, block: Block, column: Column): Pending {
+  const { denial: d, input, keys, scope } = block;
   const summary = summarizeInput(input);
-  const title = `Auto mode blocked ${shortToolName(d.toolName)}${summary ? `: ${summary}` : ""}`;
+  const title = scope && keys.length > 1 ? `Auto mode blocked ${keys.length} writes to ${scopeLabel(scope)}` : `Auto mode blocked ${shortToolName(d.toolName)}${summary ? `: ${summary}` : ""}`;
   const id = randomUUID();
   const index = appendThread(cardId, { kind: "permission", id, toolName: d.toolName, title, at: Date.now() });
-  const why = { category: "classifier" as const, detail: d.reason || "Auto mode's classifier denied this call" };
+  const why = { category: "classifier" as const, detail: d.reason || "Auto mode's classifier denied this call", ...(scope ? { grant: grantButton(scope) } : {}) };
   return {
     id, index, toolName: d.toolName, title, input, why,
     // settle() (lib/runner-pending.ts) marks the thread item and calls this with the user's answer.
     // Once the last of them is answered: the thread retries what was allowed, or the card goes back where it was.
     resolve: (result) => {
-      if (result.behavior === "allow") (session.retryGrants ??= []).push(callKey(d.toolName, input));
+      if (result.behavior === "allow") {
+        (session.retryGrants ??= []).push(...keys);
+        if (scope) grantWrites(cardId, scope);
+      }
       if (session.pending.length) return;
       const granted = session.retryGrants ?? [];
       if (!granted.length) {
@@ -111,7 +135,7 @@ function denialPrompt(cardId: string, session: Session, d: ClassifierDenial, inp
         return;
       }
       try {
-        hooks.send(cardId, retryMessage(granted.map((key) => key.slice(0, key.indexOf("\n")))));
+        hooks.send(cardId, retryMessage(granted.map((key) => key.slice(0, key.indexOf("\n"))), scope && result.behavior === "allow" ? [scopeLabel(scope)] : []));
       } catch (err) {
         safeUpdate(cardId, { column, error: err instanceof Error ? err.message : String(err) });
       }
@@ -120,10 +144,12 @@ function denialPrompt(cardId: string, session: Session, d: ClassifierDenial, inp
 }
 
 // What the thread is told to do once you allowed one or more blocked calls.
-export function retryMessage(toolNames: string[]) {
+// scopes: what the allow also granted the card for good ("the research skill"), so the thread knows later writes there go through.
+export function retryMessage(toolNames: string[], scopes: string[] = []) {
   const names = [...new Set(toolNames.map(shortToolName))].join(", ");
   const calls = toolNames.length === 1 ? "call" : "calls";
-  return `I allowed the ${names} ${calls} that auto mode's classifier blocked, once, in Weft. Retry exactly that ${calls} now, with the same input; Weft lets ${toolNames.length === 1 ? "it" : "them"} through this one time. If you already got what ${toolNames.length === 1 ? "it was" : "they were"} for another way, don't run ${toolNames.length === 1 ? "it" : "them"} again: say so and carry on.`;
+  const standing = scopes.length ? ` Weft also lets this card write to ${scopes.join(" and ")} from now on without asking (except changes to permissions).` : "";
+  return `I allowed the ${names} ${calls} that auto mode's classifier blocked, once, in Weft. Retry exactly that ${calls} now, with the same input; Weft lets ${toolNames.length === 1 ? "it" : "them"} through this one time. If you already got what ${toolNames.length === 1 ? "it was" : "they were"} for another way, don't run ${toolNames.length === 1 ? "it" : "them"} again: say so and carry on.${standing}`;
 }
 
 // A granted retry, used up by the call it matches.
@@ -134,12 +160,21 @@ export function takeGrant(session: Session, toolName: string, input: unknown): b
   return true;
 }
 
+// The retry goes to whichever CLI runs the card's next message, and that may not be the one you answered on: a
+// session left from an older build or prompts, or whose CLI ended, is swapped for a new one (lib/runner.ts
+// sessionFor). The grants go with the card, or the retry meets auto mode's classifier again with nothing to let it by.
+export function carryGrants(from: Session | undefined, to: Session) {
+  if (!from || from === to || !from.retryGrants?.length) return;
+  to.retryGrants = [...(to.retryGrants ?? []), ...from.retryGrants];
+  from.retryGrants = undefined;
+}
+
 // What canUseTool (lib/guards/ask.ts) answers for a call while the CLI is out of auto mode, or null when it isn't
 // its to answer. The granted call is allowed (an ask rule can still send it there); any other call that got
 // decided in default mode, its hook having run just before the window opened, is turned back to be run again in
 // auto mode instead of asking you about something auto mode may well have allowed.
 export function outOfAutoAnswer(session: Session, toolName: string, input: Record<string, unknown>, toolUseId: string): PermissionResult | null {
-  if (takeGrant(session, toolName, input) || session.retryWindow?.ids.has(toolUseId)) return { behavior: "allow", updatedInput: input };
+  if (takeGrant(session, toolName, input) || writeGranted(session, toolName, input) || session.retryWindow?.ids.has(toolUseId)) return { behavior: "allow", updatedInput: input };
   if (!session.retryWindow) return null;
   return { behavior: "deny", message: "Weft stepped out of auto mode for a moment to let a call you allowed through, so this call wasn't checked. Run it again now." };
 }
@@ -161,13 +196,14 @@ type Guarded = Pick<Options, "env" | "hooks">;
 export function withRetryGrant(guarded: Guarded, session: Session): Guarded {
   const allow: HookCallback = async (input) => {
     if (input.hook_event_name !== "PreToolUse") return {};
-    if (!takeGrant(session, input.tool_name, input.tool_input)) {
+    const tool = input.tool_input as Record<string, unknown>;
+    if (!takeGrant(session, input.tool_name, tool) && !writeGranted(session, input.tool_name, tool)) {
       await untilBackInAuto(session);
       return {};
     }
     await stepOut(session, input.tool_use_id);
     return {
-      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", permissionDecisionReason: "Allowed once in Weft after auto mode blocked it" },
+      hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", permissionDecisionReason: "Allowed in Weft after auto mode blocked it" },
     };
   };
   const ran: HookCallback = (input) => {

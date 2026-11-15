@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
 import { cleanup, renderHook } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { setBoardMode } from "./board-prefs";
+import { boardMode, setBoardMode, setViewMode, viewMode } from "./board-prefs";
 import { useEscape } from "./use-escape";
 import { useEscapeTogglesView, type BoardLayers } from "./use-escape-view";
+import { currentStop } from "./view-stops";
 
 const bare: BoardLayers = { thread: false, newThread: false, browser: false, drawer: false };
 
@@ -14,123 +15,77 @@ function press(target: EventTarget = window) {
 afterEach(() => {
   cleanup();
   document.body.innerHTML = "";
+  for (const name of ["weft-board-mode", "weft-view-mode"]) document.cookie = `${name}=; path=/; max-age=0`;
 });
 
 describe("useEscapeTogglesView", () => {
-  it("flips board to list and list to board", () => {
-    const choose = vi.fn();
-    const { rerender } = renderHook(({ mode }) => useEscapeTogglesView(bare, mode, choose), {
-      initialProps: { mode: "board" as "board" | "list" },
-    });
+  it("steps Simple → Board → List → Simple", () => {
+    setBoardMode("regular");
+    const onFlip = vi.fn();
+    renderHook(() => useEscapeTogglesView(bare, { onFlip }));
     press();
-    expect(choose).toHaveBeenLastCalledWith("list");
-    rerender({ mode: "list" });
+    expect([boardMode(), viewMode()]).toEqual(["advanced", "board"]);
+    expect(onFlip).toHaveBeenLastCalledWith("board");
     press();
-    expect(choose).toHaveBeenLastCalledWith("board");
+    expect([boardMode(), viewMode()]).toEqual(["advanced", "list"]);
+    expect(onFlip).toHaveBeenLastCalledWith("list");
+    press();
+    expect(boardMode()).toBe("regular");
+    expect(onFlip).toHaveBeenLastCalledWith("simple");
   });
 
   it("does nothing while something else is open", () => {
-    const choose = vi.fn();
-    renderHook(() => useEscapeTogglesView({ ...bare, browser: true }, "board", choose));
+    const onFlip = vi.fn();
+    renderHook(() => useEscapeTogglesView({ ...bare, browser: true }, { onFlip }));
     press();
-    expect(choose).not.toHaveBeenCalled();
+    expect(onFlip).not.toHaveBeenCalled();
+    expect(currentStop()).toBe("board");
   });
 
-  it("flips under a pinned rail drawer, which Escape never closes", () => {
-    const choose = vi.fn();
+  it("steps under a pinned rail drawer, which Escape never closes", () => {
     localStorage.setItem("weft.libraryPinned", "1");
-    renderHook(() => useEscapeTogglesView({ ...bare, drawer: true }, "board", choose));
+    renderHook(() => useEscapeTogglesView({ ...bare, drawer: true }));
     press();
-    expect(choose).toHaveBeenCalledWith("list");
+    expect(currentStop()).toBe("list");
     localStorage.clear();
   });
 
   it("waits for an unpinned drawer to close first", () => {
-    const choose = vi.fn();
-    renderHook(() => useEscapeTogglesView({ ...bare, drawer: true }, "board", choose));
+    renderHook(() => useEscapeTogglesView({ ...bare, drawer: true }));
     press();
-    expect(choose).not.toHaveBeenCalled();
+    expect(currentStop()).toBe("board");
   });
 
   it("leaves the view alone when Escape is typed in a field", () => {
-    const choose = vi.fn();
-    renderHook(() => useEscapeTogglesView(bare, "board", choose));
-    const input = document.body.appendChild(document.createElement("input"));
-    press(input);
-    expect(choose).not.toHaveBeenCalled();
+    const onFlip = vi.fn();
+    renderHook(() => useEscapeTogglesView(bare, { onFlip }));
+    press(document.body.appendChild(document.createElement("input")));
+    expect(onFlip).not.toHaveBeenCalled();
+    expect(currentStop()).toBe("board");
   });
 
   it("stands down under an open dialog or menu", () => {
-    const choose = vi.fn();
     const close = vi.fn();
     renderHook(() => {
-      useEscapeTogglesView(bare, "board", choose);
+      useEscapeTogglesView(bare);
       useEscape(true, close);
     });
     press();
     expect(close).toHaveBeenCalled();
-    expect(choose).not.toHaveBeenCalled();
+    expect(currentStop()).toBe("board");
   });
 
-  it("tells the caller which view it switched to", () => {
-    const choose = vi.fn();
-    const onFlip = vi.fn();
-    const { rerender } = renderHook(({ mode }) => useEscapeTogglesView(bare, mode, choose, { onFlip }), {
-      initialProps: { mode: "board" as "board" | "list" },
+  it("puts the hint away instead of stepping on while it is up, then steps once it's gone", () => {
+    setViewMode("list");
+    const onDismiss = vi.fn();
+    const { rerender } = renderHook(({ up }: { up: boolean }) => useEscapeTogglesView(bare, { hintUp: up, onDismiss }), {
+      initialProps: { up: true },
     });
     press();
-    expect(onFlip).toHaveBeenLastCalledWith("list");
-    rerender({ mode: "list" });
-    press();
-    expect(onFlip).toHaveBeenLastCalledWith("board");
-  });
-
-  it("says nothing when the view did not move", () => {
-    const onFlip = vi.fn();
-    renderHook(() => useEscapeTogglesView({ ...bare, browser: true }, "board", vi.fn(), { onFlip }));
-    press();
-    expect(onFlip).not.toHaveBeenCalled();
-  });
-
-  it("says nothing when Escape is typed in a field", () => {
-    const onFlip = vi.fn();
-    renderHook(() => useEscapeTogglesView(bare, "board", vi.fn(), { onFlip }));
-    const input = document.body.appendChild(document.createElement("input"));
-    press(input);
-    expect(onFlip).not.toHaveBeenCalled();
-  });
-
-  it("puts the hint away instead of flipping back while it is up", () => {
-    const choose = vi.fn();
-    const onDismiss = vi.fn();
-    renderHook(() => useEscapeTogglesView(bare, "board", choose, { hintUp: true, onDismiss }));
-    press();
     expect(onDismiss).toHaveBeenCalled();
-    expect(choose).not.toHaveBeenCalled();
-  });
-
-  it("flips again once the hint is gone", () => {
-    const choose = vi.fn();
-    const onDismiss = vi.fn();
-    const { rerender } = renderHook(
-      ({ up }: { up: boolean }) => useEscapeTogglesView(bare, "board", choose, { hintUp: up, onDismiss }),
-      { initialProps: { up: true } },
-    );
-    press();
-    expect(choose).not.toHaveBeenCalled();
+    expect(currentStop()).toBe("list");
     rerender({ up: false });
     press();
-    expect(choose).toHaveBeenCalledWith("list");
-  });
-});
-
-describe("useEscapeTogglesView in Regular mode", () => {
-  it("has no view to flip to", () => {
-    setBoardMode("regular");
-    const choose = vi.fn();
-    renderHook(() => useEscapeTogglesView(bare, "board", choose));
-    press();
-    expect(choose).not.toHaveBeenCalled();
-    document.cookie = "weft-board-mode=; path=/; max-age=0";
+    expect(currentStop()).toBe("simple");
   });
 });

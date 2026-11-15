@@ -16,6 +16,7 @@ function makeWorkspace(over: Partial<{
   dragDivider: (leftId: ColumnId, rightId: ColumnId, dx: number, w: number) => void;
   fitToContainer: (w: number) => void;
   columns: Record<ColumnId, React.ReactNode>;
+  hidden: readonly ColumnId[];
 }> = {}) {
   const setDragging = over.setDragging ?? vi.fn();
   const toggle = over.toggle ?? vi.fn();
@@ -37,12 +38,20 @@ function makeWorkspace(over: Partial<{
       dragDivider={dragDivider}
       fitToContainer={fitToContainer}
       columns={columns}
+      hidden={over.hidden}
     />,
   );
   return { setDragging, toggle, dragDivider, fitToContainer };
 }
 
 describe("CardWorkspace", () => {
+  it("leaves a hidden column out, with no sliver to reopen it", () => {
+    makeWorkspace({ hidden: ["show"] });
+    expect(screen.queryByTestId("show")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open show column" })).toBeNull();
+    expect(screen.getByTestId("pane")).toBeTruthy();
+  });
+
   it("renders open columns in left-to-right order", () => {
     makeWorkspace();
     // thread, pane, show are open by default; editor is closed.

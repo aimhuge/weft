@@ -72,7 +72,8 @@ describe("the hint's words", () => {
     expect(hintText("list")).toContain("Esc");
   });
 
-  it("labels the two views", () => {
+  it("labels the three views", () => {
+    expect(viewLabel("simple")).toBe("Simple");
     expect(viewLabel("board")).toBe("Board");
     expect(viewLabel("list")).toBe("List");
   });
@@ -82,13 +83,15 @@ describe("the hint's words", () => {
     expect(hintTitle("board")).toBe("Board view");
   });
 
-  it("names the view the next Escape would take you to", () => {
-    expect(hintOther("list")).toBe("Board");
+  it("names the view the next Escape would take you to: Simple → Board → List → Simple", () => {
+    expect(hintOther("simple")).toBe("Board");
     expect(hintOther("board")).toBe("List");
+    expect(hintOther("list")).toBe("Simple");
   });
 
   it("says what the next Escape does, in one sentence", () => {
-    expect(hintOtherText("list")).toBe("hit Esc again to switch to board view");
+    expect(hintOtherText("list")).toBe("hit Esc again to switch to simple view");
     expect(hintOtherText("board")).toBe("hit Esc again to switch to list view");
+    expect(hintTitle("simple")).toBe("Simple view");
   });
 });

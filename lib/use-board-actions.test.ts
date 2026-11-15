@@ -23,6 +23,7 @@ vi.mock("./line-host", () => ({ actOnLine: vi.fn(), lineTransport: vi.fn(() => (
 const { useBoardActions } = await import("./use-board-actions");
 const { dropPending, pendingSnapshot } = await import("./worker-pending-cards");
 const { openCardById } = await import("./open-card");
+const { requestNewThread } = await import("./new-thread-request");
 
 const card = (over: Partial<Card> = {}): Card =>
   ({ id: "c1", title: "T", column: "running", cwd: "/repo", tags: [], archived: false, starred: false, warm: false, ...over }) as Card;
@@ -122,6 +123,24 @@ describe("useBoardActions", () => {
       await result.current.create({ title: "T", prompt: "p", cwd: "/c", backend: "claude", start: true });
     });
     expect(apiCreate).toHaveBeenCalledWith({ title: "T", prompt: "p", cwd: "/c", backend: "claude", start: true });
+  });
+
+  it("a card made from an Edit app request opens on the app, once, and only in that folder", async () => {
+    const { result, setShowNew } = make();
+    act(() => requestNewThread({ folder: "/apps/g", draft: "Edit", page: "file:///apps/g/index.html" }));
+    expect(setShowNew).toHaveBeenCalledWith(true);
+    const input = { prompt: "p", cwd: "/apps/g", backend: "claude" as const, start: true };
+    await act(async () => {
+      await result.current.create(input);
+      await result.current.create(input);
+    });
+    expect(apiCreate).toHaveBeenNthCalledWith(1, { ...input, page: "file:///apps/g/index.html" });
+    expect(apiCreate).toHaveBeenNthCalledWith(2, input);
+    act(() => requestNewThread({ folder: "/apps/g", page: "file:///apps/g/index.html" }));
+    await act(async () => {
+      await result.current.create({ ...input, cwd: "/elsewhere" });
+    });
+    expect(apiCreate).toHaveBeenLastCalledWith({ ...input, cwd: "/elsewhere" });
   });
 
   it("improveQuality returns the new card's id", async () => {

@@ -71,13 +71,13 @@ describe("WebBoard desktop chrome", () => {
     fireEvent.keyDown(document.body, { key: "n", metaKey: true });
     expect(screen.queryByRole("dialog")).toBeNull();
     fireEvent.keyDown(document.body, { key: "n" });
-    expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "New thread" })).toBeInTheDocument();
   });
 
   it("starts a thread from the Backlog's Add a thread, as on the desktop", async () => {
     await board();
     fireEvent.click(screen.getByRole("button", { name: /Add a thread/ }));
-    expect(screen.getByLabelText("Prompt")).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "New thread" })).toBeInTheDocument();
   });
 
   it("frames the open card's synced page beside its thread through the member-gated route", async () => {

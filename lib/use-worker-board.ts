@@ -20,6 +20,7 @@ import { allOnLines, lineUp, readSnapshot, withSnapshot } from "./worker-board-l
 import { pendingSnapshot, settlePending, subscribePending, withPending } from "./worker-pending-cards";
 import { useTeamBoard } from "./use-team-board";
 import { teamMacLabel } from "./team-board-types";
+import { useTreeSync } from "./use-tree-sync";
 
 // A card change off a worker's session line, laid over the cards read last: the card keeps the board's worker:// path,
 // and one the board hasn't read yet waits for the next read, which knows its project.
@@ -52,6 +53,8 @@ async function load(since?: string): Promise<WorkerBoard | null> {
 // a worker's card shows at once, a read that already shows it settles it, and a refusal reloads.
 export function useWorkerBoard(): WorkerBoard {
   const [board, setBoard] = useState<WorkerBoard>(EMPTY_WORKER_BOARD);
+  // Folders kept in sync with a worker ride its line while this board is open (lib/use-tree-sync.ts).
+  useTreeSync();
 
   useEffect(() => {
     let alive = true;

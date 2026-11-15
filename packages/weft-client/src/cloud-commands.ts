@@ -7,6 +7,7 @@
 import { GRANT_SCOPES, type ApprovalAuth, type GrantScope } from "./approval-sig";
 import type { Backend, Effort } from "./card";
 import type { HostResult } from "./host-command";
+import type { NewCardForm } from "./new-card-form";
 import type { HostPayload } from "./host-row";
 import type { PasskeyAuth } from "./passkey-auth";
 import { readQuestionReply } from "./question-reply";
@@ -29,6 +30,9 @@ export interface NewCardPayload {
   permissionMode?: NewCardMode;
   // false: made in Backlog and left there; left out, it starts.
   start?: false;
+  // A worktree of its own, on `branch` when it names a valid one (lib/new-card.ts isolationFromBody).
+  isolated?: true;
+  branch?: string;
   // Who the thread is (lib/agents.ts). Only with `widen`, a signed approval for it (lib/create-widen.ts).
   agent?: string;
   widen?: unknown;
@@ -148,19 +152,8 @@ export type NewCommand = Pick<CloudCommandRow, "org_id" | "kind" | "target_devic
 // A command is still on its way: the web board shows it until its card turns up.
 export const isOpenCommand = (c: Pick<CloudCommandRow, "status">) => c.status === "pending" || c.status === "claimed";
 
-// What the web board's New thread dialog collects.
-export interface NewCardForm {
-  prompt: string;
-  // A model id from MODELS ("" or absent: the CLI's own default). It also says which CLI runs the card.
-  model?: string;
-  effort?: Effort | "";
-  // The CLI, when no model names it (the CLI picker's "default model").
-  backend?: Backend;
-  permissionMode?: NewCardMode;
-  tags?: string[];
-  // Made in Backlog instead of started.
-  backlog?: boolean;
-}
+// What every client's New thread form collects (./new-card-form.ts).
+export type { NewCardForm };
 
 // The row the web inserts for a new card, or null when there is nothing to run (an empty prompt). `backendOf` names the
 // CLI a model id belongs to (the app's model lists, lib/new-thread.ts), undefined when none does.
@@ -182,6 +175,11 @@ export function newCardCommand(
   const tags = form.tags?.map((t) => t.trim()).filter(Boolean);
   if (tags?.length) payload.tags = tags;
   if (form.backlog) payload.start = false;
+  if (form.isolated) {
+    payload.isolated = true;
+    const branch = form.branch?.trim();
+    if (branch) payload.branch = branch;
+  }
   return { org_id: target.orgId, kind: "new_card", target_device: target.device, folder: target.folder, payload };
 }
 

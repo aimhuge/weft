@@ -7,6 +7,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { syncOrgId } from "./cloud-sync";
 import { deviceId } from "./device-id";
 import { sessions } from "./runner-state";
+import type { PermissionMode } from "./types";
 import type { WorkerStatus } from "./worker-registry";
 
 // The Mac's name as the list shows it: its host name without the .local suffix.
@@ -34,3 +35,26 @@ export async function beatDesktopWorker(client: SupabaseClient, uid: string, sta
     console.warn(`Desktop worker: ${(err as Error).message}`);
   }
 }
+
+// The mode last published, so a Mac sends it again only when it changes (a restart sends it once more).
+let publishedMode: string | null = null;
+
+// Publishes the mode a thread started from weft.zip with no mode named starts in on this Mac (lib/cloud-inbox-cards.ts
+// webStartMode), into its desktop-worker row's capabilities, so the New thread dialog opens on it
+// (docs/architecture/new-card-parity.md). Never throws: a database without desktop_worker_start_mode yet, or a dropped
+// network, only means the dialog keeps its own guess, and the next beat tries again.
+export async function publishStartMode(client: SupabaseClient, mode: PermissionMode): Promise<void> {
+  if (mode === publishedMode) return;
+  try {
+    const { error } = await client.rpc("desktop_worker_start_mode", { p_device: deviceId(), p_mode: mode });
+    if (error) console.warn(`Desktop worker start mode: ${error.message}`);
+    else publishedMode = mode;
+  } catch (err) {
+    console.warn(`Desktop worker start mode: ${(err as Error).message}`);
+  }
+}
+
+// For tests: forget what was published.
+export const forgetPublishedMode = () => {
+  publishedMode = null;
+};

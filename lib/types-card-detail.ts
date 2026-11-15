@@ -189,6 +189,9 @@ export interface Card {
   // additionalDirectories. A run-time `/add-dir` slash command isn't enough on its own — the path
   // has to be a subdirectory of cwd or another already-granted directory at session launch.
   readScope?: string[];
+  // Skill folders and Claude settings files this card may write to without asking, granted when you allowed a write
+  // auto mode's classifier blocked there (lib/write-grant.ts). Writes that change permissions still ask each time.
+  writeScope?: string[];
   // "Allow safe SQL on this card": its database prompts the review calls Safe go through unasked (lib/db-calls.ts).
   safeSql?: true;
   // This card's changes to its project's skill set (lib/skill-sets.ts): skill names or plugin ids

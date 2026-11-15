@@ -32,7 +32,7 @@ import { useThreadLive } from "@/lib/use-thread-live";
 const TaskStrip = guarded(() => import("./TaskStrip"), { what: "subagents", inline: true });
 
 // A pending question, for the reply box, whose composer is where you type your own answer or a note.
-function questionFor(card: Card, onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => unknown, transport: ThreadTransport) {
+export function questionFor(card: Card, onAnswer: (allow: boolean, answers?: Record<string, string>, reply?: QuestionReply) => unknown, transport: ThreadTransport) {
   const pending = card.pending;
   const { grantFolder } = transport;
   if (!pending?.questions) return undefined;

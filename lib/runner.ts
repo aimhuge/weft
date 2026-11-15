@@ -23,7 +23,7 @@ import { appendThread, foldThread, getCard, getThread, updateCard } from "./stor
 import { takeTaskNote } from "./task-ledger";
 import { takeBreakNote } from "./crash-blame";
 import { turnEnv } from "./turn-env";
-import { dropDenialPrompts } from "./classifier-denial";
+import { carryGrants, dropDenialPrompts } from "./classifier-denial";
 import type { Card, PermissionMode } from "./types";
 import { awaitingWorktree, workDir } from "./work-dir";
 import { isolate } from "./worktree-start";
@@ -135,7 +135,15 @@ function keepSessionId(cardId: string, session: Session) {
 }
 
 // The card's CLI for the next message: its open one, a copy when another app has the session, a spare, or a new one.
+// Calls you allowed once after auto mode blocked them go along when it isn't the one you answered on.
 function sessionFor(card: Card) {
+  const before = sessions.get(card.id);
+  const session = openSessionFor(card);
+  carryGrants(before, session);
+  return session;
+}
+
+function openSessionFor(card: Card) {
   const session = currentSession(card.id);
   if (session?.busy) throw new Error("This thread is already running.");
   if (session) return session;

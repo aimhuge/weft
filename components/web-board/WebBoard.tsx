@@ -34,7 +34,7 @@ import { WebLiveDot } from "./WebLiveDot";
 import { WebShareBoard } from "./WebShareBoard";
 import { useWebBoard } from "./useWebBoard";
 import { WebCommandStrip } from "./WebCommandStrip";
-import { WebNewCardDialog } from "./WebNewCardDialog";
+import { WebNewCard } from "./WebNewCard";
 import { WebRail } from "./WebRail";
 import { WebReplyStatus } from "./WebReplyStatus";
 import { CloudBlobContext } from "./useCloudTransport";
@@ -229,7 +229,7 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
           </>
         )}
 
-        {composing && <WebNewCardDialog targets={targets} defaultFolder={project} onSend={board.startCard} onClose={() => setComposing(false)} />}
+        {composing && <WebNewCard places={targets} folder={project} rows={board.cards} onStart={board.startCard} client={board.client} orgId={orgId} onClose={() => setComposing(false)} />}
 
         {active && activeCard && (
           <WebThreadPanel

@@ -12,7 +12,8 @@ import BoardList from "./BoardList";
 import type { RowNest } from "./CardRowCells";
 
 export interface BoardSurfaceProps extends Omit<BoardColumnsProps, "renderCard" | "drag" | "archive" | "review"> {
-  mode: ViewMode;
+  // "sidebar" is simple mode's: the cards are in components/BoardSidebar.tsx and this is the space beside it.
+  mode: ViewMode | "sidebar";
   // The card, as the board draws it; the list draws a row of its own.
   renderCard: (card: Card) => ReactNode;
   renderRow: (card: Card, column: Column, nest?: RowNest) => ReactNode;
@@ -52,6 +53,11 @@ function dragBundle(drag: BoardSurfaceProps["drag"]): BoardColumnsProps["drag"] 
 }
 
 export default function BoardSurface({ mode, renderRow, drag, archive, review, ...props }: BoardSurfaceProps) {
+  if (mode === "sidebar") {
+    // The rest of the window beside the sidebar: the open card's frame covers it, or the board's pane sits in it.
+    // It keeps .board-sheet so the empty board's start panel (components/EmptyBoardStart.tsx) centers here.
+    return <main data-board-surface className="board-sheet min-w-0 flex-1" onDoubleClick={props.onNew} />;
+  }
   if (mode === "list") {
     return <BoardList byColumn={props.byColumn} renderRow={renderRow} onNew={props.onNew} notify={props.notify} onReorder={drag.onReorder} archive={{ count: archive.count, shown: archive.shown, onToggle: archive.onToggleShown }} />;
   }

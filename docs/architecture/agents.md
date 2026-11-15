@@ -3,7 +3,10 @@
 An agent is who a thread is: its **soul**, the first part of the system prompt Weft gives the CLI, and the **skills** it
 turns off. **Builder** is the soul every thread had before agents, Weft's own (read SOUL.md, AGENTS.md and the project's
 CLAUDE.md). **Copywriter** writes in Weft's voice: the home page, feature intros and voiceovers, the welcome tour,
-changelog entries, posts, UI copy. You make more in **Settings → Agents**, and every agent there, built-ins too, can be
+changelog entries, posts, UI copy. **Researcher** works things out with you over several turns (a question, a decision, a
+plan, a comparison, a marketing teardown) and keeps the answer on one research page in the pane that grows a round at a
+time; it runs the `/weft:research` skill (plugin/skills/research) and lands you on what changed with `mcp__browser__focus`.
+You make more in **Settings → Agents**, and every agent there, built-ins too, can be
 edited. An agent changes who the thread is, not what it can do: each keeps the browser pane, the vault, the board tools,
 the review tour and the rest of the prompt.
 
@@ -41,7 +44,7 @@ always starts with Builder's shipped soul.
 - Board: `lib/use-agents.ts` (one list per window, shipped until the server answers or where there's none, like weft.zip);
   `components/NewCardDialogControls.tsx` `AgentSelect` (starts on the folder's default, follows a new folder, always sends
   the agent so Builder picked wins over a default; its last row, **Manage agents…**, opens Settings → Agents through
-  `BoardFrame`), `lib/card-menu.ts` `agentItems` (right-click → **Agent: …**, Shift+W Builder, W Copywriter, ⌥1–⌥9 yours),
+  `BoardFrame`), `lib/card-menu.ts` `agentItems` (right-click → **Agent: …**, Shift+W Builder, W Copywriter, Shift+R Researcher, ⌥1–⌥9 yours),
   `components/CardFooterMeta.tsx` `AgentMark` (the emoji, none for Builder or a deleted agent).
 - Settings: `components/SettingsAgentsPage.tsx` (the list with Edit, Duplicate, Reset or Delete; each project's default) and
   `components/AgentEditor.tsx` (emoji, name, one line, soul, skills). Saves as you go, like Shortcuts.

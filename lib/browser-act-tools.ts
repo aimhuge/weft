@@ -118,6 +118,21 @@ export function actTools(cardId: () => string | undefined) {
         }),
     ),
     tool(
+      "focus",
+      "Bring a section of the page in the browser pane into view and flash it, so the user's eye lands on what's new instead of rereading the page. After you edit the page's file, pass reload: true: it reloads, keeps the user's place, then glides from there to the section (give a CSS selector like #r3; refs don't survive a reload). label tags the flash, e.g. \"New in round 3\".",
+      {
+        ...target,
+        reload: z.boolean().optional().describe("Reload first, keeping the user's scroll position, because you just edited the page"),
+        label: z.string().max(60).optional().describe('A short tag on the flash, like "New in round 3" or "Diagram updated"'),
+      },
+      (args) =>
+        attempt(async () => {
+          const r = await on("focus", args);
+          const what = asText(r.text);
+          return text(`${r.reloaded ? "Reloaded; " : ""}focused ${asText(r.focused)}${what ? `: "${what}"` : ""}`);
+        }),
+    ),
+    tool(
       "wait_for",
       "Wait until text shows up on the page in the browser pane, until text is gone, or until a CSS selector matches something visible. Up to timeout_ms (default 5000, at most 30000).",
       {

@@ -9,6 +9,7 @@ import type { ProjectWorker } from "@/lib/board-view";
 import type { BrowserState } from "@/lib/client";
 import type { Card, ThreadItem } from "@/lib/types";
 import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
+import type { ColumnId } from "@/lib/workspace-layout";
 import type { ThreadHandlerSet } from "@/lib/thread-handlers";
 import type { planResets } from "@/lib/schedule";
 import { NO_DRAG } from "@/lib/no-drag";
@@ -17,11 +18,17 @@ import { PaneOpenContext } from "@/lib/pane-open";
 import { ThreadTransportContext } from "@/lib/thread-transport";
 import { AskProjectContext } from "@/lib/use-ask-folder";
 import { useProjectHost } from "@/lib/use-project-host";
+import { ReplyElsewhereContext, ReplyLookContext } from "@/lib/reply-elsewhere";
+import { usePaneFull } from "@/lib/use-pane-full";
+import { useBoardSlot } from "@/lib/use-board-slot";
 import { ToolResultSourceContext } from "@/lib/use-tool-result";
 import { useWorkerQueued } from "@/lib/worker-acts";
 import { guarded } from "./guarded";
+import HideThread from "./HideThread";
 
 const BrowserPane = guarded(() => import("./BrowserPane"), { what: "browser pane", className: "m-3 w-[360px] self-start" });
+const PaneBottom = guarded(() => import("./PaneBottom"), { what: "pane reply box", className: "m-3" });
+const RailPill = guarded(() => import("./RailPill"), { inline: true, what: "show rail pill" });
 const PaneCardMarks = guarded(() => import("./PaneCardMarks"), { inline: true, what: "card marks" });
 const ShowRail = guarded(() => import("./ShowRail"), { what: "show rail", className: "w-[72px] shrink-0" });
 const ThreadPanel = guarded(() => import("./ThreadPanel"), { what: "thread", className: "m-3 w-[360px] self-start" });
@@ -42,7 +49,15 @@ const HandoverAskBar = guarded(() => import("./HandoverAskBar"), { inline: true,
 // children (none) take no space. `bottom` stops the window above an open terminal drawer. The framed
 // window is a dialog — it sits over the board with a backdrop and takes the focus — so it says so.
 // `label` names it (the card's title on weft.zip); the desktop leaves it to the panel's own heading.
-export function CardFrame({ framed, bottom, onBackdrop, label, children }: { framed: boolean; bottom?: number; onBackdrop: () => void; label?: string; children: ReactNode }) {
+export function CardFrame({ framed, inBoard, bottom, onBackdrop, label, children }: { framed: boolean; inBoard?: boolean; bottom?: number; onBackdrop: () => void; label?: string; children: ReactNode }) {
+  const { slot, frame } = useBoardSlot(framed && Boolean(inBoard));
+  if (slot) {
+    return (
+      <div ref={frame} data-in-board aria-label={label} style={{ ...NO_DRAG, ...slot }} className="fixed z-40 flex overflow-hidden border-l border-line bg-panel">
+        {children}
+      </div>
+    );
+  }
   return (
     <>
       {framed && <div data-backdrop style={NO_DRAG} className="fixed inset-0 z-30 bg-black/40" onClick={onBackdrop} aria-hidden="true" />}
@@ -119,6 +134,10 @@ export default function OpenCard(props: OpenCardProps) {
   // Share… links the card's cloud rows: a synced card's on this Mac, the rows a worker published for its own.
   const share = host.can("share") ? onShare : undefined;
   const marks = <PaneCardMarks card={card} onShare={share} onStar={onStar} onArchive={onArchive} />;
+  const show = <ShowRail card={card} hidden={false} items={shown} pageUrl={page.url} shots={page.shots} onReopen={page.open} />;
+  // Simple mode's full-page pane (lib/use-pane-full.ts): the rail folds into a pill, the thread hides behind the live
+  // line, and the reply strip runs under the whole card.
+  const { full, rail, thread, hidden } = usePaneFull(host.can("pane"), workspace.layout.open.pane);
   return (
     <ToolResultSourceContext.Provider value={host.tools}>
       <FilesSourceContext.Provider value={host.files}>
@@ -127,6 +146,9 @@ export default function OpenCard(props: OpenCardProps) {
           <PaneOpenContext.Provider value={page.open}>
             {/* A worker card's ask_add input fills this Mac's checkout of its repo (lib/use-ask-folder.ts). */}
             <AskProjectContext.Provider value={card.cwd}>
+              {/* One reply box: under the page while the thread is hidden, else the thread column's own, in the phone's look. */}
+              <ReplyLookContext.Provider value={full ? "phone" : undefined}>
+              <UnderCard bottom={full && !thread ? <PaneBottom card={card} items={shown} onSend={props.handlers.onSend} onAnswer={props.handlers.onAnswer} /> : null}>
               <Workspace
                 {...props}
                 onShare={share}
@@ -146,6 +168,8 @@ export default function OpenCard(props: OpenCardProps) {
                       onClose={closePane}
                       expanded
                       actions={marks}
+                      rail={rail ? <div className="flex w-[72px] shrink-0">{show}</div> : undefined}
+                      pill={full ? <>{thread && <HideThread />}<RailPill card={card} items={shown} /></> : undefined}
                     />
                   ) : card.team ? (
                     <TeamPane card={{ ...card, team: card.team }} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} onClose={closePane} />
@@ -153,8 +177,11 @@ export default function OpenCard(props: OpenCardProps) {
                     <WorkerPane card={card} worker={props.worker} url={page.url} browser={{ ...browser, obscured: browser.obscured || workspace.dragging }} marks={marks} onClose={closePane} />
                   )
                 }
-                show={<ShowRail card={card} hidden={false} items={shown} pageUrl={page.url} shots={page.shots} onReopen={page.open} />}
+                show={show}
+                hidden={hidden}
               />
+              </UnderCard>
+              </ReplyLookContext.Provider>
             </AskProjectContext.Provider>
           </PaneOpenContext.Provider>
         </ThreadTransportContext.Provider>
@@ -163,9 +190,23 @@ export default function OpenCard(props: OpenCardProps) {
   );
 }
 
-type WorkspaceProps = OpenCardProps & { files: boolean; footer: ReactNode; editor: ReactNode; pane: ReactNode; show: ReactNode };
+// The card's columns, and simple mode's reply strip under all of them at full width when there is one: the columns
+// then leave their own reply box and ask out (lib/reply-elsewhere.ts), and the strip keeps them.
+function UnderCard({ bottom, children }: { bottom: ReactNode; children: ReactNode }) {
+  if (!bottom) return children;
+  return (
+    <div className="flex h-full min-h-0 w-full min-w-0 flex-col">
+      <ReplyElsewhereContext.Provider value>
+        <div className="flex min-h-0 flex-1">{children}</div>
+      </ReplyElsewhereContext.Provider>
+      {bottom}
+    </div>
+  );
+}
 
-function Workspace({ card, handlers, items, streaming, resets, editTitle, workspace, onStar, onTags, onShare, onArchive, onOpenSettings, files, footer, editor, pane, show }: WorkspaceProps) {
+type WorkspaceProps = OpenCardProps & { files: boolean; footer: ReactNode; editor: ReactNode; pane: ReactNode; show: ReactNode; hidden?: readonly ColumnId[] };
+
+function Workspace({ card, handlers, items, streaming, resets, editTitle, workspace, onStar, onTags, onShare, onArchive, onOpenSettings, files, footer, editor, pane, show, hidden }: WorkspaceProps) {
   return (
     <CardWorkspace
       layout={workspace.layout}
@@ -175,6 +216,7 @@ function Workspace({ card, handlers, items, streaming, resets, editTitle, worksp
       toggle={workspace.toggle}
       dragDivider={workspace.dragDivider}
       fitToContainer={workspace.fitToContainer}
+      hidden={hidden}
       columns={{
         thread: (
           <ThreadPanel

@@ -198,6 +198,8 @@ async function startCommand() {
   // through the host kind's path (the daemon hands `run` in).
   const lines = createHostLines({
     terminal,
+    // Synced folders: a project kept as one folder with your Mac's checkout of it (lib/worker-tree-sync.ts).
+    tree: (await import("../lib/worker-tree-sync")).workerTreeDeps({ home, workerId: config.workerId, name: config.name }),
     // The editor's live reload: a file open on a line, watched until the line drops it (lib/worker-file-watch.ts).
     watchFile: (await import("../lib/worker-file-watch")).watchCardFiles((id) => store.getCard(id)?.cwd),
     unseal: (sealed, purpose) => open(keys, sealed, purpose),

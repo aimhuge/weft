@@ -23,6 +23,13 @@ function subscribe(listener: () => void) {
   return () => void listeners.delete(listener);
 }
 
+// How many minis the rail shows for the card: the full-page pane's pill (components/RailPill.tsx) says it folded.
+export function useMiniCount(card: Card, items: ThreadItem[]) {
+  const now = useNow();
+  const cardVisits = useSyncExternalStore(subscribe, () => visits.get(card.id) ?? NONE, () => NONE);
+  return showMinis(items, { live: isLive(card), now, visits: cardVisits }).length;
+}
+
 // The 72 px column right of the browser pane's page: one mini per turn of the open thread and per page
 // the pane showed, oldest first with the newest at the bottom, like the chat. Pages are pictures of what the
 // pane showed (lib/page-shots.ts); turns are a dot and their first words. Click a turn and the chat scrolls

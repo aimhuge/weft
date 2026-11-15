@@ -21,6 +21,8 @@ export const db = {
   deleteError: null as string | null,
   // How a command read back by id went (the web's host verbs follow theirs, lib/cloud-host-acts.ts).
   command: { status: "done", error: null } as { status: string; error: string | null; result?: unknown },
+  // The desktop-worker rows a read of cloud_workers answers (a Mac's published start mode, lib/web-start-modes.ts).
+  workers: [] as Array<{ device: string; capabilities: unknown }>,
 };
 
 // A module-scoped object the mock factory closes over: each created client's Realtime handlers, so a
@@ -65,7 +67,8 @@ function query(table: string) {
   let deleting = false;
   let inserted: Record<string, unknown> | null = null;
   let limit = Infinity;
-  const answer = () => ({ data: table === "cloud_thread_items" ? threadRows(filters, limit) : [], error: deleting && db.deleteError ? { message: db.deleteError } : null });
+  const rows = () => (table === "cloud_thread_items" ? threadRows(filters, limit) : table === "cloud_workers" ? db.workers : []);
+  const answer = () => ({ data: rows(), error: deleting && db.deleteError ? { message: db.deleteError } : null });
   const builder: Record<string, unknown> = {
     select: () => builder,
     in: (k: string, v: unknown) => (filters.push([`${k} in`, v]), builder),
@@ -208,6 +211,7 @@ export function resetHarness() {
   db.insertError = null;
   db.deleteError = null;
   db.command = { status: "done", error: null };
+  db.workers = [];
   mockState.inserts.length = 0;
   mockState.hints.length = 0;
   mockState.deletes.length = 0;

@@ -1,7 +1,7 @@
 "use client";
 
 import { hintOtherText, hintTitle } from "@/lib/use-view-hint";
-import type { ViewMode } from "@/lib/board-prefs";
+import type { ViewStop } from "@/lib/view-stops";
 import Icon from "./Icon";
 
 // The little pane under the board/list toggle: it says where Escape just took you, so the flip
@@ -15,7 +15,7 @@ import Icon from "./Icon";
 // It is one row, never wrapped. An absolutely-positioned box with no width shrinks to its content
 // and then wraps the text into a narrow column, which left the icon adrift and the ✕ orphaned;
 // `w-max` and `whitespace-nowrap` keep the icon, the words and the ✕ on one line, balanced.
-export default function ViewHint({ mode, onDismiss }: { mode: ViewMode; onDismiss: () => void }) {
+export default function ViewHint({ mode, onDismiss }: { mode: ViewStop; onDismiss: () => void }) {
   return (
     <div
       role="status"

@@ -125,6 +125,13 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
   to the column the turn ended in.
 - `withRetryGrant` adds a PreToolUse hook that answers `allow` for the granted call and uses the grant up. A deny hook
   (the secret guard, say) still wins, and a grant the retry turn didn't use is dropped when that turn ends.
+- The grant lives on the card's session, but the retry can run on a different CLI: `sendMessage` swaps a session from an
+  older build or prompts (any commit in the tree changes it) or one whose CLI ended for a new one. `sessionFor`
+  (`lib/runner.ts`) moves unspent grants onto whichever session runs the retry (`carryGrants`); before, the new CLI's
+  hook had no grant, so two Writes the classifier skipped ("gave no verdict") were denied again after **Allow once and
+  retry**. A "no verdict" skip arrives as the same `permission_denied` (`decision_reason_type: "classifier"`) as a
+  block, so it gets the same prompt and grant. The idle timer also leaves a CLI open while its card has such a prompt
+  (`closeWhenIdle` in `lib/runner-state.ts`): closing it dropped the prompt, and the click found nothing waiting.
 - In auto mode a hook's allow doesn't always count: the CLI sends an MCP tool's hook allow on to the classifier anyway
   ("Hook approved tool use …, but auto mode requires classifier adjudication"), so the allow alone let the retry be
   blocked again. So the granted call's own hook steps the live CLI out of auto mode first (`lib/retry-window.ts`:
@@ -140,6 +147,33 @@ What the CLI does send is a `system`/`permission_denied` message (`decision_reas
   there, and turns back any other call caught in the window (its hook ran just before the window opened) with "run it
   again", rather than asking you about something auto mode may well have allowed.
 - A reply instead of a click (`sendMessage`) drops the prompts and marks them denied in the thread.
+
+### Ask once per card for a skill's folder or a settings file
+
+The classifier won't judge writes into a skill's folder or a Claude settings file: every Write and Edit a card made
+building `plugin/skills/research/` came back "gave no verdict (it skipped this action)", and the user clicked
+**Allow once and retry** four times over two hours, once per batch. So a blocked write there grants that place to the
+card for the rest of its life (`lib/write-scope.ts` the rule, `lib/write-grant.ts` the card side):
+
+- **The scope** (`scopeFor`): a `.claude/settings*.json` file on its own, or the skill folder holding the file:
+  `skills/<name>` under any `skills/` folder (`plugin/skills`, `.claude/skills`, `~/.claude/skills`), else the nearest
+  folder up to three levels with a `SKILL.md` (a skills repo with no `skills/` level). Never a folder that is or holds
+  the card's project, never the home folder, never another path.
+- **The prompt** (`askAboutDenials` → `blocks`): blocked writes into the same scope fold into one prompt ("Auto mode
+  blocked 3 writes to the research skill"), and its Allow button says what it grants: **Allow writes to the research
+  skill for this card** (`why.grant`, shown by `components/PermissionInput.tsx`). Allowing it retries the calls as
+  before, adds the scope to `card.writeScope` (stored on the card, so it survives a new CLI or a restart), and tells
+  the thread its later writes there go through.
+- **Later writes** (`writeGranted`): the PreToolUse hook in `withRetryGrant` allows a Write, Edit, MultiEdit or
+  NotebookEdit inside a granted scope the same way it allows a retry (stepping out of auto mode for that call), and
+  `outOfAutoAnswer` allows it in `canUseTool`. Only write tools: a Bash `rm` in the folder still goes to the classifier.
+  Another card, or another folder, still asks.
+- **Permission changes always ask** (`changesPermissions`): a write that changes a settings file's `permissions`,
+  `hooks`, `disableAllHooks`, `env`, `apiKeyHelper`, `sandbox` or MCP-server keys, or a `SKILL.md`'s `allowed-tools`,
+  is never covered and never grants. The new text is worked out from the call (Write's content, Edit's and
+  MultiEdit's replacements on the file now) and compared key by key; anything it can't read for sure (bad JSON, an
+  edit whose old text isn't there) counts as a change. A standing grant there would let a thread widen its own
+  permissions with one click you gave for something else.
 
 The mode's hint in `MODE_OPTIONS` (`lib/types-card.ts`) says this: "A classifier approves or blocks; Weft asks you about blocks".
 
@@ -570,6 +604,28 @@ names the missing file even when tsc would bury it, and the git guard keeps thre
 
 Tests: `scripts/staged-imports.test.ts` (the import scan, alias and extension resolution, and the script against a real
 temp repo).
+
+## Dev server guard
+
+`lib/devserver-guard.ts` (`DEVSERVER_GUARD_MATCHER`, matcher `Bash|Monitor`, in `lib/guards/hooks.ts`, so Codex and Goose
+get it through the guard route too): refuses a long-running dev server started outside Weft's tracker, since such a
+server has no Services row, no idle stop, and outlives the thread (2026-11-15: three of them held 18 GB of a 16 GB Mac).
+
+- **Dev server** (`startsServer`): `next dev|start`, vite (bare, dev, serve, preview), `astro dev`, `nuxi dev`, `expo start`,
+  `react-native start`, `webpack serve`, `wrangler dev`, `vercel dev`, `ng serve`, storybook, gatsby, parcel, nodemon,
+  `rails s`, `flask run`, uvicorn, `manage.py runserver`, and package scripts named dev, start, serve, develop, preview,
+  storybook (or `dev:*`) through npm, pnpm, yarn, bun, turbo, npx/bunx, `pnpm exec`, `node node_modules/.bin/…`.
+  Builds, tests and installs never match.
+- **Backgrounded or detached** (`scanLine`): Bash `run_in_background`, a lone `&` (the parser marks it, `( … ) &` too:
+  `lib/shell-parse.ts` `background`), nohup, setsid, disown, `screen -dm`, `tmux new -d`, `pm2 start`, `forever start`,
+  daemonize, inside `sh -c`, heredocs fed to a shell and `$( )`; and any dev server under Monitor, which is always
+  in the background.
+- **Allowed**: a dev server in the foreground. Bash's timeout ends it with the call, so a quick smoke test
+  (`timeout 20 pnpm dev`) is fine.
+- The deny names the call to make instead: `mcp__devservers__start` with the command, the folder (after any `cd`) and
+  the url when a port is on the line.
+- A `puku-cli -p` or `claude -p` a thread starts gets it from `scripts/import-check-hook.mjs` (Weft's own repo only,
+  where `.claude/settings.json` runs that hook; its matcher doesn't include Monitor).
 
 ## Route import guard
 

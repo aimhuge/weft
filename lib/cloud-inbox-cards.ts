@@ -21,6 +21,7 @@ import { applyFolderGrant } from "./folder-grant";
 import { cardKinds, dispatcher, NO_HOST_VERBS, type CardRules } from "./host/dispatch";
 import { needsElevation, runVerb, type HostVerb } from "./host-api";
 import { defaultPermissionMode, syncFolders } from "./settings";
+import type { PermissionMode } from "./types";
 import { getCard } from "./store";
 import { holdWorkerCard, sentByWorker } from "./worker-origin";
 import { pairingStatus } from "./sync-security";
@@ -122,6 +123,16 @@ export function syncFolderFor(name: string): string | null {
   return named.length === 1 ? (named[0] ?? null) : null;
 }
 
+// This Mac's default, held to the rule a mode change from the web is (lib/cloud-new-card-mode.ts).
+const START_MODE = {
+  defaultMode: defaultPermissionMode,
+  refusal: async (permissionMode: PermissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,
+};
+
+// The mode a thread started from the web with no mode named starts in here, for weft.zip's New thread dialog to show
+// (lib/desktop-worker.ts publishStartMode).
+export const webStartMode = () => networkStartMode(undefined, START_MODE);
+
 // A new card from the web: its pasted files brought over first, its mode (named, or this Mac's default) held to the same
 // rule as a mode change (lib/cloud-new-card-mode.ts), and one asked for in Backlog made and left there.
 async function newCard(command: CloudCommandRow, receive: (text: string, payload: unknown, orgId?: string) => Promise<string>): Promise<string> {
@@ -131,10 +142,7 @@ async function newCard(command: CloudCommandRow, receive: (text: string, payload
   // An agent only with a signed approval for it, over the synced folder the check resolved (lib/create-widen.ts).
   const agent = await signedAgent(command, command.folder, macWiden);
   if (agent) body.agent = agent;
-  body.permissionMode = await networkStartMode(body.permissionMode as NewCardMode | undefined, {
-    defaultMode: defaultPermissionMode,
-    refusal: async (permissionMode) => (await macRules.elevated?.("card.update", { id: "", body: { permissionMode } })) ?? null,
-  });
+  body.permissionMode = await networkStartMode(body.permissionMode as NewCardMode | undefined, START_MODE);
   if (typeof body.prompt === "string") body.prompt = await receive(body.prompt, command.payload, command.org_id);
   return made(body.start === false ? createCardFromBody(body) : await startFeatureCard(body));
 }

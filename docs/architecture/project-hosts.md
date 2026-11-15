@@ -374,8 +374,8 @@ weft.zip board ── setHostForEveryCard(webHost) ── hostOf(card) = webHost
   them over as before (`/api/worker-blob` read mode). **The Mac now receives too**: `lib/cloud-inbox-receive.ts` `macReceive` reads
   each blob through the account's own session (`readBlob`), checks it and saves it in `~/.weft/attachments`, through the same
   `receiveAttachments`; `macDispatch` gives it to the card kinds as `receive` and to `new_card`'s prompt.
-- **New thread** (`WebNewCardDialog`): the desktop's `ModelSelect` with its CLI rows (the CLI is sent only once picked, so the
-  machine's default holds), the effort, the desktop's `ModePicker` (never skip-permissions), tags and Backlog (`start: false`,
+- **New thread** (now the desktop's own `NewCardDialog` over `lib/new-card-transport.ts`, docs/architecture/new-card-parity.md;
+  it sends the CLI with the model, and the mode only once picked): first built as `WebNewCardDialog`, the desktop's `ModelSelect` with its CLI rows, the effort, the desktop's `ModePicker` (never skip-permissions), tags and Backlog (`start: false`,
   a card made and left in Backlog); on a worker's folder, **Plan first** and no Backlog (a worker refuses `start: false` until
   `card.create`). `NewCardPayload` gains `permissionMode` (`NEW_CARD_MODES`) and `start`; the Mac holds the mode it starts in,
   named or its own default, to the rule a mode change is (`lib/cloud-new-card-mode.ts`): never skip-permissions, a looser one

@@ -1,5 +1,5 @@
 // What agents do to a pane page through CDP (electron/pane-cdp.cjs): click, hover, type, press keys, scroll,
-// pick an option, wait for something, change the viewport and read the accessibility snapshot. Input goes in as
+// pick an option, wait for something, bring a section into view and flash it (pane-focus.cjs), change the viewport and read the accessibility snapshot. Input goes in as
 // Input.dispatch* events, so the page sees trusted events (isTrusted, pointerdown, real focus), the way a person's
 // would; element.click() from a script didn't reach menus that open on pointerdown or handlers that check isTrusted.
 // An element is a ref from the snapshot (pane-ax.cjs) or a CSS selector. Each operation is a fixed page function;
@@ -9,6 +9,7 @@ const { formatAxTree } = require("./pane-ax.cjs");
 const { keyEvents } = require("./pane-keys.cjs");
 const { callOn, FOCUS, GROUP, resolveElement } = require("./pane-element.cjs");
 const { visibleExpression } = require("./pane-selector.cjs");
+const { createPaneFocus } = require("./pane-focus.cjs");
 
 const VIEWPORTS = {
   phone: { width: 390, height: 844, deviceScaleFactor: 3, mobile: true },
@@ -178,7 +179,9 @@ function createPaneInput(/** @type {{ cdp: any, wait?: (ms: number) => Promise<u
     return formatAxTree(nodes ?? []);
   }
 
-  return { click, hover, press, type, select, scroll, waitFor, viewport, snapshot };
+  const { focus } = createPaneFocus({ cdp, wait, now });
+
+  return { click, hover, press, type, select, scroll, waitFor, viewport, snapshot, focus };
 }
 
 // The control-server routes for the above. page(body) gives { wc, key } for the card's page (active when no key);
@@ -200,6 +203,7 @@ function agentRoutes({ input, cdp, page, redact }) {
     "POST /browser/press": run((wc, b) => input.press(wc, b.keys, target(b))),
     "POST /browser/select": run((wc, b) => input.select(wc, target(b), b.values)),
     "POST /browser/scroll": run((wc, b) => input.scroll(wc, b)),
+    "POST /browser/focus": run((wc, b) => input.focus(wc, b)),
     "POST /browser/wait": run((wc, b) => input.waitFor(wc, b)),
     "POST /browser/viewport": run((wc, b) => input.viewport(wc, b)),
     "POST /browser/snapshot": run(async (wc, _b, key) => {

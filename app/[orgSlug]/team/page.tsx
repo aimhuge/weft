@@ -25,6 +25,7 @@
 // layout's fallback is the one a slow loader will see.
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import { GetWeftSteps } from "@/components/team/GetWeftSteps";
 import { WebTeam } from "@/components/team/WebTeam";
 import { isWebEnabled } from "@/lib/home";
 import { teamSnapshot } from "@/lib/team-ops";
@@ -47,7 +48,11 @@ function NotDeployedCard({ slug }: { slug: string }) {
   );
 }
 
-async function TeamPageBody({ orgSlug }: { orgSlug: string }) {
+type Query = Record<string, string | string[] | undefined>;
+
+// ?joined=1 is where an accepted invite lands (app/invite/[token]/actions.ts): Weft runs on the invitee's own computer
+// with their own Claude, so the page opens with the download steps above the roster.
+async function TeamPageBody({ orgSlug, joined }: { orgSlug: string; joined: boolean }) {
   const ctx = await requireTeam(orgSlug, `/${orgSlug}/team`);
   // The same snapshot the JSON API returns (members, pending invites for managers, projects, the viewer's role in
   // each workspace), read through the service client because the tables' RLS is locked to the service role.
@@ -56,6 +61,7 @@ async function TeamPageBody({ orgSlug }: { orgSlug: string }) {
   return (
     <div className="wz-teamPage">
       <TeamTabs orgSlug={orgSlug} />
+      {joined ? <GetWeftSteps orgName={ctx.org.name} /> : null}
       <WebTeam orgSlug={orgSlug} snapshot={await teamSnapshot(ctx)} />
     </div>
   );
@@ -73,16 +79,17 @@ function TeamPageFallback() {
 }
 
 // The route params are request data under cacheComponents, so they're read inside the <Suspense>, not before it.
-async function TeamPageFor({ params }: { params: Promise<{ orgSlug: string }> }) {
+async function TeamPageFor({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams?: Promise<Query> }) {
   const { orgSlug } = await params;
   if (!isWebEnabled()) return <NotDeployedCard slug={orgSlug} />;
-  return <TeamPageBody orgSlug={orgSlug} />;
+  const query = searchParams ? await searchParams : {};
+  return <TeamPageBody orgSlug={orgSlug} joined={query.joined === "1"} />;
 }
 
-export default function Page({ params }: { params: Promise<{ orgSlug: string }> }) {
+export default function Page({ params, searchParams }: { params: Promise<{ orgSlug: string }>; searchParams?: Promise<Query> }) {
   return (
     <Suspense fallback={<TeamPageFallback />}>
-      <TeamPageFor params={params} />
+      <TeamPageFor params={params} searchParams={searchParams} />
     </Suspense>
   );
 }

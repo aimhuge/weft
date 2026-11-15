@@ -1,10 +1,9 @@
 "use client";
 
-import { boardMode } from "./board-prefs";
 import { isTyping } from "./hotkeys";
 import { railPinned } from "./rail-view";
 import { useEscape } from "./use-escape";
-import type { ViewMode } from "./board-prefs";
+import { applyStop, currentStop, nextStop, type ViewStop } from "./view-stops";
 
 // What's open on the board that Escape closes before it flips the view.
 export type BoardLayers = { thread: boolean; newThread: boolean; browser: boolean; drawer: boolean };
@@ -15,7 +14,7 @@ export function bareBoard({ thread, newThread, browser, drawer }: BoardLayers) {
   return !thread && !newThread && !browser && !(drawer && !railPinned());
 }
 
-// Escape on a bare board flips between board and list view. It is the bottom layer: it's off while a
+// Escape on a bare board steps through the views: Simple → Board → List → Simple (lib/view-stops.ts). It is the bottom layer: it's off while a
 // thread, the new-thread dialog, the browser or a closable drawer is up, so Escape closes those first,
 // and dialogs and menus sit above every panel anyway. Escape typed in a field (the search box, a
 // composer, the terminal's textarea) leaves the view alone.
@@ -30,28 +29,22 @@ export function bareBoard({ thread, newThread, browser, drawer }: BoardLayers) {
 // mean that: while it is up, the next Escape puts it away instead of flipping the view again.
 // `onDismiss` is called instead of the flip.
 export type ViewFlipOptions = {
-  onFlip?: (next: ViewMode) => void;
+  onFlip?: (next: ViewStop) => void;
   hintUp?: boolean;
   onDismiss?: () => void;
 };
 
-export function useEscapeTogglesView(
-  open: BoardLayers,
-  mode: ViewMode,
-  choose: (next: ViewMode) => void,
-  { onFlip, hintUp, onDismiss }: ViewFlipOptions = {},
-) {
+export function useEscapeTogglesView(open: BoardLayers, { onFlip, hintUp, onDismiss }: ViewFlipOptions = {}) {
   useEscape(
     bareBoard(open),
     (e) => {
-      // Regular mode has only the board, so there's nothing to flip to.
-      if (isTyping(e.target) || boardMode() === "regular") return;
+      if (isTyping(e.target)) return;
       if (hintUp) {
         onDismiss?.();
         return;
       }
-      const next = mode === "board" ? "list" : "board";
-      choose(next);
+      const next = nextStop(currentStop());
+      applyStop(next);
       onFlip?.(next);
     },
     { panel: true },

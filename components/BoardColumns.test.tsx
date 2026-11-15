@@ -98,6 +98,37 @@ describe("BoardColumns' folded columns", () => {
   });
 });
 
+describe("BoardColumns' three piles (simple mode)", () => {
+  afterEach(() => {
+    document.cookie = "weft-simple-three-piles=; path=/; max-age=0";
+    document.cookie = "weft-simple-opened-columns=; path=/; max-age=0";
+  });
+
+  it("shows Needs you, Working and Ready, with Backlog and Done as strips until opened", () => {
+    document.cookie = "weft-simple-three-piles=1; path=/";
+    setup();
+    const order = [...document.querySelectorAll("main > section")].map((s) => s.getAttribute("data-column"));
+    expect(order).toEqual(["backlog", "needs_you", "running", "review", "done"]);
+    expect(col("running").column).toEqual({ id: "running", label: "Working" });
+    expect(col("review").column).toEqual({ id: "review", label: "Ready" });
+    expect(seen.has("backlog") || seen.has("done")).toBe(false);
+    expect(document.querySelectorAll("[data-folded]")[1]?.textContent).toContain("Done1");
+    fireEvent.click(screen.getByRole("button", { name: "Open Done" }));
+    expect(seen.has("done")).toBe(true);
+    const fold = col("done").onFold as () => void;
+    seen.clear();
+    act(() => fold());
+    expect(seen.has("done")).toBe(false);
+    expect(document.cookie).not.toContain("weft-folded-columns=done");
+  });
+
+  it("follows the mode: off in advanced mode", () => {
+    setup();
+    expect(col("running").column).toEqual({ id: "running", label: "Running" });
+    expect(seen.has("done")).toBe(true);
+  });
+});
+
 describe("BoardColumns' wide columns", () => {
   const many = (column: Column, n: number) => Array.from({ length: n }, (_, i) => card(`${column}${i}`, column));
 

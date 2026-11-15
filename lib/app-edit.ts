@@ -7,6 +7,8 @@ import type { MiniApp } from "./mini-apps";
 export interface AppEditTarget {
   folder: string;
   draft: string;
+  // The app itself, for the new card's pane to open on, so it stays in front of you (lib/host-api/card-create.ts).
+  page: string;
 }
 
 export function appEditTarget(app: Pick<MiniApp, "name" | "url">): AppEditTarget | null {
@@ -23,5 +25,5 @@ export function appEditTarget(app: Pick<MiniApp, "name" | "url">): AppEditTarget
     `Edit the mini app "${app.name}". Its page is ${file}` +
     ` (with its weft-app.json manifest beside it, if it reads data). Keep it working in the browser pane, then show it there.\n\n` +
     `What to change: `;
-  return { folder, draft };
+  return { folder, draft, page: app.url };
 }

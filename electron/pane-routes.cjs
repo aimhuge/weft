@@ -15,6 +15,7 @@ const { growthRoutes } = require("./growth-read.cjs");
 const { touchIdPrompt } = require("./touch-id.cjs");
 const { desktopSignerFor, settingsSignRoutes } = require("./settings-sign.cjs");
 const { lanLineRoutes } = require("./lan-line-sign.cjs");
+const { syncList, treeSyncRoutes } = require("./tree-sync-sign.cjs");
 const { workerLabel } = require("./worker-label.cjs");
 
 // The pairing routes, looked up when called: pairing is set up after the pane (it needs the account client).
@@ -119,6 +120,13 @@ function paneRoutes({ dataDir, app, dialog, systemPreferences = require("electro
     ...settingsSignRoutes(deviceKey),
     // A worker's pinned keys and this Mac's signature over a line offered to it over the LAN (electron/lan-line-sign.cjs).
     ...lanLineRoutes({ pins: () => pinsFor(dataDir), signer: deviceKey }),
+    // Synced folders: Touch ID to turn one on, then this Mac's signature on each tree channel it opens (electron/tree-sync-sign.cjs).
+    ...treeSyncRoutes({
+      list: syncList({ dir: dataDir, safeStorage: () => require("./keychain-audit.cjs").keychainFor("synced folders") }),
+      pins: () => pinsFor(dataDir),
+      signer: deviceKey,
+      ask: touchIdPrompt({ systemPreferences, dialog, window }),
+    }),
     // mcp__board_view__*: threads see and drive the board itself, secrets redacted (electron/board-view.cjs).
     ...boardViewRoutes(createBoardView({ board })),
   };

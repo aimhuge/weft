@@ -44,6 +44,7 @@ describe("the act tools", () => {
       "press_key",
       "select_option",
       "scroll",
+      "focus",
       "wait_for",
       "set_viewport",
       "console_logs",
@@ -212,6 +213,28 @@ describe("wait_for", () => {
     reply({ waitedMs: 5 });
     await run("wait_for", { selector: ".ready" });
     expect(sent(1).body).toEqual({ selector: ".ready", timeout: undefined, key: "c1" });
+  });
+});
+
+describe("focus", () => {
+  it("brings a section into view and says what's there", async () => {
+    reply({ focused: "#r3", text: "Round 3", reloaded: false });
+    const r = await run("focus", { selector: "#r3", label: "New in round 3" });
+    expect(sent().url).toMatch(/\/browser\/focus$/);
+    expect(sent().body).toEqual({ selector: "#r3", label: "New in round 3", key: "c1" });
+    expect(r.content[0]!.text).toBe('focused #r3: "Round 3"');
+  });
+
+  it("says it reloaded first, and leaves the text out when there is none", async () => {
+    reply({ focused: "#design", text: "", reloaded: true });
+    const r = await run("focus", { selector: "#design", reload: true });
+    expect(r.content[0]!.text).toBe("Reloaded; focused #design");
+  });
+
+  it("answers the pane's refusal as an error", async () => {
+    reply({ error: "No element matches #r9 after the reload." }, false);
+    const r = await run("focus", { selector: "#r9", reload: true });
+    expect(r.isError).toBe(true);
   });
 });
 

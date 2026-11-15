@@ -42,10 +42,22 @@ async function begin(card: Card, local: boolean): Promise<Created["start"]> {
   }
 }
 
-export async function createCardVerb({ id, start, ...body }: CreateArgs, ctx: HostCtx = {}): Promise<Created> {
+// A local page the new card's pane opens on before its first turn (the pane's Edit app button: the app stays in front
+// of you instead of the starter scene, which leaves a pane that has a page alone, lib/show.ts). Only file: pages, and
+// only from this Mac's own board.
+export const panePage = (page: unknown) => (typeof page === "string" && page.startsWith("file://") ? page : undefined);
+
+async function openPage(cardId: string, page: string) {
+  const { openInPane } = await import("../browser-tools");
+  await openInPane(page, cardId).catch(() => {});
+}
+
+export async function createCardVerb({ id, start, page, ...body }: CreateArgs, ctx: HostCtx = {}): Promise<Created> {
   const local = ctx.local === true;
   // A local caller may leave the id to this host; anyone else names the board's, checked and never reused.
   const card = local && id === "" ? createCardFromBody(body) : createCardFromBody(body, claimId(id));
+  const opens = local ? panePage(page) : undefined;
+  if (opens) await openPage(card.id, opens);
   // A card whose model or CLI is at its limit waits for the window instead of failing its first turn (lib/start-gate.ts);
   // the answer says when its first message goes out.
   const started = start === false ? { started: false } : await begin(card, local);

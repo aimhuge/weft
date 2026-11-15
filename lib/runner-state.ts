@@ -290,8 +290,9 @@ function trimIdle() {
 
 function closeWhenIdle(cardId: string, session: Session) {
   if (sessions.get(cardId) !== session || session.busy) return;
-  // Closing it would end the subagents and commands running in its process group: check again later.
-  if (hasLiveTasks(cardId)) {
+  // Closing it would end the subagents and commands running in its process group, or drop the prompts its
+  // card is waiting on you for (auto mode's blocked calls), which no other CLI could answer: check again later.
+  if (hasLiveTasks(cardId) || session.pending.length) {
     scheduleIdle(session);
     return;
   }

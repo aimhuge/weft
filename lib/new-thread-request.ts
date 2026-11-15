@@ -7,6 +7,8 @@ export const NEW_THREAD_EVENT = "weft:new-thread";
 export interface NewThreadRequest {
   folder?: string;
   draft?: string;
+  // A page the card made from this dialog opens in its pane (the app being edited).
+  page?: string;
 }
 
 export function requestNewThread(request: NewThreadRequest): void {

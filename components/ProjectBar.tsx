@@ -130,15 +130,18 @@ export default function ProjectBar({
 
       {filter}
 
+      {/* Where Escape just took you (Simple, Board or List), so it shows in simple mode too, where the toggle doesn't.
+          Keyed on the flip's id, so a second flip remounts the toast and its pop-in plays again. */}
+      {viewHint && regular && (
+        <div className="relative shrink-0">
+          <ViewHintPane key={viewHint.id} mode={viewHint.mode} onDismiss={onDismissViewHint} />
+        </div>
+      )}
       {!regular && (
         <>
           <div className="relative shrink-0">
             <ViewToggle mode={view} onChange={onView} />
-            {viewHint && (
-              // Keyed on the flip's id, so a second flip remounts the toast and its pop-in plays again
-              // rather than the toast sitting there already grown.
-              <ViewHintPane key={viewHint.id} mode={viewHint.mode} onDismiss={onDismissViewHint} />
-            )}
+            {viewHint && <ViewHintPane key={viewHint.id} mode={viewHint.mode} onDismiss={onDismissViewHint} />}
           </div>
 
           <select

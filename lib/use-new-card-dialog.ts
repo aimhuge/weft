@@ -89,8 +89,11 @@ function useSettingsDefaults(
   setPermissionMode: (m: PermissionMode) => void,
   setBackend: (b: Backend) => void,
   setModel: (m: string) => void,
+  local: boolean,
 ) {
   useEffect(() => {
+    // Where there's no Weft server here (weft.zip), the machine that runs the card keeps its own defaults.
+    if (!local) return;
     api.settings().then(
       (s) => {
         if (!pickedMode.current) setPermissionMode(s.defaultPermissionMode);
@@ -101,11 +104,20 @@ function useSettingsDefaults(
       },
       () => {},
     );
-  }, [pickedMode, pickedBackend, setPermissionMode, setBackend, setModel]);
+  }, [pickedMode, pickedBackend, setPermissionMode, setBackend, setModel, local]);
 }
 
-// The dialog's state, draft and submit: a single hook so callers don't have to wire the pieces.
-export function useNewCardDialog(home: string, defaultCwd: string | undefined, recentCwd: string | undefined): NewCardDialogLogic {
+// The dialog's state, draft and submit: a single hook so callers don't have to wire the pieces. `local`: this machine
+// runs Weft's server (the desktop); false on weft.zip, where Settings, the worktree pool and the warm-up are the Mac's.
+// `startMode`: on weft.zip, the mode the place's Mac starts a thread in when none is named (lib/web-start-modes.ts), shown
+// until you pick one.
+export function useNewCardDialog(
+  home: string,
+  defaultCwd: string | undefined,
+  recentCwd: string | undefined,
+  local = true,
+  startMode?: (cwd: string) => PermissionMode | undefined,
+): NewCardDialogLogic {
   const [draftInitial] = useState(() => remembered(DRAFT) ?? "");
   const [cwd, setCwd] = useState(() => pickInitialCwd(home, defaultCwd, recentCwd));
   const [backend, setBackend] = useState<Backend>(() => (remembered(LAST_BACKEND) as Backend | null) ?? "claude");
@@ -118,13 +130,17 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
   const [busy, setBusy] = useState<false | "start" | "backlog">(false);
   const [started, setStarted] = useState<string | null>(null);
   const draftTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const { isolated, setIsolated, toggleIsolated, branch, pickBranch, promptLength, notePrompt } = useIsolate(cwd);
+  const { isolated, setIsolated, toggleIsolated, branch, pickBranch, promptLength, notePrompt } = useIsolate(cwd, local);
   // The agent you picked here; a new folder goes back to its own default.
   const [pickedAgent, setAgent] = useState<ThreadAgent | null>(null);
   const { projects: projectAgents } = useAgentList();
   const agent = pickedAgent ?? projectAgents[cwd] ?? "builder";
 
-  useSettingsDefaults(pickedMode, pickedBackend, setPermissionMode, setBackend, setModelState);
+  useSettingsDefaults(pickedMode, pickedBackend, setPermissionMode, setBackend, setModelState, local);
+  const placeMode = startMode?.(cwd);
+  useEffect(() => {
+    if (placeMode && !pickedMode.current) setPermissionMode(placeMode);
+  }, [placeMode]);
   useEffect(() => () => clearTimeout(draftTimer.current), []);
 
   // A default you changed elsewhere (Settings → Models) lands on an open dialog right away: the
@@ -186,8 +202,8 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
     setCwd(folder);
     setAgent(null);
     setError(null);
-    api.warm({ cwd: folder, backend }).catch(() => {}); // best-effort prefetch
-  }, [backend]);
+    if (local) api.warm({ cwd: folder, backend }).catch(() => {}); // best-effort prefetch
+  }, [backend, local]);
 
   const promptToStart = useCallback((read: () => string, focus: () => void) => {
     let prompt: string;
@@ -218,7 +234,9 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
           prompt,
           cwd,
           backend,
-          permissionMode,
+          // On weft.zip only a mode you picked goes: the Mac holds a named looser mode to its web rule and refuses it,
+          // while one left out falls back to its own default (lib/cloud-new-card-mode.ts).
+          ...(local || pickedMode.current ? { permissionMode } : {}),
           // A Goose row's value carries a "goose:" prefix to tell it from another CLI's same id; the
           // thread gets the bare id.
           model: bareModel(model),
@@ -247,7 +265,7 @@ export function useNewCardDialog(home: string, defaultCwd: string | undefined, r
         setBusy(false);
       }
     },
-    [busy, cwd, home, backend, permissionMode, model, effort, isolated, branch, agent, promptToStart],
+    [busy, cwd, home, backend, permissionMode, model, effort, isolated, branch, agent, promptToStart, local],
   );
 
   return {

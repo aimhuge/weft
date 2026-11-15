@@ -11,7 +11,7 @@ export const IDLE_POLL_MS = 30_000;
 
 // Every process Weft spawned (GET /api/services), grouped by what started it. Loaded when the board
 // starts, on focus, and on a timer: the user's refresh rate while the drawer is open (lib/services-prefs.ts).
-export function useServices(active = false) {
+export function useServices(open = false) {
   const [services, setServices] = useState<ServiceEntry[]>([]);
   const [launchers, setLaunchers] = useState<DevLauncher[]>([]);
   const [workers, setWorkers] = useState<WorkerDevGroup[]>([]);
@@ -20,11 +20,16 @@ export function useServices(active = false) {
   const [error, setError] = useState<string | null>(null);
   const refreshMs = useSyncExternalStore(subscribeServicesRefresh, servicesRefreshMs, () => DEFAULT_REFRESH_MS);
   const latest = useRef(0);
+  // Read in reload: an open drawer also asks for each dev server's real memory (lib/dev-footprint.ts).
+  const active = useRef(open);
+  useEffect(() => {
+    active.current = open;
+  }, [open]);
 
   const reload = useCallback(async () => {
     const mine = ++latest.current;
     try {
-      const answer = await api.services();
+      const answer = await api.services(active.current);
       if (mine !== latest.current) return;
       setServices(answer.services);
       setLaunchers(answer.launchers ?? []);
@@ -41,13 +46,13 @@ export function useServices(active = false) {
     const load = () => void reload();
     load();
     window.addEventListener("focus", load);
-    const every = active ? refreshMs : IDLE_POLL_MS;
+    const every = open ? refreshMs : IDLE_POLL_MS;
     const poll = every ? setInterval(load, every) : undefined;
     return () => {
       window.removeEventListener("focus", load);
       clearInterval(poll);
     };
-  }, [reload, active, refreshMs]);
+  }, [reload, open, refreshMs]);
 
   // End a service or one of its processes, or start a dev server again; the list reloads right after.
   const kill = async (target: { id: string } | { pid: number }) => {
@@ -59,6 +64,12 @@ export function useServices(active = false) {
     await reload();
   };
 
+  // Don't stop an idle dev server Weft didn't start (the toast's Undo, the row's Keep).
+  const keep = async (id: string) => {
+    await api.serviceAction({ action: "keep", id });
+    await reload();
+  };
+
   // Start a working folder's dev command, or restart the run serving it: answers "started" or "restarted".
   const launch = async (cwd: string, command: string) => {
     const { result } = await api.launchDev(cwd, command);
@@ -66,5 +77,5 @@ export function useServices(active = false) {
     return result;
   };
 
-  return { services, launchers, workers, machine, loaded, error, reload, kill, restart, launch, refreshMs };
+  return { services, launchers, workers, machine, loaded, error, reload, kill, restart, keep, launch, refreshMs };
 }

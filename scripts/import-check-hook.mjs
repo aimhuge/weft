@@ -5,7 +5,8 @@
 //   module that isn't there yet, which would take the whole app down (lib/route-import-guard.ts), or export a
 //   segment config cacheComponents refuses, and warns on runtime data awaited outside <Suspense>
 //   (lib/prerender-check.ts); and Bash running tsc or eslint directly instead of the pnpm scripts that take
-//   turns (lib/check-guard.ts).
+//   turns (lib/check-guard.ts), and a dev server sent to the background outside Weft's tracker
+//   (lib/devserver-guard.ts).
 // - PostToolUse: after an Edit or Write, tells the session about any import the edit broke
 //   (lib/import-check.ts), before the dev server shows it as a build error over the board, and any
 //   import it dropped that the file still uses (lib/dropped-imports.ts), which throws when it draws.
@@ -33,9 +34,10 @@ try {
   if (hookIsWeftThread()) process.exit(0);
   const { hook_event_name: event, tool_name: tool, tool_input: input, cwd } = JSON.parse(raw);
   const file = input?.file_path;
-  if (event === "PreToolUse" && tool === "Bash") {
+  if (event === "PreToolUse" && (tool === "Bash" || tool === "Monitor")) {
     const { checkVerdict } = await import("../lib/check-guard.ts");
-    const why = typeof input?.command === "string" ? checkVerdict(input.command, cwd ?? ".") : null;
+    const { devServerVerdict } = await import("../lib/devserver-guard.ts");
+    const why = typeof input?.command === "string" ? (checkVerdict(input.command, cwd ?? ".") ?? devServerVerdict(tool, input, cwd ?? ".")) : null;
     if (why) {
       process.stderr.write(`${why}\n`);
       process.exit(2);

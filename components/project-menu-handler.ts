@@ -8,6 +8,7 @@ import { projectSyncLine } from "@/lib/sync-menu";
 import { hostOf } from "@/lib/project-host";
 import { parseMacSource } from "@/lib/mac-host-verbs-source";
 import { otherMacs, signMacAsk, type MacTwin } from "@/lib/mac-twins";
+import { isMoveTree, moveToWorker, isTreeSync, syncedFolders, syncTwins, toggleTreeSync, type SyncTwin } from "@/lib/tree-sync-menu";
 import { parseWorkerProject, workerProjectMenu } from "@/lib/worker-project";
 import { setWorkerMarks } from "@/lib/worker-project-marks";
 import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
@@ -65,11 +66,14 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
       // Keep the last known state.
     }
     const synced = folders.includes(path);
-    const [onWorker, macs] = await Promise.all([
+    const workers = twinsOf(name, deps.projects);
+    const [onWorker, macs, liveSynced] = await Promise.all([
       api.workerFolders().then((r) => r.folders.includes(path), () => false),
       // Your other Macs answer only for a project they sync too, so a project this Mac doesn't sync lists none.
       synced ? otherMacs(name) : Promise.resolve([] as MacTwin[]),
+      workers.length ? syncedFolders() : Promise.resolve([]),
     ]);
+    const syncs = syncTwins(workers, liveSynced);
     const menu = projectMenu(name, {
       pinned: Boolean(project?.pinned),
       hidden: Boolean(project?.hidden),
@@ -81,16 +85,14 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
       syncStatus: projectSyncLine(path, status, folders, Date.now()).text,
       onWorker,
       folders: project?.folders,
-      twins: [...twinsOf(name, deps.projects), ...macs],
+      twins: [...workers, ...macs],
+      syncTwins: syncs,
     });
     const picked = (await shell.popupMenu(menu)) as ProjectAction | null;
     if (!picked) return false;
     const actions = projectActions(path, name, { ...deps, shell, done, live, syncFolders: folders, syncStatus: status });
-    const run = isRemoveFolder(picked)
-      ? () => removeFolder(path, name, picked.slice("remove-folder:".length), deps)
-      : isPullWip(picked)
-        ? () => pullWip(path, picked.slice("pull-wip:".length), deps, macs)
-        : actions[picked];
+    const run = twinAction(picked, { path, name, deps, macs, syncs }) ?? actions[picked as keyof typeof actions];
+    if (!run) return false;
     Promise.resolve(run()).catch(deps.notify);
     return true;
   };
@@ -138,6 +140,30 @@ async function removeFolder(path: string, name: string, folder: string, deps: Pr
 // a project there under its folder's name).
 function twinsOf(name: string, projects: ProjectSummary[]) {
   return projects.flatMap((p) => (p.worker && parseWorkerProject(p.path)?.folder === name ? [{ path: p.path, name: p.worker.name, offline: p.worker.status === "offline" }] : []));
+}
+
+// The items named by a folder or a twin: Remove <folder>, Pull Uncommitted Work from…, Keep in Sync with…, Move to….
+function twinAction(picked: ProjectAction, c: { path: string; name: string; deps: ProjectMenuDeps; macs: MacTwin[]; syncs: SyncTwin[] }): (() => unknown) | null {
+  if (isRemoveFolder(picked)) return () => removeFolder(c.path, c.name, picked.slice("remove-folder:".length), c.deps);
+  if (isPullWip(picked)) return () => pullWip(c.path, picked.slice("pull-wip:".length), c.deps, c.macs);
+  if (isTreeSync(picked)) return () => toggleSync(c.syncs, picked.slice("sync-tree:".length), c.deps);
+  if (isMoveTree(picked)) return () => moveTo(c.path, c.syncs, picked.slice("move-tree:".length), c.deps);
+  return null;
+}
+
+// "Keep in Sync with <worker>": on asks Touch ID in main, off doesn't (lib/tree-sync-menu.ts).
+async function toggleSync(syncs: SyncTwin[], from: string, deps: ProjectMenuDeps) {
+  const twin = syncs.find((t) => t.path === from);
+  if (twin) deps.toast(await toggleTreeSync(twin));
+}
+
+// "Move to <worker>": the files go over the sync line with this Mac leading, then new threads run there.
+async function moveTo(path: string, syncs: SyncTwin[], to: string, deps: ProjectMenuDeps) {
+  const twin = syncs.find((t) => t.path === to);
+  if (!twin) return;
+  const note = await moveToWorker(twin);
+  await api.setWorkerFolder(path, true);
+  deps.toast(note);
 }
 
 const isPullWip = (id: ProjectAction): id is `pull-wip:${string}` => id.startsWith("pull-wip:");

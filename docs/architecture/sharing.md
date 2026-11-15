@@ -235,7 +235,7 @@ out, it asks you to sign in first, like Share…. A workspace switcher shows whe
 - weft.zip's board has no `searchPeople` yet, so "@" there offers nothing and mentions never ask; the desktop's do.
 - A grantee sees nothing on their weft.zip home yet ("Shared with you"), and can't reply in the thread.
 
-- An invitee lands on `/<slug>/team?joined=1` after accepting, not on the board they were shared.
+- An invitee lands on `/<slug>/team?joined=1` after accepting, not on the board they were shared. That landing opens with **Next: get Weft on your computer** (`components/team/GetWeftSteps.tsx`): download (Mac via `/download`, Windows), connect your own Claude, sign in to Weft with the same GitHub, because the prompting happens in the desktop app on the invitee's own plan.
 
 - Item bodies are plain JSON on Supabase (cloud-sync.md's gap), and a public link puts them in front of anyone with it.
   Redaction catches known key shapes, not everything a tool printed.

@@ -38,6 +38,7 @@ describe("agentRoutes", () => {
       "POST /browser/press",
       "POST /browser/select",
       "POST /browser/scroll",
+      "POST /browser/focus",
       "POST /browser/wait",
       "POST /browser/viewport",
       "POST /browser/snapshot",

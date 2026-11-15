@@ -37,6 +37,7 @@ import BlastcpDrawer from "./BlastcpDrawer";
 import BlastcpLogo from "./BlastcpLogo";
 import CloudflareDrawer from "./CloudflareDrawer";
 import ServicesDrawer from "./ServicesDrawer";
+import { useIdleStopToast } from "@/lib/use-idle-stop-toast";
 import CronsDrawer from "./CronsDrawer";
 import SkillsDrawer from "./SkillsDrawer";
 import CloudflareLogo from "./CloudflareLogo";
@@ -107,7 +108,7 @@ export default function SideRail({
   // The page the board's pane shows, which lights its mini app below Services (components/AppsRail.tsx); unset outside the desktop app.
   paneUrl?: string;
 }) {
-  const { folders, cards, onOpenUrl, onOpenCard, onStartCard, notify } = ctx;
+  const { folders, cards, onOpenUrl, onOpenCard, onStartCard, notify, toast } = ctx;
   const [pinned, setPinned] = useState(() => typeof window !== "undefined" && railPinned());
   // A card is being dragged somewhere on the board: ★ and 🏷 light up to show they take drops.
   const cardDrag = useRailCardDrag();
@@ -136,6 +137,7 @@ export default function SideRail({
   const github = useGithub(githubFolders(folders, host), open === "github");
   const slack = useSlack(open === "slack");
   const services = useServices(open === "services");
+  useIdleStopToast(services.services, toast, services.keep);
   const liveServices = liveCount(filterServices(services.services, host));
   const starred = starredCount(cards);
 
@@ -230,9 +232,9 @@ export default function SideRail({
           <RailIconButton icon="🖥" label="Services" open={open === "services"} title={servicesTitle(liveServices)} count={liveServices} tone="ok" onClick={toggle("services")} />
         </AdvancedOnly>
         {paneUrl !== undefined && <AppsRail current={paneUrl} onOpen={onOpenUrl} onClose={onClosePane} notify={notify} />}
+        {/* Admin sits at the rail's foot, away from the project's tools and apps. */}
         {isSuperAdmin ? (
-          <>
-            <span className="my-1 h-px w-5 bg-line" aria-hidden />
+          <div className="mt-auto flex flex-col items-center pb-2">
             <RailIconButton
               icon="🛡"
               label="Admin"
@@ -242,7 +244,7 @@ export default function SideRail({
                 router.push("/admin/users");
               }}
             />
-          </>
+          </div>
         ) : null}
       </nav>
       {cardDrag && !open && (

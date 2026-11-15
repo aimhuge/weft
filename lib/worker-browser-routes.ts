@@ -17,7 +17,7 @@ type Route = (body: Body) => Promise<Record<string, unknown>> | Record<string, u
 const LOAD_MS = 15_000;
 const MAX_TEXT = 30_000;
 // Routes that change what's on the page: the card's pane follows the browser live once one runs.
-const ACTS = new Set(["click", "hover", "type", "press", "select", "scroll", "viewport"]);
+const ACTS = new Set(["click", "hover", "type", "press", "select", "scroll", "focus", "viewport"]);
 
 export const NO_PAGE = "The worker's browser has no page open yet. Use open_url first.";
 export const FILL_REFUSAL = "fill_field types vault values, so it runs only in the desktop app's pane; a card on a Weft Worker can't use it.";

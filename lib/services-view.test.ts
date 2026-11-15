@@ -4,6 +4,7 @@ import {
   filterServices,
   formatCpu,
   formatMem,
+  idleNote,
   liveCount,
   serviceRow,
   servicesTitle,
@@ -88,6 +89,7 @@ describe("serviceRow", () => {
       live: true,
       cpu: "1.2%",
       mem: "100 MB",
+      memTitle: "Resident memory (RSS)",
       canKill: true,
       canRestart: false,
     });
@@ -140,5 +142,31 @@ describe("STATE_TONE", () => {
     expect(STATE_TONE.starting).toBe("bg-accent");
     expect(STATE_TONE.stopped).toBe("bg-faint");
     expect(STATE_TONE.failed).toBe("bg-danger");
+  });
+});
+
+describe("idle and footprint", () => {
+  const dev = (over: Partial<ServiceEntry> = {}) => entry({ id: "dev:c1", kind: "dev", label: "pnpm dev", procs: [{ pid: 1, ppid: 0, cpu: 0, memKb: 1024, command: "node" }], memKb: 1024, ...over });
+
+  it("says how long a server has been idle, when it stops, or that it was stopped", () => {
+    const now = 60 * 60_000;
+    expect(idleNote(dev({ activeAt: now - 4 * 60_000 }), now)).toBeUndefined();
+    expect(idleNote(dev({ activeAt: now - 12 * 60_000 }), now)).toMatch(/^idle /);
+    expect(idleNote(dev({ stopAt: now + 61_500 }), now)).toBe("idle · stops in 62s");
+    expect(idleNote(dev({ stopAt: now - 5 }), now)).toBe("idle · stops in 0s");
+    expect(idleNote(dev({ idleStopped: true }), now)).toBe("stopped after 30 idle min");
+    expect(idleNote(dev(), now)).toBeUndefined();
+  });
+
+  it("shows the real footprint, flags one over 3 GB, and offers Keep on a pending stop", () => {
+    const heavy = serviceRow(dev({ footprintKb: 5 * 1024 * 1024 }), 0);
+    expect(heavy).toMatchObject({ mem: "5.0 GB", heavy: true, memTitle: "Real memory: RAM + compressed + swapped, over 3 GB" });
+    const light = serviceRow(dev(), 0);
+    expect(light).toMatchObject({ mem: "1 MB", memTitle: "Resident memory (RSS)" });
+    expect(light.heavy).toBeUndefined();
+    expect(light.canKeep).toBeUndefined();
+    const untracked = serviceRow(dev({ id: "untracked:9", kind: "other", untracked: true, stopAt: 5, cwd: "/x/app" }), 0);
+    expect(untracked.canKeep).toBe(true);
+    expect(untracked.meta).toMatch(/^untracked · app · /);
   });
 });

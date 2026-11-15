@@ -149,6 +149,9 @@ export function prewarm() {
   startAccountCloudSync();
   // Give a signed-in Weft user a BlastCP account and connect the drawer, no browser (lib/blastcp-auto.ts).
   startBlastcpAuto();
+  // Stop dev servers nobody has visited for 30 minutes, and list the ones Weft didn't start (lib/dev-idle-loop.ts). Loaded
+  // lazily: it reaches the runner and the process tree, which nothing else here needs at import time.
+  void import("./dev-idle-loop").then((m) => m.startDevIdle());
   // Upload the Keychain audit log to your Weft account while you're signed in (lib/keychain-audit-sync.ts).
   startKeychainAuditSync();
   // Post your week to your league while you are signed in to Weft (lib/league-sync.ts).

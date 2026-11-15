@@ -8,6 +8,8 @@ const deleteCard = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/store", () => ({ getCard: vi.fn((id: string) => made.get(id)), deleteCard, DATA_DIR: "/nonexistent-weft-data" }));
 const handoff = vi.hoisted(() => ({ runsOnWorker: vi.fn(() => false), handOffToWorker: vi.fn(() => Promise.resolve({ started: false, worker: "m1mini" })) }));
 vi.mock("@/lib/worker-handoff", () => handoff);
+const pane = vi.hoisted(() => ({ openInPane: vi.fn(() => Promise.resolve()) }));
+vi.mock("@/lib/browser-tools", () => pane);
 const used = vi.hoisted(() => new Set<string>());
 vi.mock("./card-ids", () => ({ cardIds: () => ({ used: (id: string) => used.has(id), remember: (id: string) => void used.add(id) }) }));
 vi.mock("@/lib/new-card", () => ({
@@ -16,7 +18,7 @@ vi.mock("@/lib/new-card", () => ({
 }));
 
 const { createCardFromBody, startCard } = await import("@/lib/new-card");
-const { createCardVerb } = await import("./card-create");
+const { createCardVerb, panePage } = await import("./card-create");
 
 beforeEach(() => {
   made.clear();
@@ -91,5 +93,29 @@ describe("createCardVerb for this host's own route", () => {
     expect((await createCardVerb({ id: "1234abcd-0003", prompt: "p" })).start).toEqual({ started: true });
     handoff.runsOnWorker.mockReturnValue(false);
     expect(handoff.handOffToWorker).not.toHaveBeenCalled();
+  });
+});
+
+describe("the page a new card's pane opens on", () => {
+  it("opens a local page in the card's own pane before its first turn, and keeps it out of the card", async () => {
+    const order: string[] = [];
+    pane.openInPane.mockImplementationOnce(() => (order.push("open"), Promise.resolve()));
+    vi.mocked(startCard).mockImplementationOnce(() => (order.push("start"), { started: true }));
+    await createCardVerb({ id: "", prompt: "p", start: true, page: "file:///apps/g/index.html" }, { local: true });
+    expect(pane.openInPane).toHaveBeenCalledWith("file:///apps/g/index.html", "fresh-id-0001");
+    expect(order).toEqual(["open", "start"]);
+    expect(createCardFromBody).toHaveBeenCalledWith({ prompt: "p" });
+  });
+
+  it("still starts the card when the pane can't open it", async () => {
+    pane.openInPane.mockRejectedValueOnce(new Error("no shell"));
+    expect((await createCardVerb({ id: "", prompt: "p", start: true, page: "file:///a.html" }, { local: true })).start).toEqual({ started: true });
+  });
+
+  it("opens nothing for a caller off this Mac, or a page that isn't a local file", async () => {
+    await createCardVerb({ id: "1234abcd-0010", prompt: "p", page: "file:///a.html" });
+    await createCardVerb({ id: "", prompt: "p", page: "https://evil.example" }, { local: true });
+    expect(pane.openInPane).not.toHaveBeenCalled();
+    expect(panePage(3)).toBeUndefined();
   });
 });

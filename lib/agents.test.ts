@@ -15,8 +15,8 @@ const reviewer: AgentInfo = { id: "a-1", name: "Reviewer", emoji: "🔍", taglin
 const builder = BUILT_IN_AGENTS[0]!;
 
 describe("the built-ins", () => {
-  it("are Builder and Copywriter, from the JSON GitHub serves for Reset", () => {
-    expect(BUILT_IN_AGENTS.map((a) => a.id)).toEqual(["builder", "copywriter"]);
+  it("are Builder, Copywriter and Researcher, from the JSON GitHub serves for Reset", () => {
+    expect(BUILT_IN_AGENTS.map((a) => a.id)).toEqual(["builder", "copywriter", "researcher"]);
     expect(BUILT_IN_AGENTS.map((a) => a.soul)).toEqual(BUILT_IN.map((a) => a.soul));
     expect(BUILT_IN_AGENTS.every((a) => a.builtIn)).toBe(true);
     expect(builder.soul).toBe(WEFT_SOUL_PROMPT);
@@ -44,9 +44,9 @@ describe("mergeAgents", () => {
 
   it("puts a saved built-in over the shipped one, marked as yours, and yours after the built-ins", () => {
     const merged = mergeAgents([reviewer, { ...builder, builtIn: undefined, soul: "Mine." }]);
-    expect(merged.map((a) => a.id)).toEqual(["builder", "copywriter", "a-1"]);
+    expect(merged.map((a) => a.id)).toEqual(["builder", "copywriter", "researcher", "a-1"]);
     expect(merged[0]).toMatchObject({ soul: "Mine.", builtIn: true, changed: "you" });
-    expect(merged[2]).toMatchObject({ name: "Reviewer", builtIn: undefined, changed: undefined });
+    expect(merged[3]).toMatchObject({ name: "Reviewer", builtIn: undefined, changed: undefined });
   });
 
   it("keeps GitHub's mark, and reads a built-in saved only for its skills as unchanged", () => {
@@ -56,7 +56,7 @@ describe("mergeAgents", () => {
   });
 
   it("never lets a saved agent claim to be built in or changed", () => {
-    expect(mergeAgents([{ ...reviewer, builtIn: true, changed: "you" }])[2]).toMatchObject({ builtIn: undefined, changed: undefined });
+    expect(mergeAgents([{ ...reviewer, builtIn: true, changed: "you" }])[3]).toMatchObject({ builtIn: undefined, changed: undefined });
   });
 });
 
@@ -64,7 +64,7 @@ describe("finding an agent", () => {
   const all = mergeAgents([reviewer]);
 
   it("finds by id among the agents given, the built-ins when none are", () => {
-    expect(findAgent("a-1", all)).toBe(all[2]);
+    expect(findAgent("a-1", all)).toBe(all[3]);
     expect(findAgent("a-1")).toBeUndefined();
     expect(findAgent(undefined, all)).toBeUndefined();
     expect(isAgent("a-1", all)).toBe(true);

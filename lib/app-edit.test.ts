@@ -8,6 +8,7 @@ describe("appEditTarget", () => {
     expect(t?.draft).toContain('"📈 Growth"');
     expect(t?.draft).toContain("/Users/me/.weft/apps/growth/index.html");
     expect(t?.draft.endsWith("What to change: ")).toBe(true);
+    expect(t?.page).toBe("file:///Users/me/.weft/apps/growth/index.html");
   });
 
   it("decodes a path with spaces", () => {

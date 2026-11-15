@@ -44,6 +44,9 @@ export interface CardWorkspace {
   // The four column contents. Each can be `null` to leave a closed-looking slot for tests
   // (production always passes a real element for the open columns).
   columns: Record<ColumnId, ReactNode>;
+  // Columns left out altogether, with no sliver: the full-page pane draws the show rail inside the pane and hides the
+  // thread until you open it (docs/architecture/simple-mode.md, piece 1); the layout keeps their own open state for later.
+  hidden?: readonly ColumnId[];
 }
 
 // One column rendered in the workspace. Fixed columns keep their width; the fill expands. A closed
@@ -153,6 +156,7 @@ export default function CardWorkspace({
   dragDivider,
   fitToContainer,
   columns,
+  hidden,
 }: CardWorkspace) {
   const wrap = useRef<HTMLDivElement>(null);
   // The container width is read in two places: the effect that reports to fitToContainer, and the
@@ -192,6 +196,7 @@ export default function CardWorkspace({
   let prevOpen: ColumnId | null = null;
   let dividerAt = 0;
   for (const id of COLUMNS) {
+    if (hidden?.includes(id)) continue;
     if (layout.open[id]) {
       if (prevOpen) {
         void rendered.splice(
