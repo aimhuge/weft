@@ -4,6 +4,7 @@
 // checkout, fed by a watcher, until the channel or the line closes.
 import { createHash } from "node:crypto";
 import { createPeer, type SyncPeer, type SyncStatus } from "./tree-sync-peer";
+import { follower } from "./tree-sync-follow";
 import { treeFs } from "./tree-sync-fs";
 import { readSyncOpen, type SyncOpen } from "./tree-sync-proof";
 import type { Channel } from "./worker-rtc";
@@ -54,6 +55,8 @@ export function treeChannel(channel: TreeChannel, deps: TreeDeps, log: (msg: str
         send: (text) => channel.send(text),
         prio: () => deps.prio(dir),
         gitDir,
+        // A commit on the Mac no longer leaves this checkout behind for good: it catches up (lib/tree-sync-follow.ts).
+        follow: follower(dir, "your Mac"),
         log,
         onStatus: (s: SyncStatus) => s.kind === "paused" && log(`Weft Worker: sync of ${o.folder} paused: ${s.reason}`),
       });

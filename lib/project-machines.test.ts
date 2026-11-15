@@ -64,6 +64,12 @@ describe("menuMachines", () => {
     ]);
   });
 
+  it("carries a sync's note to its machine, listed or not", () => {
+    const paused = { ...twin, on: true, note: "Paused: waiting" };
+    expect(menuMachines(input({ devices: [miniWorker], workerTwins: [twin], syncTwins: [paused] }))[0]).toMatchObject({ sync: { path: twin.path, on: true, note: "Paused: waiting" } });
+    expect(menuMachines(input({ workerTwins: [twin], syncTwins: [paused] }))[0]).toMatchObject({ sync: { path: twin.path, on: true, note: "Paused: waiting" } });
+  });
+
   it("keeps a worker twin the registry didn't list, synced or not", () => {
     expect(menuMachines(input({ workerTwins: [twin] }))).toEqual([{ name: "m1mini", offline: false, pull: twin.path }]);
     expect(menuMachines(input({ workerTwins: [twin], syncTwins: [{ ...twin, on: false }] }))).toEqual([{ name: "m1mini", offline: false, pull: twin.path, sync: { path: twin.path, on: false } }]);

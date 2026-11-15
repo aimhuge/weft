@@ -10,7 +10,7 @@ import { parseMacSource } from "@/lib/mac-host-verbs-source";
 import { myDevices, signMacAsk } from "@/lib/mac-twins";
 import { menuMachines } from "@/lib/project-machines";
 import type { MenuMachine } from "@/lib/project-menu";
-import { isMoveTree, moveToWorker, isTreeSync, syncedFolders, syncTwins, toggleTreeSync, type SyncTwin } from "@/lib/tree-sync-menu";
+import { isMoveTree, moveToWorker, isTreeSync, syncedFolders, syncTwins, toggleTreeSync, withNotes, type SyncTwin } from "@/lib/tree-sync-menu";
 import { isWorkerCard, workerProjectMenu, type WorkerProject } from "@/lib/worker-project";
 import { twinMap } from "@/lib/worker-twin";
 import { setWorkerMarks } from "@/lib/worker-project-marks";
@@ -77,7 +77,8 @@ export function projectMenuHandler(deps: ProjectMenuDeps) {
       myDevices(),
       workers.length ? syncedFolders() : Promise.resolve([]),
     ]);
-    const syncs = syncTwins(workers, liveSynced);
+    // A paused sync says why on its own menu line.
+    const syncs = await withNotes(syncTwins(workers, liveSynced));
     // One group per other machine, each with one way to pull (lib/project-machines.ts).
     const machines = menuMachines({ name, synced, devices, workerTwins: workers, syncTwins: syncs, onWorker });
     const menu = projectMenu(name, {

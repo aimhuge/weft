@@ -63,7 +63,7 @@ export interface MenuMachine {
   // Bring its uncommitted work here: the `from` of a pull (a worker's project path, or mac:<device>/<folder>).
   pull?: string;
   // Keep both checkouts as one folder, and Move (this Mac's work goes there): the worker's project path.
-  sync?: { path: string; on: boolean };
+  sync?: { path: string; on: boolean; note?: string };
   // New threads in this project start there (Run on Worker), ticked when they do.
   runThere?: boolean;
 }
@@ -98,7 +98,7 @@ function machineActions(project: string, m: MenuMachine, sub: boolean): MenuItem
   if (m.pull) items.push({ id: `pull-wip:${m.pull}`, label: `Bring ${sub ? "Its" : `${m.name}'s`} Uncommitted Work Here`, enabled: !m.offline });
   if (m.sync) {
     items.push(
-      { id: `sync-tree:${m.sync.path}`, label: `Keep in Sync with ${sub ? "This Mac" : m.name}`, checked: m.sync.on },
+      { id: `sync-tree:${m.sync.path}`, label: `Keep in Sync with ${sub ? "This Mac" : m.name}`, checked: m.sync.on, ...(m.sync.note ? { detail: m.sync.note } : {}) },
       { id: `move-tree:${m.sync.path}`, label: `Move ${project} ${sub ? "There" : `to ${m.name}`}`, enabled: !m.offline, detail: "Sends this Mac's work, then new threads start there" },
     );
   }

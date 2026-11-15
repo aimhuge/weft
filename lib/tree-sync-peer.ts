@@ -7,13 +7,16 @@
 //   live      the watcher's paths, batched, go through engine.local; changes coming in through engine.remote, one at a
 //             time in the order sent, read fresh just before each write
 //   paused    the commits differ (a commit, a pull, a checkout on one end): nothing moves until they match again, and
-//             the bases are dropped when HEAD moves, since they were relative to it
+//             the bases are dropped when HEAD moves, since they were relative to it. The end that is behind catches up
+//             by itself when it can (lib/tree-sync-follow.ts), tries again every rescan, and tells the other end why
+//             when it can't
 //
 // Bases persist in the checkout's .git (weft-sync/<other end>.json), so a line that drops and comes back doesn't mistake
 // a change made while apart for a clash.
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { createEngine, wins, type Outgoing } from "./tree-sync-engine";
+import type { Follow } from "./tree-sync-follow";
 import type { TreeFs } from "./tree-sync-fs";
 import { frame, unframer, type Files, type SyncMessage } from "./tree-sync-protocol";
 
@@ -32,6 +35,9 @@ export interface PeerDeps {
   // How much this end's version counts now: more while threads run here (lib/tree-sync-prio.ts).
   prio: () => number;
   gitDir: string;
+  // Moves this checkout to the other end's commit when this end is the one behind; without it, differing commits
+  // only pause.
+  follow?: Follow;
   onStatus?: (status: SyncStatus) => void;
   // How often to check the branch, HEAD and priority, and to rescan the whole folder as a safety net.
   checkMs?: number;
@@ -53,6 +59,9 @@ export function createPeer(deps: PeerDeps) {
   let mine: Files = {};
   let theirs: { branch: string; head: string; files: Files } | null = null;
   let sentSinceHeard = false;
+  // Why the other end says it's stuck, until its next hello; and the last reason this end sent it.
+  let theirWhy: string | null = null;
+  let toldWhy: string | null = null;
   let live = false;
   let stopped = false;
   let frag = 0;
@@ -108,14 +117,30 @@ export function createPeer(deps: PeerDeps) {
     if (!where || !theirs) return;
     if (!where.branch) return;
     if (theirs.branch !== where.branch) { pause(`${deps.other.label} is on ${theirs.branch} and this side is on ${where.branch}. Switch one of them to sync again.`); return; }
-    if (theirs.head !== where.head)
-      { pause(`${deps.other.label} is at ${short(theirs.head)} and this side at ${short(where.head)}. Push and pull so both are on the same commit to sync again.`); return; }
+    if (theirs.head !== where.head) { await catchUp(where, theirs.head); return; }
     const sends = engine.start(mine, theirs.files);
     live = true;
     for (const o of sends) await out(o);
     await scan(Object.keys(await deps.fs.changed()).concat(Object.keys(engine.saved())));
     saveBases();
     synced();
+  }
+
+  // The commits differ. The end that is behind moves to the other's when nothing of its own is in the way, and says
+  // hello again from there (the other end's answer starts the sync). Otherwise both pause, on the reason of the end
+  // that couldn't move.
+  async function catchUp(at: { branch: string; head: string }, want: string) {
+    const r = await deps.follow?.(at, want);
+    if (r?.moved) {
+      engine.forget();
+      status({ kind: "connecting" });
+      await hello();
+      return;
+    }
+    if (!r) { pause(`${deps.other.label} is at ${short(want)} and this side at ${short(at.head)}. Push and pull so both are on the same commit to sync again.`); return; }
+    if (r.why === "ahead") { pause(theirWhy ?? r.reason); return; }
+    pause(r.reason);
+    if (toldWhy !== r.reason) post({ t: "pause", reason: (toldWhy = r.reason) });
   }
 
   // Paths that may have changed here: each one that moved off its base goes out.
@@ -161,11 +186,14 @@ export function createPeer(deps: PeerDeps) {
 
   async function heard(m: SyncMessage) {
     if (m.t === "prio") theirPrio = m.prio;
-    else if (m.t === "pause") pause(`${deps.other.label}: ${m.reason}`);
+    else if (m.t === "pause") pause((theirWhy = `${deps.other.label}: ${m.reason}`));
     else if (m.t === "change") await take(m);
     else {
       theirPrio = m.prio;
       theirs = m;
+      // A hello starts over: their reason is gone, and so is their memory of ours.
+      theirWhy = null;
+      toldWhy = null;
       if (!sentSinceHeard) await hello();
       sentSinceHeard = false;
       await begin();
@@ -181,10 +209,17 @@ export function createPeer(deps: PeerDeps) {
     if (!where || (at.branch === where.branch && at.head === where.head)) return;
     if (at.head !== where.head) engine.forget();
     live = false;
+    toldWhy = null;
     post({ t: "pause", reason: `it moved to ${at.branch || "a detached HEAD"} at ${short(at.head)}` });
     status({ kind: "connecting" });
     await hello();
     await begin();
+  }
+
+  // The safety net: every path again while live; while paused on differing commits, another try at catching up.
+  async function rescan() {
+    if (live) return scan(Object.keys(await deps.fs.changed()).concat(Object.keys(engine.saved())));
+    if (where && theirs && theirs.branch === where.branch && theirs.head !== where.head) await begin();
   }
 
   return {
@@ -194,7 +229,7 @@ export function createPeer(deps: PeerDeps) {
       for (const [p, s] of Object.entries(await loadBases(at.head))) engine.local(p, s);
       await serial(hello);
       timers.push(setInterval(() => void serial(check), deps.checkMs ?? 2_000));
-      timers.push(setInterval(() => void serial(async () => live && scan(Object.keys(await deps.fs.changed()).concat(Object.keys(engine.saved())))), deps.rescanMs ?? 15_000));
+      timers.push(setInterval(() => void serial(rescan), deps.rescanMs ?? 15_000));
     },
     // A text from the channel.
     receive(raw: string) {

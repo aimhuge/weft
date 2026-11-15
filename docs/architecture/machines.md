@@ -37,6 +37,7 @@ goes to the underlying row's own id or the worker's project path.
 m1mini ▸
   Bring Its Uncommitted Work Here      pull-wip:<from>      (wip-sync.md)
   Keep in Sync with This Mac   ✓       sync-tree:<path>     (folder-sync.md)
+    Paused: m1mini: 20 uncommitted…      its state as a second line, when it isn't simply in sync
   Move weft There                      move-tree:<path>
   ─
   Start New Threads There      ✓       run-worker / run-here

@@ -48,6 +48,8 @@ function pullFrom(m: Machine, twin: WorkerTwin | undefined, input: MachinesInput
   return twin?.path;
 }
 
+const syncOf = (s: SyncTwin) => ({ path: s.path, on: s.on, ...(s.note ? { note: s.note } : {}) });
+
 function entry(m: Machine, input: MachinesInput, takesThreads: boolean): MenuMachine | null {
   const twin = twinOf(m, input.workerTwins);
   const pull = pullFrom(m, twin, input);
@@ -57,7 +59,7 @@ function entry(m: Machine, input: MachinesInput, takesThreads: boolean): MenuMac
     name: m.here ? HERE : m.name,
     offline: m.here ? Boolean(twin?.offline) : !m.online,
     ...(pull ? { pull } : {}),
-    ...(synced ? { sync: { path: synced.path, on: synced.on } } : {}),
+    ...(synced ? { sync: syncOf(synced) } : {}),
     ...(takesThreads ? { runThere: input.onWorker } : {}),
   };
 }
@@ -65,7 +67,7 @@ function entry(m: Machine, input: MachinesInput, takesThreads: boolean): MenuMac
 // A worker twin the registry didn't list (signed out, or its read failed): its own group, so the menu loses nothing.
 function unlisted(twin: WorkerTwin, input: MachinesInput): MenuMachine {
   const synced = input.syncTwins.find((s) => s.path === twin.path);
-  return { name: twin.name, offline: twin.offline, pull: twin.path, ...(synced ? { sync: { path: synced.path, on: synced.on } } : {}) };
+  return { name: twin.name, offline: twin.offline, pull: twin.path, ...(synced ? { sync: syncOf(synced) } : {}) };
 }
 
 export function menuMachines(input: MachinesInput): MenuMachine[] {

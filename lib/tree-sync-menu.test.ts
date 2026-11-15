@@ -1,7 +1,7 @@
 // "Keep in Sync with <worker>" (lib/tree-sync-menu.ts): which worker twins of a project this Mac syncs, and turning one
 // on or off through /api/tree-sync.
 import { describe, expect, it, vi } from "vitest";
-import { isMoveTree, isTreeSync, moveToWorker, syncedFolders, syncTwins, toggleTreeSync, TREE_SYNC_CHANGED } from "./tree-sync-menu";
+import { isMoveTree, isTreeSync, moveToWorker, syncedFolders, syncNote, syncTwins, toggleTreeSync, TREE_SYNC_CHANGED, withNotes } from "./tree-sync-menu";
 
 const W = "1A2B3C4D-0000-4000-8000-00000000ABCD";
 
@@ -99,5 +99,34 @@ describe("moveToWorker", () => {
   it("knows a move item by its id", () => {
     expect(isMoveTree("move-tree:worker://w/weft")).toBe(true);
     expect(isMoveTree("sync-tree:worker://w/weft")).toBe(false);
+  });
+});
+
+describe("syncNote", () => {
+  it("says how a sync stands in one line, and nothing while it's in sync", () => {
+    expect(syncNote({ kind: "synced", at: 1, sent: 0, took: 0, copies: [] })).toBeUndefined();
+    expect(syncNote({ kind: "connecting" })).toBe("Connecting…");
+    expect(syncNote(null)).toBe("Not connected right now");
+    expect(syncNote(undefined)).toBe("Not connected right now");
+    expect(syncNote({ kind: "paused" })).toBe("Paused: ");
+  });
+
+  it("drops a reason's list of files and its full stop", () => {
+    expect(syncNote({ kind: "paused", reason: "Mini: 3 uncommitted files clash with newer commits (a.ts, b.ts, c.ts)" })).toBe("Paused: Mini: 3 uncommitted files clash with newer commits");
+    expect(syncNote({ kind: "paused", reason: "Not connected to the worker right now." })).toBe("Paused: Not connected to the worker right now");
+    expect(syncNote({ kind: "paused", reason: "x".repeat(300) })).toHaveLength(110);
+  });
+});
+
+describe("withNotes", () => {
+  it("asks this Mac's peer about each synced twin only, and keeps a twin whose read failed", async () => {
+    const on = { path: `worker://${W}/weft`, name: "Mini", offline: false, on: true };
+    const off = { path: `worker://${W}/ling`, name: "Mini", offline: false, on: false };
+    const api = vi.fn(() => Promise.resolve<Record<string, unknown>>({ status: { kind: "paused", reason: "Mini: Waiting for commit abc1234 to be pushed" } }));
+    expect(await withNotes([on, off], api)).toEqual([{ ...on, note: "Paused: Mini: Waiting for commit abc1234 to be pushed" }, off]);
+    expect(api).toHaveBeenCalledTimes(1);
+    expect(api).toHaveBeenCalledWith({ op: "status", workerId: W, folder: "weft", workerName: "Mini" });
+    expect(await withNotes([on], () => Promise.resolve({ status: { kind: "synced" } }))).toEqual([on]);
+    expect(await withNotes([on], () => Promise.reject(new Error("down")))).toEqual([on]);
   });
 });

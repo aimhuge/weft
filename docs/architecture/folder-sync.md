@@ -25,7 +25,10 @@ without the line coming up; the folder stays in sync after (`moveToWorker` in `l
   there keeps its version; the other side's is kept beside it as `name.conflict-<machine>.ext` (and syncs too). Nothing
   is lost. With threads on both sides or neither, the higher machine id wins, so both agree without asking.
 - **Pause, don't guess.** Sync runs only while both checkouts are on the same branch and the same commit. A commit, a
-  pull or a checkout on one side pauses it until the other matches (push and pull); the files stay as they are.
+  pull or a checkout on one side pauses it until the other matches; the files stay as they are.
+- **The side that is behind catches up by itself** ([Catching up](#catching-up)). Commit on the Mac and push: the
+  worker fetches that commit and fast-forwards to it, and sync carries on. When it can't, the menu says why under
+  **Keep in Sync** ("Paused: m1mini: 20 uncommitted files clash with newer commits").
 - **What never syncs:** anything `.gitignore` hides (`node_modules`, build output), `.git`, secret files (`.env*`,
   `.envrc`, `.dev.vars`, not their `.example` templates: each machine keeps its own values in its vault), symlinks, and
   files over 20 MB. A change for one of those coming from the other side is refused there too.
@@ -54,6 +57,44 @@ lib/mac-tree-sync.ts  ◀─ /api/tree-sync ─▶ lib/line-tree-sync.ts ─ tre
   `tree` channel whenever the worker's line comes up (`keepSynced`, held from `useTreeSync` in the worker board hook), and
   pumps texts; the server's peer does the files. It holds the worker's line while a folder syncs.
 
+## Catching up
+
+Before 2026-11-16 a paused folder stayed paused: nothing moved a checkout to a new commit, a worker never pulls, and
+on a repo that commits all day the two ends were level for minutes at a time. The reason sat in a log. Now, when the
+hellos show different commits on the same branch, each end asks its follower (`lib/tree-sync-follow.ts`, the peer's
+`follow`):
+
+| This end | What it does |
+|---|---|
+| has the other's commit already (it's ahead) | waits; the other end is the one to move |
+| doesn't see the commit on origin's copy of the branch | fetches the branch from `origin` (never twice within 20 s; for one commit, 20 s after a miss, then 40, up to every 5 min); still not there, "Waiting for commit abc1234 to be pushed" |
+| is behind, nothing of its own in the way | fast-forwards (`merge --ff-only`, the repo's hooks off), says hello again from the new commit, and sync starts |
+| is behind, a file changed here is changed by those commits to something else | moves nothing: "3 uncommitted files clash with newer commits (a.ts, …)" |
+| has commits of its own too | moves nothing: "Each side has commits the other lacks" |
+
+- **Uncommitted work stays.** A fast-forward leaves files the commits don't touch as they are.
+- **A file that already holds the commit's version is not a clash.** That is the usual case: you edit on the Mac, the
+  edit syncs to the worker, then you commit it. The worker's copy of that file is "modified" against its old HEAD, and
+  git would refuse to fast-forward over it. The follower compares each file the commits change with what's on disk
+  (its blob id against the old and the new one) and stages the ones already at the new version, which git then keeps.
+- **The end that can't move tells the other** (a `pause` with its reason, once per hello), so the reason shows on the
+  Mac whichever end is stuck. Both ends try again on every rescan (15 s), so a push, or a clash cleared by hand, is
+  picked up without touching the menu.
+- **In the menu.** `withNotes` (`lib/tree-sync-menu.ts`) reads this Mac's peer (`op: "status"`) when a project's menu
+  opens, and the state rides on the item as its second line: nothing while in sync, else "Connecting…", "Not connected
+  right now" or "Paused: …" (a reason's list of files stays in the log).
+- **What it trusts.** The commit's name comes from the other end, which already may write any file here and must gain
+  nothing more. It must be a full sha that is on `origin`'s copy of the branch this end is on (a commit merely present
+  in the checkout, on another branch or in a stash, is refused), and it is only ever fast-forwarded to. The fetch and
+  the merge run with the repo's hooks off and no gc.
+- **What counts as this end's own work**, and stops the move: a file on disk that is neither the old version nor the
+  new; the same in the index (something staged that isn't the commit's version); and a file sitting where the commit
+  needs a folder, which git would otherwise remove to make room, even an ignored one.
+- **The executable bit.** A file that synced over arrived without it (the wire carries bytes, not modes), so before
+  staging, the follower gives each such file the bit its commit has.
+- The Mac follows too: a thread on the worker that commits and pushes no longer leaves this Mac behind. To the
+  threads running on the Mac it is what another card's `git pull --ff-only` already is: HEAD moves forward under them.
+
 ## Trust
 
 Writing into a checkout from the network is as strong as a shell, so the line alone never opens a tree channel.
@@ -74,5 +115,11 @@ Writing into a checkout from the network is as strong as a shell, so the line al
 - **Mac ↔ Mac.** No line runs between two Macs yet; the peer is ready for one (signaling over Supabase between paired
   Macs, held by main rather than a board window).
 - **Syncing with the board closed.** The line lives in the board window; close Weft and the two catch up on reopen.
-- **A status chip.** The menu item's check is the only on-screen sign; a paused sync says why only in the log.
+- **A status chip.** The state shows in the project's menu, under Keep in Sync, and nowhere on the board itself.
+- **Catching up over a clash.** A checkout with its own uncommitted changes to files the newer commits also change
+  stays paused until those are committed or discarded there; nothing rebases them.
+- **Filtered files.** A file under LFS, `eol=crlf` or a clean filter never matches its blob id on disk, so a range that
+  touches one reads as a clash and stays paused; nothing is lost.
+- **Bring Its Uncommitted Work Here** (wip-sync.md) still refuses when this Mac has commits the worker lacks; it doesn't
+  use the follower yet.
 - File modes beyond keeping an existing file's, staged-versus-unstaged state, submodules and LFS.

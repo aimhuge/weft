@@ -110,6 +110,12 @@ describe("projectMenu, other machines", () => {
     expect(ids({ machines: [air], submenus: true })).toEqual(expect.arrayContaining(["run-here", "run-worker"]));
   });
 
+  it("says how a sync stands under Keep in Sync", () => {
+    const paused = { ...mini, sync: { ...mini.sync, note: "Paused: m1mini: Waiting for commit abc1234 to be pushed" } };
+    const group = menu({ machines: [paused], submenus: true }).find((i) => "submenu" in i) as unknown as { submenu: unknown[] };
+    expect(group.submenu).toContainEqual({ id: "sync-tree:worker://w/weft", label: "Keep in Sync with This Mac", checked: true, detail: "Paused: m1mini: Waiting for commit abc1234 to be pushed" });
+  });
+
   it("on a shell without submenus, names the machine as a heading and in each item", () => {
     const items = menu({ machines: [mini], submenus: false });
     const at = items.findIndex((i) => "id" in i && i.id === "machine:m1mini");

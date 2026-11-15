@@ -11,6 +11,8 @@ export interface SyncTwin {
   name: string;
   offline: boolean;
   on: boolean;
+  // How a synced one stands when it isn't simply in sync: "Paused: …", "Connecting…".
+  note?: string;
 }
 
 type Api = typeof treeSyncApi;
@@ -39,6 +41,28 @@ const targetOf = (twin: SyncTwin) => {
   if (!w) throw new Error("That isn't a worker's project.");
   return { w, target: { workerId: w.workerId, folder: w.folder, workerName: twin.name } };
 };
+
+// A sync's state as one menu line; nothing while it's in sync, which the tick already says. A reason's list of files
+// (in brackets at its end) stays in the log.
+export function syncNote(status: unknown): string | undefined {
+  const s = status as { kind?: string; reason?: string } | null;
+  if (!s) return "Not connected right now";
+  if (s.kind === "connecting") return "Connecting…";
+  if (s.kind === "paused") return `Paused: ${(s.reason ?? "").replace(/ \([^)]*\)$/, "").replace(/\.$/, "")}`.slice(0, 110);
+  return undefined;
+}
+
+// Each synced twin with its note, read from this Mac's peer. A failed read leaves the twin as it was.
+export function withNotes(twins: SyncTwin[], api: Api = treeSyncApi): Promise<SyncTwin[]> {
+  return Promise.all(
+    twins.map(async (twin) => {
+      if (!twin.on) return twin;
+      const { target } = targetOf(twin);
+      const note = await api({ op: "status", ...target }).then((r) => syncNote(r.status), () => undefined);
+      return note ? { ...twin, note } : twin;
+    }),
+  );
+}
 
 // "Move to <worker>": this Mac's uncommitted work goes to the worker, this Mac winning every clash of that first
 // catch-up (the worker keeps its own as .conflict- copies), and the folder stays in sync after. The caller then ticks

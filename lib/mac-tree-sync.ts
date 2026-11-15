@@ -10,6 +10,7 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { busyCards } from "./runner-state";
 import { getCard } from "./store";
+import { follower } from "./tree-sync-follow";
 import { treeFs } from "./tree-sync-fs";
 import { createPeer, type SyncPeer, type SyncStatus } from "./tree-sync-peer";
 import { watchFolder } from "./tree-sync-watch";
@@ -96,6 +97,8 @@ export function createMacSync(deps: MacSyncDeps) {
         },
         prio: () => (leading(k) ? LEAD_PRIO : deps.prio(dir)),
         gitDir: deps.gitDir(dir),
+        // A commit a thread makes on the worker doesn't leave this checkout behind: it catches up (lib/tree-sync-follow.ts).
+        follow: follower(dir, t.workerName ?? "your worker"),
         onStatus: (s) => {
           session.status = s;
           statuses.set(k, s);

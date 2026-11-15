@@ -1171,7 +1171,9 @@ this Mac's checkout picks it up, or says why it won't (docs/architecture/wip-syn
 **Pull Uncommitted Work from <Mac>**, once you've paired them in Settings → Devices → the other Mac's row → Share work… (copy one's code,
 paste it on the other); each pull asks Touch ID. Or tick **Keep in Sync with <worker>** (Touch ID once): the two
 checkouts then stay one folder while Weft is open, every change crossing the session line in a second or two, the side
-with threads running winning a clash and the other keeping its copy as `name.conflict-<machine>.ext`
+with threads running winning a clash and the other keeping its copy as `name.conflict-<machine>.ext`. A commit on one
+side no longer stops it: the other side fetches that commit and fast-forwards to it, keeping its uncommitted work, and
+when it can't (a clash, a commit not pushed yet) the menu says why under Keep in Sync
 (docs/architecture/folder-sync.md). **Move to <worker>** hands the project over in one step: this Mac's uncommitted
 work goes across, winning any clash, and new threads start on the worker. A Weft desktop that syncs a folder
 lists itself there too, as a **headed** worker (browser pane, vault and all), so a team sees every box that can run
