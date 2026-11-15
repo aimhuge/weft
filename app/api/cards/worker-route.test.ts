@@ -18,6 +18,8 @@ vi.mock("@/lib/store", () => ({ getCard: (id: string) => ({ id }), listCards: ()
 vi.mock("@/lib/copilot", () => ({ prewarm: vi.fn() }));
 vi.mock("@/lib/repos", () => ({ projectRoot: (cwd: string) => cwd }));
 vi.mock("@/lib/settings", () => ({ listProjects: () => [] }));
+// The real one reaches lib/account.ts, which reads DATA_DIR from the store at load, and would poll the worker.
+vi.mock("@/lib/worker-refused", () => ({ watchWorkerRun: vi.fn().mockResolvedValue(null) }));
 const handoff = vi.hoisted(() => ({
   runsOnWorker: vi.fn(() => false),
   handOffToWorker: vi.fn(() => Promise.resolve({ started: false, worker: "m1mini" })),

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useAccount } from "@/lib/use-account";
+import { useSignInAskStats } from "@/lib/use-signin-ask-stats";
 import Icon, { Spinner } from "./Icon";
 
 // The welcome's sign-in screen (components/WelcomeDialog.tsx), after Get ready's video and before the projects: a new
@@ -22,6 +23,8 @@ export function useAccountStep() {
 export function AccountStep() {
   const { state, busy, waiting, error, signIn } = useAccount();
   const user = state.kind === "ready" ? state.view.user : null;
+  // Shown, clicked and completed (lib/use-signin-ask-stats.ts); Not now is the welcome's onboarding_account_deferred.
+  const stats = useSignInAskStats("welcome", state.kind === "ready" ? !user : null);
   return (
     <div className="flex flex-col gap-3">
       <div>
@@ -38,7 +41,10 @@ export function AccountStep() {
         <div className="flex flex-col items-start gap-2 rounded-lg border border-line px-3 py-3">
           <button
             type="button"
-            onClick={() => void signIn("github")}
+            onClick={() => {
+              stats.clicked();
+              void signIn("github");
+            }}
             disabled={busy !== null || waiting !== null}
             className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent hover:opacity-90 disabled:opacity-50"
           >
