@@ -16,6 +16,10 @@ A mini app is a page from the browser pane, saved so it is one click away on the
   draft naming the app and its files (`appEditTarget` in `lib/app-edit.ts`), so the user only types what to change. The
   ask is a window event, `requestNewThread` in `lib/new-thread-request.ts`, that `lib/use-board-actions.ts` answers by
   putting the draft in the dialog's remembered draft and opening it. A web or dev-server app has no files here: no pencil.
+  The app stays on screen: the request carries the app's url as `page`, the next card made in that folder sends it to
+  `POST /api/cards`, and `card.create` (`lib/host-api/card-create.ts`, this Mac's own board and `file://` only) opens it
+  in the new card's pane before its first turn, so the starter scene (`showStarter`, which skips a pane with a page)
+  never replaces it.
 - **Tile.** The name's first grapheme on a steady hue (`tagHue`), or the emoji the name starts with (`appGlyph`).
 - **Right-click** (`appMenu`, popped through `window.weft.popupMenu`): Open, Rename… (in place, Enter keeps it,
   Escape drops it), Share…, Move up, Move down, Copy address, Remove app.

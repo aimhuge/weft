@@ -41,6 +41,7 @@ app in October 2026 (the live numbers are the app's, not this doc's):
 | `supabase/migrations/20261024041130_growth_in_app_reads.sql` | The in-app reads (`growth_cards_by_day`, `growth_engagement_by_day`, `growth_engagement_overview`, `growth_retention_in_app`) and the two helpers behind them |
 | `supabase/migrations/20261114170813_growth_card_item_days.sql` | `private.growth_card_item_days`: one row per card per UTC day it synced items, with `items` and `turns`, kept by statement-level triggers on `cloud_thread_items` (insert and update add, delete takes back). `growth_activity`, `growth_engagement_activity` and `growth_engagement_by_day` read it instead of the items: the 374k-row scan took 8–12 s on this database and the API cut every activity panel at 8 s |
 | `supabase/migrations/20261114171015_growth_active_by_day_rollup.sql` | `growth_active_by_day` sums its `items` from the same rollup (8.2 s → well under a second) |
+| `supabase/migrations/20261114185458_growth_activation_models.sql` | `growth_retention_in_app_days` (the first week, day by day), `growth_activation_accounts` (each account's activation steps, phone and worker included) and `growth_cards_by_model` |
 | `supabase/migrations/20261029075755_app_versions.sql` | `app_versions`, the Mac's `app_version_submit` and the `growth_versions` read |
 | `lib/app-version-sync.ts` | The signed-in Mac's once-a-day version report, on the league sync's timer |
 | `~/.weft/app-grants.json` | The grant: the app's folder and env, the vault names its reads need, and the hash of its manifest that voids it when the manifest changes |
@@ -87,6 +88,10 @@ This is the definition the in-app retention and the engagement counts both use.
 
 - **`growth_cards_by_day(days)`** → `(day, created, moved, accounts, done)` — cards created against cards
   moved, and how many reached Done.
+- **`growth_cards_by_account_day(days)`** → `(day, account, label, created, moved, done)` — the same counts split
+  by account, one row per account that worked that day; `label` is the profile's name, else its email. The
+  **Cards pushed per day** panel stacks each bar by account (top six coloured, the rest as "others") and lists
+  each account's created/moved/Done in the hover; the day totals still come from `growth_cards_by_day`.
 - **`growth_engagement_by_day(days)`** → `(day, accounts, cards, created, turns, items)` — the cards people
   touched against the cards they started, plus the accounts working and the turns they ran.
 - **`growth_engagement_overview()`** → a jsonb object: `cards_30d`, `pushers_30d`, `cards_per_pushers`,
@@ -94,6 +99,26 @@ This is the definition the in-app retention and the engagement counts both use.
   **is** the object; a table function's body is an array of rows, and the page has to tell them apart.
 - **`growth_retention_in_app(weeks)`** → `(cohort, size, week, retained)` — the same weekly cohorts as
   `growth_retention`, but "retained" means the account did real work that week.
+- **`growth_retention_in_app_days(weeks)`** → `(cohort, size, day, retained)` — the same cohorts, day 0 to 7 after
+  each account's own signup day: the **In-app retention · first 7 days** table.
+- **`growth_activation_accounts()`** → one row per account: `signed_in`, `synced`, `pushed`, `shared`, `trial`,
+  `invited`, `mobile` (a `push_devices` row: the phone app), `worker` (a `cloud_workers` row) and `last_work`. The
+  page counts the funnel from it and lists every account by step. The funnel runs left to right and starts with two
+  GA4 steps (`web_funnel`: visitors with a `page_view`, and with a `download_clicked`, since 2025), which GA4 can't
+  tie to an account.
+- **`growth_cards_by_model(days)`** → `(day, account, label, model, cards)` — cards created per day by the model
+  they run on (no model reads as "<cli> default"): **Cards started by model** and **Models by user**.
+
+The page groups its panels in accordions (Usage, Retention, Activation, Models, Signups, Versions, Website), each
+remembering whether it was left open. **Users pushing cards** replaced Active accounts and Cards pushed per day:
+the accounts that created or moved a card, per day or over the 7 days ending each day, one segment per account,
+counted from `growth_cards_by_account_day(36)`. The account-level **Weekly retention** panel is gone; the reads
+behind it (`growth_active_by_day`, `growth_retention`, `growth_funnel`) stay in the database; nothing reads them now.
+
+`growth_engagement_overview` counted its turns by scanning `cloud_thread_items` (7.8 s, so the hosted tiles 500'd at
+the 8 s limit); it now sums them from `growth_card_item_days` (1.4 s, same count;
+`supabase/migrations/20261115054416_growth_engagement_overview_rollup.sql`). On the phone, open the hosted copy at
+`weft.zip/@fotoflo/apps/growth`: the Mac pane's own copy reaches a remote board only as a screenshot.
 
 ### Versions
 

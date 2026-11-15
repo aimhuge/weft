@@ -6,8 +6,8 @@ describe("new thread requests", () => {
   it("hands each request to the listener until it unsubscribes", () => {
     const handle = vi.fn();
     const off = onNewThreadRequest(handle);
-    requestNewThread({ folder: "/f", draft: "hi" });
-    expect(handle).toHaveBeenCalledWith({ folder: "/f", draft: "hi" });
+    requestNewThread({ folder: "/f", draft: "hi", page: "file:///f/a.html" });
+    expect(handle).toHaveBeenCalledWith({ folder: "/f", draft: "hi", page: "file:///f/a.html" });
     off();
     requestNewThread({ folder: "/g" });
     expect(handle).toHaveBeenCalledTimes(1);

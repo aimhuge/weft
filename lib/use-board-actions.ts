@@ -3,7 +3,7 @@
 // Board actions that start or open work: open a card (warm its CLI so a reply is fast), open the
 // New thread dialog, create a card, start the quality / commit-walk-through cards from the header
 // badges, and run "Review all" on the Review column.
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { api, type NewCardInput } from "./client";
 import { startPileReview } from "./pile-review";
 import { lastFolder } from "./board-helpers";
@@ -94,18 +94,26 @@ export function useBoardActions({
   // A thread asked to open another card ("Continue in new card"): it replaces this one in the panel.
   useEffect(() => onOpenCardRequest((id) => select(id)), [select]);
 
+  // The page the next card made in the request's folder opens on (the app the Edit button was pressed on), so the
+  // pane keeps showing it rather than the new card's blank pane and starter scene.
+  const pendingPage = useRef<{ folder?: string; page: string } | null>(null);
+
   // Something on the board asked for a New thread with a draft (the pane's Edit app button): the dialog opens with it.
   useEffect(
     () =>
-      onNewThreadRequest(({ folder, draft }) => {
+      onNewThreadRequest(({ folder, draft, page }) => {
         if (draft) remember(DRAFT, draft);
+        pendingPage.current = page ? { folder, page } : null;
         openNew(folder);
       }),
     [openNew],
   );
 
   const create = useCallback(async (input: NewCardInput) => {
-    const { start } = await createCard(input);
+    const pending = pendingPage.current;
+    pendingPage.current = null;
+    const page = pending && pending.folder === input.cwd ? pending.page : undefined;
+    const { start } = await createCard(page ? { ...input, page } : input);
     if (start?.worker) onSentToWorker?.(start.worker);
   }, [onSentToWorker]);
 
