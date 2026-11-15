@@ -47,7 +47,7 @@ const deleted = () => calls().filter(([, init]) => init?.method === "DELETE").ma
 describe("Move threads to…", () => {
   it("counts a worker's threads and offers the move on a revoked one, listing your other live workers", async () => {
     render(<DevicesSettings />);
-    expect(await screen.findByText(/38 threads · Revoked 2h ago/)).toBeInTheDocument();
+    expect(await screen.findByText(/Revoked 2h ago · .*38 threads/)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Move busy box's threads" })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Move m1mini (old)'s threads" }));
     const select = screen.getByRole("combobox", { name: "Move m1mini (old)'s threads to" });
@@ -94,7 +94,8 @@ describe("Revoke on a worker that owns threads", () => {
     render(<DevicesSettings />);
     await userEvent.click(await screen.findByRole("button", { name: "Forget busy box" }));
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("group")).toBeNull();
+    // The "Revoked (n)" fold is a <details>, which is a group too: only the confirm panel is meant here.
+    expect(screen.queryByRole("group", { name: /^Revoke .*\?$/ })).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "Forget busy box" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Move busy box's threads to" }), "");
     await userEvent.click(screen.getByRole("button", { name: "Revoke" }));
