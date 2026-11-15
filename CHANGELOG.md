@@ -16,6 +16,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ### Changed
 
+- **📈 Sign-in asks in the stats.** The anonymous stats now say whether Weft's two sign-in asks work: the welcome's sign-in screen and "Sign in to Weft?" after your first finished thread. Each one sends when it opens, when you click Sign in with GitHub, when you say Not now, and when the sign-in finishes. The Settings → Security switch turns these off too (`lib/use-signin-ask-stats.ts`, `components/SyncPromptDialog.tsx`, `components/WelcomeAccount.tsx`).
 - **📱 Phone pushes only when you're away, and say enough to decide.** A card moving to Needs you or Review now buzzes your phone only when you haven't used a Mac in 5 minutes and the app isn't open on your phone. Weft reports this Mac's idle time every minute while sync is on. A held tool's push names the call ("Bash: pnpm test", "Write: lib/auth.ts") with secrets scrubbed, and carries the prompt's id and kind so the phone can put Allow / Deny on it.
 
 ### Fixed
