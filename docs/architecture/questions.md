@@ -71,6 +71,17 @@ fresh.
   from `card.pending`
 - `app/api/cards/[id]/permission/route.ts` — validates the request body and
   calls `answerPermission`
+- `lib/answer-pasted.ts` — `answerPasted`: the attachments the user pasted into
+  an answer, a note or a "Chat about this" message (an image dropped into the
+  "Type something" box arrives as `![pasted-image.png](~/.weft/attachments/x.webp)`).
+  `settle` stores them as `pasted` on the question's `permission` thread item, and
+  the secret guard (`lib/secret-guard-pasted.ts`) lets the card that asked Read or
+  `cp` them, as it does a file pasted into a message (2026-11-16). A name the
+  question's own options carry is left out, so a thread can't word an option to
+  open another card's attachment by getting it picked. The image still reaches the
+  model as that Markdown link, not an image block: the CLI writes the
+  AskUserQuestion tool result from `updatedInput.answers`, which is text only, so
+  the thread opens the file with Read
 
 ## Data flow
 

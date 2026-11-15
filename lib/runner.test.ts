@@ -302,6 +302,7 @@ describe("permissions", () => {
     const q = await send("c1");
     const { promise } = ask(q, "Bash", { command: "rm -rf build" });
     expect(card("c1")).toMatchObject({ column: "needs_you", pending: { toolName: "Bash" } });
+    expect(card("c1").lastActivity).toBeGreaterThan(0); // a mid-turn question sorts the card to the top
     expect(card("c1").pending?.title).toContain("rm -rf build");
     const index = thread("c1").findIndex((i) => i.kind === "permission");
     runner.answerPermission("c1", true);
@@ -429,6 +430,15 @@ describe("permissions", () => {
       behavior: "deny",
       message: "The user didn't pick an answer and wants to talk it over instead. They wrote: why not both?",
     });
+  });
+
+  it("records an image pasted into an answer on the question's thread item, so the card may open it", async () => {
+    addCard({ id: "c1" });
+    const q = await send("c1");
+    const { promise } = ask(q, "AskUserQuestion", { questions: [{ question: "Which?", options: [{ label: "A" }] }] });
+    runner.answerPermission("c1", true, { "Which?": "![pasted-image.png](/Users/me/.weft/attachments/pasted-image-8107c1a5.webp)" });
+    await promise;
+    expect(thread("c1").find((i) => i.kind === "permission")).toMatchObject({ pasted: ["pasted-image-8107c1a5.webp"] });
   });
 });
 

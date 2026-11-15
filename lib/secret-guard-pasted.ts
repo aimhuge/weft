@@ -1,4 +1,5 @@
-// The one way into the sealed attachments folder: a file the user pasted into this card's own thread.
+// The one way into the sealed attachments folder: a file the user pasted into this card's own thread (a message, or
+// an answer to one of its questions).
 // The secret guard seals the data dir, so a thread couldn't Read the screenshot its user had just pasted
 // (2026-10-31). Only the exact file a user message on this card names opens, never the folder (a listing
 // would show every other card's uploads) and never another card's attachment.
@@ -32,11 +33,13 @@ function linkedAway(file: string): boolean {
   }
 }
 
-// The attachment names the user's messages on a card point at, folded and edited ones included.
+// The attachment names the user's messages on a card point at, folded and edited ones included, and the ones the user
+// pasted into an answer to the card's question (lib/answer-pasted.ts).
 function pastedNames(items: ThreadItem[]): Set<string> {
   const names = new Set<string>();
   for (const item of items) {
     if (item.kind === "edited") pastedNames(item.items).forEach((n) => names.add(n));
+    if (item.kind === "permission") item.pasted?.forEach((n) => names.add(n));
     if (item.kind !== "user") continue;
     for (const m of item.text.matchAll(MEDIA_REF)) {
       const name = attachmentName((m[2] ?? m[3]) as string);

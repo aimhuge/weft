@@ -91,6 +91,8 @@ export type ThreadItem =
       decision?: "allow" | "deny";
       // The user's answers, when the agent asked questions.
       answer?: string;
+      // The attachment names the user pasted into those answers (lib/answer-pasted.ts): the card may open these.
+      pasted?: string[];
       // Why Weft allowed it without asking (lib/db-calls.ts: Settings → Security → Accept harmless SQL).
       auto?: string;
       at: number;

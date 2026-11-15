@@ -108,7 +108,7 @@ is for using secrets, Settings → Secrets for managing them.**
 
 - **The drawer** (`components/VaultDrawer.tsx`, `components/VaultSection.tsx`): the project picker and search, each
   vault's name with **+ Add** and **⚙** (Settings → Secrets on that vault), one status line
-  (`components/VaultStatusLine.tsx`, `lib/vault-status.ts`: "Shared with Acme · key v2", "On this Mac only · Share…",
+  (`components/VaultStatusLine.tsx`, `lib/vault-status.ts`: "Shared with Acme · key v2", "Shared with Acme · 3 only on this Mac · Push" (Push runs in place, teams-vault.md#joining-a-shared-vault), "On this Mac only · Share…",
   "1 Mac asks to join · Review", "Your team shares this vault · Ask to join", why there's no join), the ▲ Vercel line
   with **Pull** and **Push** (first-class, `components/VercelDriftActions.tsx`), the `.env` nudge with Import all,
   **To fill in · N** and the values. The status line's action opens Settings → Secrets on the vault.
@@ -349,7 +349,9 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
   - **An attachment opens to the card its user pasted it into (2026-10-31).** A thread couldn't Read the
     screenshot its user had just pasted. A board thread's guard knows its card (`secretGuardMatcher(cardId)`
     in `lib/guards/hooks.ts`), and `pastedInto` (`lib/secret-guard-pasted.ts`) lets a Read through when the
-    file sits straight in an attachments folder and a user message on that card names it. Only Read, one file
+    file sits straight in an attachments folder and a user message on that card names it, or the user
+    pasted it into an answer to that card's question (a `permission` item's `pasted`, from `lib/answer-pasted.ts`;
+    questions.md, 2026-11-16). Only Read, one file
     at a time: the folder can't be listed (it holds every card's uploads), another card's attachment stays
     sealed, and a link in the folder is never followed. The scout and the skill reviewer have no card and get none.
     Every other folder and file in the data dir stays sealed: `vault/`, `threads/`, `attachments/`,

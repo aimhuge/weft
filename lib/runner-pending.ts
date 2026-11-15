@@ -1,9 +1,11 @@
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { pendingView } from "@weft/client";
 import { safeUpdate, sessions, type Pending } from "./runner-state";
+import { answerPasted } from "./answer-pasted";
 import { elicitationContent } from "./elicitation";
 import { replaceThreadItem } from "./store";
 import type { QuestionReply } from "./types";
+import type { ThreadItem } from "./types-thread";
 
 // A pending permission request and how it is answered. Lives on its own so lib/runner-ask.ts (which
 // asks) and lib/permission-wait.ts (which holds a request until another card lets go of the code)
@@ -42,15 +44,7 @@ export function settle(
   const p = at >= 0 ? session.pending[at] : undefined;
   if (!p) return false;
   session.pending.splice(at, 1);
-  replaceThreadItem(cardId, p.index, {
-    kind: "permission",
-    id: p.id,
-    toolName: p.toolName,
-    title: p.title,
-    decision: allow ? "allow" : "deny",
-    answer: answers ? Object.values(answers).join("; ") : undefined,
-    at: Date.now(),
-  });
+  replaceThreadItem(cardId, p.index, answeredItem(p, allow, answers, reply));
   const next = session.pending[0];
   safeUpdate(cardId, {
     column: next ? "needs_you" : "running",
@@ -59,6 +53,22 @@ export function settle(
   });
   p.resolve(denyMessage && !allow ? { behavior: "deny", message: denyMessage } : permissionResult(p, allow, answers, reply));
   return true;
+}
+
+// The request's thread item once answered. An image pasted into a question's answer, notes or chat goes in pasted:
+// the card may open it (lib/secret-guard-pasted.ts).
+function answeredItem(p: Pending, allow: boolean, answers?: Record<string, string>, reply?: QuestionReply): ThreadItem {
+  const pasted = p.questions ? answerPasted(p.questions, answers, reply) : [];
+  return {
+    kind: "permission",
+    id: p.id,
+    toolName: p.toolName,
+    title: p.title,
+    decision: allow ? "allow" : "deny",
+    answer: answers ? Object.values(answers).join("; ") : undefined,
+    ...(pasted.length ? { pasted } : {}),
+    at: Date.now(),
+  };
 }
 
 // What the CLI gets back: the input (with the answers and any notes, for a question), or a denial, which

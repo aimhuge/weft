@@ -60,6 +60,15 @@ describe("pastedInto", () => {
     expect(pastedInto("c1", path.join(attachments, "..", "vault", "acme.json"), data, thread)).toBe(false);
   });
 
+  it("opens an attachment the user pasted into an answer to this card's question, and no other", () => {
+    threads.c5 = [{ kind: "permission", id: "p", toolName: "AskUserQuestion", title: "Q", answer: "A", pasted: ["pasted-image-ba4d04ab.webp"], at: 5 }];
+    threads.c6 = [{ kind: "permission", id: "p", toolName: "AskUserQuestion", title: "Q", answer: `![x](${shot})`, at: 6 }];
+    expect(pastedInto("c5", shot, data, thread)).toBe(true);
+    expect(pastedInto("c5", other, data, thread)).toBe(false);
+    // An answer's text alone opens nothing: a picked option's label is the model's, only settle()'s list counts.
+    expect(pastedInto("c6", shot, data, thread)).toBe(false);
+  });
+
   it("won't follow a pasted name that is a link into the vault", () => {
     const link = path.join(attachments, "pasted-link-22222222.png");
     fs.symlinkSync(path.join(data, "vault", "acme.json"), link);

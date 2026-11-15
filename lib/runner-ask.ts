@@ -63,7 +63,10 @@ export function askUser(
         startWaiting(cardId, p);
         watchHolds();
       } else {
-        safeUpdate(cardId, { column: "needs_you", pending: pendingView(p), lastLine: label });
+        // Stamped as Weft's own activity, so a mid-turn question sorts its card to the top of Needs you
+        // (the board sorts by lastActivity, which a turn otherwise stamps only when it ends).
+        const now = Date.now();
+        safeUpdate(cardId, { column: "needs_you", pending: pendingView(p), lastLine: label, lastActivity: now, lastWeftTurn: now });
       }
     }
     signal.addEventListener(
