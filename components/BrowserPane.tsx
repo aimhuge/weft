@@ -30,6 +30,8 @@ export default function BrowserPane({
   onWidth,
   onClose,
   rail,
+  pill,
+  bottom,
   actions,
   saveUrl,
 }: {
@@ -43,6 +45,10 @@ export default function BrowserPane({
   onClose: () => void;
   // The show rail (components/ShowRail.tsx), right of the page; the native view keeps clear of it.
   rail?: ReactNode;
+  // The full-page pane (docs/architecture/simple-mode.md, piece 1): the folded rail's pill, in the tab bar (the toolbar
+  // with one tab), and what sits under the page (components/PaneBottom.tsx). The native view keeps clear of both.
+  pill?: ReactNode;
+  bottom?: ReactNode;
   // The open card's share, star and archive (components/PaneCardMarks.tsx), right of the zoom.
   actions?: ReactNode;
   // What Save as app saves, when it isn't the address itself (a worker card's page saves its blob ref,
@@ -149,12 +155,13 @@ export default function BrowserPane({
         {desktop && <AppButtons url={saveUrl ?? state.url} title={state.title} app={app} share={!actions} />}
         {/* Only the page's zoom; ⌘+/−/0, ⌘+scroll and pinch work too. Accent when not 100%. */}
         <ZoomMenu zoom={zoom} disabled={!state.url} />
+        {toolbarPill(state.tabs, pill)}
         {actions}
         <button className={nav} onClick={onClose} aria-label={expanded ? "Close thread" : "Close browser"}>
           <Icon name="x" size={15} />
         </button>
       </div>
-      <PaneTabs tabs={state.tabs} current={state.tab} />
+      <PaneTabs tabs={state.tabs} current={state.tab} end={pill} />
       <div className="flex min-h-0 flex-1">
       <div ref={holder} className="relative min-w-0 flex-1 bg-canvas">
         {!desktop ? (
@@ -173,8 +180,15 @@ export default function BrowserPane({
       </div>
       {rail}
       </div>
+      {bottom}
     </section>
   );
+}
+
+// The rail pill sits in the tab bar (components/PaneTabs.tsx), which draws only with two or more tabs; until then the
+// toolbar has it, so the pill never adds a row.
+function toolbarPill(tabs: BrowserState["tabs"], pill: ReactNode) {
+  return (tabs?.length ?? 0) < 2 ? pill : null;
 }
 
 // Save as app: the page joins the left rail below Services (components/AppsRail.tsx). Edit and Share an app: shown for

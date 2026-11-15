@@ -20,6 +20,8 @@ export type IsolatePick = {
   branch: string;
   onSet: (on: boolean) => void;
   onBranch: (name: string) => void;
+  // false where this machine can't read the repo's branches (weft.zip): a new one is named instead.
+  branches?: boolean;
 };
 
 function label({ on, suggest, branch }: Pick<IsolatePick, "on" | "suggest" | "branch">) {
@@ -33,7 +35,7 @@ function tipFor(on: boolean, suggest: boolean) {
   return "Shared: this card works in the folder with the other cards.";
 }
 
-export default function IsolateMenu({ cwd, on, suggest, branch, onSet, onBranch }: IsolatePick & { cwd: string }) {
+export default function IsolateMenu({ cwd, on, suggest, branch, onSet, onBranch, branches = true }: IsolatePick & { cwd: string }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   useMenuOpen({ open, setOpen, menuRef: root });
@@ -64,7 +66,7 @@ export default function IsolateMenu({ cwd, on, suggest, branch, onSet, onBranch 
         <div role="dialog" aria-label="Isolation" className="absolute bottom-full left-0 z-40 mb-1 w-72 rounded-lg border border-line bg-panel p-2 shadow-lg">
           <ModeSwitch on={on} onSet={onSet} />
           <p className="px-1 pb-1 pt-1.5 text-[11px] leading-snug text-muted">{tipFor(on, false)}</p>
-          {on && <BranchPicker cwd={cwd} branch={branch} onPick={pick} />}
+          {on && (branches ? <BranchPicker cwd={cwd} branch={branch} onPick={pick} /> : <BranchName branch={branch} onPick={onBranch} />)}
         </div>
       )}
     </div>
@@ -81,6 +83,25 @@ function ModeSwitch({ on, onSet }: { on: boolean; onSet: (on: boolean) => void }
       <button type="button" role="radio" aria-checked={on} onClick={() => onSet(true)} className={seg(on)}>
         Worktree
       </button>
+    </div>
+  );
+}
+
+// Where the branches can't be read: name one (an existing one is checked out, a new one made from HEAD), or leave it
+// empty for the card's own weft/* branch. The Mac checks the name (lib/branch-name.ts).
+function BranchName({ branch, onPick }: { branch: string; onPick: (name: string) => void }) {
+  return (
+    <div className="border-t border-line pt-2">
+      <input
+        defaultValue={branch}
+        onBlur={(e) => onPick(e.target.value.trim())}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") onPick(e.currentTarget.value.trim());
+        }}
+        placeholder="Branch (empty: its own weft/… one)"
+        aria-label="Branch"
+        className="w-full rounded-md border border-line-strong bg-transparent px-2 py-1 text-[12px] text-ink outline-none focus:border-accent/60"
+      />
     </div>
   );
 }

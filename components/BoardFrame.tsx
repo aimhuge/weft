@@ -12,6 +12,8 @@ import type { Card, RestartStatus, ThreadItem } from "@/lib/types";
 import type { UseWorkspaceLayout } from "@/lib/use-workspace-layout";
 import type { threadHandlers } from "@/lib/thread-handlers";
 import type { WorkerThread } from "@/lib/use-worker-board";
+import { useSurfaceMode } from "@/lib/use-board-sidebar";
+import { useViewMode } from "@/lib/use-view-mode";
 import OpenCard, { CardFrame } from "./OpenCard";
 import { guarded } from "./guarded";
 
@@ -72,8 +74,11 @@ export default function BoardFrame(props: BoardFrameProps) {
     [cards, home],
   );
 
+  // Simple mode's sidebar is on the board: the card sits inside the board beside it, not in a window over it.
+  const inBoard = useSurfaceMode(useViewMode().mode) === "sidebar";
+
   return (
-    <CardFrame framed={props.framed} bottom={props.bottom} onBackdrop={props.onBackdrop}>
+    <CardFrame framed={props.framed} inBoard={inBoard} bottom={props.bottom} onBackdrop={props.onBackdrop}>
       {showNew ? (
         <NewThreadWindow
           form={{ cards, home, defaultCwd: newCwd ?? project ?? undefined, recentCwd, restart, onCreate, onManageAgents: () => {

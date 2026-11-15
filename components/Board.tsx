@@ -24,6 +24,7 @@ import { filterState, footerFor, framedCard, headerCounts, menuProject, openCard
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
 import { useStartupCheck } from "@/lib/use-startup-check";
+import { useSimpleSwitch } from "@/lib/simple-switch";
 import { useNow } from "@/lib/use-now";
 import { useToast } from "@/lib/use-toast";
 import { useCloudSync } from "@/lib/use-cloud-sync";
@@ -31,6 +32,7 @@ import { useCopilotCard } from "@/lib/use-copilot-card";
 import { useBoardCardActions } from "@/lib/use-board-card-actions";
 import { useBoardView } from "@/lib/use-board-view";
 import { useViewMode } from "@/lib/use-view-mode";
+import { useSurfaceMode } from "@/lib/use-board-sidebar";
 import { useBoardArchive } from "@/lib/use-board-archive";
 import { useBoardActions } from "@/lib/use-board-actions";
 import { useBoardToggles } from "@/lib/use-board-toggles";
@@ -62,7 +64,7 @@ import BoardSurface from "./BoardSurface";
 import BoardOverlays from "./BoardOverlays";
 import BoardRail from "./BoardRail";
 import BoardBottom from "./BoardBottom";
-import BoardBrowserPane from "./BoardBrowserPane";
+import BoardBeside from "./BoardBeside";
 import BoardProjectBar from "./BoardProjectBar";
 
 // Each loads in its own CrashGuard (components/guarded.tsx), so a piece a thread left half-written, even one that
@@ -126,6 +128,7 @@ export default function Board() {
   // this one instance instead of polling twice.
   const sync = useCloudSync();
   useStartupCheck(loaded, setToast);
+  useSimpleSwitch(loaded, setToast);
   // The New thread dialog's splash page in the pane (lib/use-new-thread-pane.ts).
   const paneHeld = useNewThreadPane(showNew, selectedRef, browser.visible);
 
@@ -149,6 +152,8 @@ export default function Board() {
   const { project, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
   // The board's layout: cards in columns or in one list (lib/use-view-mode.ts).
   const { mode: viewMode, choose: chooseView } = useViewMode();
+  // Simple mode's three piles draw the board as a sidebar list instead (components/BoardSidebar.tsx).
+  const surfaceMode = useSurfaceMode(viewMode);
   // Archive, unarchive, focus the next card, and the last batch (for Z / Undo).
   const { archiveTarget, archiveCards, toggleArchive, unarchive, lastArchived } = useBoardArchive({
     cards: boardCards,
@@ -250,11 +255,11 @@ export default function Board() {
   useEscape(browserOpen && !selectedId && !showNew, toggleBrowser, { panel: true });
   // Registered last, so an open rail drawer closes before the browser does.
   useEscape(Boolean(libraryOpen) && !selectedId && !showNew && !railPinned(), () => setLibraryOpen(null), { panel: true });
-  // With nothing left to close, Escape flips board and list view. The flip pops a little pane
+  // With nothing left to close, Escape steps Simple → Board → List (lib/view-stops.ts). The flip pops a little pane
   // saying where it took you, so the switch isn't silent.
   const { hint: viewHint, show: showViewHint, clear: clearViewHint } = useViewHint();
   const boardLayers = { thread: Boolean(selectedId), newThread: showNew, browser: browserOpen, drawer: Boolean(libraryOpen) };
-  useEscapeTogglesView(boardLayers, viewMode, chooseView, {
+  useEscapeTogglesView(boardLayers, {
     onFlip: showViewHint,
     hintUp: Boolean(viewHint),
     onDismiss: clearViewHint,
@@ -362,7 +367,7 @@ export default function Board() {
         <BoardRail
           open={libraryOpen}
           onOpen={setLibraryOpen}
-          ctx={{ project, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify }}
+          ctx={{ project, folders: railFolders, cards, onOpenUrl: showPage, onOpenCard: openCard, onStartCard: improveQuality, notify, toast: setToast }}
           filter={railFilter}
           onFilter={setRailFilter}
           onStarCard={toggleStar}
@@ -371,22 +376,14 @@ export default function Board() {
           onClosePane={toggleBrowser}
           paneUrl={desktop ? browser.url : undefined}
         />
-        {!framed && (
-          // Only while no card is open (framed), so its X toggles the pane rather than closing a card.
-          <BoardBrowserPane
-            open={browserOpen}
-            held={paneHeld}
-            desktop={desktop}
-            state={browser}
-            width={browserWidth}
-            onWidth={setBrowserWidth}
-            obscured={overlay}
-            onClose={toggleBrowser}
-            items={thread}
-          />
-        )}
+        <BoardBeside
+          mode={surfaceMode}
+          framed={framed}
+          sidebar={{ columns: visibleColumns, byColumn, loaded, now, selectedId, onOpen: openCard, onMenu: onCardMenu }}
+          pane={{ open: browserOpen, held: paneHeld, desktop, state: browser, width: browserWidth, onWidth: setBrowserWidth, obscured: overlay, onClose: toggleBrowser, items: thread }}
+        />
         <BoardSurface
-          mode={viewMode}
+          mode={surfaceMode}
           columns={visibleColumns}
           byColumn={byColumn}
           allCards={boardCards}

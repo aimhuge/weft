@@ -2245,3 +2245,70 @@
     display: none;
   }
 }
+
+/* The invitee's next step after joining (/<slug>/team?joined=1, components/team/GetWeftSteps.tsx): download Weft. */
+.wz-app .wz-getWeft {
+  margin: 0 0 24px;
+  padding: 22px 22px 18px;
+  border: 1px solid var(--clay);
+  border-radius: 16px;
+  background: linear-gradient(160deg, var(--clay-soft), transparent 70%), var(--panel);
+}
+.wz-app .wz-getWeftKicker {
+  margin: 0;
+  color: var(--ok);
+  font-size: 13px;
+  font-weight: 600;
+}
+.wz-app .wz-getWeftTitle {
+  margin: 4px 0 6px;
+  font-family: var(--display);
+  font-size: 26px;
+  color: var(--thread);
+}
+.wz-app .wz-getWeftSub {
+  margin: 0 0 16px;
+  color: var(--thread-2);
+  max-width: 56ch;
+}
+.wz-app .wz-getWeftSteps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+.wz-app .wz-getWeftSteps li {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.wz-app .wz-getWeftSteps p {
+  margin: 2px 0 0;
+  color: var(--thread-2);
+  font-size: 14px;
+}
+.wz-app .wz-getWeftNum {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--clay-soft);
+  color: var(--clay-2);
+  font-weight: 700;
+}
+.wz-app .wz-getWeftCtas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin-top: 10px;
+}
+.wz-app .wz-getWeftAlt {
+  color: var(--thread-2);
+  text-decoration: underline;
+  font-size: 14px;
+  padding: 8px 2px;
+}

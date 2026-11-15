@@ -24,6 +24,8 @@ export interface Run {
   log: string;
   exited: boolean;
   failed: boolean;
+  // Stopped by the idle check (lib/dev-idle-loop.ts): kept in runs so the drawer offers Start, and any start brings it back.
+  idleStopped?: true;
 }
 
 const g = globalThis as unknown as { __weftDevExit?: boolean };
@@ -56,6 +58,20 @@ export function stopDev(cardId: string) {
   const run = runs.get(cardId);
   if (!run) return;
   runs.delete(cardId);
+  signalGroup(run);
+}
+
+// After 30 idle minutes (lib/dev-idle-loop.ts): ends the server but keeps its run, marked, so the Services drawer still
+// lists it with Start, and mcp__devservers__start or the review tour's dev command starts it again.
+export function idleStop(cardId: string) {
+  const run = runs.get(cardId);
+  if (!run || run.exited) return;
+  run.idleStopped = true;
+  run.log = `${run.log}\nStopped by Weft after 30 minutes with no visitors; it starts again on demand.`.slice(-LOG_LIMIT);
+  signalGroup(run);
+}
+
+function signalGroup(run: Run) {
   if (run.exited) return;
   // The shell leads a process group, so one signal takes down the server and whatever it spawned.
   try {
@@ -75,7 +91,7 @@ export async function startDev(cardId: string, command: string, cwd: string, tit
   const port = await isolatedPort(getCard(cardId), command);
   const url = withPort(givenUrl, port);
   const existing = runs.get(cardId);
-  if (existing && !existing.exited && existing.command === command) return { url: existing.url ?? url, port };
+  if (existing && !existing.exited && !existing.idleStopped && existing.command === command) return { url: existing.url ?? url, port };
   const { launch, note } = await devSecrets(cardId, command, cwd, title);
   stopDev(cardId);
   // cliEnv() drops the pane's control-server token, which a dev server has no use for.

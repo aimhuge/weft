@@ -18,6 +18,8 @@ export type ProjectAction =
   | "run-here"
   | "run-worker"
   | `pull-wip:${string}`
+  | `sync-tree:${string}`
+  | `move-tree:${string}`
   | "pin"
   | "unpin"
   | "hide"
@@ -46,6 +48,8 @@ export interface ProjectMenuState {
   folders?: string[];
   // The Weft Workers that hold this project too, each a "Pull Uncommitted Work from <worker>" item (lib/wip-pull.ts).
   twins?: { path: string; name: string; offline: boolean }[];
+  // The worker twins, each a "Keep in Sync with <worker>" item, checked while this Mac syncs it (lib/tree-sync-menu.ts).
+  syncTwins?: { path: string; name: string; offline: boolean; on: boolean }[];
 }
 
 const SEPARATOR: MenuItem = { type: "separator" };
@@ -72,6 +76,17 @@ const KEYS: Record<string, string> = {
 
 const base = (folder: string) => folder.split("/").filter(Boolean).pop() ?? folder;
 
+const offline = (t: { offline: boolean }) => (t.offline ? { detail: "offline" } : {});
+
+// The project on another machine: Pull Uncommitted Work from…, Keep in Sync with… and Move to… for each twin.
+function twinItems(s: ProjectMenuState): MenuItem[] {
+  return [
+    ...(s.twins ?? []).map((t) => ({ id: `pull-wip:${t.path}`, label: `Pull Uncommitted Work from ${t.name}`, enabled: !t.offline, ...offline(t) })),
+    ...(s.syncTwins ?? []).map((t) => ({ id: `sync-tree:${t.path}`, label: `Keep in Sync with ${t.name}`, checked: t.on, ...offline(t) })),
+    ...(s.syncTwins ?? []).map((t) => ({ id: `move-tree:${t.path}`, label: `Move to ${t.name}`, enabled: !t.offline, ...offline(t) })),
+  ] as MenuItem[];
+}
+
 export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
   const items: MenuItem[] = [
     { id: "new", label: `New Thread in ${name}` },
@@ -94,7 +109,7 @@ export function projectMenu(name: string, s: ProjectMenuState): MenuItem[] {
     { id: "sync", label: s.synced ? `Don't Sync ${name}` : `Sync ${name}`, enabled: s.syncable || s.synced, detail: s.syncStatus },
     { id: "run-here", label: "Run on This Machine", checked: !s.onWorker },
     { id: "run-worker", label: "Run on Worker", checked: s.onWorker, enabled: s.syncable || s.onWorker },
-    ...(s.twins ?? []).map((t) => ({ id: `pull-wip:${t.path}`, label: `Pull Uncommitted Work from ${t.name}`, enabled: !t.offline, ...(t.offline ? { detail: "offline" } : {}) })),
+    ...twinItems(s),
     SEPARATOR,
     s.pinned ? { id: "unpin", label: "Unpin from Bar" } : { id: "pin", label: "Pin to Bar" },
     s.hidden ? { id: "show", label: "Show in Bar" } : { id: "hide", label: "Hide from Bar" },

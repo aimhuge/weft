@@ -149,6 +149,7 @@ export {
   type StopPayload,
   type UpdatePayload,
 } from "./cloud-commands";
+export { NEW_CARD_FIELDS, type NewCardField } from "./new-card-form";
 export { pendingView, type PendingPermission, type PendingSql, type PromptReason, type SqlReview, type SqlVerdict } from "./pending";
 export { pendingItem, unsent, type PendingSend } from "./pending-sends";
 export { findableText, findCount, matchThread, plainMarkdown, spotAt, totalHits, type FindMatch, type FindSpot } from "./thread-find";

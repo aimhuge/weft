@@ -163,3 +163,39 @@ describe("BrowserPane with its zoom menu", () => {
     expect(box.height).toBeGreaterThan(0);
   });
 });
+
+// Simple mode's full-page pane (docs/architecture/simple-mode.md, piece 1): the rail's pill and what sits under the page.
+describe("BrowserPane's full-page slots", () => {
+  beforeEach(() => {
+    (window as unknown as { weft: unknown }).weft = { browser: { setBounds: vi.fn() }, onMenu: () => () => {} };
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+  });
+  afterEach(() => {
+    delete (window as unknown as { weft?: unknown }).weft;
+    vi.unstubAllGlobals();
+  });
+
+  const tab = (id: number) => ({ id, url: `https://example.com/${id}`, title: `Tab ${id}` });
+  const pane = (tabs: ReturnType<typeof tab>[]) => (
+    <BrowserPane
+      desktop
+      state={{ url: "https://example.com", tabs, tab: 1 } as never}
+      obscured={false}
+      expanded
+      width={400}
+      onWidth={() => {}}
+      onClose={() => {}}
+      pill={<button>pill</button>}
+      bottom={<p>reply here</p>}
+    />
+  );
+
+  it("puts the pill in the toolbar with one tab, in the tab bar with more, and the bottom under the page", () => {
+    const { rerender } = render(pane([tab(1)]));
+    expect(screen.getByText("pill").closest("[role=tablist]")).toBeNull();
+    expect(screen.getByText("reply here")).toBeInTheDocument();
+    rerender(pane([tab(1), tab(2)]));
+    expect(screen.getAllByText("pill")).toHaveLength(1);
+    expect(screen.getByText("pill").closest("[role=tablist]")).not.toBeNull();
+  });
+});

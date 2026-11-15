@@ -19,7 +19,8 @@ function warm(cwd: string) {
   void apiFetch("/api/worktrees", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ cwd }) }).catch(() => {});
 }
 
-export function useIsolate(cwd: string) {
+// `local`: this machine keeps the worktree pool; weft.zip's card is the Mac's to warm.
+export function useIsolate(cwd: string, local = true) {
   const [isolated, setIsolated] = useState(false);
   // A branch belongs to its repo: picked for one folder, another folder starts back on the card's own.
   const [picked, setPicked] = useState({ cwd, name: "" });
@@ -27,8 +28,8 @@ export function useIsolate(cwd: string) {
   const [promptLength, setPromptLength] = useState(0);
   // Warmed when it goes on, and again when the folder changes while it's on. A worker keeps its own pool (its daemon).
   useEffect(() => {
-    if (isolated && cwd && !isWorkerProject(cwd)) warm(cwd);
-  }, [isolated, cwd]);
+    if (local && isolated && cwd && !isWorkerProject(cwd)) warm(cwd);
+  }, [isolated, cwd, local]);
   const toggleIsolated = useCallback(() => setIsolated((v) => !v), []);
   // Picking a branch picks a worktree too: a branch is only for one.
   const pickBranch = useCallback(

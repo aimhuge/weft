@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { PaneTab } from "@/lib/client";
 import { pageLabel } from "@/lib/show-rail";
 import Icon from "./Icon";
@@ -30,7 +31,8 @@ export function tabLabel(tab: PaneTab) {
 
 // The open card's browser tabs, under the toolbar (components/BrowserPane.tsx). Only drawn with two or
 // more tabs: a card with one page keeps the row for the page. Middle-click or × closes a tab.
-export default function PaneTabs({ tabs = [], current }: { tabs?: readonly PaneTab[]; current: number | null | undefined }) {
+// end sits at the row's right (the full-page pane's rail pill, components/RailPill.tsx); with one tab the toolbar has it.
+export default function PaneTabs({ tabs = [], current, end }: { tabs?: readonly PaneTab[]; current: number | null | undefined; end?: ReactNode }) {
   if (tabs.length < 2) return null;
   const browser = typeof window === "undefined" ? undefined : window.weft?.browser;
   return (
@@ -64,6 +66,7 @@ export default function PaneTabs({ tabs = [], current }: { tabs?: readonly PaneT
           </div>
         );
       })}
+      {end && <div className="ml-auto flex shrink-0 items-center pb-1 pl-1">{end}</div>}
     </div>
   );
 }

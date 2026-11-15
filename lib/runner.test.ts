@@ -761,6 +761,21 @@ describe("stale sessions (BUILD)", () => {
     expect(lastQuery().received).toEqual(["next"]);
   });
 
+  it("a call you allowed once goes with the card when the retry opens a new CLI", async () => {
+    addCard({ id: "c1" });
+    const q = await send("c1");
+    q.emit(success("ok"));
+    await flush();
+    const old = sessionsMap().get("c1") as unknown as { retryGrants?: string[] } & Session;
+    old.retryGrants = ["Write\n{}"];
+    old.build = "older-build";
+    runner.sendMessage("c1", "retry it");
+    const fresh = sessionsMap().get("c1") as unknown as { retryGrants?: string[] };
+    expect(fresh).not.toBe(old);
+    expect(fresh.retryGrants).toEqual(["Write\n{}"]);
+    expect(old.retryGrants).toBeUndefined();
+  });
+
   it("a busy session from older code is kept", async () => {
     addCard({ id: "c1" });
     const q = await send("c1");

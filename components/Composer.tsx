@@ -12,6 +12,7 @@ import { useThreadTransport } from "@/lib/thread-transport";
 import { useComposerKeys } from "@/lib/use-composer-keys";
 import { useDictation } from "@/lib/use-dictation";
 import { useDesktopDictation } from "@/lib/use-desktop-dictation";
+import { useVoiceComposer } from "@/lib/use-voice-mode";
 import { useHandedFiles } from "@/lib/use-file-drop";
 import { removeFromEditor, SecretBars, useComposerSecrets } from "./SecretPaste";
 import { Media, NO_UPLOAD, insertFiles } from "./MediaNode";
@@ -54,9 +55,15 @@ const Composer = forwardRef<
     cardId?: string;
     // Files dropped elsewhere for this composer (a card id, or "new"; lib/file-drop.ts) land here.
     dropTarget?: string;
+    // Simple mode's phone look (docs/architecture/simple-mode.md, piece 1): a rounded box, the words on top and one
+    // row of round buttons under them (components/ComposerPhoneRow.tsx), with voice mode; no format bar, Markdown
+    // view or model picker.
+    look?: "phone";
+    // What a message spoken in voice mode does once its words are in the box; onSubmit when not given.
+    onVoiceSubmit?: () => void;
   }
 >(function Composer(
-  { initial = "", placeholder, autoFocus, variant, onSubmit, onSubmitAlt, onChange, actions, modelPicker, header, sizeClass, className = "", cwd, cardId, dropTarget },
+  { initial = "", placeholder, autoFocus, variant, onSubmit, onSubmitAlt, onChange, actions, modelPicker, header, sizeClass, className = "", cwd, cardId, dropTarget, look, onVoiceSubmit },
   ref,
 ) {
   const [source, setSource] = useState<string | null>(null);
@@ -69,6 +76,7 @@ const Composer = forwardRef<
   const editorRef = useRef<Editor | null>(null);
   const onSubmitRef = useRef(onSubmit);
   const onSubmitAltRef = useRef(onSubmitAlt);
+  const onVoiceSubmitRef = useRef(onVoiceSubmit ?? onSubmit);
   const onChangeRef = useRef(onChange);
   const placeholderRef = useRef(placeholder);
   // Pasted files go where the card's host keeps them (lib/thread-transport.ts upload).
@@ -77,6 +85,7 @@ const Composer = forwardRef<
   useEffect(() => {
     onSubmitRef.current = onSubmit;
     onSubmitAltRef.current = onSubmitAlt;
+    onVoiceSubmitRef.current = onVoiceSubmit ?? onSubmit;
     onChangeRef.current = onChange;
     uploadRef.current = upload;
   });
@@ -161,7 +170,9 @@ const Composer = forwardRef<
     });
   }
 
-  const recorder = useDictation((text) => {
+  // Dictated words go in at the cursor. focus is false for voice mode's, whose field is hidden behind the voice bar,
+  // which keeps the focus for the next Space.
+  function insertSpoken(text: string, focus = true) {
     if (source !== null) {
       insertIntoSource(text);
       return;
@@ -170,11 +181,15 @@ const Composer = forwardRef<
     // Keep a space between dictated text and what's before it.
     const { from } = editor.state.selection;
     const before = editor.state.doc.textBetween(Math.max(0, from - 1), from, "\n", "\n");
-    editor
-      .chain()
-      .focus()
-      .insertContent(before && !/\s/.test(before) ? ` ${text}` : text)
-      .run();
+    const chain = editor.chain();
+    (focus ? chain.focus() : chain).insertContent(before && !/\s/.test(before) ? ` ${text}` : text).run();
+  }
+
+  const recorder = useDictation((text) => insertSpoken(text));
+  // Voice mode (phone look only): what's said goes in beside any attachments and out as the message.
+  const voice = useVoiceComposer(look === "phone", (text) => {
+    insertSpoken(text, false);
+    onVoiceSubmitRef.current();
   });
 
   // In the desktop app the floating pill records; the caret goes back here first so its text lands in this composer.
@@ -184,7 +199,8 @@ const Composer = forwardRef<
   }, [source, editor]);
   const dictation = useDesktopDictation(recorder, focusForDictation);
 
-  const { onKeyDownCapture, onKeyDown } = useComposerKeys({ typeahead, dictation, pickSkill: pick });
+  // In voice mode the dictation key and Esc drive the voice bar's recorder, whose words are sent.
+  const { onKeyDownCapture, onKeyDown } = useComposerKeys({ typeahead, dictation: voice.on ? voice.recorder : dictation, pickSkill: pick });
 
   // The Markdown view's text changed: by typing, an insert, or Remove it.
   function editSource(next: string) {
@@ -241,7 +257,7 @@ const Composer = forwardRef<
         if (source !== null) void uploadIntoSource(files);
         else if (editor) insertFiles(editor, files, upload);
       }}
-      className={`composer relative flex min-h-0 flex-col rounded-lg border bg-canvas transition-colors focus-within:border-accent ${
+      className={`composer relative flex min-h-0 flex-col ${look === "phone" ? "rounded-3xl" : "rounded-lg"} border bg-canvas transition-colors focus-within:border-accent ${
         dragging ? "border-accent bg-accent-soft" : "border-line-strong"
       } ${className}`}
     >
@@ -249,7 +265,7 @@ const Composer = forwardRef<
 
       {header}
 
-      {showFormat && editor && source === null && (
+      {showFormat && !look && editor && source === null && (
         <div className="flex shrink-0 items-center border-b border-line px-1.5 py-1">
           <ComposerFormatBar editor={editor} />
         </div>
@@ -269,7 +285,7 @@ const Composer = forwardRef<
           uploadIntoSource={uploadIntoSource}
         />
       ) : (
-        <EditorContent editor={editor} className="min-h-0 flex-1 overflow-hidden" />
+        <EditorContent editor={editor} className={`min-h-0 flex-1 overflow-hidden ${voice.on ? "hidden" : ""}`} />
       )}
 
       <SecretBars
@@ -296,6 +312,8 @@ const Composer = forwardRef<
         uploadIntoSource={uploadIntoSource}
         modelPicker={modelPicker}
         actions={actions}
+        // ⌨ puts the caret back a frame later, when the editor may be gone with the card.
+        phone={look === "phone" ? { voice, focusText: () => editor?.isDestroyed === false && editor.commands.focus() } : undefined}
       />
     </div>
   );

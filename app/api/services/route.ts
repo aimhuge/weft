@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { launch, LaunchRefused, listLaunchers } from "@/lib/dev-launchers";
+import { keep } from "@/lib/dev-idle-state";
 import { restartDev } from "@/lib/devserver";
 import { fail, guard } from "@/lib/guard";
 import { killProc, killService, ServiceRefused } from "@/lib/services-kill";
@@ -13,23 +14,33 @@ export async function GET(req: Request) {
   const denied = guard(req, { write: false });
   if (denied) return denied;
   await connection();
-  const [services, launchers, workers] = await Promise.all([listServices(), listLaunchers(), workerDevServers()]);
+  // ?footprint=1, while the drawer is open: each dev server's real memory too (one `top`, lib/dev-footprint.ts).
+  const footprint = new URL(req.url).searchParams.has("footprint");
+  const [services, launchers, workers] = await Promise.all([listServices(footprint), listLaunchers(), workerDevServers()]);
   return Response.json({ services, launchers, workers, machine: machineInfo() });
 }
 
 // kill: end a service by id, or one process in it by pid. restart: start a Weft dev server again
 // (`dev:<cardId>`) with its original command, folder, url and title. launch: start a working folder's
-// dev command, or restart the run already serving it; answers which it did.
+// dev command, or restart the run already serving it; answers which it did. keep: don't stop an idle untracked dev
+// server (`untracked:<pid>`, the toast's Undo).
+// Runs a kill, restart or keep; false for anything else.
+async function act(action?: string, id?: string, pid?: number): Promise<boolean> {
+  if (action === "kill" && typeof pid === "number") await killProc(pid);
+  else if (action === "kill" && id) await killService(id);
+  else if (action === "restart" && id?.startsWith("dev:")) await restartDev(id.slice(4));
+  else if (action === "keep" && id?.startsWith("untracked:")) keep(id);
+  else return false;
+  return true;
+}
+
 export async function POST(req: Request) {
   const denied = guard(req);
   if (denied) return denied;
   const { action, id, pid, cwd, command } = (await req.json().catch(() => ({}))) as { action?: string; id?: string; pid?: number; cwd?: string; command?: string };
   try {
     if (action === "launch" && cwd && command) return Response.json({ ok: true, ...(await launch(cwd, command)) });
-    if (action === "kill" && typeof pid === "number") await killProc(pid);
-    else if (action === "kill" && id) await killService(id);
-    else if (action === "restart" && id?.startsWith("dev:")) await restartDev(id.slice(4));
-    else return fail("Unknown action.");
+    if (!(await act(action, id, pid))) return fail("Unknown action.");
   } catch (err) {
     if (err instanceof ServiceRefused || err instanceof LaunchRefused) return fail(err, 403);
     throw err;

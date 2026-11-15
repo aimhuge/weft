@@ -23,7 +23,8 @@ export interface NewThreadPicks {
 
 // The New thread window's ⏰ and ✕. The ⏰ puts the prompt being written on a cron instead of starting it once:
 // each run is a fresh card with this prompt, folder, model and mode (docs/architecture/crons.md).
-export default function NewThreadHeaderActions({ read, picks, onCreated, onClose }: { read: () => string; picks: NewThreadPicks; onCreated: () => void; onClose: () => void }) {
+// `cron`: false where crons can't be made (weft.zip has no cron runner of its own), leaving just ✕.
+export default function NewThreadHeaderActions({ read, picks, onCreated, onClose, cron = true }: { read: () => string; picks: NewThreadPicks; onCreated: () => void; onClose: () => void; cron?: boolean }) {
   const t = useUiText();
   const [open, setOpen] = useState(false);
   const [runNow, setRunNow] = useState(true);
@@ -41,9 +42,9 @@ export default function NewThreadHeaderActions({ read, picks, onCreated, onClose
 
   return (
     <div ref={root} className="relative flex items-center gap-1">
-      <button type="button" onClick={() => setOpen(!open)} title={t("Run this on a cron")} aria-label={t("Run on a cron")} aria-expanded={open} className={`rounded-md p-1 hover:bg-sunken ${open ? "text-cron" : "text-muted hover:text-ink"}`}>
+      {cron && <button type="button" onClick={() => setOpen(!open)} title={t("Run this on a cron")} aria-label={t("Run on a cron")} aria-expanded={open} className={`rounded-md p-1 hover:bg-sunken ${open ? "text-cron" : "text-muted hover:text-ink"}`}>
         <Icon name="clock" size={16} />
-      </button>
+      </button>}
       <button onClick={onClose} aria-label={t("Close")} className="rounded-md p-1 text-muted hover:bg-sunken hover:text-ink">
         <Icon name="x" size={16} />
       </button>

@@ -102,14 +102,22 @@ export function resolveLocalPath(raw: string, home = os.homedir()): string | nul
 // the #hash, kept verbatim so the ref reads `blob:sha256:<hex>#step-2` (paneFromUrl in
 // lib/share-types.ts parses that). The whole string is tried first, since a file name may hold a '#'.
 // A ?query counts too (`index.html?v=2#founders`, a thread's cache-buster): left in the path, the file
-// isn't found, the page stays a file:// URL and a share link shows only the pane capture.
+// isn't found, the page stays a file:// URL and a share link shows only the pane capture. It's dropped from the ref,
+// which keeps only the #anchor: a static file's query means nothing, and the phone reads `blob:sha256:<hex>#anchor`
+// only (weft-mobile src/lib/feed.ts), so a `?r=9` there showed the pane capture instead of the page.
+// The #anchor of what follows a page's path, without any ?query before it.
+function anchorOf(rest: string) {
+  const at = rest.indexOf("#");
+  return at < 0 ? "" : rest.slice(at);
+}
+
 export function resolvePage(raw: string, home = os.homedir()): { local: string; hash: string } | null {
   const whole = resolveLocalPath(raw, home);
   if (whole) return { local: whole, hash: "" };
   const cuts = [raw.indexOf("?"), raw.indexOf("#")].filter((at) => at > 0).sort((a, b) => a - b);
   for (const at of cuts) {
     const local = resolveLocalPath(raw.slice(0, at), home);
-    if (local) return { local, hash: raw.slice(at) };
+    if (local) return { local, hash: anchorOf(raw.slice(at)) };
   }
   return null;
 }

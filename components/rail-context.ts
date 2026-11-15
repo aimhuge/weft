@@ -1,4 +1,5 @@
 import type { Card } from "@/lib/types";
+import type { ToastAction } from "@/lib/use-toast";
 
 // What the left rail hands every drawer behind it (🔐, 🪝, ▲, Supabase, Cloudflare, BlastCP, GitHub, Slack,
 // skills, 🖥 Services): the board's project and cards, and the few board actions a drawer can take.
@@ -15,4 +16,6 @@ export interface RailContext {
   // Starts a card in a folder (a drawer's helper card, like Supabase's Migrate); rejects when that fails.
   onStartCard: (cwd: string, prompt: string, title: string) => Promise<string | undefined>;
   notify: (err: unknown) => void;
+  // A toast with a button (the idle dev server stop's Undo, lib/use-idle-stop-toast.ts).
+  toast?: (text: string, action?: ToastAction) => void;
 }

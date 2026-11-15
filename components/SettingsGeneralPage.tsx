@@ -7,6 +7,7 @@ import AwaySettings from "./AwaySettings";
 import DictationSettings from "./DictationSettings";
 import HistorySettings from "./HistorySettings";
 import { SettingsCard, SettingsSectionHeader } from "./SettingsLayout";
+import SimplePieces from "./SimplePieces";
 import SoundSettings from "./SoundSettings";
 import SwitchRow from "./SwitchRow";
 import UiLanguagePicker from "./UiLanguagePicker";
@@ -42,15 +43,18 @@ export default function SettingsGeneralPage({
         </section>
       </SettingsCard>
       <SettingsCard>
+        {/* Simple mode is regular mode (the same cookie): on strips the board to your threads and turns on the
+            pieces below, each of which you can also keep on or off alone (docs/architecture/simple-mode.md). */}
         <SwitchRow
-          title="Advanced mode"
-          hint="Everything on the board: the tool rail, badges, list view, sorting and each card's details. Off is Regular, just your threads."
-          on={advanced}
+          title="Simple mode"
+          hint="Just your threads and what they built. Off is Advanced: the tool rail, badges, list view, sorting and each card's details."
+          on={!advanced}
           onChange={(on) => {
-            setBoardMode(on ? "advanced" : "regular");
-            setAdvanced(on);
+            setBoardMode(on ? "regular" : "advanced");
+            setAdvanced(!on);
           }}
         />
+        <SimplePieces />
         <SwitchRow
           title="Show backlog"
           hint="A column for threads you add without starting. It still shows while cards wait in it; its chevron folds it to a strip."

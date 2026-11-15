@@ -178,7 +178,7 @@ The web can't run a thread, so a card made there, or a reply typed there, is a r
 
 - **Ownership.** A `BEFORE INSERT` trigger (`private.check_cloud_command_device`, `20261018130000_cloud_commands_device_ownership.sql`) refuses a row whose `device_id` isn't a device of the row's `account_id` in `public.devices`, so a signed-in user of one account can't insert a command aimed at someone else's Mac. The receiver's check on `lib/cloud-inbox.ts` also cross-checks the row's `account_id` against its own session, not just the `device_id`. `card_id` is set only by the receiver after `createCardFromBody` accepts the request; an insert that writes a non-null `card_id` is rewritten to `NULL` by a `BEFORE INSERT` step, so the client can't pre-claim a card.
 
-- **Web** (`components/web-board/WebNewCardDialog.tsx`, `useWebBoard.startCard`, `lib/web-commands.ts`): the header's New thread offers
+- **Web** (`components/web-board/WebNewCard.tsx`, the desktop's `NewCardDialog` over `lib/new-card-transport.ts`, docs/architecture/new-card-parity.md; `useWebBoard.startCard`, `lib/web-commands.ts`): the header's New thread offers
   `webTargets` (folders of cards whose `owner_user` is you), inserts the row as you, and `WebCommandStrip` follows it ("Waiting for your Mac",
   "Starting…", the failure, Cancel/Dismiss) over Realtime. When the command is done and the card's row has synced back, the board opens the card.
 - **Mac** (`lib/cloud-inbox.ts`, started with the outbox from `cloud-sync-start.ts`): while you're signed in and a folder syncs it listens on

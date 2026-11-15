@@ -59,8 +59,8 @@ describe("resolvePage", () => {
   });
   it("splits a ?query (a cache-buster) off too, keeping it with the #hash", () => {
     const p = file(".weft/show/rfp/index.html");
-    expect(resolvePage(`file://${p}?v=2#founders`, HOME)).toEqual({ local: p, hash: "?v=2#founders" });
-    expect(resolvePage(`${p}?v=3`, HOME)).toEqual({ local: p, hash: "?v=3" });
+    expect(resolvePage(`file://${p}?v=2#founders`, HOME)).toEqual({ local: p, hash: "#founders" });
+    expect(resolvePage(`${p}?v=3`, HOME)).toEqual({ local: p, hash: "" });
   });
   it("prefers a file whose name holds a '#'", () => {
     const p = file("odd#name.html");

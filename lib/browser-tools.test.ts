@@ -155,6 +155,7 @@ describe("browserMcpServer", () => {
       "press_key",
       "select_option",
       "scroll",
+      "focus",
       "wait_for",
       "set_viewport",
       "console_logs",

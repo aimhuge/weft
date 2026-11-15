@@ -10,7 +10,7 @@ export type SettingsSection = { page: SettingsPage; title: string; words: string
 export const SETTINGS_SECTIONS: SettingsSection[] = [
   { page: "general", title: "Appearance", words: "theme dark mode light mode scene wallpaper colors palette", hint: "Light, dark or system, and the scene behind the board." },
   { page: "general", title: "Interface language", words: "locale English Chinese translation", hint: "English or Simplified Chinese for the board and Settings." },
-  { page: "general", title: "Advanced mode", words: "regular mode simple basic chrome minimal clean", hint: "The full board: tool rail, badges, list view and card details." },
+  { page: "general", title: "Simple mode", words: "regular mode simple basic chrome minimal clean", hint: "Just your threads, or the full board with its tool rail, badges and details." },
   { page: "general", title: "Show backlog", words: "column", hint: "A column for threads you add without starting them." },
   { page: "general", title: "Show progress", words: "streak level xp badges quiet mode", hint: "Your streak and level in the header, with badges as toasts." },
   { page: "general", title: "Count my Claude Code history", words: "xp sessions profile wefter", hint: "Let sessions from before Weft count toward XP and streaks." },

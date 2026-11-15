@@ -85,13 +85,17 @@ describe("cardMenu", () => {
     expect(item(live, "agent:copywriter")?.enabled).toBe(true);
   });
 
-  it("lists the agents you made after the built-ins, keyed ⌥1 on", () => {
+  it("keys each built-in by letter and the agents you made ⌥1 on", () => {
     const agents = [...BUILT_IN_AGENTS, { id: "a-1", name: "Reviewer", emoji: "🔍", tagline: "", soul: "s" }];
     const menu = cardMenu(card({ agent: "a-1" }), null, undefined, agents);
+    expect(item(menu, "agent:builder")).toMatchObject({ accelerator: "Shift+W", checked: false });
+    expect(item(menu, "agent:copywriter")).toMatchObject({ accelerator: "W" });
+    expect(item(menu, "agent:researcher")).toMatchObject({ label: "Agent: 🔬 Researcher", checked: false, accelerator: "Shift+R" });
     expect(item(menu, "agent:a-1")).toMatchObject({ label: "Agent: 🔍 Reviewer", checked: true, accelerator: "Alt+1" });
-    expect(item(menu, "agent:builder")?.checked).toBe(false);
     const many = Array.from({ length: 12 }, (_, i) => ({ id: `a-${i}`, name: `A${i}`, emoji: "🤖", tagline: "", soul: "s" }));
-    expect(item(cardMenu(card(), null, undefined, [...BUILT_IN_AGENTS, ...many]), "agent:a-11")?.accelerator).toBeUndefined();
+    const big = cardMenu(card(), null, undefined, [...BUILT_IN_AGENTS, ...many]);
+    expect(item(big, "agent:a-8")?.accelerator).toBe("Alt+9");
+    expect(item(big, "agent:a-9")?.accelerator).toBeUndefined();
   });
 
   it("labels archive by state", () => {

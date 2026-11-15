@@ -15,7 +15,7 @@ import WorkerDevServers from "./WorkerDevServers";
 import { Note } from "./VaultParts";
 
 type Services = ReturnType<typeof useServices>;
-type Props = Pick<Services, "services" | "loaded" | "error" | "kill" | "restart" | "refreshMs"> & Partial<Pick<Services, "launchers" | "launch" | "workers">> & {
+type Props = Pick<Services, "services" | "loaded" | "error" | "kill" | "restart" | "refreshMs"> & Partial<Pick<Services, "launchers" | "launch" | "workers" | "keep">> & {
   // This Mac's cores and RAM, once the first list arrives.
   machine?: MachineInfo;
   // The top bar's project, or null for every project.
@@ -33,7 +33,7 @@ const BUTTON = "rounded px-1.5 py-0.5 text-muted hover:bg-sunken disabled:opacit
 // workers' (WorkerDevServers), then how busy the Mac is, then everything Weft spawned, one row per thread CLI, dev
 // server, terminal or other command, with its CPU and memory. A thread's row names its card, which a click opens.
 // Expand a row for its processes; ✕ ends a service or one process.
-export default function ServicesDrawer({ services, launchers = [], workers = [], launch, machine, loaded, error, kill, restart, refreshMs, project, cards = [], onOpenCard, onOpenUrl, notify }: Props) {
+export default function ServicesDrawer({ services, launchers = [], workers = [], launch, keep, machine, loaded, error, kill, restart, refreshMs, project, cards = [], onOpenCard, onOpenUrl, notify }: Props) {
   const now = useNow();
   const [busy, setBusy] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
@@ -119,7 +119,16 @@ export default function ServicesDrawer({ services, launchers = [], workers = [],
                   </button>
                 )}
                 {row.cpu && <span className="w-9 shrink-0 text-right font-mono text-[10.5px] tabular-nums">{row.cpu}</span>}
-                {row.mem && <span className="w-[52px] shrink-0 text-right font-mono text-[10.5px] tabular-nums">{row.mem}</span>}
+                {row.canKeep && keep && (
+                  <button type="button" disabled={busy === row.key} onClick={act(row.key, () => keep(s.id))} title="Don't stop this idle dev server" className={`shrink-0 ${BUTTON} hover:text-ink`}>
+                    Keep
+                  </button>
+                )}
+                {row.mem && (
+                  <span title={row.memTitle} className={`w-[52px] shrink-0 text-right font-mono text-[10.5px] tabular-nums ${row.heavy ? "font-semibold text-danger" : ""}`}>
+                    {row.mem}
+                  </span>
+                )}
                 <span className="w-[14px] shrink-0" />
               </div>
               {row.note && <div className="pl-3.5 text-[10.5px] text-faint">{row.note}</div>}

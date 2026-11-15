@@ -26,15 +26,15 @@ beforeEach(() => {
 
 describe("useAgents", () => {
   it("draws the shipped list on the server, before anything is read", () => {
-    expect(renderToString(createElement(Names))).toContain("Builder,Copywriter|");
+    expect(renderToString(createElement(Names))).toContain("Builder,Copywriter,Researcher|");
   });
 
   it("reads the server's list once, and every user follows a change", async () => {
     api.agents.mockResolvedValue({ agents: [...BUILT_IN_AGENTS, reviewer], projects: { "/dev/app": "a-1" } });
     const { unmount } = render(createElement(Names));
-    expect(await screen.findByText("Builder,Copywriter,Reviewer|/dev/app")).toBeTruthy();
+    expect(await screen.findByText("Builder,Copywriter,Researcher,Reviewer|/dev/app")).toBeTruthy();
     act(() => showAgents({ projects: {} }));
-    expect(screen.getByText("Builder,Copywriter,Reviewer|")).toBeTruthy();
+    expect(screen.getByText("Builder,Copywriter,Researcher,Reviewer|")).toBeTruthy();
     expect(api.agents).toHaveBeenCalledTimes(1);
     unmount();
     showAgents({ agents: BUILT_IN_AGENTS });
@@ -46,6 +46,6 @@ describe("useAgents", () => {
     });
     await refreshAgents();
     render(createElement(Names));
-    expect(screen.getByText("Builder,Copywriter|")).toBeTruthy();
+    expect(screen.getByText("Builder,Copywriter,Researcher|")).toBeTruthy();
   });
 });

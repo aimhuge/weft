@@ -170,6 +170,14 @@ describe("PermissionActions", () => {
     expect(REASONS.classifier.label).toBe("Auto mode blocked");
   });
 
+  it("says what a block in a skill's folder grants the card on its Allow button", async () => {
+    const grant = "Allow writes to the research skill for this card";
+    const { onAnswer } = setup({ ...base, why: { category: "classifier", detail: "No verdict", grant } });
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual([grant, "Keep denied"]);
+    await userEvent.click(screen.getByRole("button", { name: grant }));
+    expect(onAnswer).toHaveBeenLastCalledWith(true);
+  });
+
   it("offers Wait first when another card holds the code, and a plain Go ahead without This first", async () => {
     const { onAnswer, onWait } = setup({ ...base, why: { category: "same-code", detail: "d", holder } });
     expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["Wait", "Go ahead", "Deny"]);

@@ -17,9 +17,12 @@ vi.mock("@/lib/devserver", () => ({
   restartDev: (cardId: string) => restartDev(cardId),
 }));
 
-const listServices = vi.hoisted(() => vi.fn<() => Promise<unknown>>());
+const keep = vi.hoisted(() => vi.fn<(key: string) => void>());
+vi.mock("@/lib/dev-idle-state", () => ({ keep: (key: string) => keep(key) }));
+
+const listServices = vi.hoisted(() => vi.fn<(footprint?: boolean) => Promise<unknown>>());
 vi.mock("@/lib/services-snapshot", () => ({
-  listServices: () => listServices(),
+  listServices: (footprint?: boolean) => listServices(footprint),
   machineInfo: () => ({ cores: 10, memKb: 16 * 1024 * 1024 }),
 }));
 
@@ -64,7 +67,13 @@ describe("GET /api/services", () => {
     const json = (await res.json()) as { services: { id: string }[]; machine: unknown };
     expect(json.services).toEqual([{ id: "weft", kind: "weft" }]);
     expect(json.machine).toEqual({ cores: 10, memKb: 16 * 1024 * 1024 });
-    expect(listServices).toHaveBeenCalled();
+    expect(listServices).toHaveBeenCalledWith(false);
+  });
+
+  it("asks for each dev server's footprint with ?footprint=1", async () => {
+    const res = await route.GET(req("/services?footprint=1", { headers: READ }));
+    expect(res.status).toBe(200);
+    expect(listServices).toHaveBeenCalledWith(true);
   });
 
   it("returns the dev launchers from listLaunchers", async () => {
@@ -142,6 +151,20 @@ describe("POST /api/services", () => {
     expect(json.error).toMatch(/isn't one of the board's/);
   });
 
+  it("keeps an idle untracked dev server (the toast's Undo)", async () => {
+    const res = await post({ action: "keep", id: "untracked:11" });
+    expect(res.status).toBe(200);
+    expect(keep).toHaveBeenCalledWith("untracked:11");
+  });
+
+  it("refuses a keep whose id is not an untracked: id", async () => {
+    for (const body of [{ action: "keep", id: "dev:c1" }, { action: "keep" }]) {
+      const res = await post(body);
+      expect(res.status, JSON.stringify(body)).toBe(400);
+    }
+    expect(keep).not.toHaveBeenCalled();
+  });
+
   it("refuses a restart whose id is not a dev: id", async () => {
     const res = await post({ action: "restart", id: "cli:c1" });
     expect(res.status).toBe(400);
@@ -149,7 +172,7 @@ describe("POST /api/services", () => {
   });
 
   it("400s an unknown action, or bad JSON, and skips every call", async () => {
-    for (const body of [{ action: "hack", id: "cli:c1" }, { action: "kill" }, "{}"]) {
+    for (const body of [{ action: "hack", id: "cli:c1" }, { action: "kill" }, "{}", "not json"]) {
       const res = await post(body);
       expect(res.status, JSON.stringify(body)).toBe(400);
     }

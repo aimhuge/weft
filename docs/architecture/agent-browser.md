@@ -25,6 +25,7 @@ and `screenshot`. Every thread gets them (Claude Code and puku in-process, Codex
 | `press_key` (`keys`) | `POST /browser/press` | `"Enter"`, `"Shift+Tab"`, `"Meta+a"`… as an `Input.dispatchKeyEvent` down/up pair (`electron/pane-keys.cjs`) |
 | `select_option` (`values`) | `POST /browser/select` | picks `<select>` options by value or label, fires `input` and `change` |
 | `scroll` (`direction`, `amount`) | `POST /browser/scroll` | a `mouseWheel` at the viewport (or element) centre, so the box under it scrolls; with only a target, scrolls it into view |
+| `focus` (`ref` / `selector`, `reload`, `label`) | `POST /browser/focus` | `electron/pane-focus.cjs`: glides the section near the top of the view and draws a pulsing outline with the label over it (Weft's own overlay, so any page works). `reload: true` first reloads the page (the thread just edited its file), waits for the new document and puts the scroll back where the reader was, so the glide starts from their place, never from the top; refs don't survive the reload, so it takes a selector |
 | `wait_for` (`text` / `gone` / `selector`, `timeout_ms`) | `POST /browser/wait` | polls every 150 ms, up to 30 s |
 | `set_viewport` (`phone` / `tablet` / `desktop`, or `width`+`height`) | `POST /browser/viewport` | `Emulation.setDeviceMetricsOverride`, plus touch for phone and tablet |
 | `console_logs` (`level`) | `POST /browser/console` | console messages and uncaught errors since the page loaded |

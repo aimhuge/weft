@@ -94,7 +94,7 @@ function JoinCard({ token, orgName }: { token: string; orgName: string }) {
     <div className="wz-app wz-auth">
       <main className="wz-authCard">
         <h1 className="wz-authTitle">Join {orgName} on Weft</h1>
-        <p className="wz-authSub">You&apos;ve been invited to this workspace. Join to see its board and team.</p>
+        <p className="wz-authSub">You&apos;ve been invited to this workspace. Join, then download Weft and prompt with your own Claude.</p>
         <JoinForm token={token} orgName={orgName} action={joinWorkspace} />
       </main>
     </div>

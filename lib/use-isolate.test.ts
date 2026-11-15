@@ -31,6 +31,13 @@ describe("useIsolate", () => {
     expect(result.current.promptLength).toBe(20);
   });
 
+  it("leaves the pool to the Mac where this machine has none (weft.zip)", () => {
+    const { result } = renderHook(() => useIsolate("mac-1\n/repo", false));
+    act(() => result.current.toggleIsolated());
+    expect(result.current.isolated).toBe(true);
+    expect(apiFetch).not.toHaveBeenCalled();
+  });
+
   it("picks a branch, which turns a worktree on, and forgets it for another folder", () => {
     const { result, rerender } = renderHook(({ cwd }) => useIsolate(cwd), { initialProps: { cwd: "/repo" } });
     expect(result.current.branch).toBe("");

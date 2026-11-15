@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { mimeFor, saveImageData } from "./attachments";
 import { openInPane, paneThumb, paneUrl } from "./browser-tools";
+import { installPageKit } from "./page-kit";
 import { emojiPrompt, parseEmoji } from "./card-pictures";
 import { complete } from "./haiku";
 import { clip } from "./format";
@@ -203,6 +204,8 @@ export function newThreadUrl(origin?: string) {
 // A card that already has a page keeps it: a thread that was handed its own page before it started
 // (the agent-design thread's brief, lib/agent-brief-page.ts) shows that page, not the generic scene.
 export async function showStarter(cardId: string, title: string, ask: string) {
+  // The page kit a thread's own page links (lib/page-kit.ts): copied once per run, before the thread can write one.
+  installPageKit();
   if ((await paneUrl(cardId)) !== "") return;
   if (fs.existsSync(showFile(cardId))) return;
   await openInPane(`file://${write(cardId, starterPage(title, ask, new Date(), cardId))}`, cardId);

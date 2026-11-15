@@ -10,6 +10,8 @@
 //             simulator's track, lib/host-line-screen.ts, or an ICE restart)
 //   terminal  a pty in one project folder, only with a signed approval for it (lib/host-line-terminal.ts); refused
 //             (TERMINAL_REFUSAL) without one, or on a worker that has no terminal deps. It dies with the line.
+//   tree      a synced folder, opened by this Mac's signed request for it (lib/host-line-tree.ts); refused without
+//             one, or on a worker with no tree deps. One per folder per line; it stops with the line.
 //
 // Each fixed label gets one channel per line, and any other label is closed. A line no board has pinged for QUIET_MS is
 // closed: the board went away without saying so.
@@ -17,6 +19,8 @@ import type { HostDone } from "./host-command";
 import { lineFileWatches, type WatchFile } from "./host-line-files";
 import { lineScreens, type ScreenDeps } from "./host-line-screen";
 import { terminalChannel, type TerminalDeps } from "./host-line-terminal";
+import { treeChannel, type TreeDeps } from "./host-line-tree";
+import { TREE_CHANNEL } from "./tree-sync-protocol";
 import { LINE_CHANNELS, LINE_PURPOSE, readControl, readHostCall, readLineOffer, type HostReply, type LineEvent } from "./host-line-protocol";
 import { sealAnswer, type SealedAnswer } from "./rtc-signal";
 import { answerOffer, type Channel, type Channels } from "./worker-rtc";
@@ -46,6 +50,8 @@ export interface HostLineDeps extends ScreenDeps {
   terminal?: TerminalDeps;
   // Watches a card's file for the editor's live reload (lib/worker-file-watch.ts); absent, files.watch is only a read.
   watchFile?: WatchFile;
+  // Synced folders (lib/host-line-tree.ts); absent, every tree channel is refused.
+  tree?: TreeDeps;
   log?: (msg: string) => void;
   quietMs?: number;
   maxLines?: number;
@@ -149,6 +155,17 @@ export function createHostLines(deps: HostLineDeps) {
     });
   }
 
+  // A synced folder per channel; a worker with no tree deps refuses each as it opens.
+  function tree(channel: LineChannel, stops: Set<() => void>) {
+    if (!deps.tree) {
+      channel.stateChanged.subscribe((s) => s === "open" && channel.send(JSON.stringify({ t: "refused", message: "This worker can't sync folders yet. Update it." })));
+      return;
+    }
+    const stop = treeChannel(channel, deps.tree, log);
+    stops.add(stop);
+    closed(channel, () => stops.delete(stop));
+  }
+
   // One channel per fixed label per line: a second one with the same label is closed.
   function once(taken: Set<string>, handle: (c: LineChannel) => void) {
     return (c: LineChannel) => {
@@ -171,6 +188,7 @@ export function createHostLines(deps: HostLineDeps) {
     const screens = lineScreens(deps);
     const taken = new Set<string>();
     const terminals = new Set<() => void>();
+    const trees = new Set<() => void>();
     let events: ((event: LineEvent) => void) | null = null;
     const files = lineFileWatches(deps.watchFile, (event) => events?.(event));
     const quietMs = deps.quietMs ?? QUIET_MS;
@@ -182,6 +200,7 @@ export function createHostLines(deps: HostLineDeps) {
         if (!lines.delete(line)) return;
         clearInterval(quiet);
         terminals.forEach((stop) => stop());
+        trees.forEach((stop) => stop());
         files.closeAll();
         screens.closeAll();
         opened?.close();
@@ -192,6 +211,7 @@ export function createHostLines(deps: HostLineDeps) {
       [LINE_CHANNELS.events]: once(taken, (c) => eventsChannel(c, (push) => (events = push))),
       [LINE_CHANNELS.control]: once(taken, (c) => controlChannel(c, { opened: () => opened, screens, heard: () => (lastHeard = now()) })),
       [LINE_CHANNELS.terminal]: (c) => terminal(c, taken, terminals),
+      [TREE_CHANNEL]: (c) => tree(c, trees),
       // A screen's input:<device>:<nonce>, or a label nobody handles, which is closed.
       "*": (c) => screens.input(c),
     };

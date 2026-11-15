@@ -88,6 +88,6 @@ fetchWip + applyWip, as from a worker ◀──
 
 - **The other direction.** Sending this Mac's work to the worker means a row from the network rewriting the worker's
   tree, which is as strong as a shell: it needs a signed approval (project-hosts.md, Signed widening).
-- **A direct line.** The snapshot goes by way of the remote, not the WebRTC session line; a `tree` channel would spare
-  the remote the uncommitted code.
-- **Continuous mirroring**, staged-versus-unstaged state (a pull lands everything unstaged), submodules and LFS.
+- **A direct line.** The snapshot goes by way of the remote. Continuous sync over a `tree` channel on the session line is
+  now its own feature ([folder-sync.md](folder-sync.md)); a pull still uses the remote.
+- Staged-versus-unstaged state (a pull lands everything unstaged), submodules and LFS.

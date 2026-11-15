@@ -2,7 +2,7 @@
 // The board's middle: the columns or the list of every card, whichever the user picked. Both are
 // stubbed, so this pins the switch itself.
 
-import { cleanup, render } from "@testing-library/react";
+import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Card, Column } from "@/lib/types";
 import { makeCard } from "./test-utils";
@@ -18,7 +18,7 @@ import BoardSurface, { type BoardSurfaceProps } from "./BoardSurface";
 
 afterEach(cleanup);
 
-function setup(mode: "board" | "list") {
+function setup(mode: BoardSurfaceProps["mode"]) {
   const props: BoardSurfaceProps = {
     mode,
     columns: [{ id: "running", label: "Running" }],
@@ -53,5 +53,14 @@ describe("BoardSurface", () => {
     const { view } = setup("list");
     expect(view.container.querySelector('[data-board="list"]')).toBeInTheDocument();
     expect(view.container.querySelector('[data-board="columns"]')).toBeNull();
+  });
+
+  it("leaves only the space beside simple mode's sidebar, where a double-click opens New thread", () => {
+    const { props, view } = setup("sidebar");
+    const space = view.container.querySelector("main.board-sheet");
+    expect(space).toBeInTheDocument();
+    expect(view.container.querySelector("[data-board]")).toBeNull();
+    fireEvent.doubleClick(space!);
+    expect(props.onNew).toHaveBeenCalled();
   });
 });

@@ -57,14 +57,20 @@ export default function ToolRun({ calls, live, cardId }: { calls: (ToolCall | Pe
           )}
         </div>
       ) : (
-        images.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {images.map((src) => (
-              <MediaView key={src} src={src} alt="Screenshot" thumb={images.length > 1} />
-            ))}
-          </div>
-        )
+        <Screenshots images={images} />
       )}
+    </div>
+  );
+}
+
+// The screenshots a folded run took, kept visible under its line (components/TurnSteps.tsx folds a turn the same way).
+export function Screenshots({ images }: { images: readonly string[] }) {
+  if (!images.length) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      {images.map((src) => (
+        <MediaView key={src} src={src} alt="Screenshot" thumb={images.length > 1} />
+      ))}
     </div>
   );
 }

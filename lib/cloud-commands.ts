@@ -79,6 +79,8 @@ export function newCardBody(command: Pick<CloudCommandRow, "folder" | "payload">
     // Only a mode a new card may start in, and only when it names one; Backlog only when it asks for it.
     ...(isNewCardMode(p.permissionMode) ? { permissionMode: p.permissionMode } : {}),
     ...(p.start === false ? { start: false } : {}),
+    // A worktree of its own; lib/new-card.ts checks the branch name.
+    ...(p.isolated === true ? { isolated: true, ...(typeof p.branch === "string" && p.branch ? { branch: p.branch } : {}) } : {}),
     cwd: command.folder,
     // Who asked, for the first turn's <weft-env> block (lib/turn-client.ts): a hint, never a check.
     client: commandClient(raw),

@@ -35,6 +35,13 @@ describe("PaneTabs", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("puts end at the right of the row, only with two or more tabs", () => {
+    const { rerender } = render(<PaneTabs tabs={tabs} current={1} end={<span>pill</span>} />);
+    expect(screen.getByText("pill")).toBeInTheDocument();
+    rerender(<PaneTabs tabs={[settings]} current={1} end={<span>pill</span>} />);
+    expect(screen.queryByText("pill")).toBeNull();
+  });
+
   it("marks the current tab and selects one on click", () => {
     render(<PaneTabs tabs={tabs} current={1} />);
     expect(screen.getByRole("tab", { name: /Settings/ }).getAttribute("aria-selected")).toBe("true");

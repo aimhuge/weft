@@ -204,6 +204,17 @@ describe("the idle CLIs", () => {
     expect(session.idle).toBeDefined();
   });
 
+  it("leaves a CLI alone while its card waits on you for a blocked call", () => {
+    vi.useFakeTimers();
+    h.keepAlive = 5;
+    const session = makeSession("a", { pending: [{ id: "p" }] as unknown as import("./runner-state").Session["pending"] });
+    scheduleIdle(session);
+    vi.advanceTimersByTime(5 * 60_000);
+    // Closing it would drop the prompt, and "Allow once and retry" would find nothing waiting.
+    expect(sessions.has("a")).toBe(true);
+    expect(session.idle).toBeDefined();
+  });
+
   it("leaves a session that is no longer the card's alone", () => {
     vi.useFakeTimers();
     h.keepAlive = 5;

@@ -12,6 +12,8 @@ export interface SimpleCommand {
   outputs: string[];
   stdin: string[];
   pipes: boolean;
+  // Set when a lone `&` sends it to the background (on the last command of a `( … ) &` group too).
+  background?: true;
 }
 
 export const blankCommand = (): SimpleCommand => ({ words: [], inputs: [], outputs: [], stdin: [], pipes: false });
@@ -217,11 +219,19 @@ class ShellParser {
 
   private ampersand() {
     if (this.at(1) !== ">") {
+      if (this.at(1) !== "&") this.markBackground();
       this.separator();
       return;
     }
     this.i++;
     this.greaterThan();
+  }
+
+  // `cmd &`, or `( … ) &` once the group's last command has already ended.
+  private markBackground() {
+    this.endWord();
+    const target = this.cmd.words.length ? this.cmd : this.commands.at(-1);
+    if (target) target.background = true;
   }
 
   private skipFd() {

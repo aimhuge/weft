@@ -8,7 +8,6 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { CloudCommandRow } from "@/lib/cloud-commands";
 import type { CloudThreadItemRow } from "@/lib/cloud-sync-types";
-import { pickModel } from "../model-picker-test-utils";
 import "../test-utils";
 import { cardRow, commandRow, db, mockState, resetHarness } from "./web-board-harness";
 
@@ -166,101 +165,6 @@ describe("WebBoard", () => {
 });
 
 
-describe("WebBoard starting a thread on your Mac", () => {
-  const mine = [cardRow({ card_id: "a", folder: "/Users/me/dev/app", column: "review" })];
-  const open = async (cards = mine) => {
-    const { WebBoard } = await loadBoard();
-    render(<WebBoard {...props} initialCards={cards} />);
-    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
-    return screen.getByRole("dialog");
-  };
-
-  it("offers your synced folders, and sends the prompt to the Mac that owns the folder", async () => {
-    const dialog = await open();
-    const project = within(dialog).getByRole<HTMLSelectElement>("combobox", { name: "Project" });
-    expect(project.selectedOptions[0]?.textContent).toBe("app");
-    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "  Add a dark mode  " } });
-    pickModel("Model", "Opus 5.5", within(dialog));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Start on my Mac" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(mockState.inserts).toEqual([
-      {
-        table: "cloud_commands",
-        row: { org_id: "o1", kind: "new_card", target_device: "mac-1", folder: "/Users/me/dev/app", payload: { prompt: "Add a dark mode", backend: "claude", model: "claude-opus-5-5" } },
-      },
-    ]);
-    // Until the Mac has it, the board says so.
-    expect(screen.getByRole("list", { name: "Threads sent to your Mac" })).toHaveTextContent(/Add a dark mode.*Waiting for your Mac/);
-  });
-
-  it("sends the mode you pick, the tags and Backlog, and says it adds to Backlog", async () => {
-    const dialog = await open();
-    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "Later" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: /^Permissions:/ }));
-    fireEvent.click(within(dialog).getByRole("menuitemradio", { name: /Auto/ }));
-    fireEvent.change(within(dialog).getByLabelText("Tags"), { target: { value: "ui, , bug" } });
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Backlog" }));
-    expect(within(dialog).queryByRole("checkbox", { name: "Plan first" })).toBeNull();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Add to Backlog" }));
-    await waitFor(() => expect(mockState.inserts).toHaveLength(1));
-    expect(mockState.inserts[0]?.row).toMatchObject({ kind: "new_card", payload: { prompt: "Later", permissionMode: "auto", tags: ["ui", "bug"], start: false } });
-  });
-
-  it("on a worker's folder offers Plan first and no Backlog", async () => {
-    const dialog = await open([cardRow({ card_id: "w", folder: "app", owner_device: "worker:w1" })]);
-    expect(dialog).toHaveTextContent("Runs on your worker, in");
-    expect(within(dialog).getByRole("checkbox", { name: "Backlog" })).toBeDisabled();
-    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "Think" } });
-    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Plan first" }));
-    fireEvent.click(within(dialog).getByRole("button", { name: "Start on my worker" }));
-    await waitFor(() => expect(mockState.inserts).toHaveLength(1));
-    expect(mockState.inserts[0]?.row).toMatchObject({ target_device: "worker:w1", payload: { prompt: "Think", permissionMode: "plan" } });
-  });
-
-  it("will not send an empty prompt", async () => {
-    const dialog = await open();
-    expect(within(dialog).getByRole("button", { name: "Start on my Mac" })).toBeDisabled();
-  });
-
-  it("says why it couldn't be sent and keeps the prompt", async () => {
-    db.insertError = "new row violates row-level security policy";
-    const dialog = await open();
-    fireEvent.change(within(dialog).getByLabelText("Prompt"), { target: { value: "Do it" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Start on my Mac" }));
-    expect(await within(dialog).findByRole("alert")).toHaveTextContent("row-level security");
-    expect(within(dialog).getByLabelText("Prompt")).toHaveValue("Do it");
-  });
-
-  it("sends with ⌘↵ in the prompt", async () => {
-    const dialog = await open();
-    const prompt = within(dialog).getByLabelText("Prompt");
-    fireEvent.change(prompt, { target: { value: "Go" } });
-    fireEvent.keyDown(prompt, { key: "Enter", metaKey: true });
-    await waitFor(() => expect(mockState.inserts).toHaveLength(1));
-  });
-
-  it("starts in the selected project", async () => {
-    const { WebBoard } = await loadBoard();
-    render(<WebBoard {...props} initialCards={[cardRow({ card_id: "a", folder: "/dev/one" }), cardRow({ card_id: "b", folder: "/dev/two", updated_at: "2026-10-01T00:00:00Z" })]} />);
-    fireEvent.click(screen.getByRole("button", { name: /^two/ }));
-    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
-    expect(screen.getByRole<HTMLSelectElement>("combobox", { name: "Project" }).selectedOptions[0]?.textContent).toBe("two");
-  });
-
-  it("closes without sending", async () => {
-    const dialog = await open();
-    fireEvent.click(within(dialog).getByRole("button", { name: "Close" }));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(mockState.inserts).toEqual([]);
-  });
-
-  it("has nowhere to start when none of the synced folders are yours", async () => {
-    const dialog = await open([cardRow({ card_id: "t", owner_user: "u2" })]);
-    expect(dialog).toHaveTextContent(/No folder to start it in yet/);
-    expect(within(dialog).queryByRole("button", { name: "Start on my Mac" })).toBeNull();
-  });
-});
-
 describe("WebBoard threads sent to your Mac", () => {
   const sentTo = async (commands: ReturnType<typeof commandRow>[]) => {
     const { WebBoard } = await loadBoard();
@@ -303,21 +207,6 @@ describe("WebBoard threads sent to your Mac", () => {
     push({ eventType: "DELETE", new: null, old: { id: "p" } });
     await waitFor(() => expect(screen.queryByText("Mine")).toBeNull());
     expect(screen.queryByRole("list", { name: "Threads sent to your Mac" })).toBeNull();
-  });
-
-  it("opens the card a thread became, once it has synced back", async () => {
-    const { WebBoard } = await loadBoard();
-    render(<WebBoard {...props} initialCards={[cardRow({ card_id: "a", folder: "/Users/me/dev/app" })]} />);
-    fireEvent.click(screen.getByRole("button", { name: "New thread" }));
-    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Build it" } });
-    fireEvent.click(screen.getByRole("button", { name: "Start on my Mac" }));
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    // The Mac reports it done a moment before the card's own row lands…
-    push({ eventType: "UPDATE", new: commandRow({ id: "cmd-1", status: "done", card_id: "made", payload: { prompt: "Build it" } }), old: {} });
-    expect(screen.queryByRole("dialog")).toBeNull();
-    // …and the card opens when it does.
-    act(() => mockState.clients[0]?.trigger("cloud_cards", { eventType: "INSERT", new: cardRow({ card_id: "made", title: "Build it", column: "running" }), old: null }));
-    expect(await screen.findByRole("dialog", { name: /Build it/i })).toBeInTheDocument();
   });
 
   it("doesn't open a card for a command sent from another tab", async () => {

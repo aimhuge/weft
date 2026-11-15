@@ -18,6 +18,10 @@ const cards = vi.hoisted(() => new Map<string, Partial<Card>>());
 const getCard = vi.hoisted(() => vi.fn((id: string) => cards.get(id)));
 vi.mock("./store", () => ({ getCard }));
 
+const footprints = vi.hoisted(() => vi.fn());
+vi.mock("./dev-footprint", () => ({ footprints }));
+
+const { idleState } = await import("./dev-idle-state");
 const snap = await import("./services-snapshot");
 
 type ExecCallback = (err: unknown, stdout: { stdout: string }, stderr: string) => void;
@@ -150,5 +154,94 @@ describe("listServices", () => {
     const task = all.find((s) => s.kind === "task");
     expect(task).not.toHaveProperty("title");
     expect(task).not.toHaveProperty("url");
+  });
+});
+
+describe("listServices: idle check and footprints", () => {
+  // Weft's own server (this process) runs dev server 10, whose child 11 is a thread CLI; 40 is an untracked server.
+  const self = process.pid;
+  const PS = [`  ${self}  1 ${self}  0.0  10  00:10  node server.js`, `  10  ${self} 10  1.5  100  00:01  pnpm dev`, "  11 10 10  2.0  200  00:01  claude", "  40  1 40  0.5  300  01:00  pnpm dev", "  41 40 40  1.0  400  00:30  node next dev"].join("\n");
+  const ps = (out = PS) => execFile.mockImplementation((_c, _a, _o, cb: ExecCallback) => cb(null, { stdout: out }, ""));
+  const untracked = (over: Record<string, unknown> = {}) => ({ key: "untracked:40", root: 40, pids: [40, 41], ports: [3001], cwd: "/repo/app", command: "/usr/local/bin/pnpm dev", ...over });
+
+  beforeEach(() => {
+    idleState.activeAt = new Map();
+    idleState.pending = new Map();
+    idleState.untracked = [];
+    footprints.mockReset().mockResolvedValue(new Map());
+  });
+
+  it("lists an untracked dev server with its processes, url and the time Weft will stop it", async () => {
+    ps();
+    vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    idleState.untracked = [untracked()];
+    idleState.pending.set("untracked:40", { stopAt: 1_090_000 });
+    idleState.activeAt.set("untracked:40", 5);
+    const all = await snap.listServices();
+    const row = all.find((s) => s.id === "untracked:40");
+    expect(row).toMatchObject({ kind: "other", cwd: "/repo/app", url: "http://localhost:3001", state: "running", cpu: 1.5, memKb: 700, startedAt: 1_000_000 - 60_000, untracked: true, stopAt: 1_090_000, activeAt: 5 });
+    expect(row?.procs.map((p) => p.pid)).toEqual([40, 41]);
+    expect(footprints).not.toHaveBeenCalled();
+  });
+
+  it("leaves out url and stopAt when there's no port or pending stop, and starts now when its root is gone", () => {
+    idleState.untracked = [untracked({ ports: [], root: 99, pids: [] })];
+    const [row] = snap.untrackedEntries([], 500);
+    expect(row).not.toHaveProperty("url");
+    expect(row).not.toHaveProperty("stopAt");
+    expect(row).toMatchObject({ cpu: 0, memKb: 0, startedAt: 500, procs: [] });
+  });
+
+  it("marks only running dev rows with when they were last active, and flags an idle-stopped run", async () => {
+    ps();
+    runs.set("c1", { child: { pid: 10 }, exited: false, command: "pnpm dev", cwd: "/repo" });
+    runs.set("c2", { child: { pid: 20 }, exited: true, idleStopped: true, command: "pnpm dev", cwd: "/repo2" });
+    sessions.set("c3", { process: { pid: 11 }, spec: { backend: "claude", cwd: "/repo" } });
+    listDev.mockResolvedValue([
+      { cardId: "c1", command: "pnpm dev", cwd: "/repo", state: "running", startedAt: 50, source: "weft" },
+      { cardId: "c2", command: "pnpm dev", cwd: "/repo2", state: "stopped", startedAt: 50, source: "weft" },
+    ]);
+    for (const k of ["c1", "c2", "c3"]) idleState.activeAt.set(k, 7);
+    const all = await snap.listServices();
+    expect(all.find((s) => s.id === "dev:c1")?.activeAt).toBe(7);
+    const stopped = all.find((s) => s.id === "dev:c2");
+    expect(stopped).toMatchObject({ idleStopped: true });
+    expect(stopped).not.toHaveProperty("activeAt");
+    for (const s of all.filter((s) => s.kind !== "dev")) expect(s, s.id).not.toHaveProperty("activeAt");
+  });
+
+  it("doesn't flag a stopped run that wasn't stopped for idling", async () => {
+    ps();
+    listDev.mockResolvedValue([{ cardId: "c2", command: "pnpm dev", cwd: "/repo2", state: "stopped", startedAt: 50, source: "weft" }]);
+    const all = await snap.listServices();
+    expect(all.find((s) => s.id === "dev:c2")).not.toHaveProperty("idleStopped");
+  });
+
+  it("with footprint, sums each live dev server's real memory over its processes", async () => {
+    ps();
+    runs.set("c1", { child: { pid: 10 }, exited: false, command: "pnpm dev", cwd: "/repo" });
+    runs.set("c2", { child: { pid: 20 }, exited: true, command: "vite", cwd: "/r2" });
+    listDev.mockResolvedValue([
+      { cardId: "c1", command: "pnpm dev", cwd: "/repo", state: "running", startedAt: 50, source: "weft" },
+      { cardId: "c2", command: "vite", cwd: "/r2", state: "stopped", startedAt: 50, source: "weft" },
+    ]);
+    idleState.untracked = [untracked(), untracked({ key: "untracked:77", root: 77, pids: [77] })];
+    footprints.mockResolvedValue(new Map([[10, 1000], [11, 24], [40, 5000]]));
+    const all = await snap.listServices(true);
+    const pids = footprints.mock.calls[0]?.[0] as number[];
+    expect(pids).toEqual(expect.arrayContaining([10, 40, 41]));
+    expect(pids).not.toContain(77);
+    const dev = all.find((s) => s.id === "dev:c1");
+    expect(dev?.procs.map((p) => p.pid)).toEqual([10, 11]);
+    expect(dev?.footprintKb).toBe(1024);
+    expect(all.find((s) => s.id === "untracked:40")?.footprintKb).toBe(5000);
+    expect(all.find((s) => s.id === "dev:c2")).not.toHaveProperty("footprintKb");
+  });
+
+  it("leaves footprintKb off when top read nothing for a server", async () => {
+    ps();
+    idleState.untracked = [untracked()];
+    const all = await snap.listServices(true);
+    expect(all.find((s) => s.id === "untracked:40")).not.toHaveProperty("footprintKb");
   });
 });

@@ -7,7 +7,7 @@ vi.mock("./device-id", () => ({ deviceId: () => "dev-1" }));
 const sessions = new Map<string, { busy: boolean }>();
 vi.mock("./runner-state", () => ({ sessions }));
 
-const { beatDesktopWorker, desktopName } = await import("./desktop-worker");
+const { beatDesktopWorker, desktopName, forgetPublishedMode, publishStartMode } = await import("./desktop-worker");
 
 function fakeClient(error: { message: string } | null = null) {
   const rpc = vi.fn<(fn: string, args: Record<string, unknown>) => Promise<unknown>>(() => Promise.resolve({ data: "w-1", error }));
@@ -60,5 +60,30 @@ describe("beatDesktopWorker", () => {
     syncOrgId.mockRejectedValue(new Error("offline"));
     await beatDesktopWorker(fakeClient().client, "u-1");
     expect(warn).toHaveBeenCalledWith("Desktop worker: offline");
+  });
+});
+
+describe("publishStartMode", () => {
+  beforeEach(() => forgetPublishedMode());
+
+  it("publishes the mode once, and again only when it changes", async () => {
+    const { client, rpc } = fakeClient();
+    await publishStartMode(client, "auto");
+    await publishStartMode(client, "auto");
+    await publishStartMode(client, "default");
+    expect(rpc.mock.calls).toEqual([
+      ["desktop_worker_start_mode", { p_device: "dev-1", p_mode: "auto" }],
+      ["desktop_worker_start_mode", { p_device: "dev-1", p_mode: "default" }],
+    ]);
+  });
+
+  it("tries again after the database refuses or the network drops, and never throws", async () => {
+    const refused = fakeClient({ message: "no such function" });
+    await publishStartMode(refused.client, "auto");
+    await publishStartMode(refused.client, "auto");
+    expect(refused.rpc).toHaveBeenCalledTimes(2);
+    const thrown = { rpc: vi.fn(() => Promise.reject(new Error("offline"))) } as unknown as SupabaseClient;
+    await expect(publishStartMode(thrown, "auto")).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledWith("Desktop worker start mode: offline");
   });
 });

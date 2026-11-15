@@ -38,6 +38,16 @@ export interface ServiceEntry {
   procs: ServiceProc[];
   // Set on a thread's own dev server, so Stop goes to its task.
   taskId?: string;
+  // A dev server's real memory (RAM + compressed + swapped: macOS's phys_footprint, as `top -stats mem` reads it), KB.
+  footprintKb?: number;
+  // When a dev server last had a request from outside Weft or a turn on its card (lib/dev-idle.ts).
+  activeAt?: number;
+  // Stopped by Weft after 30 idle minutes; Start brings it back.
+  idleStopped?: true;
+  // A dev server Weft didn't start, found listening in a board folder (lib/dev-untracked.ts).
+  untracked?: true;
+  // An idle untracked server Weft will stop at this time unless kept (the toast's Undo).
+  stopAt?: number;
 }
 
 // This Mac, so the drawer can say "2.8 of 10 cores · 7.9 of 16 GB" rather than a bare "276% CPU".

@@ -84,4 +84,23 @@ describe("projectMenu", () => {
     expect(item("pull-wip:worker://w2/weft", { twins })).toEqual({ id: "pull-wip:worker://w2/weft", label: "Pull Uncommitted Work from vps", enabled: false, detail: "offline" });
     expect(item("pull-wip:worker://w1/weft")).toBeUndefined();
   });
+
+  it("offers Keep in Sync with each worker twin, checked when it syncs, and says when it's offline", () => {
+    const syncTwins = [
+      { path: "worker://w1/weft", name: "m1mini", offline: false, on: true },
+      { path: "worker://w2/weft", name: "vps", offline: true, on: false },
+    ];
+    expect(item("sync-tree:worker://w1/weft", { syncTwins })).toEqual({ id: "sync-tree:worker://w1/weft", label: "Keep in Sync with m1mini", checked: true });
+    expect(item("sync-tree:worker://w2/weft", { syncTwins })).toEqual({ id: "sync-tree:worker://w2/weft", label: "Keep in Sync with vps", checked: false, detail: "offline" });
+    expect(item("sync-tree:worker://w1/weft")).toBeUndefined();
+  });
+
+  it("offers Move to each worker twin, off while it's offline", () => {
+    const syncTwins = [
+      { path: "worker://w1/weft", name: "m1mini", offline: false, on: false },
+      { path: "worker://w2/weft", name: "vps", offline: true, on: false },
+    ];
+    expect(item("move-tree:worker://w1/weft", { syncTwins })).toEqual({ id: "move-tree:worker://w1/weft", label: "Move to m1mini", enabled: true });
+    expect(item("move-tree:worker://w2/weft", { syncTwins })).toEqual({ id: "move-tree:worker://w2/weft", label: "Move to vps", enabled: false, detail: "offline" });
+  });
 });

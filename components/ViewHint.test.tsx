@@ -26,9 +26,9 @@ describe("ViewHint", () => {
     expect(screen.getByRole("status")).toHaveTextContent("hit Esc again to switch to list view");
   });
 
-  it("names the view you would go back to, the other way round", () => {
+  it("names the next view in the ring: from List back round to Simple", () => {
     render(<ViewHint mode="list" onDismiss={vi.fn()} />);
-    expect(screen.getByRole("status")).toHaveTextContent("hit Esc again to switch to board view");
+    expect(screen.getByRole("status")).toHaveTextContent("hit Esc again to switch to simple view");
   });
 
   it("closes on its ✕", () => {

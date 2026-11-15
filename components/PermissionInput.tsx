@@ -275,18 +275,9 @@ export function PermissionActions({
         </span>
       </div>
     );
-  // Auto mode's classifier denied it already (lib/classifier-denial.ts): allowing it retries the call once.
-  if (pending.why?.category === "classifier")
-    return (
-      <div className="mt-2 flex gap-2">
-        <button onClick={() => onAnswer(true)} disabled={answered} className={PRIMARY} title="Let this exact call through once and have the thread retry it">
-          Allow once and retry
-        </button>
-        <button onClick={() => onAnswer(false)} disabled={answered} className={SECONDARY}>
-          Keep denied
-        </button>
-      </div>
-    );
+  // Auto mode's classifier denied it already (lib/classifier-denial.ts): allowing it retries the call once. In a skill's
+  // folder or a settings file it also lets the card's later writes there through (why.grant, lib/write-grant.ts).
+  if (pending.why?.category === "classifier") return <ClassifierActions grant={pending.why.grant} answered={answered} onAnswer={onAnswer} />;
   if (pending.readScope && onGrant)
     return (
       <div className="mt-2 flex flex-wrap gap-2">
@@ -315,6 +306,24 @@ export function PermissionActions({
       </div>
     );
   return <AllowDeny risky={riskySql(pending.sql)} answered={answered} onAnswer={onAnswer} extra={extra} />;
+}
+
+function ClassifierActions({ grant, answered, onAnswer }: { grant?: string; answered: boolean; onAnswer: (allow: boolean) => void }) {
+  return (
+    <div className="mt-2 flex flex-wrap gap-2">
+      <button
+        onClick={() => onAnswer(true)}
+        disabled={answered}
+        className={PRIMARY}
+        title={grant ? "Retry it now, and let this card's later writes there through without asking. Changes to permissions still ask." : "Let this exact call through once and have the thread retry it"}
+      >
+        {grant ?? "Allow once and retry"}
+      </button>
+      <button onClick={() => onAnswer(false)} disabled={answered} className={SECONDARY}>
+        Keep denied
+      </button>
+    </div>
+  );
 }
 
 // The plain Allow / Deny. On flagged SQL the review hasn't called Safe (components/SqlReview.tsx riskySql), Deny leads.

@@ -7,7 +7,9 @@ import { useThreadTransport } from "@/lib/thread-transport";
 import type { Editor } from "@tiptap/react";
 import { insertFiles } from "./MediaNode";
 import { currentBinding, formatBinding } from "@/lib/shortcuts";
+import type { VoiceComposer } from "@/lib/use-voice-mode";
 import ComposerMicButton from "./ComposerMicButton";
+import ComposerPhoneRow from "./ComposerPhoneRow";
 import Icon, { type IconName } from "./Icon";
 import Tip from "./Tip";
 
@@ -53,6 +55,7 @@ export default function ComposerBottomBar({
   uploadIntoSource,
   modelPicker,
   actions,
+  phone,
 }: {
   editor: Editor | null;
   source: string | null;
@@ -65,43 +68,49 @@ export default function ComposerBottomBar({
   uploadIntoSource: (files: File[]) => Promise<void>;
   modelPicker?: ReactNode;
   actions?: ReactNode;
+  // The phone look (components/ComposerPhoneRow.tsx): ＋, mic, 〰 voice mode and the actions, no format or Markdown.
+  phone?: { voice: VoiceComposer; focusText: () => void };
 }) {
   const { upload } = useThreadTransport();
   return (
     <>
-      <div className="flex shrink-0 flex-wrap items-center gap-x-0.5 gap-y-1 px-1.5 pb-1.5 pt-0.5">
-        <ToolButton
-          icon="paperclip"
-          label="Attach images, videos, or files"
-          onClick={() => fileInput.current?.click()}
-        />
-        <ComposerMicButton dictation={dictation} />
-        {variant === "reply" && source === null && (
+      {phone ? (
+        <ComposerPhoneRow dictation={dictation} voice={phone.voice} fileInput={fileInput} focusText={phone.focusText} actions={actions} />
+      ) : (
+        <div className="flex shrink-0 flex-wrap items-center gap-x-0.5 gap-y-1 px-1.5 pb-1.5 pt-0.5">
           <ToolButton
-            icon="heading"
-            label="Formatting"
-            active={showFormat}
-            onClick={() => setShowFormat(!showFormat)}
+            icon="paperclip"
+            label="Attach images, videos, or files"
+            onClick={() => fileInput.current?.click()}
           />
-        )}
-        <ToolButton
-          icon="markdown"
-          label={source === null ? "Edit as Markdown" : "Back to formatted text"}
-          active={source !== null}
-          onClick={toggleSource}
-        />
-        {modelPicker && <div className="ml-1 min-w-0">{modelPicker}</div>}
-        <span className="min-w-0 flex-1 truncate px-1.5 text-[11.5px]">
-          {dictation.error ? (
-            <button type="button" onClick={dictation.clearError} className="text-danger" title="Dismiss">
-              {dictation.error}
-            </button>
-          ) : dictation.state === "recording" ? (
-            <span className="text-muted">Listening… {formatBinding(currentBinding("dictation"))} or the mic again to insert, Esc cancels</span>
-          ) : null}
-        </span>
-        {actions}
-      </div>
+          <ComposerMicButton dictation={dictation} />
+          {variant === "reply" && source === null && (
+            <ToolButton
+              icon="heading"
+              label="Formatting"
+              active={showFormat}
+              onClick={() => setShowFormat(!showFormat)}
+            />
+          )}
+          <ToolButton
+            icon="markdown"
+            label={source === null ? "Edit as Markdown" : "Back to formatted text"}
+            active={source !== null}
+            onClick={toggleSource}
+          />
+          {modelPicker && <div className="ml-1 min-w-0">{modelPicker}</div>}
+          <span className="min-w-0 flex-1 truncate px-1.5 text-[11.5px]">
+            {dictation.error ? (
+              <button type="button" onClick={dictation.clearError} className="text-danger" title="Dismiss">
+                {dictation.error}
+              </button>
+            ) : dictation.state === "recording" ? (
+              <span className="text-muted">Listening… {formatBinding(currentBinding("dictation"))} or the mic again to insert, Esc cancels</span>
+            ) : null}
+          </span>
+          {actions}
+        </div>
+      )}
 
       <input
         ref={fileInput}

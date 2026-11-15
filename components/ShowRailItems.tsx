@@ -3,8 +3,8 @@
 import type { Dot, Mini } from "@/lib/show-rail";
 import Icon from "./Icon";
 
-const DOT: Record<Exclude<Dot, "page">, string> = { ok: "bg-ok", wait: "bg-warn", err: "bg-danger", usr: "bg-faint" };
-const LABEL: Record<Exclude<Dot, "page">, string> = { ok: "Finished", wait: "Waiting", err: "Failed", usr: "You" };
+export const DOT: Record<Exclude<Dot, "page">, string> = { ok: "bg-ok", wait: "bg-warn", err: "bg-danger", usr: "bg-faint" };
+export const LABEL: Record<Exclude<Dot, "page">, string> = { ok: "Finished", wait: "Waiting", err: "Failed", usr: "You" };
 
 type Props = { mini: Mini; active: boolean; onClick: () => void };
 

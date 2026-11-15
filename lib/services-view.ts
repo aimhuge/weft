@@ -1,3 +1,4 @@
+import { HEAVY_KB } from "./dev-idle";
 import { folderName } from "./format";
 import { taskDuration } from "./tasks-view";
 import type { ServiceEntry, ServiceState } from "./types";
@@ -46,15 +47,38 @@ export interface ServiceRow {
   // Measured: a thread's own dev server is counted under its CLI, a stopped run has nothing to measure.
   cpu?: string;
   mem?: string;
+  // A dev server over 3 GB of real memory (lib/dev-idle.ts HEAVY_KB): its number shows in red.
+  heavy?: true;
+  // What the memory number is.
+  memTitle?: string;
   canKill: boolean;
+  // An idle untracked server Weft is about to stop: Keep stops that.
+  canKeep?: true;
   // Weft's own dev servers start again with their command; a thread's own can only be stopped.
   canRestart: boolean;
   note?: string;
 }
 
+// Shown as idle once it has had no visitor for this long; Weft stops it at 30 minutes.
+const SHOW_IDLE_MS = 5 * 60_000;
+
+// The idle check's word on a dev server (lib/dev-idle-loop.ts), for the row's second line.
+export function idleNote(s: ServiceEntry, now: number): string | undefined {
+  if (s.stopAt) return `idle · stops in ${Math.max(0, Math.ceil((s.stopAt - now) / 1000))}s`;
+  if (s.idleStopped) return "stopped after 30 idle min";
+  if (s.activeAt !== undefined && now - s.activeAt >= SHOW_IDLE_MS) return `idle ${taskDuration(now - s.activeAt)}`;
+  return undefined;
+}
+
+function memory(s: ServiceEntry): Pick<ServiceRow, "mem" | "heavy" | "memTitle"> {
+  const kb = s.footprintKb ?? s.memKb;
+  const title = s.footprintKb ? "Real memory: RAM + compressed + swapped" : "Resident memory (RSS)";
+  return { mem: formatMem(kb), memTitle: kb > HEAVY_KB ? `${title}, over 3 GB` : title, ...(kb > HEAVY_KB && { heavy: true as const }) };
+}
+
 export function serviceRow(s: ServiceEntry, now: number): ServiceRow {
   const live = LIVE.has(s.state);
-  const meta = [s.title && s.label, s.cwd && folderName(s.cwd), live ? taskDuration(now - s.startedAt) : undefined].filter(Boolean).join(" · ");
+  const meta = [s.untracked && "untracked", s.title && s.label, s.cwd && folderName(s.cwd), live ? taskDuration(now - s.startedAt) : undefined, idleNote(s, now)].filter(Boolean).join(" · ");
   return {
     key: s.id,
     label: s.label,
@@ -63,8 +87,9 @@ export function serviceRow(s: ServiceEntry, now: number): ServiceRow {
     ...(s.url && { url: s.url }),
     state: s.state,
     live,
-    ...(s.procs.length && { cpu: formatCpu(s.cpu), mem: formatMem(s.memKb) }),
+    ...(s.procs.length && { cpu: formatCpu(s.cpu), ...memory(s) }),
     canKill: s.kind !== "weft" && live,
+    ...(s.stopAt && { canKeep: true as const }),
     canRestart: s.kind === "dev",
     ...(s.kind === "task" && { note: "Started inside its thread: its CPU and memory count under that thread's CLI." }),
     ...(s.kind === "weft" && { note: "Weft itself: quit Weft to end it." }),

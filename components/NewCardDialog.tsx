@@ -1,7 +1,7 @@
 "use client";
 
 import { useUiText } from "@/lib/ui-language";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { isMac } from "@/lib/hotkeys";
 import { type NewCardInput } from "@/lib/client";
 import type { Card, RestartStatus } from "@/lib/types";
@@ -15,18 +15,20 @@ import { NEW_THREAD_PANE } from "@/lib/use-new-thread-pane";
 import { useHeldModifiers } from "@/lib/use-mod-held";
 import { useNewCardDialog } from "@/lib/use-new-card-dialog";
 import { useStartGate } from "@/lib/use-start-gate";
+import { useOneBox } from "@/lib/use-one-box";
 import { NEW_THREAD } from "@/lib/file-drop";
 import Composer, { type ComposerHandle } from "./Composer";
 import { IntroButton, IntroFrame, PlayIntroButton } from "./FeatureIntro";
 import NewThreadHeaderActions from "./NewThreadHeaderActions";
-import { NewCardDialogControls, NewThreadModelPicker } from "./NewCardDialogControls";
+import { DialogControls, NewThreadModelPicker } from "./NewCardDialogControls";
+import { NewCardOneBox, OneBoxTitle } from "./NewCardOneBox";
+import { composerLook, wantsProjectChips } from "@/lib/one-box";
 import { isWorkerProject } from "@/lib/worker-project";
-import { NewCardDialogFooter } from "./NewCardDialogFooter";
+import { DialogStatus, NewCardDialogFooter } from "./NewCardDialogFooter";
 import { RestartRequested } from "./RestartChip";
-import StatusStrip from "./StatusStrip";
 import { isBacklogKey } from "./submit-keys";
 import { track } from "@/lib/analytics";
-import { suggestIsolate } from "@/lib/use-isolate";
+import { canBacklog, useNewCardTransport } from "@/lib/new-card-transport";
 
 export default function NewCardDialog({
   cards = [],
@@ -54,7 +56,9 @@ export default function NewCardDialog({
   onManageAgents?: () => void;
 }) {
   const t = useUiText();
-  const dialog = useNewCardDialog(home, defaultCwd, recentCwd);
+  // The desktop's own server, or weft.zip's places and new_card command (lib/new-card-transport.ts).
+  const host = useNewCardTransport();
+  const dialog = useNewCardDialog(home, defaultCwd, recentCwd, host.local, host.startMode);
   // ⌘ or ⌃ held: the Start button names what ⌘↵ or ⌃↵ will do.
   const startBtn = startButton(useHeldModifiers());
   // A busy card in this folder shares its working tree, unless this one is isolated (docs/architecture/worktrees.md).
@@ -63,12 +67,33 @@ export default function NewCardDialog({
   // reset it waits for, and the card runs then (lib/start-gate.ts).
   const gate = useStartGate(dialog.backend, dialog.model);
   const composer = useRef<ComposerHandle>(null);
+  // Simple mode's one-box dialog, laid out like the phone's new-card screen until More (lib/use-one-box.ts).
+  const { full, showAll } = useOneBox();
+  const look = composerLook(full);
+  // The composer starts from the saved draft, and from what was typed when More swaps the one-box one for the full one.
+  const [initial, setInitial] = useState(dialog.draftInitial);
+  const showMore = () => {
+    setInitial(composer.current?.read() ?? "");
+    showAll();
+  };
   useEscape(true, onClose);
   // Its intro plays when you press ▶ by the title (lib/feature-intros.ts), never on its own: in the browser pane on the
   // desktop beside it (lib/pane-intro.ts) and in a frame over the composer on the web.
   const inPane = hasPane();
   const intro = useFeatureIntro(inPane ? null : "newthread");
   const playInPane = inPane ? () => playPaneIntro("newthread", NEW_THREAD_PANE) : null;
+
+  // The model picker: in the composer's bottom bar, or as a pill over it in the one-box dialog.
+  const modelPicker = (pill: boolean) => (
+    <NewThreadModelPicker
+      cwd={host.local ? dialog.cwd : undefined}
+      backend={dialog.backend}
+      model={dialog.model}
+      onPickModel={dialog.setModel}
+      onPickCli={dialog.pickCliDefault}
+      pill={pill}
+    />
+  );
 
   // The composer-backed submit: each call site picks its `start` and `stay` shape.
   const composerOps = {
@@ -109,56 +134,44 @@ export default function NewCardDialog({
       <div className="flex shrink-0 items-center justify-between border-b border-line px-5 py-3.5">
         <h2 className="flex min-w-0 items-center gap-2 truncate text-[15px] font-medium text-ink">
           {t("New thread")}
+          <OneBoxTitle shown={!full} cwd={dialog.cwd} places={host.places} />
           {playInPane ? <PlayIntroButton id="newthread" onPlay={playInPane} /> : <IntroButton intro={intro} />}
           <RestartRequested restart={restart} />
         </h2>
-        <NewThreadHeaderActions read={composerOps.read} picks={dialog} onCreated={() => { composerOps.clear(); onClose(); }} onClose={onClose} />
+        <NewThreadHeaderActions cron={host.local && full} read={composerOps.read} picks={dialog} onCreated={() => { composerOps.clear(); onClose(); }} onClose={onClose} />
       </div>
       <div className="flex min-h-0 flex-1 flex-col px-5 pt-3">
         <IntroFrame intro={intro} className="mb-3" />
+        <NewCardOneBox
+          shown={!full}
+          chips={wantsProjectChips(host.local, defaultCwd)}
+          cwd={dialog.cwd}
+          onPick={dialog.chooseFolder}
+          host={host}
+          model={modelPicker(true)}
+          onMore={showMore}
+        />
         <Composer
+          // More remounts it in the full layout, which sizes it at creation; what was typed carries over.
+          key={look.key}
           ref={composer}
           variant="dialog"
           cwd={dialog.cwd}
           dropTarget={NEW_THREAD}
           autoFocus
-          initial={dialog.draftInitial}
+          initial={initial}
           onChange={dialog.saveDraft}
           onSubmit={() => void submit(true, false)}
           onSubmitAlt={() => void submit(true, true)}
-          placeholder={t("What should this thread do? @ to mention someone, / for skills, paste screenshots or hit the mic and talk.")}
-          sizeClass="h-full min-h-[180px]"
-          className="flex-1"
-          modelPicker={
-            <NewThreadModelPicker
-              cwd={dialog.cwd}
-              backend={dialog.backend}
-              model={dialog.model}
-              onPickModel={dialog.setModel}
-              onPickCli={dialog.pickCliDefault}
-            />
-          }
+          placeholder={t(look.placeholder)}
+          sizeClass={look.sizeClass}
+          className={look.className}
+          look={look.look}
+          modelPicker={full && modelPicker(false)}
         />
       </div>
 
-      <NewCardDialogControls
-        cwd={dialog.cwd}
-        home={home}
-        backend={dialog.backend}
-        effort={dialog.effort}
-        permissionMode={dialog.permissionMode}
-        onChooseFolder={dialog.chooseFolder}
-        onPickEffort={dialog.setEffort}
-        onPickMode={dialog.pickMode}
-        isolate={{
-          on: dialog.isolated,
-          suggest: suggestIsolate(alsoHere.length, dialog.promptLength),
-          branch: dialog.branch,
-          onSet: dialog.setIsolated,
-          onBranch: dialog.pickBranch,
-        }}
-        agent={{ value: dialog.agent, onPick: dialog.setAgent, onManage: onManageAgents }}
-      />
+      <DialogControls shown={full} dialog={dialog} host={host} home={home} busyHere={alsoHere.length} onManageAgents={onManageAgents} />
 
       <NewCardDialogFooter
         error={dialog.error}
@@ -168,11 +181,11 @@ export default function NewCardDialog({
         startBtn={startBtn}
         waitsUntil={gate?.at}
         waitsFor={gate ? gateNote(gate, modelLabel(dialog.model)) : undefined}
+        canBacklog={host.local || canBacklog(dialog.cwd)}
+        minimal={!full}
         onSubmit={(start) => void submit(start, false)}
       />
-      {/* The board's footer sits under this dialog, so its folder and plan limits show here instead. */}
-      <StatusStrip cwd={dialog.cwd} backend={dialog.backend}
-        className="shrink-0 border-t border-line px-5 py-1.5" />
+      <DialogStatus shown={full} host={host} cwd={dialog.cwd} backend={dialog.backend} />
     </aside>
   );
 }

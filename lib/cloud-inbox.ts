@@ -16,8 +16,8 @@
 // a nudge: what runs is always read back from the table, never taken from the event.
 import type { RealtimeChannel, SupabaseClient } from "@supabase/supabase-js";
 import { accountClient } from "./account";
-import { macDispatch } from "./cloud-inbox-cards";
-import { beatDesktopWorker, desktopStatus } from "./desktop-worker";
+import { macDispatch, webStartMode } from "./cloud-inbox-cards";
+import { beatDesktopWorker, desktopStatus, publishStartMode } from "./desktop-worker";
 import { drainDeviceCalls } from "./device-calls";
 import { deviceId } from "./device-id";
 import { globalSingleton } from "./global-singleton";
@@ -57,7 +57,11 @@ async function connect(): Promise<Connection | null> {
 // check, as the account the check found: no presence, so every tick writes the row, and never an offline on the way out.
 const beat = (client: SupabaseClient, uid: string) =>
   createBeat({
-    heartbeat: (status) => beatDesktopWorker(client, uid, status),
+    // Then the mode a web thread with none named starts in here, for weft.zip's New thread dialog (sent when it changes).
+    heartbeat: async (status) => {
+      await beatDesktopWorker(client, uid, status);
+      await publishStartMode(client, await webStartMode());
+    },
     status: desktopStatus,
     // Keeps the leases of the commands this Mac is running (lib/host/lease.ts).
     renew: () => inbox().renew(sessionLine(client, uid, deviceId(), warn)),

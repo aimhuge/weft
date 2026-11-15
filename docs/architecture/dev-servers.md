@@ -128,6 +128,54 @@ Built 2026-11-02 (migration `20261102190000_worker_tunnels.sql`, not applied). `
   `electron/secret-env.cjs` on its stdin, which redacts them from the log
   ([project-hosts.md](project-hosts.md#the-vault-on-a-worker-t2-as-built)).
 
+## Only through the tracker
+
+A Bash guard (`lib/devserver-guard.ts`, [thread-guards.md](thread-guards.md#dev-server-guard)) turns away a dev server a
+thread sends to the background from its own shell, and points at `mcp__devservers__start` with the command, folder and
+url filled in. On 2026-11-15 three dev servers threads had started that way (blastcp :4002 at 7.9 GB, plain-dharma :8008
+at 5.3 GB and two days old, groovenfill :8080 at 5.1 GB) held about 18 GB, mostly swapped out, and none had a Services row.
+
+## Idle stop
+
+`lib/dev-idle-loop.ts` checks once a minute (`startDevIdle`, started with the server's background work in `lib/copilot.ts`).
+
+- **Cost.** One `netstat -anv -p tcp` (~5 ms: every TCP socket with its process) and the drawer's own `ps` (~10 ms); an
+  `lsof -d cwd` only for a listener seen for the first time (`idleState.cwds` caches it by pid). No `top`.
+- **Active** (`lib/dev-traffic.ts` `hasVisitor`): a socket established to one of the server's listening ports whose
+  other end isn't Weft's own server. Each localhost connection shows twice in netstat, so the client's end names who
+  asked: Weft's status probes (each Services refresh, the review panel's poll, `mcp__devservers__start`'s wait) don't
+  count, the pane or a browser showing the app does (its HMR socket stays open while the page is). A turn on the run's
+  card, or on any card working in its folder, counts too. CPU time doesn't: a probe's render looks like a visit.
+- **Idle** (`lib/dev-idle.ts` `track`): 30 minutes (`IDLE_MS`) with neither. A run Weft started is stopped with
+  `idleStop` (`lib/devserver.ts`): its process group gets SIGTERM, but the run stays in `runs` marked `idleStopped`, so
+  the drawer lists it as stopped with Start, and it comes back on demand: `mcp__devservers__start` (`findDev` skips
+  ended runs; `startDev` doesn't reuse an `idleStopped` one), the review tour's `dev.start` (its url no longer answers,
+  so it starts the plan's command), the drawer's Start (`restartDev`).
+- **No evidence, no stop**: if netstat reads nothing, the tick does nothing.
+
+## Untracked servers
+
+`lib/dev-untracked.ts` `findUntracked` lists dev servers Weft didn't start: a process listening on a port whose folder is
+one of the board's and whose launch chain names a dev server (`next-server`, `next dev`, vite, `expo start`, astro,
+`pnpm dev`, …). From the listener it climbs to the launcher (node, a package manager, an npm script's `sh -c`), stopping
+before an interactive shell, a thread's CLI, a multiplexer, launchd or Weft; that root and everything under it is the
+server. Weft's own server is never listed: not its pids (`weftProcess()`), not a next-server in its folder on its port.
+
+- They are Services rows (`id: "untracked:<root pid>"`, kind `other`, `untracked: true`, meta "untracked · app · 2h").
+- Idle ones aren't stopped at once (`plan`): the row gets `stopAt` (90 s, `GRACE_MS`) and reads "idle · stops in 62s" with
+  **Keep**, and the board shows a toast (`lib/use-idle-stop-toast.ts`, through `RailContext.toast`) whose **Undo** keeps
+  it: `POST /api/services { action: "keep", id }` → `keep()` in `lib/dev-idle-state.ts`, for as long as that process lives.
+  The closed drawer still polls every 30 s, so the toast lands inside the grace.
+- Stopping is `terminate` (`lib/services-kill.ts`): SIGTERM to the tree, children first, SIGKILL after the grace.
+
+## Real memory
+
+The drawer's memory number for a dev server is its footprint (`lib/dev-footprint.ts`): macOS's phys_footprint as
+`top -l 1 -stats pid,mem` reads it, RAM plus compressed plus swapped, summed over the server's processes. ps's RSS
+leaves a swapped-out server looking small. `top` costs ~0.4 s, so only an open drawer asks (`GET /api/services?footprint=1`),
+for every pid in one call, reused for 15 s. Over 3 GB (`HEAVY_KB`) the number is red; its tooltip says which measure it is.
+Idle state is folded into the row's second line ("idle 12m", "stopped after 30 idle min"), no new chrome.
+
 ## Stopping one task
 
 Separately, every running row in the task strip has a ■ Stop (`app/api/cards/[id]/tasks/[taskId]/stop` →
@@ -138,7 +186,9 @@ task with no CLI left to ask is marked stopped directly.
 
 - A process that daemonizes (double-forks to PID 1) leaves Weft's tree and the drawer.
 - Runs live in the Next server's memory: a Weft restart stops them (as before), and the list starts empty.
-- Codex threads reach the tools over HTTP like the other MCP servers, but nothing stops a Codex thread from
-  starting a server in its own shell.
+- Codex and Goose threads run the same Bash guard through Weft's guard route, but a backgrounding form the shell
+  parser can't see (a script file that backgrounds a server, say) still slips past; the idle check then finds it as
+  untracked.
+- A forgotten browser tab with the app open keeps its HMR socket up, so its server never reads idle.
 - The Stop button on the thread still kills background tasks with the turn; declaring the SDK's
   `perTaskStopAffordance` would spare them now that each has its own Stop.

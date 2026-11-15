@@ -1,4 +1,4 @@
-import { agentLabel, agentOf, BUILT_IN_AGENTS, type AgentInfo, type ThreadAgent } from "./agents";
+import { agentLabel, agentOf, BUILT_IN_AGENTS, isBuiltIn, type AgentInfo, type ThreadAgent } from "./agents";
 import { isLive } from "./format";
 import { permissionOptions, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "./types";
 import { BACKENDS } from "./new-thread";
@@ -162,17 +162,22 @@ function switchItems(card: Card, live: boolean): MenuItem[] {
   }));
 }
 
-// Each agent's key, by its place in the list: Shift+W for Builder, W for Copywriter, then ⌥1 to ⌥9 for the ones you made.
-function agentKey(index: number): string | undefined {
-  if (index < 2) return index === 0 ? "Shift+W" : "W";
-  return index <= 10 ? `Alt+${index - 1}` : undefined;
+// Each agent's key: a letter for each built-in, and ⌥1 to ⌥9 for the ones you made (and your team's), in order, so a
+// new built-in never moves the keys you've learned for yours.
+const BUILT_IN_KEYS: Record<string, string> = { builder: "Shift+W", copywriter: "W", researcher: "Shift+R" };
+
+function agentKey(agents: AgentInfo[], index: number): string | undefined {
+  const id = agents[index]?.id ?? "";
+  if (isBuiltIn(id)) return BUILT_IN_KEYS[id];
+  const n = agents.slice(0, index).filter((a) => !isBuiltIn(a.id)).length + 1;
+  return n <= 9 ? `Alt+${n}` : undefined;
 }
 
 // "Agent: <name>", ticked on the card's own: who the thread is (lib/agents.ts). A switch ends its CLI, so not mid-turn.
 function agentItems(card: Card, live: boolean, agents: AgentInfo[]): MenuItem[] {
   const current = agentOf(card.agent, agents).id;
   return agents.map((agent, i) => {
-    const key = agentKey(i);
+    const key = agentKey(agents, i);
     return {
       id: `agent:${agent.id}`,
       label: `Agent: ${agentLabel(agent)}`,

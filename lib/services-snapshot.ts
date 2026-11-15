@@ -2,11 +2,13 @@ import { execFile } from "node:child_process";
 import os from "node:os";
 import { promisify } from "node:util";
 import { BACKEND_LABELS, type MachineInfo, type ServiceEntry } from "./types";
+import { idleState } from "./dev-idle-state";
+import { footprints } from "./dev-footprint";
 import { runs } from "./devserver";
 import { listDev } from "./devserver-list";
 import { sessions, spares } from "./runner-state";
 import { getCard } from "./store";
-import { buildServices, parseProcs, sortServices, type Known } from "./services";
+import { buildServices, parseProcs, shortCommand, sortServices, type Known, type Proc } from "./services";
 
 // GET /api/services: the process tree under Weft (lib/services.ts), named from what this server
 // started (thread CLIs by card, dev servers by run), plus the dev servers that aren't running right
@@ -59,7 +61,7 @@ export function knownPids(): { known: Map<number, Known>; bySession: Map<string,
   return { known, bySession };
 }
 
-export async function listServices(): Promise<ServiceEntry[]> {
+export async function listServices(footprint = false): Promise<ServiceEntry[]> {
   const now = Date.now();
   const [procs, dev] = await Promise.all([readProcs(), listDev()]);
   const services = buildServices(procs, { self: process.pid, ...knownPids(), now });
@@ -73,7 +75,51 @@ export async function listServices(): Promise<ServiceEntry[]> {
     const live = byId.get(`dev:${d.cardId}`);
     // A live run takes the probe's state ("starting" until its url answers).
     if (live) live.state = d.state;
-    else extra.push({ id: `dev:${d.cardId}`, kind: "dev", label: d.command, cardId: d.cardId, cwd: d.cwd, state: d.state, cpu: 0, memKb: 0, startedAt: d.startedAt, procs: [], ...(d.title && { title: d.title }), ...(d.url && { url: d.url }) });
+    else extra.push({ id: `dev:${d.cardId}`, kind: "dev", label: d.command, cardId: d.cardId, cwd: d.cwd, state: d.state, cpu: 0, memKb: 0, startedAt: d.startedAt, procs: [], ...(d.title && { title: d.title }), ...(d.url && { url: d.url }), ...(runs.get(d.cardId)?.idleStopped && { idleStopped: true as const }) });
   }
-  return sortServices([...services, ...extra]);
+  const all = [...services, ...extra, ...untrackedEntries(procs, now)];
+  for (const s of all) markIdle(s);
+  if (footprint) await addFootprints(all);
+  return sortServices(all);
+}
+
+// When a dev server last had a visitor or a turn, from the idle check (lib/dev-idle-loop.ts).
+function markIdle(s: ServiceEntry) {
+  const key = s.untracked ? s.id : s.kind === "dev" ? s.id.slice(4) : undefined;
+  const at = key ? idleState.activeAt.get(key) : undefined;
+  if (at !== undefined && s.state === "running") s.activeAt = at;
+}
+
+// Dev servers Weft didn't start, listening in a board folder (lib/dev-untracked.ts), with their processes from this ps.
+export function untrackedEntries(procs: readonly Proc[], now: number): ServiceEntry[] {
+  return idleState.untracked.map((u) => {
+    const mine = procs.filter((p) => u.pids.includes(p.pid));
+    const stopAt = idleState.pending.get(u.key)?.stopAt;
+    return {
+      id: u.key,
+      kind: "other",
+      label: shortCommand(u.command),
+      cwd: u.cwd,
+      ...(u.ports[0] && { url: `http://localhost:${u.ports[0]}` }),
+      state: "running",
+      cpu: Math.round(mine.reduce((n, p) => n + p.cpu, 0) * 10) / 10,
+      memKb: mine.reduce((n, p) => n + p.memKb, 0),
+      startedAt: now - elapsedOf(procs, u.root) * 1000,
+      procs: mine.map(({ pid, ppid, cpu, memKb, command }) => ({ pid, ppid, cpu, memKb, command })),
+      untracked: true,
+      ...(stopAt && { stopAt }),
+    };
+  });
+}
+
+const elapsedOf = (procs: readonly Proc[], pid: number) => procs.find((p) => p.pid === pid)?.elapsed ?? 0;
+
+// Each live dev server's real memory, summed over its processes (lib/dev-footprint.ts).
+async function addFootprints(all: ServiceEntry[]) {
+  const devs = all.filter((s) => (s.kind === "dev" || s.untracked) && s.procs.length);
+  const kb = await footprints(devs.flatMap((s) => s.procs.map((p) => p.pid)));
+  for (const s of devs) {
+    const sum = s.procs.reduce((n, p) => n + (kb.get(p.pid) ?? 0), 0);
+    if (sum) s.footprintKb = sum;
+  }
 }

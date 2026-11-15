@@ -74,6 +74,9 @@ export interface PromptReason {
   holder?: { id: string; title: string; claim: string; emoji?: string; thumb?: string; first?: true };
   // For an outside-folder Bash call: the word that read as a path, with a little of the line around it (lib/folder-guard.ts).
   match?: { before: string; token: string; after: string };
+  // For a classifier block in a skill's folder or a settings file: what allowing it grants the card from now on,
+  // as the Allow button's words ("Allow writes to the research skill for this card", lib/write-grant.ts).
+  grant?: string;
 }
 
 // The board's view of a request the runner holds: its fields, without the runner's own (its thread index, its resolver).

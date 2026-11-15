@@ -4,7 +4,9 @@ import { memo, useState } from "react";
 import { FindRevealContext, REVEAL_ALL, useFindReveal } from "@/lib/find-reveal";
 import { formatTokens } from "@/lib/format";
 import { turnId } from "@/lib/show-rail";
+import { foldTurnSteps, type Entry, type TurnRow } from "@/lib/turn-steps";
 import type { ThreadItem } from "@/lib/types";
+import { useSimplePiece } from "@/lib/use-simple-piece";
 import CrashGuard from "./CrashGuard";
 import Icon from "./Icon";
 import Markdown from "./Markdown";
@@ -14,13 +16,12 @@ import SecretAskInput from "./SecretAskInput";
 import ShellLine from "./ShellLine";
 import ToolLine from "./ToolLine";
 import ToolRun from "./ToolRun";
+import TurnSteps from "./TurnSteps";
 
-type ToolCall = Extract<ThreadItem, { kind: "tool" }>;
 type Permission = Extract<ThreadItem, { kind: "permission" }>;
 
-// What a thread shows: a message, or a run of tool calls between messages, folded into one line. key is
-// the index of the first thread item in it, so it stays put as the run grows.
-export type Entry = { kind: "item"; item: ThreadItem; key: number } | { kind: "tools"; calls: (ToolCall | Permission)[]; key: number };
+// What a thread shows: a message, or a run of tool calls between messages, folded into one line (lib/turn-steps.ts).
+export type { Entry };
 
 // Tool calls, and the permission requests they made, fold together. An answered question stays out. A
 // stored thread can hold a null hole, so items are checked one by one; a thread's ask for a key stays
@@ -186,13 +187,18 @@ export function ThreadEntries({
   // full result when its inline result was trimmed (lib/cloud-sync-types.ts).
   cardId: string;
 }) {
+  // Simple mode folds each turn's tool runs into one "Weft ran N steps" line; advanced mode draws them run by run.
+  const foldSteps = useSimplePiece("fold-turn-steps");
+  const rows: TurnRow[] = foldSteps ? foldTurnSteps(entries) : entries;
   return (
     <SecretAskBatchProvider onSend={onSend}>
-      {entries.map((entry) => {
+      {rows.map((entry) => {
         // One message that fails to draw is a chip in its place; the rest of the thread and the reply box stay.
         const row = (
-          <CrashGuard key={entry.key} inline what={entry.kind === "tools" ? "tool run" : "message"} className="self-start">
-            {entry.kind === "tools" ? (
+          <CrashGuard key={entry.key} inline what={entry.kind === "item" ? "message" : "tool run"} className="self-start">
+            {entry.kind === "steps" ? (
+              <TurnSteps runs={entry.runs} live={live} cardId={cardId} />
+            ) : entry.kind === "tools" ? (
               <ToolRun calls={entry.calls} live={live} cardId={cardId} />
             ) : entry.item.kind === "tool" && entry.item.ask ? (
               <SecretAskInput ask={entry.item.ask} onAdded={onSend} />

@@ -48,4 +48,13 @@ describe("parseShell", () => {
     expect(words("echo 'open")).toEqual([["echo", "open"]]);
     expect(words("")).toEqual([]);
   });
+
+  it("marks a command a lone & sends to the background, and a ( … ) & group's last one", () => {
+    const bg = (line: string) => parseShell(line).commands.map((c) => c.background === true);
+    expect(bg("pnpm dev & echo hi")).toEqual([true, false]);
+    expect(bg("(cd web; pnpm dev) &")).toEqual([false, true]);
+    expect(bg("a && b")).toEqual([false, false]);
+    expect(bg("a 2>&1 &> log")).toEqual([false]);
+    expect(bg("& a")).toEqual([false]);
+  });
 });
