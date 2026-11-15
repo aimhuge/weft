@@ -1264,7 +1264,8 @@ four characters showing.
   A card that used secrets has them swapped for `‹NAME›` in every tool result Weft stores or indexes.
 - **The 🔐 drawer is for using secrets; Settings → Secrets is for managing them.** The drawer shows each vault's
   secrets with + Add, one status line ("Shared with AimHuge · key v2", "On this Mac only · Share…", "1 Mac asks to
-  join · Review"), the ▲ Vercel line with Pull and Push, and the To fill in list. ⚙ or the status line opens Settings →
+  join · Review", "Shared with AimHuge · 3 only on this Mac · Push" for values a join left on this Mac alone, each marked
+  "this Mac" and pushed to the team with one Touch ID), the ▲ Vercel line with Pull and Push, and the To fill in list. ⚙ or the status line opens Settings →
   Secrets on that vault: sharing, Ask to join, approving Macs, the recovery key, Import…, Locate…, .env.local, the
   event log and the Keychain log.
 - **Provider drawers use the token you already keep in 🔐.** With no token saved, the ▲ Vercel, Supabase and

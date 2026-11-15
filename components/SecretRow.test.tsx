@@ -109,3 +109,10 @@ describe("SecretRow", () => {
     expect(screen.getByRole("button", { name: "Reveal API_KEY" })).toBeInTheDocument();
   });
 });
+
+describe("a value on this Mac only", () => {
+  it("carries a small mark that says the team's vault has none", () => {
+    render(<SecretRow secret={secret({ localOnly: true })} value={undefined} spread={false} onAct={vi.fn()} onMenu={vi.fn()} />);
+    expect(screen.getByText("this Mac").getAttribute("title")).toMatch(/your team's vault has no value for it/);
+  });
+});

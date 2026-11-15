@@ -18,6 +18,7 @@ const { registerVault } = require("./vault-ipc.cjs");
 const { createVaultSync } = require("./vault-sync.cjs");
 const { writeValue } = require("./vault-conflict.cjs");
 const { createManagedEnv } = require("./vault-managed-env.cjs");
+const { pushLocalSteps } = require("./vault-push-local.cjs");
 const { createSharedApi, sharedHandlers } = require("./vault-shared-api.cjs");
 const { readLocalVault, readVaultFile } = require("./vault-local.cjs");
 const { show: showRecovery, recoveryStatus } = require("./vault-recovery.cjs");
@@ -89,7 +90,8 @@ function createVault({ dataDir, safeStorage, sodium, prompt, clipboard, run = gi
       const vault = await readLocalVault({ dir: vaultDir, id, device, sodium });
       return { ...vault, shared: Boolean(sharedBlock({ dir: vaultDir, id })) };
     };
-    return createSharedApi({ readVault, readServerVault, readRepoVault, adopt, device, sodium, sync, prompt });
+    // Push's steps: this Mac's values the team's vault has none for (electron/vault-push-local.cjs), after the API's Touch ID.
+    return createSharedApi({ readVault, readServerVault, readRepoVault, adopt, ...pushLocalSteps({ idOf, storeReady, log, onChange }), device, sodium, sync, prompt });
   }
 
   // Linked repos' chores after each overview: ask to join, seal to approved Macs, tell an admin who's waiting.

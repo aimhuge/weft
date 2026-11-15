@@ -73,6 +73,11 @@ function createVaultStore({ dir, device, sodium, now = Date.now, sync = null, on
     pull: (id) => (isShared(id) ? shared.pull(id) : Promise.resolve(null)),
     adopt: (id, label, grant, value) => shared.adopt(id, label, grant, value),
     queued: (id) => (isShared(id) ? sync.queued(id) : 0),
+    // A shared vault's values the server has no value for, and Push for them (electron/vault-store-shared.cjs).
+    /** @type {(id: string) => { name: string, environment: string }[]} */
+    localOnly: (id) => (isShared(id) ? shared.localOnly(id).map((e) => ({ name: e.name, environment: e.environment })) : []),
+    /** @type {(id: string, picked: { name: string, environment: string }[]) => Promise<{ pushed: { name: string, environment: string }[], kept: { name: string, environment: string }[], queued: number }>} */
+    pushLocal: (id, picked) => shared.pushLocal(id, picked),
 
     exists: (id) => fs.existsSync(fileOf(id)),
 
@@ -83,9 +88,11 @@ function createVaultStore({ dir, device, sodium, now = Date.now, sync = null, on
     list(id) {
       const vault = read(id);
       if (!vault) return [];
+      // localOnly: a shared vault's value the server has none for (the drawer's mark and Push).
+      const stranded = new Set(isShared(id) ? shared.localOnly(id, vault) : []);
       return vault.secrets.map((s) => {
         const missing = !s.ciphertext;
-        return { name: s.name, environment: s.environment, missing, tail: missing ? "" : tailOf(valueOf(vault, s)), updatedAt: s.updatedAt, source: s.source, hint: s.hint };
+        return { name: s.name, environment: s.environment, missing, tail: missing ? "" : tailOf(valueOf(vault, s)), updatedAt: s.updatedAt, source: s.source, hint: s.hint, ...(stranded.has(s) && { localOnly: true }) };
       });
     },
 

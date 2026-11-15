@@ -3,6 +3,9 @@
 // (electron/vault-sync.cjs), and the shadow takes the server's row on success, the server's current row on a
 // conflict, or the local entry when the write was queued offline. A pull writes the server's changes in.
 
+const { SERVER_NAME } = require("./vault-share.cjs");
+const { rowKey } = require("./vault-sync-files.cjs");
+
 /** @typedef {import("./vault-store.cjs").Entry} Entry */
 /** @typedef {import("./vault-store.cjs").Vault} Vault */
 
@@ -66,7 +69,8 @@ function createSharedOps({ sync, environments, device, sodium, now, read, write,
 
   // This Mac joins a vault the team already shares: the team's key replaces the one the local file was
   // made with. A local vault has a key of its own, so a value already here is decrypted and sealed
-  // again under the team's key rather than lost. It stays on this Mac until someone writes it.
+  // again under the team's key rather than lost. It stays on this Mac only (localOnly) until the user
+  // presses Push (pushLocal) or someone writes it: joining a team's vault doesn't hand your values to the team.
   async function adopt(id, label, { key, keyVersion, wrappedKey }, shared) {
     const old = read(id);
     const secrets = (old?.secrets ?? []).map((entry) => {
@@ -128,7 +132,40 @@ function createSharedOps({ sync, environments, device, sodium, now, read, write,
     return !pushed.conflict;
   }
 
-  return { pull, set, remove, adopt };
+  // The values this Mac holds that the server has none for: no row, a blank row, no queued write. Stranded by a
+  // join (adopt) until pushed. Lower-case names stay local by design (vault_secrets takes upper case only).
+  /** @returns {Entry[]} */
+  function localOnly(id, vault = read(id)) {
+    const held = sync.held(id);
+    return (vault?.secrets ?? []).filter((e) => e.ciphertext && SERVER_NAME.test(e.name) && !held.has(rowKey(e.name, e.environment)));
+  }
+
+  // Push: the picked local-only values go up through set's path, one write and one event-log line each. Only rows
+  // the server has no value for: a row a teammate filled since (a conflict) keeps theirs, here as on the server, like
+  // any lost write. A teammate's new blank loses nothing: this Mac's value stays, still to push.
+  /** @param {{ name: string, environment: string }[]} picked */
+  async function pushLocal(id, picked) {
+    await pull(id);
+    const vault = read(id);
+    const want = new Set(picked.map((p) => rowKey(p.name, p.environment)));
+    const entries = localOnly(id, vault).filter((e) => want.has(rowKey(e.name, e.environment)));
+    const result = { pushed: /** @type {{ name: string, environment: string }[]} */ ([]), kept: /** @type {{ name: string, environment: string }[]} */ ([]), queued: 0 };
+    if (!entries.length) return result;
+    const key = keyOf(vault);
+    for (const e of entries) {
+      const value = sodium.decrypt(e, key, sodium.aad(id, e.name, e.environment, e.keyVersion));
+      const one = { conflicts: /** @type {{ current: Record<string, any> | null }[]} */ ([]), queued: 0 };
+      await pushOne(id, vault, key, { name: e.name, environment: e.environment, value, source: e.source }, one);
+      const lost = one.conflicts[0];
+      if (lost && !lost.current?.ciphertext) put(vault, e);
+      (lost ? result.kept : result.pushed).push({ name: e.name, environment: e.environment });
+      result.queued += one.queued;
+    }
+    write(vault);
+    return result;
+  }
+
+  return { pull, set, remove, adopt, localOnly, pushLocal };
 }
 
 module.exports = { createSharedOps, entryOf, mergeGrants };

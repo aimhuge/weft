@@ -53,6 +53,7 @@ export function SecretRow({
         <span className="min-w-0 flex-1 font-mono text-ink [overflow-wrap:anywhere]" title={s.missing ? blankTitle(s) : s.source ? `${s.name} · from ${s.source}` : s.name}>
           <WrapName name={s.name} />
         </span>
+        <LocalOnlyMark secret={s} />
         {s.missing ? note && <Tag>{note}</Tag> : <span className="font-mono text-[10.5px] text-faint group-hover:hidden">{masked(s)}</span>}
         {left !== null ? (
           <CountdownButton
@@ -119,6 +120,16 @@ export function SecretRow({
         </div>
       )}
     </div>
+  );
+}
+
+// A shared vault's value the team's vault has none for: a small mark, not a row (lib/vault-status.ts has the count and Push).
+function LocalOnlyMark({ secret }: { secret: VaultSecret }) {
+  if (!secret.localOnly) return null;
+  return (
+    <span title="Only on this Mac: your team's vault has no value for it. Push on the line under the vault's name shares it." className="shrink-0 text-[10px] text-accent group-hover:hidden">
+      this Mac
+    </span>
   );
 }
 

@@ -9,6 +9,7 @@
 //   drain(id)       the offline queue, in order, stopping at a conflict with the queue left intact
 //   resolve(id, k)  the hand-resolve of a queued conflict: keep mine (k true) or take theirs
 //   subscribe(id)   Realtime on the vault's rows, events and grants; close() ends every subscription
+//   held(id)        the rows the server holds a value for, or a write is queued for: what isn't is on this Mac only
 // id is the local vault id (github:owner/name); the server's uuid comes from <hash>.shared.json.
 const { createSyncFiles, rowKey } = require("./vault-sync-files.cjs");
 const { server } = require("./vault-sync-server.cjs");
@@ -45,12 +46,16 @@ function createVaultSync({ accountClient, supabase, dir, now = Date.now }) {
     return st;
   }
 
-  // What the server now holds for a row, into the sync file's map.
+  // What the server now holds for a row, into the sync file's map. blank: the row has no value yet, so a value this
+  // Mac holds for it is on this Mac only (held()).
   function record(st, op, row) {
     const key = rowKey(op.name, op.environment);
-    if (row) st.rows[key] = { rowId: row.id, rowVersion: Number(row.row_version) };
+    if (row) st.rows[key] = { rowId: row.id, rowVersion: Number(row.row_version), blank: Boolean(row.is_blank) };
     else delete st.rows[key];
   }
+
+  // A sync file written before rows carried `blank`: those rows are read once more, so held() can tell.
+  const unsure = (st, key) => Boolean(st.rows[key]) && st.rows[key].blank === undefined;
 
   // One write against the server, recorded and logged on success. Throws OfflineError with no network.
   async function send(id, st, op, expected) {
@@ -69,12 +74,15 @@ function createVaultSync({ accountClient, supabase, dir, now = Date.now }) {
     try {
       const { serverVersion, keyVersion } = await server.version(db(), st.vaultId);
       const grants = await server.grants(db(), st.vaultId);
-      if (serverVersion === st.serverVersion) return { serverVersion, keyVersion, rows: [], removed: [], grants };
+      if (serverVersion === st.serverVersion && !Object.keys(st.rows).some((k) => unsure(st, k))) return { serverVersion, keyVersion, rows: [], removed: [], grants };
       // A name with a queued write keeps the user's value in the shadow until the queue drains.
       const pending = new Set(files.queue(id).map((e) => rowKey(e.name, e.environment)));
       const keys = await server.keys(db(), st.vaultId);
       const live = new Set(keys.map((k) => rowKey(k.name, k.environment)));
-      const changed = keys.filter((k) => !pending.has(rowKey(k.name, k.environment)) && st.rows[rowKey(k.name, k.environment)]?.rowVersion !== Number(k.row_version));
+      const changed = keys.filter((k) => {
+        const key = rowKey(k.name, k.environment);
+        return !pending.has(key) && (st.rows[key]?.rowVersion !== Number(k.row_version) || unsure(st, key));
+      });
       const rows = await server.rows(db(), st.vaultId, changed.map((k) => k.id));
       const removed = Object.keys(st.rows).filter((k) => !live.has(k) && !pending.has(k)).map((k) => ({ environment: k.split("\n")[0], name: k.split("\n")[1] }));
       for (const row of rows) record(st, row, row);
@@ -123,6 +131,14 @@ function createVaultSync({ accountClient, supabase, dir, now = Date.now }) {
     markShared: files.markShared,
     // How many writes wait to go out: the drawer's "queued" chip.
     queued: (id) => files.queue(id).length,
+    // The rows the server has a value for, and the ones a queued write will give one: a value this Mac holds for any
+    // other row is on this Mac only (electron/vault-store-shared.cjs `localOnly`). Keys are rowKey(name, environment).
+    /** @returns {Set<string>} */
+    held(id) {
+      const st = need(id);
+      const rows = Object.entries(st.rows).filter(([, r]) => !r.blank).map(([k]) => k);
+      return new Set([...rows, ...files.queue(id).filter((e) => e.op === "set").map((e) => rowKey(e.name, e.environment))]);
+    },
 
     pull,
     drain,

@@ -14,7 +14,7 @@ import { vaultEventsBridge } from "@/lib/vault-events";
 import { SettingsCard } from "./SettingsLayout";
 import VaultEventsList from "./VaultEventsList";
 import { VaultRecoveryButton } from "./VaultRecoveryButton";
-import { DeviceRequests, JoinHint, JoinOffer, ShareOffer, SharedBadge } from "./VaultShared";
+import { DeviceRequests, JoinHint, JoinOffer, LocalOnlyOffer, ShareOffer, SharedBadge } from "./VaultShared";
 
 const BUTTON = "rounded-md border border-line-strong px-2.5 py-1 text-[12px] text-ink hover:bg-sunken disabled:opacity-50";
 const ROW = "flex flex-wrap items-center gap-2 border-t border-line pt-2.5";
@@ -123,8 +123,9 @@ function Sharing({ vault: v, repo, bridge, orgs, onChanged, notify, startOpen }:
           />
         </>
       ) : null}
-      {v.joinHint || v.join || v.requests ? (
+      {v.joinHint || v.join || v.requests || v.localOnly ? (
         <div className="flex basis-full flex-col gap-1.5">
+          {v.shared && v.localOnly ? <LocalOnlyOffer vault={v} bridge={bridge} onDone={onChanged} notify={notify} /> : null}
           {v.joinHint ? <JoinHint hint={v.joinHint} onDone={onChanged} notify={notify} /> : null}
           {v.join ? <JoinOffer folder={v.folder} join={v.join} bridge={bridge} onDone={onChanged} notify={notify} /> : null}
           {v.requests ? <DeviceRequests requests={v.requests} bridge={bridge} onDone={onChanged} notify={notify} /> : null}

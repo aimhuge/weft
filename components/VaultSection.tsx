@@ -80,7 +80,7 @@ export function VaultSection({
           <Icon name="sliders" size={12} />
         </button>
       </div>
-      <VaultStatusLine vault={v} />
+      <VaultStatusLine vault={v} notify={notify} />
       <VaultVercel folder={v.folder} changed={v.secrets.map((s) => `${secretKey(s)}${s.missing ? "" : s.updatedAt}`).join("\n")} notify={notify} />
       {editing && !editing.fixed && form}
       {v.nudge && (

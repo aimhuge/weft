@@ -164,4 +164,4 @@ async function importSecrets({ accountClient, vaultId, secrets, keyVersion, user
   return rows.length;
 }
 
-module.exports = { grantPendingDevice, shareLocalVault, readPending, importSecrets, actorId, existingVault, holdsGrant };
+module.exports = { SERVER_NAME, grantPendingDevice, shareLocalVault, readPending, importSecrets, actorId, existingVault, holdsGrant };

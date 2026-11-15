@@ -38,6 +38,8 @@ export interface VaultSecret {
   source?: string;
   // A blank's note on where to get its value, from the thread that added it.
   hint?: string;
+  // A shared vault's value the team's vault has none for: it is on this Mac only until Push (docs/architecture/teams-vault.md).
+  localOnly?: boolean;
 }
 
 export interface VaultSummary {
@@ -55,6 +57,8 @@ export interface VaultSummary {
   managed?: boolean;
   // Set when the vault is shared with a workspace (docs/architecture/teams-vault.md); undefined for a local one.
   shared?: VaultShared;
+  // How many of a shared vault's values are on this Mac only (the secrets flagged localOnly). Missing when none.
+  localOnly?: number;
   // Set when the workspace already shares this repo and this Mac isn't in it yet.
   join?: VaultJoin;
   // Set when there's no join to offer and the drawer should say why (signed out, nothing shared, lookup failed).
@@ -132,6 +136,8 @@ export interface VaultBridge extends KeychainBridge {
   share?(folder: string, orgId: string, repo: string, label?: string): Promise<{ vaultId: string; repo: string; keyVersion: number; orgId: string; keptLocal?: string[] }>;
   // A team linked this repo: share this Mac's vault for it with the team, after Touch ID. Missing in older shells.
   shareRepo?(orgId: string, orgName: string, repo: string): Promise<RepoShareResult>;
+  // Push: a shared vault's values on this Mac only go to the team, after one Touch ID. Missing in older shells.
+  pushLocal?(folder: string): Promise<PushLocalResult>;
   // A teammate's Mac joining a shared vault: this Mac asks, an admin approves or declines, this Mac opens it.
   requestJoin?(vaultId: string): Promise<{ pendingId: string }>;
   deviceGrant?(pendingId: string): Promise<{ denied?: boolean }>;
@@ -147,6 +153,10 @@ export interface DeviceBridge {
   standing?: () => Promise<DeviceStanding>;
   readd?: () => Promise<{ denied?: boolean; resealed?: number }>;
 }
+
+// What Push answers: the names that went up, the ones a teammate filled first (theirs kept), and how many wait offline.
+type NameEnv = { name: string; environment: VaultEnvironment };
+export type PushLocalResult = { denied: true } | { pushed: NameEnv[]; kept: NameEnv[]; queued: number };
 
 export type WriteBackResult = { written: true; file: string; gitignoreAdded: boolean } | { refused: string };
 

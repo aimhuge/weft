@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { offersShare, vaultStatus } from "./vault-status";
+import { offersShare, pushedText, vaultStatus } from "./vault-status";
 import type { VaultSummary } from "./vault-view";
 
 const v = (over: Partial<VaultSummary> = {}): VaultSummary => ({ id: "github:o/web", label: "o/web", folder: "/w", folders: ["/w"], secrets: [], nudge: null, ...over });
@@ -46,5 +46,21 @@ describe("vaultStatus", () => {
     expect(vaultStatus(v({ secrets: [value] }))).toEqual({ text: "On this Mac only", action: "Share…", tone: "quiet" });
     expect(vaultStatus(v())).toBeNull();
     expect(vaultStatus(v({ id: "folder:/w", secrets: [value] }))).toBeNull();
+  });
+
+  it("counts a shared vault's values on this Mac only, with Push in place of the key version", () => {
+    expect(vaultStatus(v({ shared, localOnly: 3 }))).toEqual({ text: "Shared with Acme · 3 only on this Mac", action: "Push", tone: "accent", push: true });
+  });
+});
+
+describe("pushedText", () => {
+  const a = { name: "A", environment: "development" as const };
+  const aProd = { name: "A", environment: "production" as const };
+  const b = { name: "B", environment: "production" as const };
+  it("says what went up, what was queued, and what a teammate filled first", () => {
+    expect(pushedText({ denied: true })).toBeNull();
+    expect(pushedText({ pushed: [], kept: [], queued: 0 })).toBeNull();
+    expect(pushedText({ pushed: [a, aProd], kept: [], queued: 0 })).toBe("Shared with your team: A.");
+    expect(pushedText({ pushed: [a], kept: [b], queued: 1 })).toBe("Queued for your team (offline): A. A teammate filled B first; theirs is kept.");
   });
 });

@@ -20,7 +20,9 @@ function vaultRow({ id, label, folder, store: s, dir, orgs, team, device, nudge,
   const requests = shared && team?.requests.get(shared.vaultId);
   // joinHint: why there's no join to offer (signed out, nothing shared, lookup failed, this Mac revoked).
   const joinHint = joinHintFor({ id, shared, join, reason: team?.reason, secrets, device });
-  return { id, label, folder, folders: [folder], secrets, nudge, managed, ...(shared && { shared }), ...(join && { join }), ...(joinHint && { joinHint }), ...(requests && { requests }), ...(s?.isShared(id) && { queued: s.queued(id) }) };
+  // localOnly: a shared vault's values the server has none for (s.list flags each), the status line's Push.
+  const localOnly = secrets.filter((x) => x.localOnly).length;
+  return { id, label, folder, folders: [folder], secrets, nudge, managed, ...(shared && { shared }), ...(localOnly && { localOnly }), ...(join && { join }), ...(joinHint && { joinHint }), ...(requests && { requests }), ...(s?.isShared(id) && { queued: s.queued(id) }) };
 }
 
 // A native notification (a teammate's Mac waiting for an admin); clicking it brings Weft to the front.

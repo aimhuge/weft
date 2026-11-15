@@ -2,9 +2,10 @@
 // Secrets"): where the vault stands with the team, and the next step, which Settings → Secrets takes. One line instead
 // of the badge, the share button, the join banner, the asks and the why-no-join hint the drawer used to stack.
 import { DEVICE_HINTS, JOIN_HINTS } from "./vault-shared";
-import type { VaultSummary } from "./vault-view";
+import type { PushLocalResult, VaultSummary } from "./vault-view";
 
-export type VaultStatus = { text: string; action: string | null; tone: "quiet" | "accent" };
+// push: the action is Push (this Mac's values the team's vault has none for), run in place, not in Settings.
+export type VaultStatus = { text: string; action: string | null; tone: "quiet" | "accent"; push?: true };
 
 // A removed or unregistered Mac can't act on anything vaultStatus says, so its standing comes first.
 function deviceStatus(hint: VaultSummary["joinHint"]): VaultStatus | null {
@@ -24,13 +25,30 @@ export function offersShare(v: VaultSummary): boolean {
   return !v.shared && !v.join && !deviceStatus(v.joinHint);
 }
 
+// A shared vault: who with, and the values on this Mac only (stranded by a join) with Push, in place of the key version.
+function sharedStatus(shared: NonNullable<VaultSummary["shared"]>, localOnly: number): VaultStatus {
+  const who = `Shared with ${shared.org.name || "a workspace"}`;
+  if (localOnly) return { text: `${who} · ${localOnly} only on this Mac`, action: "Push", tone: "accent", push: true };
+  return { text: `${who} · key v${shared.keyVersion}`, action: null, tone: "quiet" };
+}
+
+// The toast after Push: what went up, and what a teammate had filled first. null when there's nothing to say.
+export function pushedText(result: PushLocalResult): string | null {
+  if ("denied" in result) return null;
+  const parts: string[] = [];
+  const names = (list: { name: string }[]) => [...new Set(list.map((p) => p.name))].join(", ");
+  if (result.pushed.length) parts.push(`${result.queued ? "Queued for your team (offline)" : "Shared with your team"}: ${names(result.pushed)}.`);
+  if (result.kept.length) parts.push(`A teammate filled ${names(result.kept)} first; theirs is kept.`);
+  return parts.join(" ") || null;
+}
+
 export function vaultStatus(v: VaultSummary): VaultStatus | null {
   const device = deviceStatus(v.joinHint);
   if (device) return device;
   const asking = v.requests?.length ?? 0;
   if (asking) return { text: `${asking} ${asking === 1 ? "Mac asks" : "Macs ask"} to join`, action: "Review", tone: "accent" };
   if (v.join) return joinStatus(v.join);
-  if (v.shared) return { text: `Shared with ${v.shared.org.name || "a workspace"} · key v${v.shared.keyVersion}`, action: null, tone: "quiet" };
+  if (v.shared) return sharedStatus(v.shared, v.localOnly ?? 0);
   if (v.joinHint) return { text: JOIN_HINTS[v.joinHint], action: v.joinHint === "signed-out" ? "Sign in" : null, tone: "quiet" };
   if (v.id.startsWith("github:") && v.secrets.some((s) => !s.missing)) return { text: "On this Mac only", action: "Share…", tone: "quiet" };
   return null;

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { ACCOUNT_EVENT, useAccount } from "@/lib/use-account";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
+import { pushedText } from "@/lib/vault-status";
 import { JOIN_HINTS, keyVersionTitle, sharedLabel, shareTargets, type VaultDeviceRequest, type VaultJoin, type VaultJoinHint, type VaultOrg } from "@/lib/vault-shared";
 import { DeviceStandingLine } from "./DeviceStanding";
 import Icon from "./Icon";
@@ -161,6 +162,38 @@ export function JoinOffer({ folder, join, bridge, onDone, notify }: { folder: st
         <span className="min-w-0 flex-1">{granted ? "An admin approved this Mac." : "Your team shares this vault. This Mac isn't in it yet."}</span>
         <button type="button" disabled={busy} className={ACT} onClick={() => void run(() => (granted ? open(folder, join) : requestJoin(join.vaultId)))}>
           {granted ? "Open shared vault" : "Ask to join"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// A shared vault's values on this Mac only: what Open shared vault leaves behind, since joining doesn't hand your values
+// to the team. Push names them in one Touch ID (electron/vault-shared-api.cjs) and never replaces a teammate's value.
+export function LocalOnlyOffer({ vault, bridge, onDone, notify }: { vault: VaultSummary; bridge: VaultBridge | null; onDone: () => void; notify: (err: unknown) => void }) {
+  const { busy, run } = useBannerAction(onDone, notify);
+  const pushLocal = bridge?.pushLocal?.bind(bridge);
+  const count = vault.localOnly ?? 0;
+  if (!pushLocal || !count) return null;
+  const names = [...new Set(vault.secrets.filter((s) => s.localOnly).map((s) => s.name))].join(", ");
+  return (
+    <div className={BANNER}>
+      <div className="flex items-center gap-1.5">
+        <span className="min-w-0 flex-1" title={names}>
+          {count} {count === 1 ? "value is" : "values are"} only on this Mac; your team&apos;s vault has none for {count === 1 ? "it" : "them"}.
+        </span>
+        <button
+          type="button"
+          disabled={busy}
+          className={ACT}
+          onClick={() =>
+            void run(async () => {
+              const text = pushedText(await pushLocal(vault.folder));
+              if (text) notify(new Error(text));
+            })
+          }
+        >
+          Push to team
         </button>
       </div>
     </div>

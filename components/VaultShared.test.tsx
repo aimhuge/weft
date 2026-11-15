@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { VaultBridge, VaultSummary } from "@/lib/vault-view";
-import { DeviceRequests, JoinHint, JoinOffer, SharedBadge } from "./VaultShared";
+import { DeviceRequests, JoinHint, JoinOffer, LocalOnlyOffer, SharedBadge } from "./VaultShared";
 
 const signIn = vi.fn();
 vi.mock("@/lib/use-account", () => ({ ACCOUNT_EVENT: "weft:account", useAccount: () => ({ waiting: null, signIn }) }));
@@ -91,5 +91,35 @@ describe("SharedBadge", () => {
     const vault = { id: "github:a/b", label: "a/b", folder: "/repo", folders: ["/repo"], secrets: [], nudge: null, shared } as VaultSummary;
     render(<SharedBadge vault={vault} />);
     expect(screen.getByText("Shared with Acme")).toBeTruthy();
+  });
+});
+
+describe("LocalOnlyOffer", () => {
+  const shared = { org: { id: "o1", slug: "acme", name: "Acme" }, vaultId: "v1", keyVersion: 1, serverVersion: 1, recoveryShownAt: null };
+  const value = (name: string) => ({ name, environment: "production" as const, missing: false, tail: "", updatedAt: "", localOnly: true });
+  const v = (localOnly: number): VaultSummary => ({ id: "github:a/b", label: "a/b", folder: "/repo", folders: ["/repo"], secrets: [value("A"), value("B")], nudge: null, shared, localOnly });
+
+  it("offers Push after a join left values here, and reloads once they're up", async () => {
+    const pushLocal = vi.fn(() => Promise.resolve({ pushed: [value("A"), value("B")], kept: [], queued: 0 }));
+    const onDone = vi.fn();
+    const notify = vi.fn();
+    render(<LocalOnlyOffer vault={v(2)} bridge={bridge({ pushLocal })} onDone={onDone} notify={notify} />);
+    expect(screen.getByText(/2 values are only on this Mac/).getAttribute("title")).toBe("A, B");
+    fireEvent.click(screen.getByText("Push to team"));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(notify).toHaveBeenCalledWith(new Error("Shared with your team: A, B."));
+  });
+
+  it("says it of one value, stays quiet on a refusal, and is gone with nothing to push", async () => {
+    const notify = vi.fn();
+    const onDone = vi.fn();
+    render(<LocalOnlyOffer vault={v(1)} bridge={bridge({ pushLocal: vi.fn(() => Promise.resolve({ denied: true as const })) })} onDone={onDone} notify={notify} />);
+    expect(screen.getByText(/1 value is only on this Mac; your team's vault has none for it/)).toBeTruthy();
+    fireEvent.click(screen.getByText("Push to team"));
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(notify).not.toHaveBeenCalled();
+    cleanup();
+    const { container } = render(<LocalOnlyOffer vault={v(0)} bridge={bridge({ pushLocal: vi.fn() })} onDone={vi.fn()} notify={vi.fn()} />);
+    expect(container.innerHTML).toBe("");
   });
 });

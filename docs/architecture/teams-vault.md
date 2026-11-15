@@ -434,7 +434,21 @@ page is now the team's list of machines plus a pointer to the drawer, where a Ma
    `vault_grants`' own insert policy only takes the caller's device, so this function is the only way in.
 4. **The teammate sees "Open shared vault"**, also Touch ID. `adopt` in `electron/vault-store-shared.cjs`
    makes the team's key this Mac's key for the vault. A value already on the Mac is re-encrypted under it and
-   stays, on this Mac only, until someone writes that name. A blank on the server never replaces it.
+   stays, on this Mac only, until the user pushes it or someone writes that name. A blank on the server never replaces
+   it. Opening never uploads it: a teammate joining a team's vault hasn't agreed to hand their own values to the team.
+5. **The Mac says what only it has, and offers Push** (added 2026-11-16, after a MacBook Air kept three production
+   values the other Mac's 📈 Growth app needed, with nothing on either Mac saying so). `localOnly` in
+   `electron/vault-store-shared.cjs` is every upper-case value in the shadow with no server row, a blank server row, and
+   no queued write; `held()` in `electron/vault-sync.cjs` answers which rows the server has a value for, from the sync
+   file's `rows`, which now carry `blank` (a sync file from before is read once more on the next pull). `list()` flags
+   those secrets `localOnly` and the overview counts them (`localOnly` on the summary). The drawer's status line reads
+   "Shared with Acme · 3 only on this Mac · **Push**", each such row carries a small "this Mac" mark, and Settings →
+   Secrets shows "3 values are only on this Mac · **Push to team**" right where Open shared vault was. Push
+   (`vault:push-local`, `pushLocal` in `electron/vault-shared-api.cjs` and `electron/vault-push-local.cjs`) takes one
+   Touch ID naming every name and environment, pulls, and sends each through `set`'s path: one `vault_events` line each,
+   the expected `row_version` of the blank or none. A teammate who filled the row first wins (the toast says so) and a
+   server row with a value is never replaced; offline, the writes queue. The Mac that lacks a value can't know it exists,
+   so nothing changes there.
 
 Names with lower-case letters stay on the sharer's Mac, because `vault_secrets` takes upper case only, and the
 drawer says which.
@@ -687,6 +701,9 @@ The shared-vault changes are additive, not a rewrite:
   bumped on `<date>` by `<actor>`".
 - (Since 2026-11-05 the event log, the recovery key, Share…, Ask to join and the Macs asking sit on the vault's card in
   Settings → Secrets, and the drawer shows one status line for them: secrets.md#the-drawer-and-settings--secrets.)
+- **Values on this Mac only** (2026-11-16): a shared vault's values the server has none for fold into that status line,
+  "Shared with Acme · 3 only on this Mac · Push", in place of the key version, with a small "this Mac" mark on each
+  such row instead of a new row. Push runs in place (one Touch ID), not in Settings (step 5 of "Joining a shared vault").
 - An **Event log tab** (alongside the secrets tab, in the same drawer): the last 100 `vault_events` for
   this vault, in reverse-chronological order. Filtered by what the current user did (default) or "all
   members" (the team's view). The tab is on the drawer, not its own page, so the secret is one click away

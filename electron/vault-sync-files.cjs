@@ -9,7 +9,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 
 /** @typedef {{ orgId: string, vaultId: string, repo: string, keyVersion: number }} Shared */
-/** @typedef {{ vaultId: string, orgId: string, serverVersion: number, rows: Record<string, { rowId: string, rowVersion: number }> }} SyncState */
+/** @typedef {{ vaultId: string, orgId: string, serverVersion: number, rows: Record<string, { rowId: string, rowVersion: number, blank?: boolean }> }} SyncState */
 /** @typedef {{ op: "set" | "remove" | "blank", name: string, environment: string, ciphertext?: string, nonce?: string, keyVersion?: number, hint?: string, expectedRowVersion: number | null, expectedServerVersion: number, chained?: boolean, queuedAt: string }} QueueEntry */
 
 // The same 16 hex characters electron/vault-store.cjs names the vault's file with.

@@ -7,7 +7,7 @@ const { registerVaultEvents } = require("./vault-events-ipc.cjs");
  * @param {{ handle: (channel: string, fn: (event: unknown, ...args: unknown[]) => Promise<unknown>) => void }} ipcMain
  * @param {{ vault: any, isBoard: (sender: unknown) => boolean, board?: () => any, dataDir?: string,
  *   accountClient?: (() => any) | null,
- *   shared?: { grantPending: (opts: any) => Promise<unknown>, declinePending: (opts: any) => Promise<unknown>, requestJoin: (opts: any) => Promise<unknown>, join: (opts: any) => Promise<unknown>, shareLocal: (opts: any) => Promise<unknown>, shareRepo?: (opts: any) => Promise<unknown>, rotate?: (opts: any) => Promise<unknown> } | null }} deps
+ *   shared?: { grantPending: (opts: any) => Promise<unknown>, declinePending: (opts: any) => Promise<unknown>, requestJoin: (opts: any) => Promise<unknown>, join: (opts: any) => Promise<unknown>, shareLocal: (opts: any) => Promise<unknown>, shareRepo?: (opts: any) => Promise<unknown>, pushLocal?: (opts: any) => Promise<unknown>, rotate?: (opts: any) => Promise<unknown> } | null }} deps
  */
 function registerVault(ipcMain, { vault, isBoard, board = null, dataDir = "", accountClient = null, shared = null }) {
   const handle = (channel, fn) =>
@@ -50,6 +50,8 @@ function registerVault(ipcMain, { vault, isBoard, board = null, dataDir = "", ac
     if (shared.shareRepo) {
       handle("vault:share-repo", (orgId, orgName, repo) => shared.shareRepo({ orgId: String(orgId), orgName: orgName ? String(orgName) : undefined, repo: String(repo), accountClient: accountClient() }));
     }
+    // Push: this Mac's values the shared vault has none for, after one Touch ID naming them.
+    if (shared.pushLocal) handle("vault:push-local", (folder) => shared.pushLocal({ folder: String(folder), accountClient: accountClient() }));
     handle("vault:share", (folder, orgId, repo, label) => shared.shareLocal({ folder: String(folder), orgId: String(orgId), repo: String(repo), label: label ? String(label) : undefined, accountClient: accountClient() }));
     // A shared vault's rotate (docs/architecture/teams-vault.md, "Removal and rotation"): the new key
     // is made here, in main, because that is the only place a vault key exists. The plan — sealed

@@ -37,6 +37,8 @@ const VERBS: Record<string, string> = {
   read: "read",
   set: "set",
   "add blank": "added the blank",
+  // Push: values that were on this Mac only, sent to the shared vault (electron/vault-push-local.cjs).
+  push: "shared with the team",
   import: "imported",
   "copy to": "copied",
   remove: "removed",

@@ -10,6 +10,7 @@
 //   join          the teammate's Mac opens the grant and adopts the shared key.
 //   shareRepo     a team linked the repo: share this Mac's vault for it, if there is one (one Touch ID).
 //   sealTrusted   seal the vaults this Mac holds to the team's Macs an admin approved once (no Touch ID).
+//   pushLocal     Push: this Mac's values a shared vault has none for go up, after one Touch ID naming them.
 //
 // The key is read from the vault store, passed to the wrap, and dropped. It is never written to a
 // file, a log, a request or an IPC payload. The server only ever sees the sealed box.
@@ -31,9 +32,11 @@ const { rotateForMember, writeRotate } = require("./vault-rotate.cjs");
  *   device: { id?: string, publicKey: string, privateKey?: string }, sodium?: any, prompt?: (reason: string) => Promise<boolean>,
  *   adopt?: (folder: string, grant: { key: string, keyVersion: number, wrappedKey: string }, shared: { orgId: string, vaultId: string, repo: string, keyVersion: number }) => Promise<unknown>,
  *   readRepoVault?: (repo: string) => Promise<{ id: string, label: string, key: string, keyVersion: number, secrets: Secret[], shared?: boolean } | null>,
+ *   localOnly?: (folder: string) => Promise<{ label: string, entries: { name: string, environment: string }[] }>,
+ *   pushLocal?: (folder: string, picked: { name: string, environment: string }[]) => Promise<{ pushed: { name: string, environment: string }[], kept: { name: string, environment: string }[], queued: number }>,
  *   sync?: any, checkRepo?: (repo: string) => Promise<boolean> }} deps
  */
-function createSharedApi({ readVault, readServerVault, readRepoVault, device, sodium, prompt = async () => true, adopt, sync = null, checkRepo }) {
+function createSharedApi({ readVault, readServerVault, readRepoVault, device, sodium, prompt = async () => true, adopt, localOnly, pushLocal, sync = null, checkRepo }) {
   /**
    * Seal every team vault this Mac holds to the team's Macs an admin approved once (public.trusted_vault_gaps):
    * a new linked project, or a teammate's Mac that hasn't opened this one yet. No Touch ID: the admin's approval was
@@ -176,6 +179,18 @@ function createSharedApi({ readVault, readServerVault, readRepoVault, device, so
     },
 
     /**
+     * Push: the values this Mac holds that the shared vault has none for (stranded by a join) go to the team. One
+     * Touch ID names every name and environment; nothing goes up without it, and a row with a value is never replaced.
+     */
+    /** @param {{ folder: string }} opts */
+    async pushLocal({ folder }) {
+      const { label, entries } = await localOnly(folder);
+      if (!entries.length) return { pushed: [], kept: [], queued: 0 };
+      if (!(await prompt(`share ${pushText(entries)} from ${label} with your team`))) return { denied: true };
+      return pushLocal(folder, entries);
+    },
+
+    /**
      * Rotate every vault a member's machines had a grant on, around those machines
      * (docs/architecture/teams-vault.md, "Removal and rotation").
      *
@@ -200,6 +215,13 @@ function createSharedApi({ readVault, readServerVault, readRepoVault, device, so
   };
 }
 
+// "API_KEY (production), GA4_ID (development, production)": the Touch ID prompt's names, each with its environments.
+function pushText(entries) {
+  const byName = new Map();
+  for (const e of entries) byName.set(e.name, [...(byName.get(e.name) ?? []), e.environment]);
+  return [...byName].map(([name, envs]) => `${name} (${envs.join(", ")})`).join(", ");
+}
+
 // The board's shared-vault calls, each on a fresh API: the device has to be read as the signed-in user.
 function sharedHandlers(shared, token) {
   const call = (name, extra = () => ({})) => async (opts) => (await shared())[name]({ ...opts, ...extra() });
@@ -210,9 +232,10 @@ function sharedHandlers(shared, token) {
     join: call("join"),
     shareLocal: call("shareLocal"),
     shareRepo: call("shareRepo"),
+    pushLocal: call("pushLocal"),
     sealTrusted: call("sealTrusted"),
     rotate: call("rotate", () => ({ token: token() })),
   };
 }
 
-module.exports = { createSharedApi, sharedHandlers };
+module.exports = { createSharedApi, sharedHandlers, pushText };
