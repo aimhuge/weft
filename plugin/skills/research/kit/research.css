@@ -1,0 +1,88 @@
+/* Weft research pages (plugin/skills/research): a page that grows a round at a time. Living blocks at the top are
+   edited in place; rounds append under a divider. research.js marks what belongs to the latest round (.now), so this
+   round's changes are bright and earlier ones stay visible but quiet. A bright mark fades to quiet only after it has
+   been on screen a few seconds (research.js), never on a timer: a fade the reader didn't watch is a change they never saw. */
+:root {
+  --bg: #0f1115; --fg: #e8e6e1; --mute: #9a978f; --line: #2a2d34; --card: #171a20; --acc: #f2b84b;
+  --now: rgb(242 184 75 / 0.18); --was: rgb(154 151 143 / 0.55);
+}
+@media (prefers-color-scheme: light) {
+  :root { --bg: #fbfaf7; --fg: #1d1c1a; --mute: #6b6860; --line: #e3e0d8; --card: #ffffff; --acc: #b7791f; --now: rgb(242 184 75 / 0.28); }
+}
+* { box-sizing: border-box; }
+html { scroll-padding-top: 64px; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, sans-serif; }
+main { max-width: 760px; margin: 0 auto; padding: 0 16px 50vh; }
+h1 { font-size: 1.55rem; line-height: 1.25; margin: 0.4em 0 0.2em; }
+h2 { font-size: 1.2rem; margin: 1.5em 0 0.4em; }
+h3 { font-size: 1.02rem; margin: 1.2em 0 0.3em; }
+a { color: var(--acc); }
+code { font-size: 0.9em; background: var(--card); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; }
+img, svg, video { max-width: 100%; height: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+th, td { border-bottom: 1px solid var(--line); padding: 6px 4px; text-align: left; vertical-align: top; }
+.question { color: var(--mute); margin-top: 0; }
+
+/* The bar research.js builds: the living blocks and every round, the latest lit, the latest lit. */
+nav.rr-bar { position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); padding: 8px 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+nav.rr-bar a { flex: none; font: inherit; font-size: 0.8rem; min-height: 32px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 99px; background: none; color: var(--mute); text-decoration: none; cursor: pointer; }
+nav.rr-bar .now { border-color: var(--acc); color: var(--acc); }
+
+/* Living blocks: the diagram, the plan, the recipe, the verdict. One place each, rewritten as the research moves. */
+.living { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin: 14px 0; }
+.living.now { border-color: var(--acc); }
+.rr-chip { float: right; font-size: 0.72rem; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--line); color: var(--mute); margin-left: 8px; }
+.now > .rr-chip { border-color: var(--acc); color: var(--acc); }
+.living > .rr-title { font-size: 0.78rem; color: var(--mute); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; cursor: pointer; min-height: 24px; }
+.living > .rr-title::before { content: "▾ "; }
+.living > .rr-sum { color: var(--mute); font-size: 0.92rem; }
+
+/* Accordions everywhere: a living block this round didn't change folds to its title and one-line summary
+   (data-summary), and an earlier round to its divider and TL;DR. Tap a title or divider to open one; a bar link or a
+   focus on something inside a fold opens it. What you're working on is open, and everything else stays closed. */
+.living:not(.now):not(.open) { padding-bottom: 8px; }
+.living:not(.now):not(.open) > :not(.rr-title):not(.rr-chip):not(.rr-sum) { display: none; }
+.living:not(.now):not(.open) > .rr-title::before { content: "▸ "; }
+.living.now > .rr-sum, .living.open > .rr-sum { display: none; }
+.living:not(.now):not(.open) > .rr-title { margin-bottom: 2px; }
+details { border: 1px solid var(--line); border-radius: 10px; margin: 8px 0; }
+details > summary { cursor: pointer; padding: 8px 12px; min-height: 40px; list-style: none; font-size: 0.95rem; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "▸ "; color: var(--mute); }
+details[open] > summary::before { content: "▾ "; }
+details > :not(summary) { padding: 0 12px; }
+
+/* A round: a heavy divider with when and what you asked, then the answer. Earlier rounds sit back a little. */
+.round { margin-top: 56px; }
+.round > .rr-divider { border-top: 3px solid var(--acc); padding-top: 12px; margin-bottom: 8px; }
+.round:not(.now) > .rr-divider { border-top: 2px dashed var(--line); }
+.rr-when { font-size: 0.78rem; color: var(--acc); text-transform: uppercase; letter-spacing: 0.08em; }
+.round:not(.now) .rr-when { color: var(--mute); }
+.rr-asked { font-size: 1.1rem; margin-top: 2px; }
+.tldr { border-left: 3px solid var(--acc); padding: 2px 12px; margin: 10px 0; font-size: 1.05rem; }
+.changed { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; font-size: 0.92rem; margin: 10px 0; }
+.changed a { display: block; padding: 3px 0; }
+
+/* What changed: <mark data-round="N"> is text round N added. This round's are bright; earlier rounds' are a quiet
+   underline. There are no cuts on the page: removed text is simply gone, and the round's "Changed" line says what
+   moved in a few words ("Proof: 4h → 6h"). Struck-through text is more to read, and the pane exists to read less. */
+mark { background: none; color: inherit; border-radius: 3px; padding: 0 2px; box-shadow: inset 0 -2px 0 var(--was); transition: background 1.6s ease-out, box-shadow 1.6s ease-out; }
+mark.now { background: var(--now); box-shadow: inset 0 -2px 0 var(--acc); }
+mark.now.seen { background: none; box-shadow: inset 0 -2px 0 var(--was); }
+
+/* Earlier rounds fold to their divider and TL;DR: the page reads as the living blocks, a one-line history, and the
+   latest round open. Tap a folded round's divider to open it. */
+.round:not(.now):not(.open) > :not(.rr-divider):not(.tldr) { display: none; }
+.round:not(.now) > .rr-divider { cursor: pointer; }
+.round:not(.now) .rr-when::before { content: "▸ "; }
+.round.open:not(.now) .rr-when::before { content: "▾ "; }
+.round:not(.now) { margin-top: 20px; }
+
+/* Evidence */
+.solid, .thin { font-size: 0.72rem; padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.solid { background: rgb(80 160 100 / 0.2); color: #7ccf8f; }
+.thin { background: rgb(220 150 70 / 0.2); color: #e3a866; }
+.sources { font-size: 0.86rem; color: var(--mute); padding-left: 1.1em; }
+.sources li { margin: 3px 0; }
+.next { border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; font-size: 0.92rem; }
+blockquote { margin: 10px 0; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--mute); }
