@@ -10,8 +10,13 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ### Added
 
+- **🔬 Researcher: research on one page that grows.** A new built-in agent works a question out with you over several turns and keeps the answer on one page in the browser pane. Living blocks at the top (the answer, the plan, a diagram, sources) change in place, each turn adds a short round below a divider, earlier rounds fold to one line, and new text stays highlighted until you've seen it. It searches the whole web for any time window, or not at all when what it knows already answers. A new `mcp__browser__focus` tool reloads the page where you were reading and glides to what changed with a labelled flash, so you read only the new part. `lib/agents-built-in.json`, `plugin/skills/research/`, `electron/pane-focus.cjs`, `lib/browser-act-tools.ts`.
 - **📈 Desktop activation in the stats.** The anonymous stats now cover past the welcome: the first card a Mac starts, its first card moved to Done (with the minutes between), and one ping per day Weft is used. That shows desktop retention for people who never make an account. These use the same allow-list, hashed ID and Settings → Security switch as the onboarding stats (`lib/activation.ts`, `app/api/cards`).
 - **Every website download is counted, cookie-free.** All of weft.zip's download links (Mac, Windows x64 and ARM, and the new `/download/ios` for TestFlight) now go through the `/download` redirect routes with `?from=` naming the button. After the redirect, the route captures an anonymous `download_redirected` event in PostHog (platform, arch, version, button, referrer host, utm tags), with no person profile, no IP and no cookie. Bots and HEAD requests are skipped. The funnel's top step no longer has to rely on GitHub's raw asset count. Main files: `lib/download-track.ts`, `app/download/*`, `lib/home.ts`, `app/privacy/page.tsx`.
+
+### Changed
+
+- **📱 Phone pushes only when you're away, and say enough to decide.** A card moving to Needs you or Review now buzzes your phone only when you haven't used a Mac in 5 minutes and the app isn't open on your phone. Weft reports this Mac's idle time every minute while sync is on. A held tool's push names the call ("Bash: pnpm test", "Write: lib/auth.ts") with secrets scrubbed, and carries the prompt's id and kind so the phone can put Allow / Deny on it.
 
 ### Fixed
 
