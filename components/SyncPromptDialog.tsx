@@ -10,6 +10,7 @@ import { useState } from "react";
 import type { CloudSyncStatus } from "@/lib/cloud-sync-view";
 import type { Card } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
+import { useSignInAskStats } from "@/lib/use-signin-ask-stats";
 import { useSyncPrompt } from "@/lib/use-sync-prompt";
 import { openTeamPage } from "./board-palette";
 import Icon, { Spinner } from "./Icon";
@@ -62,13 +63,25 @@ function SyncBody({ name, noWorkspace }: { name: string; noWorkspace: boolean })
   );
 }
 
-function Prompt({ folder, status, onClose, onSync }: { folder: string; status: CloudSyncStatus | null; onClose: (neverAgain: boolean) => void; onSync: () => Promise<void> }) {
+// Signed out, from the sync status or the account, and this ask's sign-in stats (lib/use-signin-ask-stats.ts), which
+// wait until one of them has answered.
+function useSignInAsk(status: CloudSyncStatus | null) {
   const { state, signIn } = useAccount();
+  const signedOut = Boolean(status?.signedOut) || (state.kind === "ready" && !state.view.user);
+  const stats = useSignInAskStats("first_thread", status !== null || state.kind === "ready" ? signedOut : null);
+  return { signedOut, signIn, stats };
+}
+
+function Prompt({ folder, status, onClose, onSync }: { folder: string; status: CloudSyncStatus | null; onClose: (neverAgain: boolean) => void; onSync: () => Promise<void> }) {
+  const { signedOut, signIn, stats } = useSignInAsk(status);
   const [never, setNever] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const name = folderName(folder);
-  const signedOut = status?.signedOut || (state.kind === "ready" && !state.view.user);
+  const closeAsk = () => {
+    stats.declined(never);
+    onClose(never);
+  };
 
   const sync = () => {
     setBusy(true);
@@ -79,13 +92,13 @@ function Prompt({ folder, status, onClose, onSync }: { folder: string; status: C
     });
   };
   const action = signedOut
-    ? { label: "Sign in with GitHub", run: () => void signIn("github") }
+    ? { label: "Sign in with GitHub", run: () => { stats.clicked(); void signIn("github"); } }
     : status?.noWorkspace
       ? { label: "Open the web board", run: openTeamPage }
       : { label: `Sync ${name}`, run: sync };
 
   return (
-    <Modal title={signedOut ? "Sign in to Weft?" : `Turn on Project Sync for ${name}?`} onClose={() => onClose(never)} keepOnBackdrop className="w-full max-w-[440px]">
+    <Modal title={signedOut ? "Sign in to Weft?" : `Turn on Project Sync for ${name}?`} onClose={closeAsk} keepOnBackdrop className="w-full max-w-[440px]">
       <div className="flex flex-col gap-3 px-5 py-4">
         {signedOut ? <SignInBody name={name} /> : <SyncBody name={name} noWorkspace={Boolean(status?.noWorkspace)} />}
         {error && <p className="text-[12.5px] text-danger">Couldn&apos;t turn sync on: {error}</p>}
@@ -95,7 +108,7 @@ function Prompt({ folder, status, onClose, onSync }: { folder: string; status: C
             Don&apos;t show me again
           </label>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => onClose(never)} className={SECONDARY}>
+            <button type="button" onClick={closeAsk} className={SECONDARY}>
               Not now
             </button>
             <button type="button" onClick={action.run} disabled={busy} className={PRIMARY} autoFocus>

@@ -23,6 +23,9 @@ type AccountStub = { kind: "ready"; view: { user: { id: string } | null } };
 const account = vi.hoisted(() => ({ signIn: vi.fn(), state: null as unknown as AccountStub }));
 vi.mock("@/lib/use-account", () => ({ useAccount: () => ({ state: account.state, signIn: account.signIn }) }));
 
+const stats = vi.hoisted(() => ({ trackOnboarding: vi.fn() }));
+vi.mock("@/lib/telemetry-client", () => stats);
+
 const openTeamPage = vi.hoisted(() => vi.fn());
 vi.mock("./board-palette", () => ({ openTeamPage }));
 
@@ -106,6 +109,22 @@ describe("SyncPromptDialog", () => {
     expect(screen.getByText("Sign in to Weft?")).toBeInTheDocument();
     for (const perk of ["Project Sync", "Share links", "Leagues", "Puku trial"]) expect(screen.getByText(perk)).toBeInTheDocument();
     expect(screen.queryByText(/uploaded unencrypted/)).toBeNull();
+    expect(stats.trackOnboarding).toHaveBeenCalledWith("signin_ask_shown", { where: "first_thread" });
+    expect(stats.trackOnboarding).toHaveBeenCalledWith("signin_ask_clicked", { where: "first_thread" });
+  });
+
+  it("signed out, Not now counts as declining the sign-in ask", async () => {
+    account.state = { kind: "ready", view: { user: null } };
+    setup();
+    await userEvent.click(await screen.findByLabelText("Don't show me again"));
+    await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(stats.trackOnboarding).toHaveBeenCalledWith("signin_ask_declined", { where: "first_thread", never: true });
+  });
+
+  it("signed in, it sends no sign-in stats", async () => {
+    setup();
+    await userEvent.click(await screen.findByRole("button", { name: "Not now" }));
+    expect(stats.trackOnboarding).not.toHaveBeenCalled();
   });
 
   it("doesn't ask while the only thread waits on a question", async () => {

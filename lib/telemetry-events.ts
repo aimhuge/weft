@@ -17,6 +17,11 @@ export const ONBOARDING_EVENTS = {
   activation_first_card: ["backend"],
   activation_first_done: ["minutes_since_first_card"],
   desktop_active_day: ["has_done"],
+  // The two sign-in asks (lib/use-signin-ask-stats.ts): where is "welcome" or "first_thread".
+  signin_ask_shown: ["where"],
+  signin_ask_clicked: ["where"],
+  signin_ask_declined: ["where", "never"],
+  signin_ask_completed: ["where"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type OnboardingEvent = keyof typeof ONBOARDING_EVENTS;
