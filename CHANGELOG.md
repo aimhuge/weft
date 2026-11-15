@@ -20,6 +20,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 - **📱 Phone pushes only when you're away, and say enough to decide.** A card moving to Needs you or Review now buzzes your phone only when you haven't used a Mac in 5 minutes and the app isn't open on your phone. Weft reports this Mac's idle time every minute while sync is on. A held tool's push names the call ("Bash: pnpm test", "Write: lib/auth.ts") with secrets scrubbed, and carries the prompt's id and kind so the phone can put Allow / Deny on it.
 - **A card that already shipped its work is archived straight away on Done.** If a card's files are committed and its branch is pushed, `/weft:done` now skips the tests, docs, scout, deploy check and report page, and the card goes straight to the archive (`plugin/skills/done/settled.sh`, `plugin/skills/done/SKILL.md`).
+- **About Weft puts the version up top.** The heading and the window title now read "Weft™ v0.8.3". The line under the heading shows the full build ("Build 0.8.3+e4e94043") only when a server patch is running. (`electron/about.js`, `electron/about.cjs`, `electron/about.html`)
 
 ### Fixed
 
