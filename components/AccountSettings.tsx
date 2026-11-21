@@ -90,7 +90,7 @@ function SignInForm(props: {
         <p className="flex items-center gap-2 text-[12.5px] text-muted">
           <Spinner size={11} />
           {waiting.email
-            ? `${t("Sent a sign-in link to")} ${waiting.what}. ${t("Open it on this Mac to finish.")}`
+            ? `${t("Sent a link to")} ${waiting.what}. ${t("Open it on this Mac to finish.")}`
             : `${t("Finish signing in with")} ${waiting.what} ${t("in your browser.")}`}
         </p>
       )}

@@ -85,13 +85,14 @@ export default function GameBadge({
   const tip = (
     <span className="flex w-[220px] flex-col gap-1">
       <b>
-        {t("Streak")}: {streak.current}{t(" days")}{streak.atRisk ? `: ${t("ship something today to keep it")}` : ""}
+        {t("{count}-day streak").replace("{count}", String(streak.current))}
+        {streak.atRisk ? `: ${t("ship something today to keep it")}` : ""}
       </b>
       <span>
         {t("Best")} {streak.best} · {streak.freezes} {t(streak.freezes === 1 ? "streak freeze" : "streak freezes")}
       </span>
       <span>
-        {t("Level")} {level.level} {t(level.title)} · {(level.next - game.xp).toLocaleString()} {t("XP to the next level")}
+        {t("Lv")} {level.level} {t(level.title)} · {(level.next - game.xp).toLocaleString()} {t("XP to the next level")}
       </span>
       <span>
         {t("Today")}: {game.today.cards} {t("started")}, {game.today.done} {t("shipped")}, {game.today.xp} XP
@@ -104,7 +105,9 @@ export default function GameBadge({
       <Tip text={tip}>
         <button
           onClick={() => setOpen("you")}
-          aria-label={`${t("Wefter Profile")}：${t("Streak")} ${streak.current}${t(" days")}，${t("Level")} ${level.level}`}
+          aria-label={t("Wefter Profile: {count}-day streak, level {level}")
+            .replace("{count}", String(streak.current))
+            .replace("{level}", String(level.level))}
           className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] text-muted hover:bg-hover"
         >
           <span className={streak.atRisk || streak.current === 0 ? "opacity-40 grayscale" : ""}>🔥</span>

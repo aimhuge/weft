@@ -38,7 +38,7 @@ export default function LeagueBadge({ refresh }: { refresh?: unknown }) {
     view.state === "ready" ? (
       <span className="flex w-[220px] flex-col gap-1">
         <b>
-          {t(view.league)} {t("League")}{me ? `: #${me.rank} / ${view.rows.length}` : ""}
+          {t(view.league)} {t("League")}{me ? `: #${me.rank} ${t("of")} ${view.rows.length}` : ""}
         </b>
         {me && <span>{me.xp.toLocaleString()} XP {t("this week")}</span>}
         <span className="text-muted">{t("Click to see every league and who's in it.")}</span>
@@ -51,7 +51,7 @@ export default function LeagueBadge({ refresh }: { refresh?: unknown }) {
       <Tip text={tip}>
         <button
           onClick={() => setOpen(true)}
-          aria-label={`${t("Leagues")}：${label}`}
+          aria-label={`${t("Leagues")}: ${label}`}
           className="flex items-center gap-1 rounded-md px-1 py-0.5 text-[11.5px] text-muted hover:bg-hover"
         >
           <span>🏆</span>

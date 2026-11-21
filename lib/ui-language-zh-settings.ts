@@ -52,7 +52,7 @@ export const simplifiedChineseSettings: Readonly<Record<string, string>> = {
   "Sign-in isn't set up in this build yet.": "此版本尚未配置登录功能。",
   "via": "通过",
   "Signed in": "已登录",
-  "Sent a sign-in link to": "已发送登录链接至",
+  "Sent a link to": "已发送登录链接至",
   "Open it on this Mac to finish.": "请在这台 Mac 上打开链接以完成登录。",
   "Finish signing in with": "请通过",
   "in your browser.": "在浏览器中完成登录。",
