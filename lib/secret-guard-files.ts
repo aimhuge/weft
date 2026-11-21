@@ -272,8 +272,8 @@ export function inTranscriptDir(file: string): boolean {
 // Whether a Glob or Grep from this folder walks into the CLI's own: `.claude/**` from home does.
 export const searchesCliHome = (root: string) => holdsCliHome(placed(normalized(root || ".")), realPlace);
 
-// `~/.claude/projects/<project>/memory/…` (2026-11-02). Only that: the transcripts beside it, settings*.json, hooks and
-// skills stay sealed, since a thread that could write them could grant itself permissions. `..` is folded first, and
+// `~/.claude/projects/<project>/memory/…` (2026-11-02). Only that: the transcripts beside it, settings*.json and hooks
+// stay sealed (skills open to read and run through lib/secret-guard-skills.ts), since a thread that could write them could grant itself permissions. `..` is folded first, and
 // a link is judged by where it lands: the memory folder must really be one, and the file really in it.
 const MEMORY = /^(.*\/\.claude\/projects\/[^/]+\/memory)(?:\/|$)/i;
 

@@ -213,7 +213,7 @@ When a new doc lands in this folder, add it here on the same change.
   render in the pane, `~/.weft/apps/`, the mini apps, and `~/.weft/scout/`; symlinks followed, `..` folded; an attachment the user
   pasted into the card, a message or an answer to its question (`lib/answer-pasted.ts`), opens to Read through `lib/secret-guard-pasted.ts`), the CLI's own `~/.claude` transcripts (save a
   project's `memory/` folder, `inMemoryDir`, and the session's own whole project folder to read, found by its session id,
-  through `lib/secret-guard-own-project.ts`; thread-guards.md#the-sessions-own-project-folder), a worker's home save a bare listing of it (`isWorkerHome`); words a command takes as
+  through `lib/secret-guard-own-project.ts`; thread-guards.md#the-sessions-own-project-folder; installed skills open to read and run, never to write, through `lib/secret-guard-skills.ts`; thread-guards.md#installed-skills), a worker's home save a bare listing of it (`isWorkerHome`); words a command takes as
   text, a PR body or a commit message, aren't paths (`lib/shell-text.ts`), and `lib/secret-guard-why.ts` words each refusal for what was refused —
   `lib/secret-guard-bash.ts` for the shell (with `lib/secret-guard-credentials.ts`: no `gh auth token`, `gog auth tokens export`,
   `git credential fill` or the CLIs' token files), and `lib/secret-guard-tool.ts` for the file tools (Read, Edit, Write, Glob,

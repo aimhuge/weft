@@ -261,8 +261,9 @@ const listsHome = (run: string[], word: string) =>
 
 // Why one simple command is turned away.
 function commandVerdict({ words: raw, inputs, outputs, stdin }: SimpleCommand, dataDir: string, depth: number, namesSecret: () => boolean): string | null {
-  // `echo {} > .claude/settings.json` rewrites the hooks that guard this thread.
-  const redirected = inputs.find((f) => isSecretFile(f, dataDir)) ?? outputs.find((f) => changesCliSettings(f));
+  // `echo {} > .claude/settings.json` rewrites the hooks that guard this thread; `> ~/.claude/skills/x/SKILL.md` plants
+  // instructions every later thread loads (the CLI's home, save a project's memory: inTranscriptDir).
+  const redirected = inputs.find((f) => isSecretFile(f, dataDir)) ?? outputs.find((f) => changesCliSettings(f) || inTranscriptDir(f));
   if (redirected) return reason(redirected);
   const words = stripPrefixes(raw);
   if (dumpsEnvironment(words)) return ENV_DUMP;

@@ -29,7 +29,8 @@ const KINDS: { is: (at: string, clean: string, dataDir: string) => boolean; say:
     is: (_at, clean) => inTranscriptDir(clean),
     say: (name) =>
       `${name} is in the CLI's own folder (~/.claude), so it can't be read here: its transcripts hold every value a thread ` +
-      "saw, and its settings and hooks decide what a thread may do. Keep memory in ~/.claude/projects/<project>/memory/, which is open.",
+      "saw, and its settings and hooks decide what a thread may do. Keep memory in ~/.claude/projects/<project>/memory/, which is open. " +
+      "Installed skills (~/.claude/skills/) open to read and to run a script by its full path, never to change.",
   },
   { is: (_at, clean) => changesCliSettings(clean, true), say: SETTINGS_REFUSAL },
   {
