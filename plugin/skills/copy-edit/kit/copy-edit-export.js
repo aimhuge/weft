@@ -3,6 +3,7 @@
 // - Export (toolbar): one download, <slug>.zip with piece.md and images/.
 // - In Weft, the same files go to export/ beside the page (window.weft.showExport, electron/show-export.cjs) on load
 //   and after every save, so a thread reads them from disk instead of asking the user to save each image.
+// A Substack header and footer, kept for every piece, go around the text (frames() below).
 // copy-edit.js calls window.CopyEditExport({ doc, toast }) and gets back { sync }.
 window.CopyEditExport = ({ doc, toast }) => {
   const EXT = { "image/png": "png", "image/jpeg": "jpg", "image/gif": "gif", "image/webp": "webp" };
@@ -20,8 +21,10 @@ window.CopyEditExport = ({ doc, toast }) => {
       const data = /^data:([^;,]+);base64,/.exec(src);
       const ext = data ? EXT[data[1]] || "png" : (/\.(png|jpe?g|gif|webp)(?:[?#]|$)/i.exec(src)?.[1] || "png").toLowerCase();
       const words = [fig.classList.contains("cover") ? "cover" : "", slugOf(cap)].filter(Boolean).join("-") || "image";
-      const name = `images/${String(i + 1).padStart(2, "0")}-${words}.${ext}`;
-      return { fig, img, src, cap, name, base64: data ? src.slice(src.indexOf(",") + 1) : null };
+      // An image already on the web (a Substack CDN url) stays a link in piece.md: no file to write.
+      const remote = /^https?:/i.test(src);
+      const name = remote ? src : `images/${String(i + 1).padStart(2, "0")}-${words}.${ext}`;
+      return { fig, img, src, cap, name, remote, base64: data ? src.slice(src.indexOf(",") + 1) : null };
     });
   }
 
@@ -39,6 +42,8 @@ window.CopyEditExport = ({ doc, toast }) => {
     const cover = images.find((im) => im.fig.classList.contains("cover"));
     const title = document.title.replace(/^Editor\s*[—-]\s*/, "").trim();
     const out = [title ? `# ${title}` : "", cover ? figMd(cover) : ""];
+    const [head, foot] = ["header", "footer"].map(frameText);
+    if (head) out.push(head, "---");
     for (const el of doc.children) {
       if (el.tagName === "FIGURE") { if (byFig.has(el) && byFig.get(el) !== cover) out.push(figMd(byFig.get(el))); continue; }
       if (el.tagName === "OL" || el.tagName === "UL") {
@@ -49,6 +54,7 @@ window.CopyEditExport = ({ doc, toast }) => {
       const lead = /^H[1-6]$/.test(el.tagName) ? "## " : el.tagName === "BLOCKQUOTE" ? "> " : "";
       out.push([label ? `**${label}**` : "", text ? lead + text : ""].filter(Boolean).join("\n"));
     }
+    if (foot) out.push("---", foot);
     return out.filter(Boolean).join("\n\n") + "\n";
   }
 
@@ -97,7 +103,7 @@ window.CopyEditExport = ({ doc, toast }) => {
     if (!window.weft?.showExport) return null;
     const images = imagesOf();
     const files = [{ name: "piece.md", text: markdown(images) },
-      ...images.map((im) => (im.base64 ? { name: im.name, base64: im.base64 } : { name: im.name, from: im.src }))];
+      ...images.filter((im) => !im.remote).map((im) => (im.base64 ? { name: im.name, base64: im.base64 } : { name: im.name, from: im.src }))];
     const res = await window.weft.showExport(files).catch((err) => ({ ok: false, error: String(err?.message || err) }));
     if (!res?.ok) console.warn("copy-edit export:", res?.error);
     return res;
@@ -108,7 +114,7 @@ window.CopyEditExport = ({ doc, toast }) => {
   async function exportZip() {
     const images = imagesOf(), enc = new TextEncoder();
     const files = [{ name: "piece.md", body: enc.encode(markdown(images)) }];
-    for (const im of images) {
+    for (const im of images.filter((i) => !i.remote)) {
       try { files.push({ name: im.name, body: await bytesOf(im) }); } catch { toast(`Couldn't read ${im.name}`); }
     }
     const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(zip(files)), download: `${slug()}.zip` });
@@ -117,6 +123,29 @@ window.CopyEditExport = ({ doc, toast }) => {
     const beside = await writeBeside();
     toast(`Exported piece.md + ${images.length} image${images.length === 1 ? "" : "s"}` + (beside?.ok ? ", also in export/ beside this page" : ""));
   }
+
+  // Header and footer: your Substack intro and sign-off, written once and kept for every piece (localStorage is shared
+  // by every page in the show folder), shown above and below the text and put around it in piece.md, with dividers.
+  const FRAME_KEY = "copy-edit:frame:";
+  const frameText = (which) => (localStorage.getItem(FRAME_KEY + which) || "").replace(/\n{3,}/g, "\n\n").trim();
+  function frames() {
+    if (document.querySelector(".frame")) return;
+    const col = document.createElement("div");
+    col.className = "col";
+    doc.before(col);
+    col.append(doc);
+    for (const which of ["header", "footer"]) {
+      const el = document.createElement("div");
+      el.className = `frame frame-${which}`;
+      el.contentEditable = "plaintext-only";
+      el.dataset.label = `Substack ${which} · every piece`;
+      el.dataset.empty = which === "header" ? "Your intro, above every piece you export (optional)" : "Your sign-off: subscribe line, links (optional)";
+      el.innerText = frameText(which);
+      el.addEventListener("input", () => { localStorage.setItem(FRAME_KEY + which, el.innerText); sync(); });
+      if (which === "header") doc.before(el); else doc.after(el);
+    }
+  }
+  frames();
 
   const copy = document.getElementById("copy");
   if (!document.getElementById("export")) copy.insertAdjacentHTML("beforebegin", `<button id="export" title="Download piece.md and every image as one .zip">Export</button>`);

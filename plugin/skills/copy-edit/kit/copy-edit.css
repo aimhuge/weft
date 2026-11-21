@@ -58,3 +58,8 @@
 #doc figure.cover { margin-top:0; }
 #doc figure.cover::before { content:"Cover image"; position:absolute; top:8px; left:8px; z-index:1; font:600 11px/1 system-ui,sans-serif; letter-spacing:.08em; text-transform:uppercase; color:#fff; background:var(--accent); padding:6px 9px; border-radius:6px; }
 #doc figure.cover .fig-cover { background:var(--accent); border-color:var(--accent); }
+.col { min-width:0; display:flex; flex-direction:column; gap:10px; }
+.frame { position:relative; border:1px dashed #33333d; border-radius:12px; padding:26px clamp(16px,3vw,44px) 12px; font:16px/1.6 Georgia, "Iowan Old Style", serif; color:#c9c6c0; outline:none; white-space:pre-wrap; }
+.frame:focus { border-color:var(--accent); }
+.frame::before { content:attr(data-label); position:absolute; top:8px; left:14px; font:600 10px/1 system-ui,sans-serif; letter-spacing:.1em; text-transform:uppercase; color:var(--mute); }
+.frame:empty::after { content:attr(data-empty); opacity:.45; font-style:italic; }

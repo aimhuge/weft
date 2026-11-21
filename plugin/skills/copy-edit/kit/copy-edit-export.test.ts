@@ -34,7 +34,7 @@ const BODY = [
   fig("img-coal.png", ""),
 ].join("");
 
-beforeEach(() => { delete (window as unknown as Win).weft; });
+beforeEach(() => { delete (window as unknown as Win).weft; localStorage.clear(); });
 afterEach(() => vi.useRealTimers());
 
 describe("markdown", () => {
@@ -53,6 +53,35 @@ describe("markdown", () => {
   it("adds the Export button once, before Copy text", () => {
     page("<p>x</p>");
     expect(document.getElementById("export")?.nextElementSibling?.id).toBe("copy");
+  });
+});
+
+describe("Substack header and footer", () => {
+  it("shows both around the text, keeps what's typed for every piece, and puts them around the body with dividers", () => {
+    page("<p>Body.</p>");
+    const head = document.querySelector<HTMLElement>(".frame-header")!, foot = document.querySelector<HTMLElement>(".frame-footer")!;
+    expect(head.nextElementSibling?.id).toBe("doc");
+    expect(foot.previousElementSibling?.id).toBe("doc");
+    head.innerText = "Hi, I'm Alex.";
+    head.dispatchEvent(new Event("input"));
+    foot.innerText = "Subscribe for more.";
+    foot.dispatchEvent(new Event("input"));
+    const { api } = page("<p>Another piece.</p>");
+    expect(api.markdown()).toBe("# Let's dance\n\nHi, I'm Alex.\n\n---\n\nAnother piece.\n\n---\n\nSubscribe for more.\n");
+  });
+  it("leaves them out when empty", () => {
+    expect(page("<p>Body.</p>").api.markdown()).toBe("# Let's dance\n\nBody.\n");
+  });
+  it("keeps an image already on the web as its link, with no file", async () => {
+    vi.useFakeTimers();
+    const showExport = vi.fn(() => Promise.resolve({ ok: true }));
+    Object.assign(window, { weft: { showExport } });
+    const { api } = page(fig("https://cdn.example.com/a.png", "Remote") + fig(PNG, "Local"));
+    expect(api.markdown()).toContain("![Remote](https://cdn.example.com/a.png)");
+    api.sync();
+    await vi.advanceTimersByTimeAsync(1300);
+    const [files] = showExport.mock.calls[0] as unknown as [{ name: string }[]];
+    expect(files.map((f) => f.name)).toEqual(["piece.md", "images/02-local.png"]);
   });
 });
 

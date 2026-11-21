@@ -105,6 +105,10 @@ save:
 ~/.weft/show/copy-edit/<slug>/export/images/01-cover-lets-dance.png, 02-…   # reading order, named from captions
 ```
 
+The user's Substack header and footer (an intro and a sign-off, edited in the dashed boxes above and below the text,
+kept for every piece) go around the body in `piece.md` with `---` dividers; empty ones are left out. Don't paste your own.
+An image already on the web (a Substack CDN url) stays a link in `piece.md`, with no file.
+
 To publish: open (or reload) the page with `mcp__browser__open_url` so it writes a fresh export, wait a couple of
 seconds, then read `export/piece.md` and upload the files under `export/images/` in the order the markdown names them
 (the cover goes in the platform's cover slot). If `export/` doesn't appear, the running Weft predates the export bridge:
