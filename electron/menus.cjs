@@ -4,6 +4,7 @@ const { BaseWindow, Menu, Tray, app, clipboard, dialog, nativeImage, shell, webC
 const fs = require("node:fs");
 const path = require("node:path");
 const { showAboutWindow } = require("./about.cjs");
+const { spellingItems } = require("./spelling-menu.cjs");
 const { COPILOT_ENABLED } = require("./features.cjs");
 const { READ_HEADERS } = require("./server-read.cjs");
 const { createKeepWorking } = require("./keep-working.cjs");
@@ -232,6 +233,7 @@ function createMenus({ APP_NAME, ASSETS, COPILOT_SHORTCUT, mac, pane, getWin, ge
           { type: "separator" },
         );
       }
+      items.push(...spellingItems(params, contents));
       if (params.isEditable) items.push({ role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "selectAll" });
       else if (params.selectionText) items.push({ role: "copy" });
       if (!app.isPackaged) items.push({ type: "separator" }, { label: "Inspect Element", click: () => contents.inspectElement(params.x, params.y) });
