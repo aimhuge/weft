@@ -41,9 +41,9 @@ window.CopyEditExport = ({ doc, toast }) => {
     const figMd = (im) => `![${im.cap.replace(/[[\]]/g, "")}](${im.name})` + (im.cap ? `\n*${im.cap}*` : "");
     const cover = images.find((im) => im.fig.classList.contains("cover"));
     const title = document.title.replace(/^Editor\s*[—-]\s*/, "").trim();
-    const out = [title ? `# ${title}` : "", cover ? figMd(cover) : ""];
+    // As the page shows it: the header above the cover, the footer after the text.
     const [head, foot] = ["header", "footer"].map(frameText);
-    if (head) out.push(head, "---");
+    const out = [title ? `# ${title}` : "", head, head ? "---" : "", cover ? figMd(cover) : ""];
     for (const el of doc.children) {
       if (el.tagName === "FIGURE") { if (byFig.has(el) && byFig.get(el) !== cover) out.push(figMd(byFig.get(el))); continue; }
       if (el.tagName === "OL" || el.tagName === "UL") {
