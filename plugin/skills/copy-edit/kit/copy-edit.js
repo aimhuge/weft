@@ -1,6 +1,7 @@
 // Copy-edit kit: turns a page with <article id="doc"> (the piece, flagged phrases wrapped in
 // <mark data-n="N">) and <script type="application/json" id="notes"> into an editor with a notes sidebar.
-// Load copy-edit-doc.js and copy-edit-images.js first; this file is the notes, the sidebar and saving.
+// Load copy-edit-doc.js and copy-edit-images.js first; this file is the notes, the sidebar and saving. It loads
+// copy-edit-export.js (Export, and export/ beside the page in Weft) itself when the page doesn't.
 // Notes JSON: { "N": { "t": "title", "q": "why (optional)", "fix": "replacement text or null", "typo": true?,
 //   "anchor": "exact text to underline", "kind": "big" | "typo"?, "image": "file.png"?, "place": "before" | "after"? } }
 // A note with an anchor (a later round's note) is underlined in the user's saved text on load, until applied or dismissed.
@@ -10,6 +11,7 @@
 // "place", before or after the marked paragraph, keeping its words.
 (() => {
   const { norm, anchor, labels, flatten } = window.CopyEditDoc;
+  const KIT = document.currentScript?.src.replace(/[^/]*$/, "") || "../_kit/";
   const doc = document.getElementById("doc");
   const NOTES = JSON.parse(document.getElementById("notes").textContent);
   const KEY = doc.dataset.key || "copy-edit:" + location.pathname;
@@ -33,6 +35,7 @@
       try {
         localStorage.setItem(KEY, doc.innerHTML);
         $("saved").textContent = "saved";
+        exporter?.sync();
       } catch {
         $("saved").textContent = "not saved: too big";
         toast("Too big to save. Remove an image, or use a smaller one");
@@ -59,6 +62,11 @@
 
   const flattened = flatten(doc), relabeled = labels(doc), tidied = flattened || relabeled;
   const images = window.CopyEditImages({ doc, save, stat, toast });
+  // Export: older pages don't list the script, so fetch it beside this one. Its first sync writes export/ on load.
+  let exporter = null;
+  const startExport = () => { exporter = window.CopyEditExport({ doc, toast }); exporter.sync(); };
+  if (window.CopyEditExport) startExport();
+  else document.head.append(Object.assign(document.createElement("script"), { src: KIT + "copy-edit-export.js", onload: startExport }));
   for (const [n, o] of Object.entries(NOTES)) if (o.anchor && !done.has(n) && !markOf(n)) anchor(doc, n, o);
 
   const paras = (text) => text.split(/\n\s*\n/);

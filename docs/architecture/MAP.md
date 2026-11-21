@@ -405,7 +405,11 @@ When a new doc lands in this folder, add it here on the same change.
   runs it too): the piece word for word in an editor in the browser pane, each issue underlined (red big picture, yellow claim,
   blue typo) with a note in a sticky sidebar to Apply or Dismiss, Fix all typos, autosave and Copy text as plain text. Its kit
   (`kit/copy-edit.css` + `kit/copy-edit.js` + `kit/template.html`) is copied to `~/.weft/show/copy-edit/_kit`; notes live in
-  the page as JSON.
+  the page as JSON. `kit/copy-edit-export.js` is Export: one `<slug>.zip` download with `piece.md` (cover first, captions
+  italic, labels bold) and every image named in reading order from its caption (`01-cover-lets-dance.png`). In Weft the page
+  also keeps `export/` beside itself current on load and after every save through `window.weft.showExport`
+  (`electron/show-export.cjs`: the pane's main frame only, a `file:` page under `~/.weft/show` only, writing only into that
+  page's `export/` and `export/images/`, text and image types, capped), so a thread reads the user's pasted images from disk.
 - `plugin/skills/*`: my own skills (`/weft:done`, `/weft:commit`, `/weft:preview`, `/weft:setup-done`,
   which installs tests, docs and strict lint on a project before `/done`; `/weft:done` also keeps this file current, and first runs
   `plugin/skills/done/settled.sh`: a card whose files are committed and pushed is archived with no tests, docs or report);

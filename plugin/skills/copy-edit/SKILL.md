@@ -63,7 +63,7 @@ Open it with `mcp__browser__open_url` and take a screenshot to check the underli
 
 The editor gives the user: underlines that jump to their note and back, Apply and Dismiss on each note, Reopen on a
 resolved note whose words are still in the draft (an accidental Dismiss), Fix all typos,
-Reset to original, a live word count, autosave, and Copy text (plain text with list numbers kept, ready to paste into
+Reset to original, a live word count, autosave, Export (piece.md and every image in one .zip), and Copy text (plain text with list numbers kept, ready to paste into
 LinkedIn or an email). The notes sit in a sticky sidebar beside the text, and stack below it only on a phone.
 
 ## 4. Later rounds
@@ -83,7 +83,7 @@ A link goes in as plain text in brackets, `(https://…)`, so it survives Copy t
 
 Images: the user adds one with Add image, by pasting, or by dropping a file on the text; it lands after the
 paragraph they're in, as a figure with an editable caption (hover for ↑ ↓ to move it a paragraph, Cover to make
-it the cover image at the top, Save image, and Remove with Undo). Images are shrunk to at
+it the cover image at the top, Save image, and Remove with Undo); Export (section 5) gets them all out at once. Images are shrunk to at
 most 1600px and saved with the draft. When the draft has a placeholder like `[screenshot]`, take the shot
 (`mcp__browser__screenshot` with `save_to` in the piece's folder; hover the header first so the click marker isn't in
 it), and add a note with `"image": "file.png"`, the placeholder as its `anchor` and the caption as its `fix`: its
@@ -94,7 +94,24 @@ of the cited numbers) over generated pictures; look at every generated image bef
 Look for what a draft's growth leaves behind: a question raised and never answered, an argument tossed aside in a
 clause, new typos in the new paragraphs.
 
-## 5. In the reply
+## 5. Getting the piece out (publishing)
+
+Never ask the user to save images one by one: pasted and dropped images live only in the page's saved copy, which you
+can't read. The page exports them for you. In Weft, the editor writes `export/` beside itself on load and after every
+save:
+
+```
+~/.weft/show/copy-edit/<slug>/export/piece.md        # title, cover first, ![caption](images/NN-slug.png), *caption*, **label**
+~/.weft/show/copy-edit/<slug>/export/images/01-cover-lets-dance.png, 02-…   # reading order, named from captions
+```
+
+To publish: open (or reload) the page with `mcp__browser__open_url` so it writes a fresh export, wait a couple of
+seconds, then read `export/piece.md` and upload the files under `export/images/` in the order the markdown names them
+(the cover goes in the platform's cover slot). If `export/` doesn't appear, the running Weft predates the export bridge:
+ask the user to click **Export** once, which downloads one `<slug>.zip` with the same files, and unzip it into a new
+empty folder. Look at each image before you post it.
+
+## 6. In the reply
 
 Short: the two or three big-picture notes in a sentence each, and what you checked. The page carries the rest. Offer
 a tightened version only if the user asks for one; when they do, put it in the same editor as a new page

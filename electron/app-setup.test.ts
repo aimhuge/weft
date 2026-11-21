@@ -100,6 +100,8 @@ describe("setupApps", () => {
     // From sim-live.cjs — the simulator's live view: its window to capture, and its taps:
     expect(handlers.has("sim-live:source")).toBe(true);
     expect(handlers.has("sim-live:input")).toBe(true);
+    // From show-export.cjs — a show page writing its export/ folder:
+    expect(handlers.has("show-export:write")).toBe(true);
   });
 
   it("binds the push's confirm to vault.confirm", async () => {
