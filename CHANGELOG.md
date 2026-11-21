@@ -11,6 +11,7 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 ### Added
 
 - **Copy-edit: a Substack header and footer on every piece.** The copy-edit editor has two dashed boxes, above and below the text, for your Substack intro and sign-off. You write them once, they're kept for every piece, and Export puts them around the body in `piece.md` with `---` dividers (left out when empty). An image already on the web, such as one on Substack's CDN, now stays a link in `piece.md` instead of stopping the export. (`plugin/skills/copy-edit/kit/copy-edit-export.js`, `plugin/skills/copy-edit/kit/copy-edit.css`)
+- **Copy-edit: headings and links.** The copy-edit editor shows H1 and H2 headings as headings, with a Text / H1 / H2 menu in the toolbar for the paragraph you're in, and keeps links. Export writes headings as `#` and `##`, links as `[text](url)`, and the title as front matter so it doesn't clash with your own H1s. Copy text keeps each link's address in brackets. Notes can now underline text inside a heading. SKILL.md says how to pull a published Substack post back into the editor. (`plugin/skills/copy-edit/kit/copy-edit.js`, `plugin/skills/copy-edit/kit/copy-edit-export.js`, `plugin/skills/copy-edit/SKILL.md`)
 
 ## [0.9.0] - 2026-11-21
 
