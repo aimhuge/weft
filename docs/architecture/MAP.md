@@ -401,6 +401,11 @@ When a new doc lands in this folder, add it here on the same change.
   list, four kinds of claim, compare and marketing-teardown modes) and its page kit (`kit/research.css` + `kit/research.js`,
   copied to `~/.weft/show/research/_kit`): living blocks edited in place, a round per turn under a divider, everything an
   accordion closed unless it's the work (unchanged blocks fold to a one-line summary, earlier rounds to their TL;DR), marks that fade once seen (docs/architecture/agents.md).
+- `plugin/skills/copy-edit/*`: `/weft:copy-edit`, the default way any thread edits the user's writing (the Copywriter
+  runs it too): the piece word for word in an editor in the browser pane, each issue underlined (red big picture, yellow claim,
+  blue typo) with a note in a sticky sidebar to Apply or Dismiss, Fix all typos, autosave and Copy text as plain text. Its kit
+  (`kit/copy-edit.css` + `kit/copy-edit.js` + `kit/template.html`) is copied to `~/.weft/show/copy-edit/_kit`; notes live in
+  the page as JSON.
 - `plugin/skills/*`: my own skills (`/weft:done`, `/weft:commit`, `/weft:preview`, `/weft:setup-done`,
   which installs tests, docs and strict lint on a project before `/done`; `/weft:done` also keeps this file current, and first runs
   `plugin/skills/done/settled.sh`: a card whose files are committed and pushed is archived with no tests, docs or report);
