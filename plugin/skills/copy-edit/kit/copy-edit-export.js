@@ -33,6 +33,8 @@ window.CopyEditExport = ({ doc, toast }) => {
     const c = el.cloneNode(true);
     const tags = [...c.querySelectorAll(".tag")].map((t) => { const s = t.textContent.trim(); t.remove(); return s; });
     c.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+    // A link keeps its address: [text](url) in markdown.
+    c.querySelectorAll("a[href]").forEach((a) => a.replaceWith(`[${a.textContent}](${a.getAttribute("href")})`));
     const text = nbsp(c.textContent).replace(/[ \t]{2,}/g, " ").replace(/ *\n */g, "\n").trim();
     return { label: tags.filter(Boolean).join(" "), text };
   }
@@ -43,7 +45,8 @@ window.CopyEditExport = ({ doc, toast }) => {
     const title = document.title.replace(/^Editor\s*[—-]\s*/, "").trim();
     // As the page shows it: the header above the cover, the footer after the text.
     const [head, foot] = ["header", "footer"].map(frameText);
-    const out = [title ? `# ${title}` : "", head, head ? "---" : "", cover ? figMd(cover) : ""];
+    // The title goes in front matter, so the piece's own # and ## headings keep their meaning.
+    const out = [title ? `---\ntitle: ${JSON.stringify(title)}\n---` : "", head, head ? "---" : "", cover ? figMd(cover) : ""];
     for (const el of doc.children) {
       if (el.tagName === "FIGURE") { if (byFig.has(el) && byFig.get(el) !== cover) out.push(figMd(byFig.get(el))); continue; }
       if (el.tagName === "OL" || el.tagName === "UL") {
@@ -51,7 +54,7 @@ window.CopyEditExport = ({ doc, toast }) => {
         continue;
       }
       const { label, text } = blockText(el);
-      const lead = /^H[1-6]$/.test(el.tagName) ? "## " : el.tagName === "BLOCKQUOTE" ? "> " : "";
+      const lead = /^H[1-6]$/.test(el.tagName) ? "#".repeat(+el.tagName[1]) + " " : el.tagName === "BLOCKQUOTE" ? "> " : "";
       out.push([label ? `**${label}**` : "", text ? lead + text : ""].filter(Boolean).join("\n"));
     }
     if (foot) out.push("---", foot);

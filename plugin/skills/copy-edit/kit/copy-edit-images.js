@@ -90,7 +90,7 @@ window.CopyEditImages = ({ doc, save, stat, toast }) => {
 
   // Move one paragraph up or down in reading order, however the browser nested things; skip empty lines.
   function move(fig, up) {
-    const blocks = [...doc.querySelectorAll("p, figure, ol, ul, h2, h3, blockquote")].filter((b) =>
+    const blocks = [...doc.querySelectorAll("p, figure, ol, ul, h1, h2, h3, blockquote")].filter((b) =>
       (b === fig || !b.closest("figure")) && !b.parentElement.closest("ol, ul, blockquote") && (b.tagName === "FIGURE" || b.textContent.trim()));
     const target = blocks[blocks.indexOf(fig) + (up ? -1 : 1)];
     if (!target) return;

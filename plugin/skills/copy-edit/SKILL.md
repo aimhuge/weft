@@ -57,6 +57,8 @@ Fill in the template:
   `<ol class="qs"><li>…</li></ol>` (badged cards). A heading line like "Regarding the first question" becomes
   `<span class="tag">Regarding the first question</span>` at the start of its paragraph, in the author's words;
   Copy text writes it as its own line, as written.
+- Headings the author wrote as headings stay `<h1>` / `<h2>`, and links stay `<a href>`: Export writes them as `#`, `##`
+  and `[text](url)`, Copy text as `text (url)`. The toolbar's Text / H1 / H2 menu changes the block the caret is in.
 - The notes as JSON in `<script type="application/json" id="notes">`.
 
 Open it with `mcp__browser__open_url` and take a screenshot to check the underlines line up.
@@ -114,6 +116,11 @@ seconds, then read `export/piece.md` and upload the files under `export/images/`
 (the cover goes in the platform's cover slot). If `export/` doesn't appear, the running Weft predates the export bridge:
 ask the user to click **Export** once, which downloads one `<slug>.zip` with the same files, and unzip it into a new
 empty folder. Look at each image before you post it.
+
+After it's published, the post is the source of truth. To bring it back into the editor, read Substack's public API
+(`https://<pub>.substack.com/api/v1/posts?limit=…`, the post's `body_html`), convert it to the editor's blocks (figures with
+the `substack-post-media` url and caption, h1/h2, p with links, lists; drop the subscribe and share widgets), save the old
+page as `index-vN.html` and bump `data-key` past any key the pane may already hold a saved copy under.
 
 ## 6. In the reply
 

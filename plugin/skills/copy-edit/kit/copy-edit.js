@@ -124,7 +124,7 @@
   function act(n, a) {
     const m = markOf(n);
     if (!m) return;
-    const block = m.closest("p, li") || m.parentElement;
+    const block = m.closest("p, li, h1, h2, h3") || m.parentElement;
     if (a === "apply" && NOTES[n].image) applyImage(n, m, block);
     else applyText(n, m, block, a);
     markDone(n);
@@ -177,9 +177,33 @@
       if (el.tagName === "FIGURE") return images.plainFigure(el, clean);
       const c = el.cloneNode(true);
       c.querySelectorAll(".tag").forEach((tag) => tag.replaceWith(tag.textContent.trim() + "\n"));
+      c.querySelectorAll("a[href]").forEach((a) => { if (a.textContent.trim() !== a.getAttribute("href")) a.append(` (${a.getAttribute("href")})`); });
       return clean(c.innerText);
     }).filter(Boolean).join("\n\n");
   }
+  // Text, H1 or H2 for the block the caret is in. Remembered on selectionchange, since picking from the menu moves focus.
+  if (!$("block")) $("applyTypos").insertAdjacentHTML("beforebegin",
+    `<select id="block" title="Paragraph style"><option value="p">Text</option><option value="h1">H1</option><option value="h2">H2</option></select>`);
+  let caretBlock = null;
+  document.addEventListener("selectionchange", () => {
+    const n = getSelection().anchorNode;
+    let el = n && (n.nodeType === 1 ? n : n.parentElement);
+    while (el && el.parentElement !== doc) el = el.parentElement;
+    if (!el || !doc.contains(el)) return;
+    caretBlock = el;
+    $("block").value = /^H[12]$/.test(el.tagName) ? el.tagName.toLowerCase() : "p";
+  });
+  $("block").onchange = () => {
+    const b = caretBlock, to = $("block").value;
+    if (!b || !doc.contains(b) || !/^(P|H[1-6]|DIV)$/.test(b.tagName)) { $("block").value = "p"; return toast("Put the caret in a paragraph first"); }
+    if (b.tagName.toLowerCase() === to) return;
+    const n = document.createElement(to);
+    n.append(...b.childNodes);
+    b.replaceWith(n);
+    caretBlock = n;
+    save();
+    stat();
+  };
   $("copy").onclick = async () => { await navigator.clipboard.writeText(plain()); toast("Copied as plain text"); };
   $("applyTypos").onclick = () => { for (const [n, o] of Object.entries(NOTES)) if (o.typo) act(n, "apply"); toast("Typos fixed"); };
   $("reset").onclick = () => {

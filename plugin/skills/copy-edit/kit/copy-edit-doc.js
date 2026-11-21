@@ -42,7 +42,7 @@
       r.surroundContents(makeMark(n, o));
       return;
     }
-    for (const block of doc.querySelectorAll("p, li")) {
+    for (const block of doc.querySelectorAll("p, li, h1, h2, h3")) {
       const at = norm(block.textContent).indexOf(want);
       if (at < 0) continue;
       const r = rangeIn(block, at, at + o.anchor.length);

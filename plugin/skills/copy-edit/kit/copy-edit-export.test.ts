@@ -41,7 +41,7 @@ describe("markdown", () => {
   it("puts the title and cover first, captions italic, labels bold, lists numbered, marks unwrapped", () => {
     const { api } = page(BODY);
     expect(api.markdown()).toBe([
-      "# Let's dance",
+      "---\ntitle: \"Let's dance\"\n---",
       "![Let's dance. (Illustration, AI-generated.)](images/01-cover-lets-dance-illustration-ai-generated.png)\n*Let's dance. (Illustration, AI-generated.)*",
       "**Regarding the first question**\nListen. The Riemann Hypothesis appears solved.",
       "![Bernhard Riemann’s 1859 paper, page one](images/02-bernhard-riemanns-1859-paper-page.jpg)\n*Bernhard Riemann’s 1859 paper, page one*",
@@ -49,6 +49,10 @@ describe("markdown", () => {
       "Line one\nline two",
       "![](images/03-image.png)",
     ].join("\n\n") + "\n");
+  });
+  it("keeps H1 and H2 as # and ##, and links as [text](url)", () => {
+    const { api } = page(`<h1>AI has solved math</h1><p>See <a href="https://weft.zip">Weft</a>.</p><h2>Question 1</h2>`);
+    expect(api.markdown()).toBe("---\ntitle: \"Let's dance\"\n---\n\n# AI has solved math\n\nSee [Weft](https://weft.zip).\n\n## Question 1\n");
   });
   it("adds the Export button once, before Copy text", () => {
     page("<p>x</p>");
@@ -67,10 +71,10 @@ describe("Substack header and footer", () => {
     foot.innerText = "Subscribe for more.";
     foot.dispatchEvent(new Event("input"));
     const { api } = page("<p>Another piece.</p>");
-    expect(api.markdown()).toBe("# Let's dance\n\nHi, I'm Alex.\n\n---\n\nAnother piece.\n\n---\n\nSubscribe for more.\n");
+    expect(api.markdown()).toBe("---\ntitle: \"Let's dance\"\n---\n\nHi, I'm Alex.\n\n---\n\nAnother piece.\n\n---\n\nSubscribe for more.\n");
   });
   it("leaves them out when empty", () => {
-    expect(page("<p>Body.</p>").api.markdown()).toBe("# Let's dance\n\nBody.\n");
+    expect(page("<p>Body.</p>").api.markdown()).toBe("---\ntitle: \"Let's dance\"\n---\n\nBody.\n");
   });
   it("keeps an image already on the web as its link, with no file", async () => {
     vi.useFakeTimers();
@@ -126,7 +130,7 @@ describe("Export button", () => {
     const files = unzipSync(new Uint8Array(await blob!.arrayBuffer()));
     expect(Object.keys(files)).toEqual(["piece.md", "images/01-cover-lets-dance-illustration-ai-generated.png",
       "images/02-bernhard-riemanns-1859-paper-page.jpg", "images/03-image.png"]);
-    expect(strFromU8(files["piece.md"] ?? new Uint8Array())).toMatch(/^# Let's dance\n\n!\[/);
+    expect(strFromU8(files["piece.md"] ?? new Uint8Array())).toMatch(/^---\ntitle: "Let's dance"\n---\n\n!\[/);
     expect(strFromU8(files["images/02-bernhard-riemanns-1859-paper-page.jpg"] ?? new Uint8Array())).toBe("jpg-bytes");
     expect(strFromU8(files["images/03-image.png"] ?? new Uint8Array())).toBe("file-bytes");
     expect(toast).toHaveBeenCalledWith("Exported piece.md + 3 images");
