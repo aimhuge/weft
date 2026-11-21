@@ -1,4 +1,11 @@
 {
+  "0.9.0": {
+    "lines": [
+      "Weft now opens in Simple mode: just your threads and what they built. Switch back anytime in Settings.",
+      "Researcher keeps your answer on one page in the browser pane, so each turn you read only what's new.",
+      "Ask your AI to edit a post or email, and Weft opens it in an editor with notes you can apply or dismiss."
+    ]
+  },
   "0.8.3": {
     "lines": [
       "Pull your uncommitted work from your other Mac or a Weft Worker, so you pick up right where you left off.",
