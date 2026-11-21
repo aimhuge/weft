@@ -2,7 +2,8 @@
 // MCP tool's answer is too big for the context (changelog_list with 158 entries, ~80k chars), Claude Code writes it to
 // `<project>/<session-id>/tool-results/<name>.txt` and tells the thread to read it in chunks; the secret guard sealed all
 // of `~/.claude`, so the thread never saw the answer (2026-11-04). The user chose to open the whole project folder: its
-// tool results, its sessions' transcripts and its memory. Other projects, the CLI's settings, hooks and skills stay sealed.
+// tool results, its sessions' transcripts and its memory. Other projects, the CLI's settings and hooks stay sealed. Installed
+// skills open to read and run since 2026-11-21 (lib/secret-guard-skills.ts): a skill's scripts were unreachable.
 //
 // The project is found by the hook call's own session_id (the folder holding `<id>.jsonl` or `<id>/`), never by the cwd:
 // a thread can `cd` into another repo, but it can't change the session id the CLI hands its hooks. Only reads open
