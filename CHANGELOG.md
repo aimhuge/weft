@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-21
+
 ### Added
 
 - **🧵 Pull a worker's uncommitted work onto this Mac.** When the same project is on this Mac and on a Weft Worker, its right-click menu has **Pull Uncommitted Work from <worker>**. The worker snapshots what it hasn't committed and pushes it to a hidden ref on the project's remote (no branch moves, so no CI and no deploy), and this Mac checks it out. A pull refuses rather than lose work: on another branch, on commits the worker lacks, over uncommitted work this Mac never sent, or under a running thread. `.env` files never travel. Main files: `lib/wip-snapshot.ts`, `lib/wip-pull.ts`, `lib/host-api/tree-snapshot.ts`, `app/api/wip/route.ts`, docs/architecture/wip-sync.md.
