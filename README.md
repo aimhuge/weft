@@ -463,7 +463,7 @@ cards don't fit its height and another column's width still fits. Narrow the win
 
 Drag a Backlog card onto another one to set the order: drop on its top half to place the card before it,
 or its bottom half to place it after. Weft saves that order and uses it for the Backlog list, whatever
-sort is selected for the other columns. Review ignores the sort too: its most recently updated card is always on top.
+sort is selected for the other columns. The sort menu has two options, Newest and Active, and Review follows it like the rest (Active puts the turn that just finished on top).
 In the New thread dialog, **⌘B** adds the thread to the Backlog (the same as **Add to backlog**). Each Backlog card has
 an archive button on hover. The Backlog header has two more: the flag saves the cards it shows as a **sprint** ("Sprint 3 ·
 Oct 18"), and the box archives them all after an "Are you sure?" that can save them as a sprint first. Click the word
@@ -927,6 +927,10 @@ its own. **Take over now** doesn't wait, for when they're offline: your card sta
 Either way it's a new card of yours in your checkout of the repo, with their thread as its history and a brief of
 what's done and what's open; their card stays theirs and says "Alex has it" on every board, theirs included
 (docs/architecture/cloud-sync.md#taking-over-a-teammates-card, #asking-for-a-handover).
+Two pickers in the project bar narrow either board by person (**Everyone**, **You**, a teammate) and by machine
+(**This Mac**, a teammate's Mac, a Weft Worker), each with its count of cards on screen. They show only when there is a
+choice, and ride in the URL (`?who=…&on=…`), so a filtered weft.zip board can be bookmarked or shared; on weft.zip a
+teammate's card carries their picture as it does on the desktop (docs/architecture/cloud-sync.md#filtering-by-person-and-machine).
 The pencil beside a team you own renames it; its weft.zip address stays the same. The trash deletes it, once you
 type its name, as long as you're in another team too and it has no paid plan still running.
 

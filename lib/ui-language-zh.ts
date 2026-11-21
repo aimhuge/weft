@@ -20,6 +20,8 @@ const simplifiedChineseBase: Readonly<Record<string, string>> = {
   "Search prompts, projects and commands for": "在提示词、项目和命令中搜索",
   "Sort cards": "排序卡片",
   "Newest first": "最新优先",
+  "Newest": "最新",
+  "Active": "活跃",
   "Oldest first": "最早优先",
   "Recently active": "最近活跃",
   "Board": "看板",

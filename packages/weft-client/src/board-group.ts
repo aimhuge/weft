@@ -169,11 +169,10 @@ export function groupByColumn<C extends BoardCard>(cards: C[], view: BoardView, 
   return groups;
 }
 
-// Backlog keeps the user's dragged order; Review always shows the most recently updated card first, so
-// the turn that just finished is on top whatever the board's sort; the rest follow the chosen sort.
+// Backlog keeps the user's dragged order; every other column, Review too, follows the chosen sort, so the
+// sort menu means the same thing everywhere ("Active" puts the turn that just finished on top).
 function columnSorter(column: Column, view: BoardView): (a: BoardCard, b: BoardCard) => number {
   if (column === "backlog") return backlogSorter(view);
-  if (column === "review") return SORTERS.active;
   return SORTERS[view.sort];
 }
 

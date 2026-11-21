@@ -139,7 +139,7 @@ export default function ProjectBar({
       )}
       {!regular && (
         <>
-          <div className="relative shrink-0">
+          <div className="relative ml-1 shrink-0">
             <ViewToggle mode={view} onChange={onView} />
             {viewHint && <ViewHintPane key={viewHint.id} mode={viewHint.mode} onDismiss={onDismissViewHint} />}
           </div>
@@ -152,7 +152,7 @@ export default function ProjectBar({
             // On weft.zip the page is dark but the browser's dropdown is not, so the opened list would
             // be light-on-dark. The desktop app is always dark, so it doesn't need the hint.
             style={variant === "web" ? { colorScheme: "dark" } : undefined}
-            className="shrink-0 rounded-md border border-line-strong bg-canvas px-2 py-1 text-[12px] text-ink outline-none focus:border-accent"
+            className="shrink-0 rounded-md border border-line-strong bg-canvas px-1 py-1 text-[11.5px] text-ink outline-none focus:border-accent"
           >
             {SORTS.map((s) => (
               <option key={s.id} value={s.id}>
