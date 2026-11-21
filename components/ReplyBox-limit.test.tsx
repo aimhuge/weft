@@ -47,7 +47,7 @@ describe("a model at its own limit", () => {
   const sendLater = { backend: "claude" as const, resets: {}, scheduled: [] };
 
   it("schedules for the model's reset instead of sending", async () => {
-    plans({ plans: {}, models: [{ model: "claude-opus-5-5", at: NOW, resetsAt: RESET_AT }] });
+    plans({ plans: {}, models: [{ backend: "claude", model: "claude-opus-5-5", at: NOW, resetsAt: RESET_AT }] });
     const { onSend, box } = setup({ backend: "claude", model: "claude-opus-5-5", sendLater });
     await waitFor(() => expect(screen.getByRole("button", { name: /^Send at / })).toBeInTheDocument());
     await userEvent.type(box, "after the reset");

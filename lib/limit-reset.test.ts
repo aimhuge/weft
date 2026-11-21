@@ -13,6 +13,7 @@ const sample = (over: Partial<PlanSample> = {}): PlanSample => ({
 });
 
 const modelLimit = (over: Partial<ModelLimitView> = {}): ModelLimitView => ({
+  backend: "claude",
   model: "opus",
   at: NOW - 60_000,
   resetsAt: RESET_AT,
@@ -20,6 +21,12 @@ const modelLimit = (over: Partial<ModelLimitView> = {}): ModelLimitView => ({
 });
 
 describe("planWindow", () => {
+  it("does not apply another backend's model cap or an older unscoped cap", () => {
+    expect(resetFor("puku", "opus", [], [modelLimit()], NOW)).toBeUndefined();
+    expect(resetFor("puku", "opus", [], [modelLimit({ backend: undefined })], NOW)).toBeUndefined();
+    expect(resetFor("puku", "opus", [], [modelLimit({ backend: "puku" })], NOW)?.kind).toBe("model");
+  });
+
   it("is undefined when there is no sample", () => {
     expect(planWindow([], "claude", "five_hour", NOW)).toBeUndefined();
   });

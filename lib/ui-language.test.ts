@@ -109,6 +109,14 @@ describe("uiText", () => {
     expect(uiText("en", "Settings")).toBe("Settings");
   });
 
+  it("translates account, CLI and settings-search copy", () => {
+    expect(uiText("zh-CN", "CLIs")).toBe("命令行工具");
+    expect(uiText("zh-CN", "Not logged in")).toBe("未登录");
+    expect(uiText("zh-CN", "English or Simplified Chinese for the board and Settings.")).toBe(
+      "设置看板和设置页面使用英文或简体中文。",
+    );
+  });
+
   it("keeps text it has no translation for, including object keys", () => {
     expect(uiText("zh-CN", "Not a known string")).toBe("Not a known string");
     expect(uiText("zh-CN", "__proto__")).toBe("__proto__");

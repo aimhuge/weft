@@ -112,8 +112,8 @@ async function pollOnce(now = Date.now()): Promise<void> {
       // An upgrade gives the account more room, and the per-model caps Weft is holding are stale:
       // the models behind them can run again. Free them, and wake the cards parked on them.
       // (The plan's own window reset is handled by the onReset hook above; this is the plan CHANGING.)
-      const released = releaseUpgradedModels(result.limits, now);
-      if (released.length) resumeParkedOnModels(released, now);
+      const released = releaseUpgradedModels(result.limits, now, backend);
+      if (released.length) resumeParkedOnModels(released, now, backend);
     } catch (err) {
       if (!s.warned) {
         s.warned = true;

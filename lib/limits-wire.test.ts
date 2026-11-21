@@ -67,3 +67,7 @@ describe("the limits wire", () => {
     expect(latestReading([])).toEqual({});
   });
 });
+it("preserves the backend of a model cap sent by a worker", () => {
+  const cap = { backend: "puku" as const, model: "opus-4.8", at: 60_000, resetsAt: 120_000 };
+  expect(unpackModels(packLimits([], MAX_PACKED, [cap]), 60_000)).toEqual([cap]);
+});

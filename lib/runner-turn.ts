@@ -94,7 +94,7 @@ function handleRateLimit(id: string, backend: Backend, info: Extract<SDKMessage,
   // help (lib/limit-kind.ts).
   const capped = modelCapFor(card?.model, info.rateLimitType);
   if (info.status === "rejected" && capped) {
-    recordModelLimit(capped, at, info.resetsAt ? info.resetsAt * 1000 : undefined);
+    recordModelLimit(capped, at, info.resetsAt ? info.resetsAt * 1000 : undefined, backend);
     return;
   }
   // A refused request is a limit hit, for the limit badges and the wefter card's chart.
@@ -344,12 +344,12 @@ async function refreshLimits(id: string, session: Session) {
     const limits = usage?.rate_limits;
     if (!limits) return;
     updateLimits(id, session.spec.backend, { fiveHour: usageWindow(limits.five_hour), sevenDay: usageWindow(limits.seven_day) });
-    recordModelCaps(getCard(id)?.model, limits);
+    recordModelCaps(getCard(id)?.model, limits, Date.now(), session.spec.backend);
     // A plan upgrade gives the account more room, and the cap Weft is holding on this model is
     // stale: the CLI's own answer says the model has room again, so the cap goes (lib/limit-upgrade.ts).
     // Without this the card stays "at its limit" until the cap's own reset passes, even though the
     // model can run right now.
-    releaseUpgradedModels(limits);
+    releaseUpgradedModels(limits, Date.now(), session.spec.backend);
   } catch {}
 }
 

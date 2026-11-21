@@ -85,6 +85,9 @@ Weft, not a browser, so it carries no Mark of the Web). macOS still uses Squirre
 
 Claude Code threads need none of the lookups: the Agent SDK finds its own `claude.exe` in the server bundle.
 
+Codex sign-in runs `codex login` from Weft and shows the browser link in the login dialog.
+For puku-cli and other npm shims, both login and status checks use `spawnPlan()`.
+
 ## Dictation
 
 Same flow as docs/architecture/dictation.md, with three Windows pieces:

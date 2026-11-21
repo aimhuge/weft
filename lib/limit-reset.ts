@@ -42,6 +42,7 @@ export interface PlanSample {
 
 // A model that has hit its own cap, and when it frees up (unix ms).
 export interface ModelLimitView {
+  backend?: Backend;
   model: string;
   at: number;
   resetsAt: number;
@@ -79,9 +80,10 @@ export function modelResetsAt(
   model: string | undefined,
   limits: ModelLimitView[],
   now = Date.now(),
+  backend: Backend = "claude",
 ): number | undefined {
   if (!model) return undefined;
-  const limit = limits.find((l) => l.model === model);
+  const limit = limits.find((l) => l.model === model && l.backend === backend);
   return limit && limit.resetsAt > now ? limit.resetsAt : undefined;
 }
 
@@ -99,7 +101,7 @@ export function resetFor(
   limits: ModelLimitView[] = [],
   now = Date.now(),
 ): ResetAnswer | undefined {
-  const modelAt = modelResetsAt(model, limits, now);
+  const modelAt = modelResetsAt(model, limits, now, backend);
   if (modelAt !== undefined) return { at: modelAt, kind: "model", subject: model as string };
 
   const weekly = planWindow(samples, backend, "seven_day", now);
@@ -116,8 +118,8 @@ export function resetFor(
 }
 
 // The line a picker shows for a spent model: "limit until 2:30am".
-export function limitNote(model: string | undefined, limits: ModelLimitView[], now = Date.now()): string | undefined {
-  const at = modelResetsAt(model, limits, now);
+export function limitNote(model: string | undefined, limits: ModelLimitView[], now = Date.now(), backend: Backend = "claude"): string | undefined {
+  const at = modelResetsAt(model, limits, now, backend);
   if (at === undefined) return undefined;
   return `limit until ${new Date(at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
 }

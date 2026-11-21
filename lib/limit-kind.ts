@@ -18,6 +18,7 @@
 // per-model store (lib/model-limit.ts), where it gates that model and only that model.
 
 import { recordModelLimit } from "./model-limit";
+import type { Backend } from "./types";
 import { usageWindow } from "./turn";
 
 // The plan window a rate limit type names, if it names one of the plan's own.
@@ -86,7 +87,7 @@ export function modelCapFor(cardModel: string | undefined, rateLimitType: string
 //
 // A cap whose window has room is not a cap, and one whose reset has passed is not a cap either:
 // the window is open again, and the store forgets it (lib/model-limit.ts).
-export function recordModelCaps(model: string | undefined, limits: PlanRateLimits, now = Date.now()): void {
+export function recordModelCaps(model: string | undefined, limits: PlanRateLimits, now = Date.now(), backend: Backend = "claude"): void {
   if (!model) return;
   const scopes = [
     { family: "opus", window: limits.seven_day_opus },
@@ -104,6 +105,6 @@ export function recordModelCaps(model: string | undefined, limits: PlanRateLimit
     if (!window || window.used < 100) continue;
     const resetsAt = window.resetsAt !== undefined ? window.resetsAt * 1000 : undefined;
     if (resetsAt !== undefined && resetsAt <= now) continue;
-    recordModelLimit(model, now, resetsAt);
+    recordModelLimit(model, now, resetsAt, backend);
   }
 }

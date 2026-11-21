@@ -1,9 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useUiText } from "@/lib/ui-language";
 import { api } from "@/lib/client";
 import type { Backend, CliStatus, LoginView } from "@/lib/types";
 import Icon, { Spinner } from "./Icon";
+import LoginDialog from "./LoginDialog";
 
 const CLIS: { id: Backend; label: string }[] = [
   { id: "claude", label: "Claude Code" },
@@ -25,11 +27,11 @@ function message(err: unknown) {
   return err instanceof Error ? err.message : String(err);
 }
 
-function statusLine(s: CliStatus | undefined): { text: string; dot: string } {
-  if (!s) return { text: "Unknown", dot: "bg-faint" };
+function statusLine(s: CliStatus | undefined, t: (text: string) => string): { text: string; dot: string } {
+  if (!s) return { text: t("Unknown"), dot: "bg-faint" };
   if (s.error) return { text: s.error, dot: "bg-danger" };
-  if (s.loggedIn) return { text: s.email ? `Logged in as ${s.email}` : "Logged in", dot: "bg-ok" };
-  return { text: "Not logged in", dot: "bg-warn" };
+  if (s.loggedIn) return { text: s.email ? `${t("Logged in as")} ${s.email}` : t("Logged in"), dot: "bg-ok" };
+  return { text: t("Not logged in"), dot: "bg-warn" };
 }
 
 // A login the server is still running: the button stays out of the way until it finishes, so a
@@ -40,8 +42,10 @@ function liveRun(runs: LoginView[], backend: Backend): LoginView | undefined {
 
 // Settings → Accounts → CLIs: whether each CLI is logged in, with a Log in button when it isn't.
 export default function CliLogins({ titleClass }: { titleClass: string }) {
+  const t = useUiText();
   const [login, setLogin] = useState<LoginStatus>({ kind: "loading" });
   const [starting, setStarting] = useState<Backend | null>(null);
+  const [reopened, setReopened] = useState<Backend | null>(null);
   const [startError, setStartError] = useState<Partial<Record<Backend, string>>>({});
 
   // Only sets state once the request settles, so it's safe to call from an effect.
@@ -85,29 +89,29 @@ export default function CliLogins({ titleClass }: { titleClass: string }) {
   return (
     <section className="flex flex-col gap-2">
       <div className="flex items-center justify-between gap-4">
-        <h3 className={titleClass}>CLIs</h3>
+        <h3 className={titleClass} data-settings-section="CLIs">{t("CLIs")}</h3>
         <button
           onClick={refreshLoginStatus}
           disabled={login.kind === "loading"}
           className="flex items-center gap-1 text-[12.5px] text-accent hover:underline disabled:text-faint disabled:no-underline"
         >
           <Icon name="reload" size={12} />
-          Refresh
+          {t("Refresh")}
         </button>
       </div>
 
       {login.kind === "loading" ? (
         <div className="flex items-center gap-2 py-2 text-[12.5px] text-muted">
-          <Spinner size={12} /> Checking logins
+          <Spinner size={12} /> {t("Checking logins")}
         </div>
       ) : login.kind === "error" ? (
-        <p className="break-words text-[12.5px] text-danger">Couldn&apos;t check logins: {login.error}</p>
+        <p className="break-words text-[12.5px] text-danger">{t("Couldn't check logins:")} {login.error}</p>
       ) : (
         <div className="flex flex-col gap-2">
           {CLIS.map((cli) => {
             // A CLI the server didn't report on reads as Unknown.
             const s = (login.status as Partial<Record<Backend, CliStatus>>)[cli.id];
-            const line = statusLine(s);
+            const line = statusLine(s, t);
             const error = startError[cli.id];
             // A login the server is running for this CLI: the button waits for it.
             const running = liveRun(login.runs, cli.id);
@@ -122,9 +126,9 @@ export default function CliLogins({ titleClass }: { titleClass: string }) {
                   </span>
                 </span>
                 {running ? (
-                  <span className="flex shrink-0 items-center gap-1 text-[12.5px] text-ok">
-                    <Spinner size={11} /> Logging in
-                  </span>
+                  <button type="button" onClick={() => setReopened(cli.id)} className="flex shrink-0 items-center gap-1 text-[12.5px] text-ok">
+                    <Spinner size={11} /> {t("Logging in")}
+                  </button>
                 ) : (
                   s &&
                   !s.loggedIn && (
@@ -134,7 +138,7 @@ export default function CliLogins({ titleClass }: { titleClass: string }) {
                       className="flex shrink-0 items-center gap-1.5 rounded-md border border-line-strong px-2.5 py-1 text-[12.5px] text-ink hover:bg-sunken disabled:opacity-50"
                     >
                       {starting === cli.id && <Spinner size={11} />}
-                      Log in
+                      {t("Log in")}
                     </button>
                   )
                 )}
@@ -143,6 +147,9 @@ export default function CliLogins({ titleClass }: { titleClass: string }) {
           })}
         </div>
       )}
+      {reopened && login.kind === "ready" && login.runs.filter((run) => run.backend === reopened).map((run) => (
+        <LoginDialog key={run.backend} login={run} onClose={() => setReopened(null)} />
+      ))}
     </section>
   );
 }

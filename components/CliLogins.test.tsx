@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Backend, CliStatus, LoginView } from "@/lib/types";
+import { setUiLanguage } from "@/lib/ui-language";
 import "./test-utils";
 import CliLogins from "./CliLogins";
 
@@ -74,6 +75,18 @@ describe("CliLogins", () => {
     expect(await screen.findAllByText("Not logged in")).toHaveLength(3);
     const buttons = screen.getAllByRole("button", { name: /Log in/ });
     expect(buttons).toHaveLength(3);
+  });
+
+  it("localizes the section and login statuses in Simplified Chinese", async () => {
+    setUiLanguage("zh-CN");
+    try {
+      setup();
+      expect(await screen.findByRole("heading", { name: "命令行工具" })).toBeInTheDocument();
+      expect(await screen.findAllByText("未登录")).toHaveLength(3);
+      expect(screen.getAllByRole("button", { name: "登录" })).toHaveLength(3);
+    } finally {
+      setUiLanguage("en");
+    }
   });
 
   it("starts a login when Log in is pressed", async () => {

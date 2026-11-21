@@ -2,14 +2,14 @@
 // the samples lib/limit-history.ts keeps, packed small, so a worker card's burndown chart draws the worker's own week.
 // One tuple per sample: [at in minutes, CLI, 5 or 7 (the window), used share, reset in unix seconds or 0].
 // `m`, beside them, the models at their own cap (lib/model-limit.ts), so a worker card's model pickers mark the worker's
-// spent models, not this Mac's (lib/use-plan-limits.ts): [model, hit at in minutes, reset in unix seconds]. An older
+// spent models, not this Mac's (lib/use-plan-limits.ts): [model, hit at in minutes, reset in unix seconds, backend?]. An older
 // worker sends no `m`, and reads as none capped.
 import type { LimitSample } from "./limit-chart";
 import type { ModelLimit } from "./model-limit";
 import type { Backend } from "./types";
 
 export type PackedSample = [number, string, 5 | 7, number, number];
-export type PackedModel = [string, number, number];
+export type PackedModel = [string, number, number, Backend?];
 export interface PackedLimits {
   v: 1;
   s: PackedSample[];
@@ -30,17 +30,21 @@ const BACKENDS: ReadonlySet<string> = new Set<Backend>(["claude", "puku", "codex
 export function packLimits(samples: LimitSample[], max = MAX_PACKED, models: ModelLimit[] = []): PackedLimits {
   const kept = samples.slice(-max);
   const s = kept.map((x): PackedSample => [Math.round(x.at / 60_000), x.backend, x.kind === "five_hour" ? 5 : 7, twoPlaces(x.used), Math.round(x.resetsAt ?? 0)]);
-  const m = models.slice(-MAX_MODELS).map((l): PackedModel => [l.model.slice(0, MODEL_ID_MAX), Math.round(l.at / 60_000), Math.round(l.resetsAt / 1000)]);
+  const m = models.slice(-MAX_MODELS).map((l): PackedModel => {
+    const tuple: PackedModel = [l.model.slice(0, MODEL_ID_MAX), Math.round(l.at / 60_000), Math.round(l.resetsAt / 1000)];
+    if (l.backend) tuple[3] = l.backend;
+    return tuple;
+  });
   return m.length ? { v: 1, s, m } : { v: 1, s };
 }
 
-const isModel = (t: unknown): t is PackedModel => Array.isArray(t) && t.length === 3 && typeof t[0] === "string" && typeof t[1] === "number" && typeof t[2] === "number";
+const isModel = (t: unknown): t is PackedModel => Array.isArray(t) && (t.length === 3 || (t.length === 4 && BACKENDS.has(t[3] as string))) && typeof t[0] === "string" && typeof t[1] === "number" && typeof t[2] === "number";
 
 /** The models a row says are at their cap and not yet reset at `now`; none from an older worker or anything else. */
 export function unpackModels(packed: unknown, now = Date.now()): ModelLimit[] {
   const list = (packed as Partial<PackedLimits> | null)?.m;
   if (!Array.isArray(list)) return [];
-  return list.filter(isModel).map(([model, at, resetsAt]) => ({ model, at: at * 60_000, resetsAt: resetsAt * 1000 })).filter((l) => l.resetsAt > now);
+  return list.filter(isModel).map(([model, at, resetsAt, backend]) => ({ model, ...(backend && { backend }), at: at * 60_000, resetsAt: resetsAt * 1000 })).filter((l) => l.resetsAt > now);
 }
 
 const isTuple = (t: unknown): t is PackedSample =>

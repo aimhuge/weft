@@ -142,7 +142,7 @@ describe("createCardFromBody", () => {
   it("starts on the backup model when the picked one is spent", () => {
     vi.mocked(fallback.fallbackFor).mockReturnValue({ backend: "puku", model: "puku-2" });
     createCardFromBody({ prompt: "x", backend: "claude", model: "opus" });
-    expect(fallback.fallbackFor).toHaveBeenCalledWith("opus");
+    expect(fallback.fallbackFor).toHaveBeenCalledWith("opus", expect.any(Number), "claude");
     expect(vi.mocked(store.createCard).mock.calls[0]?.[0]).toMatchObject({ backend: "puku", model: "puku-2" });
   });
 

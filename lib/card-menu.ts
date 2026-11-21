@@ -16,6 +16,39 @@ export type MenuItem =
   | { label: string; submenu: MenuItem[]; enabled?: boolean; detail?: string }
   | { type: "separator" };
 
+export function translateMenuItems(items: MenuItem[], translate: (text: string) => string): MenuItem[] {
+  return items.map((item) => ("id" in item ? { ...item, label: translateMenuLabel(item.label, translate) } : item));
+}
+
+function translateMenuLabel(label: string, translate: (text: string) => string): string {
+  const skill = /^Run (\/.*)$/.exec(label)?.[1];
+  if (skill !== undefined) return `${translate("Run /")}${skill.slice(1)}`;
+
+  const backendMatch = /^Run on (.+?)( \(hit plan limit\))?$/.exec(label);
+  const backend = backendMatch?.[1];
+  if (backend !== undefined) {
+    const key = backendMatch?.[2] ? "Run on {backend} (hit plan limit)" : "Run on {backend}";
+    return translate(key).replace("{backend}", backend);
+  }
+
+  const permission = /^Permissions: (.+)$/.exec(label)?.[1];
+  if (permission !== undefined) return `${translate("Permissions")}：${translate(permission)}`;
+
+  const agent = /^Agent: (.+)$/.exec(label)?.[1];
+  if (agent !== undefined) {
+    const name = agent.replace(/\bBuilder\b/g, translate("Builder")).replace(/\bCopywriter\b/g, translate("Copywriter"));
+    return translate("Agent: {name}").replace("{name}", name);
+  }
+
+  const archived = /^Show (\d+) Archived$/.exec(label)?.[1];
+  if (archived !== undefined) return translate("Show {count} Archived").replace("{count}", archived);
+
+  const archiveAll = /^Archive All (\d+) in Done$/.exec(label)?.[1];
+  if (archiveAll !== undefined) return translate("Archive All {count} in Done").replace("{count}", archiveAll);
+
+  return translate(label);
+}
+
 export type CardAction =
   | "open"
   | "rename"

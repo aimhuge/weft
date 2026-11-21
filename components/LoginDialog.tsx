@@ -4,6 +4,7 @@ import { useEffect, useEffectEvent, useRef, useState, type SubmitEvent } from "r
 import { api } from "@/lib/client";
 import type { Backend, LoginTrial, LoginView } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
+import { isMac } from "@/lib/hotkeys";
 import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "./button-styles";
@@ -107,7 +108,7 @@ function CodeEntry({
 }
 
 function TerminalFallback({ backend, busy, onClick }: { backend: Backend; busy: boolean; onClick: () => void }) {
-  if (backend === "github-copilot") return null;
+  if (backend === "github-copilot" || !isMac()) return null;
   return (
     <button onClick={onClick} disabled={busy} className={BUTTON_SECONDARY}>
       Use Terminal instead

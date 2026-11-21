@@ -49,6 +49,7 @@ export interface ReplyModeInput {
   cold?: { tokens: string };
   // The 5-hour window is used up; it resets at this time (ms). Only where Send later is offered.
   limitResetAt?: number;
+  limitReason?: string;
   // The last turn stopped short (a stop, an error, a plan limit, the app closing), so "continue" makes sense.
   cutOff: boolean;
   // Board threads take Send later; the copilot doesn't.
@@ -108,9 +109,9 @@ function noPriorSchedule(input: ReplyModeInput, here: string, later: ReplyMenuIt
   const resetAt = input.limitResetAt as number;
   return {
     mode: "reply",
-    chip: "Fresh start · 5-hour limit used up",
+    chip: `Fresh start · ${input.limitReason ?? "5-hour limit used up"}`,
     tone: "accent",
-    primary: { action: "schedule", label: `Send at ${formatAt(resetAt, input.now)}`, tip: "Send when the 5-hour window resets (Enter)" },
+    primary: { action: "schedule", label: `Send at ${formatAt(resetAt, input.now)}`, tip: "Send when the limit resets (Enter)" },
     menu: [{ action: "send", label: here }, ...(input.canFresh ? [{ action: "fresh", label: "Send fresh now" } as ReplyMenuItem] : []), ...later],
   };
 }
@@ -145,9 +146,9 @@ function idleMode(input: ReplyModeInput): ReplyModeView {
     const fresh: ReplyMenuItem[] = input.cold ? [{ action: "fresh", label: "Send fresh now" }] : [];
     return {
       mode: "reply",
-      chip: "5-hour limit used up",
+      chip: input.limitReason ?? "5-hour limit used up",
       tone: "accent",
-      primary: { action: "schedule", label: `Send at ${formatAt(input.limitResetAt, input.now)}`, tip: "Send when the 5-hour window resets (Enter)" },
+      primary: { action: "schedule", label: `Send at ${formatAt(input.limitResetAt, input.now)}`, tip: "Send when the limit resets (Enter)" },
       menu: [{ action: "send", label: here }, ...fresh, ...later],
     };
   }
@@ -248,6 +249,7 @@ export interface ReplyBoxState {
   // snapshot does: the shared limit stores (lib/limit-reset.ts) also know the model's own cap and
   // the CLI's weekly window. When it's there, it answers instead of fiveHour + planReset.
   limitResetAt?: number;
+  limitReason?: string;
   cutOff: boolean;
   // No prior assistant turn in the current session (model/CLI was just switched, or the card was never started).
   // When true, the reply box defaults to Send fresh (or Send for codex) and Continue is hidden.
@@ -275,6 +277,7 @@ export function replyBoxMode(s: ReplyBoxState): { view: ReplyModeView; resetAt?:
     folder: folderName(s.cwd),
     cold: cold && { tokens: formatTokens(cold.tokens) },
     limitResetAt: resetAt,
+    limitReason: s.limitReason,
     cutOff: s.cutOff,
     canSchedule: Boolean(s.sendLater),
     canFresh: s.canFresh,

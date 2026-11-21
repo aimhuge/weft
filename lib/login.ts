@@ -8,6 +8,7 @@ import { openLoginInTerminal } from "./login-terminal";
 import { authStatus } from "./login-status";
 import { startCopilotLogin } from "./github-copilot-login";
 import { clean, errMessage, isNotLoggedInError, isRateLimitError, lastUrl, needsTty } from "./login-output";
+import { isWindows, killTree, spawnPlan } from "./win-command";
 
 // Runs `<cli> auth login` in the background when a thread finds its CLI logged out, streams the
 // CLI's output to the board's login pop-up, and falls back to a Terminal window when the CLI
@@ -145,7 +146,10 @@ function startPolling(run: LoginRun, deadline: number) {
 function killChild(run: LoginRun) {
   const child = run.child;
   run.child = undefined;
-  if (child && child.exitCode === null && child.signalCode === null) child.kill();
+  if (child && child.exitCode === null && child.signalCode === null) {
+    if (isWindows() && child.pid && killTree(child.pid)) return;
+    child.kill();
+  }
 }
 
 // Stops whatever a run is doing and hands back the callbacks still waiting on a login.
@@ -213,7 +217,7 @@ async function onExit(run: LoginRun, child: ChildProcess, code: number | null, s
 
   if (status.loggedIn) {
     succeed(run);
-  } else if (needsTty(clean(run.raw))) {
+  } else if (process.platform === "darwin" && needsTty(clean(run.raw))) {
     append(run, "\nThe CLI needs a terminal for this login, so it's opening in Terminal.\n");
     openLoginInTerminal(run.view.backend);
   } else if (code === 0 && !signal) {
@@ -236,13 +240,26 @@ export function startLogin(backend: Backend, onDone?: () => void): LoginView {
 
   if (backend === "github-copilot") return startCopilotLogin(onDone);
 
-  // Codex login requires an interactive terminal for browser/device authorization, and Goose's
-  // `configure` is an interactive wizard: both need a real TTY, so they go to a Terminal window.
-  if (backend === "codex" || backend === "goose") return openLoginInTerminal(backend, onDone);
+  // Keep the existing device login on macOS. On Windows Codex's browser login can run through pipes.
+  if (backend === "goose" || (backend === "codex" && !isWindows())) return openLoginInTerminal(backend, onDone);
 
   const bin = binary(backend);
+  const args = backend === "codex" ? ["login"] : ["auth", "login"];
+  const env = cliEnv();
+  if (backend === "codex") delete env.CLAUDE_CODE_ENTRYPOINT;
+  const plan = spawnPlan(bin, args, { env });
   const run = newRun(backend, "running", onDone);
-  const child = spawn(/*turbopackIgnore: true*/ bin, ["auth", "login"], { env: cliEnv(), stdio: ["pipe", "pipe", "pipe"] });
+  let child;
+  try {
+    child = spawn(/*turbopackIgnore: true*/ plan.command, plan.args, {
+      env,
+      stdio: ["pipe", "pipe", "pipe"],
+      ...(plan.windowsVerbatimArguments && { windowsVerbatimArguments: true }),
+    });
+  } catch (err) {
+    failRun(run, errMessage(err));
+    return snapshot(run);
+  }
   run.child = child;
 
   const onData = (chunk: Buffer) => {

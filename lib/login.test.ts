@@ -1,4 +1,5 @@
 import { EventEmitter } from "node:events";
+import fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoginView } from "./types";
 
@@ -87,6 +88,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   Object.defineProperty(process, "platform", platform);
+  vi.unstubAllEnvs();
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
@@ -122,6 +124,42 @@ describe("startLogin", () => {
     login.startLogin("puku");
     expect(cp.which).toHaveBeenCalledWith("/usr/bin/which", ["puku-cli"]);
     expect(cp.spawn.mock.calls[0]![0]).toBe("/usr/local/bin/puku-cli");
+  });
+
+  it("starts Windows Codex browser login and finishes after the CLI signs in", async () => {
+    const bin = "C:\\Tools\\codex.exe";
+    setPlatform("win32");
+    vi.stubEnv("PATH", "C:\\Tools");
+    vi.stubEnv("PATHEXT", ".EXE");
+    vi.spyOn(fs, "statSync").mockReturnValueOnce({ isFile: () => true } as fs.Stats);
+    const onDone = vi.fn();
+    expect(login.startLogin("codex", onDone).state).toBe("running");
+    expect(cp.spawn).toHaveBeenCalledWith(bin, ["login"], expect.objectContaining({ stdio: ["pipe", "pipe", "pipe"] }));
+    expect(cp.osascript).not.toHaveBeenCalled();
+    statusSays("Logged in using ChatGPT");
+    child().emit("close", 0, null);
+    await flush();
+    expect(onDone).toHaveBeenCalledOnce();
+  });
+
+  it("starts the puku-cli Windows shim through cmd.exe", () => {
+    setPlatform("win32");
+    vi.stubEnv("PATH", "C:\\Program Files\\Weft");
+    vi.stubEnv("PATHEXT", ".CMD");
+    vi.stubEnv("COMSPEC", "C:\\Windows\\System32\\cmd.exe");
+    vi.spyOn(fs, "statSync").mockReturnValueOnce({ isFile: () => true } as fs.Stats);
+    expect(login.startLogin("puku").state).toBe("running");
+    expect(cp.spawn).toHaveBeenCalledWith(
+      "C:\\Windows\\System32\\cmd.exe",
+      ["/d", "/s", "/c", '"C:\\Program^ Files\\Weft\\puku-cli.cmd ^"auth^" ^"login^""'],
+      expect.objectContaining({ windowsVerbatimArguments: true }),
+    );
+  });
+
+  it("reports a synchronous spawn failure in the login dialog", () => {
+    cp.spawn.mockImplementationOnce(() => { throw new Error("spawn EINVAL"); });
+    expect(login.startLogin("puku")).toMatchObject({ state: "failed", output: "\nspawn EINVAL\n" });
+    expect(lastPublished()?.state).toBe("failed");
   });
 
   it("looks the CLI up on PATH only once", () => {
