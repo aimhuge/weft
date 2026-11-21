@@ -1,7 +1,7 @@
 "use client";
 
 import { LEAGUES } from "@/lib/game";
-import { profileUrl, zoneOf, type LeagueRow } from "@/lib/league";
+import { leagueName, profileUrl, zoneOf, type LeagueRow } from "@/lib/league";
 import Tip from "./Tip";
 
 // What the profile's League tab and the Leagues dialog share: the six-tier ladder and a league's table, best
@@ -47,7 +47,8 @@ export function openProfile(url: string) {
 const COLS = "grid grid-cols-[28px_32px_1fr_auto_64px] gap-2.5";
 
 function Row({ row, size, tier }: { row: LeagueRow; size: number; tier: number }) {
-  const zone = zoneOf(row, size, tier);
+  // In the open league each builder moves within their own tier.
+  const zone = zoneOf(row, size, row.tier ?? tier);
   const url = profileUrl(row.username);
   const name = <span className="truncate font-semibold text-ink">{row.name}{row.isMe && <span className="font-normal text-muted"> (you)</span>}</span>;
   return (
@@ -65,7 +66,7 @@ function Row({ row, size, tier }: { row: LeagueRow; size: number; tier: number }
           name
         )}
         <span className="truncate text-[11px] text-muted">
-          Level {row.level} · {row.shipped} shipped{row.streak > 0 ? ` · 🔥 ${row.streak}` : ""}
+          {row.tier !== undefined && `${leagueName(row.tier)} · `}Level {row.level} · {row.shipped} shipped{row.streak > 0 ? ` · 🔥 ${row.streak}` : ""}
           {url && <span> · @{row.username}</span>}
         </span>
       </div>

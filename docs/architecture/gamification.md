@@ -215,8 +215,12 @@ gameState() ── lib/league.ts leagueEntry() ──> { week, xp, shipped, stre
   tier's leagues underneath (yours first). The Loom's League tab shows only your league, with an All leagues button.
   The dialog plays a short intro video the first time you open it (`useFeatureIntro("leagues")`, see
   [feature-intros.md](feature-intros.md)).
-- **Small leagues.** With few accounts each tier holds one league, so a winner who moves up can find themselves alone; a lone
-  builder doesn't move up again until someone joins.
+- **The open league.** While a week has fewer than 30 builders in all (`POOL_SIZE`, `private.league_pooled`), they share one
+  league instead of each sitting alone in their tier (a winner who moved up used to find themselves alone, and lose sight of
+  the friend they beat). `league_standings` returns the whole week with each row's own tier and `pooled`; the League tab titles
+  it "Open League" and shows each builder's tier, and `league_tier_for` ranks a pooled week across everyone, so its top and
+  bottom still move up and down a tier. League emails rank the same way (`leaguesOf(rows, pooled)`). Past 30 it splits back
+  into per-tier leagues (20261121003415_league_pool.sql). The Leagues dialog still browses tier by tier.
 
 ### League emails
 

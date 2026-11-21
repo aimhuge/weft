@@ -38,6 +38,17 @@ describe("planLeagueMails", () => {
     expect(mails.find((m) => m.to === "b@w.test")?.facts).toMatchObject({ move: "stay" });
   });
 
+  it("ranks a small week as one open league, and a full one per tier", () => {
+    const old = MONDAY - WELCOME_WINDOW_MS - 1;
+    const small = [row({ user_id: "a", week: LAST_WEEK, tier: 2, xp: 600 }), row({ user_id: "z", week: LAST_WEEK, tier: 3, xp: 2000 })];
+    const builders = [b({ id: "a", email: "a@w.test", createdAt: old }), b({ id: "z", email: "z@w.test", createdAt: old })];
+    const pooled = planLeagueMails({ now: MONDAY, thisWeek: [], lastWeek: small, builders, sent: [] });
+    expect(pooled.find((m) => m.userId === "a")?.facts).toMatchObject({ rank: 2 });
+    const filler = Array.from({ length: 28 }, (_, i) => row({ user_id: `f${i}`, week: LAST_WEEK, tier: 0, xp: 1 }));
+    const full = planLeagueMails({ now: MONDAY, thisWeek: [], lastWeek: [...small, ...filler], builders, sent: [] });
+    expect(full.find((m) => m.userId === "a")?.facts).toMatchObject({ rank: 1 });
+  });
+
   it("sends a welcome to a builder who just signed up, once", () => {
     const me = row({ user_id: "a" });
     const builders = [b({ id: "a", name: "Alex", email: "a@w.test", createdAt: MONDAY - 1 * DAY_MS })];

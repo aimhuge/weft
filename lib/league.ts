@@ -32,12 +32,18 @@ export interface LeagueRow {
   level: number;
   badges: LeagueBadge[];
   isMe: boolean;
+  // Their own tier: in the open league (below) builders of different tiers share one table.
+  tier?: number;
 }
 
 export type LeagueView =
   | { state: "signed-out" }
   | { state: "error"; error: string }
-  | { state: "ready"; week: string; tier: number; league: string; rows: LeagueRow[]; up: number; down: number };
+  | { state: "ready"; week: string; tier: number; league: string; rows: LeagueRow[]; up: number; down: number; pooled?: boolean };
+
+// The open league (supabase/migrations/20261121003415_league_pool.sql): while a week has fewer than this many
+// builders in all, they share one league instead of each sitting alone in their tier.
+export const POOL_SIZE = 30;
 
 export const MAX_BADGES = 12;
 export const PROFILE_BASE = "https://weft.zip/@";
@@ -99,6 +105,8 @@ export interface StandingRow {
   is_me: boolean;
   tier: number;
   size: number;
+  // The week is one open league (an older server leaves it out).
+  pooled?: boolean;
 }
 
 const toBadges = (raw: unknown): LeagueBadge[] =>
@@ -124,8 +132,9 @@ const toRow = (r: Omit<StandingRow, "tier">): LeagueRow => ({
 });
 
 export function toLeagueView(week: string, rows: StandingRow[]): LeagueView {
-  const tier = rows[0]?.tier ?? 0;
+  const tier = (rows.find((r) => r.is_me) ?? rows[0])?.tier ?? 0;
   const { up, down } = leagueMoves(rows.length);
+  const pooled = rows.some((r) => r.pooled);
   return {
     state: "ready",
     week,
@@ -133,7 +142,8 @@ export function toLeagueView(week: string, rows: StandingRow[]): LeagueView {
     league: leagueName(tier),
     up,
     down,
-    rows: rows.map(toRow),
+    rows: rows.map((r) => (pooled ? { ...toRow(r), tier: r.tier } : toRow(r))),
+    ...(pooled ? { pooled } : {}),
   };
 }
 

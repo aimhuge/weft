@@ -47,7 +47,7 @@ export default function LeagueTab({ weekXp }: { weekXp: number }) {
   }
   return (
     <div className="flex flex-col gap-3">
-      <LeagueHead league={view.league} week={view.week} size={view.rows.length} up={view.up} down={view.down} />
+      <LeagueHead league={view.league} week={view.week} size={view.rows.length} up={view.up} down={view.down} title={view.pooled ? "Open League" : undefined} />
       <LeagueTable rows={view.rows} tier={view.tier} />
       {all}
       {dialog}
