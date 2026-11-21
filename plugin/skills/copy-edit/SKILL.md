@@ -27,7 +27,10 @@ Three kinds, each with its own underline colour:
 For every note:
 
 - `t`: a title of two to five words ("Not verified yet", "Physically impossible").
-- `q`: one or two sentences on why, citing what you checked. Leave it out for typos.
+- `q`: the write-up the user reads in the sidebar. Short for a small claim (one or two sentences on why, citing
+  what you checked). For a big-picture or structural note, write it out in paragraphs separated by a blank line:
+  what's wrong (quote their words), what the fix changes (for a move, the section's order before and after, numbered),
+  and why it matters to the reader. Plain words, no jargon. Leave it out for typos.
 - `fix`: a replacement **in the author's voice** that fits the sentence exactly where the mark is, or `null` when
   the fix is structural and the author has to make it.
 - Number notes in reading order. Underline the shortest phrase the note covers, not the whole paragraph.
@@ -40,7 +43,7 @@ One page per piece, at `~/.weft/show/copy-edit/<slug>/index.html`. Copy the kit 
 
 ```
 mkdir -p ~/.weft/show/copy-edit/<slug> ~/.weft/show/copy-edit/_kit
-cp <this skill's folder>/kit/copy-edit.css <this skill's folder>/kit/copy-edit.js ~/.weft/show/copy-edit/_kit/
+cp <this skill's folder>/kit/copy-edit*.css <this skill's folder>/kit/copy-edit*.js ~/.weft/show/copy-edit/_kit/
 cp <this skill's folder>/kit/template.html ~/.weft/show/copy-edit/<slug>/index.html
 ```
 
@@ -52,13 +55,14 @@ Fill in the template:
   `<mark data-n="N">`.
 - Light structure only where the author already wrote it: a numbered list in the text becomes
   `<ol class="qs"><li>…</li></ol>` (badged cards). A heading line like "Regarding the first question" becomes
-  `<span class="tag" data-plain="Regarding the first question:">On question 1</span>` at the start of its paragraph;
-  `data-plain` is what Copy text writes in its place.
+  `<span class="tag">Regarding the first question</span>` at the start of its paragraph, in the author's words;
+  Copy text writes it as its own line, as written.
 - The notes as JSON in `<script type="application/json" id="notes">`.
 
 Open it with `mcp__browser__open_url` and take a screenshot to check the underlines line up.
 
-The editor gives the user: underlines that jump to their note and back, Apply and Dismiss on each note, Fix all typos,
+The editor gives the user: underlines that jump to their note and back, Apply and Dismiss on each note, Reopen on a
+resolved note whose words are still in the draft (an accidental Dismiss), Fix all typos,
 Reset to original, a live word count, autosave, and Copy text (plain text with list numbers kept, ready to paste into
 LinkedIn or an email). The notes sit in a sticky sidebar beside the text, and stack below it only on a phone.
 
@@ -70,6 +74,22 @@ with an `anchor`: the exact text to underline, copied from what they wrote now (
 underlines each anchor on load until it's applied or dismissed, and lists open notes first. Number new notes after the
 last one. A `fix` can add paragraphs: separate them with a blank line, and a `## Label` paragraph becomes the small
 label on the paragraph after it.
+
+When the user asks you to make a change yourself, do it through notes and click Apply in the pane, so it lands in
+their saved copy. A move is two notes: one whose `fix` is `" "` removes the text, and one that inserts it before the
+target's opening words. Copy each anchor from `read_page` right before (they may have just fixed a typo inside it),
+check both are underlined (`mcp__browser__wait_for` on `mark[data-n="N"]`), then apply the removal before the insert.
+A link goes in as plain text in brackets, `(https://…)`, so it survives Copy text.
+
+Images: the user adds one with Add image, by pasting, or by dropping a file on the text; it lands after the
+paragraph they're in, as a figure with an editable caption (hover for ↑ ↓ to move it a paragraph, Cover to make
+it the cover image at the top, Save image, and Remove with Undo). Images are shrunk to at
+most 1600px and saved with the draft. When the draft has a placeholder like `[screenshot]`, take the shot
+(`mcp__browser__screenshot` with `save_to` in the piece's folder; hover the header first so the click marker isn't in
+it), and add a note with `"image": "file.png"`, the placeholder as its `anchor` and the caption as its `fix`: its
+button reads Add image. To put an image next to a paragraph without removing words, add `"place": "after"` (or
+`"before"`) and anchor the paragraph's last (or first) words. Prefer real artifacts (the source document, a chart
+of the cited numbers) over generated pictures; look at every generated image before offering it. Copy text writes each image as `[Image: caption]` so the user knows where it goes.
 
 Look for what a draft's growth leaves behind: a question raised and never answered, an argument tossed aside in a
 clause, new typos in the new paragraphs.

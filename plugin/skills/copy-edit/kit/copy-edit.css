@@ -34,7 +34,27 @@
   .note .fix { margin-top:8px; padding:8px 10px; background:#1d1d24; border-radius:8px; font-family:Georgia,serif; }
   .note .row { display:flex; gap:6px; margin-top:8px; }
   .toast { position:fixed; bottom:18px; left:50%; transform:translateX(-50%); background:var(--accent); color:#fff; padding:8px 14px; border-radius:8px; font-size:13px; opacity:0; transition:.2s; pointer-events:none; }
+.toast.show { pointer-events:auto; }
+.toast button { margin-left:10px; background:rgba(255,255,255,.18); border:0; color:#fff; font-weight:600; min-height:28px; padding:4px 10px; }
   .toast.show { opacity:1; }
 .note .fix p { margin:0 0 .6em; }
 .note .fix p:last-child { margin:0; }
 .note .fix .tag { font-size:10px; margin:2px 0 6px; }
+.note .why { color:#c9c6c0; font-size:13.5px; line-height:1.55; }
+.note .why p { margin:0 0 .6em; }
+.note .why p:last-child { margin:0; }
+.note.done .why { display:none; }
+.note.done.active .why { display:block; }
+.note .row .q { align-self:center; margin-right:auto; }
+#doc figure { margin:1.4em 0; position:relative; }
+#doc figure img { display:block; max-width:100%; height:auto; border-radius:10px; border:1px solid #2b2838; }
+#doc figcaption { font:14px/1.5 system-ui,sans-serif; color:var(--mute); text-align:center; margin-top:8px; outline:none; }
+#doc figcaption:empty::before { content:"Add a caption"; opacity:.5; }
+.fig-tools { position:absolute; top:8px; right:8px; display:flex; gap:6px; opacity:0; transition:opacity .15s; }
+#doc figure:hover .fig-tools, #doc figure:focus-within .fig-tools { opacity:1; }
+.fig-tools a, .fig-tools button { font:12px system-ui,sans-serif; color:var(--ink); background:rgba(20,20,26,.88); border:1px solid #3a3a45; border-radius:8px; padding:6px 10px; cursor:pointer; text-decoration:none; min-height:30px; }
+@media (hover:none) { .fig-tools { opacity:1; } }
+.note .fix-img { display:block; max-width:100%; border-radius:8px; margin-top:8px; border:1px solid #2b2838; }
+#doc figure.cover { margin-top:0; }
+#doc figure.cover::before { content:"Cover image"; position:absolute; top:8px; left:8px; z-index:1; font:600 11px/1 system-ui,sans-serif; letter-spacing:.08em; text-transform:uppercase; color:#fff; background:var(--accent); padding:6px 9px; border-radius:6px; }
+#doc figure.cover .fig-cover { background:var(--accent); border-color:var(--accent); }
