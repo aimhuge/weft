@@ -508,12 +508,33 @@ it in chunks; with the folder sealed the thread never saw the answer. The user c
   before `bashVerdict` reads the line, so `head -c 20000 <result>` and `jq` run; a folder is never swapped, so
   `cd <project>; cat ../other/x.jsonl` and `rm -rf <project>` stay refused.
 - **Never past it**: a `..` in the name is refused before folding, and a path must land inside both where it's named and
-  where it really is (a link to another project or to `settings.json` stays sealed). Other projects, the CLI's settings,
-  hooks and skills stay sealed.
+  where it really is (a link to another project or to `settings.json` stays sealed). Other projects, the CLI's settings
+  and hooks stay sealed; installed skills open to read and run ([below](#installed-skills)).
 - **The folder gate** counts it as the card's own (`ownProjectDirs` joins the granted folders in `folderGuard`), so a
   Read there doesn't ask "Outside the project".
 - The trade-off: a transcript holds every value its thread saw in plaintext, so a thread can now read what earlier
   threads of the same project saw. Other projects' transcripts stay sealed.
+
+### Installed skills
+
+The CLI's installed skills, `~/.claude/skills/<name>/` (and `CLAUDE_CONFIG_DIR/skills`, and a plugin's `skills/` under
+`~/.claude/plugins/`), open to **read and run** (`lib/secret-guard-skills.ts`, 2026-11-21). The Skill tool loads a
+SKILL.md itself, but the seal turned away every script, reference and template a skill ships: Anthropic's pptx skill
+says `python ~/.claude/skills/pptx/scripts/office/validate.py deck.pptx`, and every skills.sh skill with scripts broke.
+
+- **Reads**: Read, LS, Grep and Glob judge a skill's path by `skillStandIn`: a `/tmp/weft-skill/<name>` stand-in, or the
+  real place when a link lands outside the CLI's home (so a link to a `.env` is still a `.env`).
+- **Bash**: `withoutSkills` swaps the stand-ins in only when `readsOnly` says the whole line (nested `$( … )` too) just
+  reads or runs them: a reader (`cat`, `grep`, `ls`, `find` without `-exec`/`-delete`, `jq`…), an interpreter
+  (`python3`, `node`, `bash`…) whose script is the skill's file with no other skill path after it, the script run by its
+  own path, or `cp`/`ditto` with the skill only as a source. Anything else that names one (`rm`, `mv`, `tee`, `sed -i`,
+  `cp x <skill>`, `cd <skill>`, a path inside `-c` code or `--opt=`) reaches the seal as it was.
+- **Writes stay sealed**: Write and Edit still refuse, and so does any redirect into the CLI's home (`> ~/.claude/…`,
+  `inTranscriptDir` in `commandVerdict`; before, only a settings file was checked there). A skill is loaded by every
+  later thread, so one a thread could change would plant instructions in all of them.
+- **Never past it**: a `..` is refused before folding, and a path must land in a skill where it's named and where it
+  really is, or outside the CLI's home: a link in a skill to `settings.json` or a transcript stays sealed. A plugin's
+  hooks stay sealed. The folder gate grants the skills folders (`skillsDirs`), so a read there doesn't ask.
 
 `changelog_list` pages too (`pageOf` in `lib/changelog-tool.ts`): 40 entries a page (`limit` up to 100, `offset` for the
 next), each line clipped to 300 chars, a footer naming the next offset, and `mine: true` for the card's own entries, so its
