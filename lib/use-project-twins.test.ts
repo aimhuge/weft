@@ -42,4 +42,19 @@ describe("useProjectTwins", () => {
     expect(run(null).archivedCount).toBe(1);
     expect(run(null).projectOf(wpath)).toBe("/dev/weft");
   });
+
+  it("offers the people and machines of the cards on screen, and filters to the one picked", () => {
+    const mate = makeCard({ id: "m", cwd: "/dev/other", column: "running", team: { org: "o", owner: "u2", name: "Zulker Nien", device: "mac-z" } });
+    const all = [...cards, mate];
+    const twins = (selected: string | null, railFilter = {}) =>
+      renderHook(() => useProjectTwins({ selected, projects: [saved], cards: all, workerProjects: [wp, only], rootOf: (c) => c, railFilter, view })).result.current;
+    expect(twins(null).owners.people.map((p) => [p.id, p.label, p.count])).toEqual([["me", "You", 3], ["u2", "Zulker Nien", 1]]);
+    expect(twins(null).owners.machines.map((m) => m.label)).toEqual(["This Mac", "m1mini", "Zulker's Mac"]);
+    // Zulker's card is in another project, so it isn't counted under this one.
+    expect(twins("/dev/weft").owners.people.map((p) => p.id)).toEqual(["me"]);
+    const picked = twins(null, { who: "u2" });
+    expect([...picked.byColumn.values()].flat().map((c) => c.id)).toEqual(["m"]);
+    expect(picked.owners.machines.map((m) => m.id)).toEqual(["mac-z"]);
+    expect([...twins(null, { on: "worker:w1" }).byColumn.values()].flat().map((c) => c.id).sort()).toEqual(["b", "c"]);
+  });
 });

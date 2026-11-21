@@ -18,6 +18,7 @@ import { isOpenCommand, type CloudCommandRow } from "@/lib/cloud-commands";
 import { BLOB_REF_PREFIX, THREAD_PAGE_SIZE, type CloudCardRow, type CloudThreadItemRow } from "@/lib/cloud-sync-types";
 import { pageFromRows } from "@/lib/cloud-thread-page";
 import { resolveBlobUrls } from "@/lib/blob-urls";
+import { boardDirectory, EMPTY_DIRECTORY } from "@/lib/board-directory";
 import { queueMirror } from "@/lib/r2-queue";
 import { collectBlobRefs } from "@/lib/web-board";
 import { cardThumbRefs } from "@/lib/web-board-thumbs";
@@ -48,14 +49,16 @@ async function readQuery(searchParams?: Promise<Query>) {
   const query = searchParams ? await searchParams : {};
   const raw = query.card;
   const cardId = typeof raw === "string" && raw ? raw : null;
-  return { cardId };
+  // The person and machine filters (lib/board-owners.ts), so a shared link opens already filtered.
+  const pick = (v: string | string[] | undefined) => (typeof v === "string" && v ? v : undefined);
+  return { cardId, owners: { who: pick(query.who), on: pick(query.on) } };
 }
 
 // The page body. The gate throws (redirects to /login or notFound()) before this runs, so a
 // successful return is an "ok" verdict from requireTeam.
 async function BoardPageBody({ orgSlug, searchParams }: { orgSlug: string; searchParams?: Promise<Query> }) {
   const ctx = await requireTeam(orgSlug, `/${orgSlug}/board`);
-  const { cardId } = await readQuery(searchParams);
+  const { cardId, owners } = await readQuery(searchParams);
   // The server-side cookie-bound Supabase client. lib/web-session's `webClient` builds it through
   // @supabase/ssr's createServerClient with the request's cookies and swallows read-only writes —
   // RLS still gates every read, and a memberless visitor just sees nothing.
@@ -110,7 +113,12 @@ async function BoardPageBody({ orgSlug, searchParams }: { orgSlug: string; searc
   const initialRefs = new Set<string>();
   if (cardId) collectBlobRefs(pageFromRows(cardId, threadRows).items, initialRefs);
   for (const ref of cardThumbRefs(cardRows)) initialRefs.add(ref);
-  const initialBlobUrls = await resolveBlobUrls(supabase, ctx.org.id, [...initialRefs], { onUnmirrored: queueMirror(ctx.org.id) });
+  // Names for the person and machine pickers, for the owners and machines of the rows RLS returned only: read with the
+  // gate's service client here on the server (a teammate's devices are theirs alone under RLS); plain names go down.
+  const [initialBlobUrls, directory] = await Promise.all([
+    resolveBlobUrls(supabase, ctx.org.id, [...initialRefs], { onUnmirrored: queueMirror(ctx.org.id) }),
+    boardDirectory(ctx.service, cardRows).catch(() => EMPTY_DIRECTORY),
+  ]);
 
   return (
     <WebBoard
@@ -124,6 +132,8 @@ async function BoardPageBody({ orgSlug, searchParams }: { orgSlug: string; searc
       openCardId={cardId}
       initialThread={threadRows}
       initialBlobUrls={initialBlobUrls}
+      directory={directory}
+      initialOwners={owners}
     />
   );
 }

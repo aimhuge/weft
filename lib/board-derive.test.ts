@@ -8,8 +8,9 @@ const latest = { cwd: "/latest", backend: "codex" as const, model: "m" };
 
 describe("filterState", () => {
   it("is not filtering with nothing set, and keys the view on every filter", () => {
-    expect(filterState(null, "  ", {})).toEqual({ filtering: false, view: "\n\n" });
-    expect(filterState("/p", " fix ", { starred: true, tag: "bug" })).toEqual({ filtering: true, view: "/p\nfix\n★bug" });
+    expect(filterState(null, "  ", {})).toEqual({ filtering: false, view: "\n\n\n@" });
+    expect(filterState("/p", " fix ", { starred: true, tag: "bug" })).toEqual({ filtering: true, view: "/p\nfix\n★bug\n@" });
+    expect(filterState(null, "", { who: "me", on: "here" })).toEqual({ filtering: true, view: "\n\n\nme@here" });
     expect(filterState(null, "q", {}).filtering).toBe(true);
     expect(filterState(null, "", { tag: "x" }).filtering).toBe(true);
   });

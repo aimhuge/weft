@@ -116,4 +116,10 @@ export const simplifiedChineseBoard: Readonly<Record<string, string>> = {
   "% filled by the last request)": "%）",
   "Near zero the thread is compacted or loses detail.": "接近零时，线程会压缩上下文或丢失细节。",
   "input and output tokens used in this thread": "本线程使用的输入和输出词元",
+  "Whose cards": "谁的卡片",
+  "Everyone": "所有人",
+  "Nobody here": "这里没有此人",
+  "Which machine": "哪台机器",
+  "All machines": "所有机器",
+  "No cards there": "那里没有卡片",
 };

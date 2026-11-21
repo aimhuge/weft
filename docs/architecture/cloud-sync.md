@@ -375,6 +375,28 @@ your board read: pushed ──▶ taken (the lock) ──▶ takeOverTeamCard(�
 - **Gaps.** Their CLI session doesn't travel, only its thread and a brief. Only the files the card's own Edit/Write
   calls touched go in, not files a Bash command changed. Nothing reminds them of an ask beyond the tile and the bar.
 
+## Filtering by person and machine
+
+Status: built 2026-11-21, on both boards (parity).
+
+Every synced row already says whose a card is (`cloud_cards.owner_user`, filled by the database) and which machine runs it
+(`owner_device`: a Mac's device id, or `worker:<id>` for a Weft Worker), so no migration was needed. Two pickers in the
+project bar (`components/OwnerFilter.tsx`, in `components/BoardProjectBar.tsx`) narrow the board by person and machine;
+`RailFilter` gains `who` and `on` (`lib/rail-view.ts`), and `filterCards` takes a `placeOf(card)` that says where each card sits:
+
+- **Desktop**: `cardPlace` (`lib/board-owners.ts`): a teammate's card by its `Card.team` mark (owner and Mac), a `worker://`
+  card on its worker, the rest you, on `here` (This Mac). Names come from the marks and the worker projects (`deskNames`);
+  `lib/use-project-twins.ts` returns the options.
+- **weft.zip**: `rowPlace` from each row (`components/web-board/useWebOwners.ts`), which also gives a teammate's card the
+  desktop's own `Card.team`, so the tile draws their picture (`TeamOwnerMark`). The page names the people and machines on
+  the rows the visitor could read (`lib/board-directory.ts`: `profiles`, `devices.host_device`, `cloud_workers`), on the
+  server with the gate's service client, since a teammate's devices are theirs alone under RLS; only names go down.
+
+The options (`ownerChoices`) are counted over the cards the project chip, ★ and tag leave on screen, so a count is what
+picking it shows; picking a person narrows the machines to theirs. You are `me` on both boards, so `?who=me` means "my cards"
+for whoever opens it; `lib/use-owner-filter-url.ts` keeps `?who=…&on=…` in the URL (weft.zip's page also reads them on the
+server, so a shared link opens filtered). On a phone the pickers narrow and open the native list.
+
 ## Ownership
 
 The Mac running a card owns it: `owner_user` is the account that runs it and the only one that may write its rows,

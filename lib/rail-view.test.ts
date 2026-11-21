@@ -11,6 +11,17 @@ const cards = [
 const ids = (list: { id: string }[]) => list.map((c) => c.id);
 
 describe("filterCards", () => {
+  it("narrows by person and machine when it's told whose each card is", () => {
+    const place = (c: { id: string }) => ({ who: c.id === "a" ? "u2" : "me", on: c.id === "b" ? "worker:w" : "here" });
+    expect(ids(filterCards(cards, { who: "u2" }, place))).toEqual(["a"]);
+    expect(ids(filterCards(cards, { who: "me", on: "here" }, place))).toEqual(["c", "d"]);
+    expect(ids(filterCards(cards, { on: "worker:w", tag: "bug" }, place))).toEqual(["b"]);
+    // Without a way to place cards, who and on don't narrow anything.
+    expect(filterCards(cards, { who: "u2" })).toBe(cards);
+    expect(isFiltering({ who: "u2" })).toBe(true);
+    expect(isFiltering({ on: "here" })).toBe(true);
+  });
+
   it("shows every card with no filter", () => {
     expect(filterCards(cards, {})).toBe(cards);
     expect(filterCards(cards, { starred: false, tag: "" })).toBe(cards);

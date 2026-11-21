@@ -17,6 +17,7 @@ vi.mock("./ProjectBar", () => ({
 }));
 vi.mock("./FilterBox", () => ({ default: (p: Props) => (seen.set("box", p), null) }));
 vi.mock("./RailFilterChip", () => ({ default: (p: Props) => (seen.set("chip", p), null) }));
+vi.mock("./OwnerFilter", () => ({ default: (p: Props) => (seen.set("owners", p), null) }));
 
 import { topMatches } from "@/lib/board-view";
 import BoardProjectBar, { type BoardProjectBarProps } from "./BoardProjectBar";
@@ -36,6 +37,7 @@ function setup(over: Partial<BoardProjectBarProps> = {}) {
     onProject: vi.fn(),
     railFilter: { starred: true },
     onRailFilter: vi.fn(),
+    owners: { people: [], machines: [] },
     query: "",
     onQuery: vi.fn(),
     byColumn: new Map<Column, Card[]>([["running", [card("a", "fix login"), card("b", "docs")]]]),
@@ -60,6 +62,11 @@ describe("BoardProjectBar", () => {
     const bar = seen.get("bar")!;
     expect(bar).toMatchObject({ total: 3, selected: "/p", onSelect: p.onProject, sort: "recent", onSort: p.onSort, home: "/h", onMenuOpenChange: p.onMenuOpenChange });
     expect(seen.get("chip")).toMatchObject({ filter: p.railFilter, onClear: p.onRailFilter });
+  });
+
+  it("hands the person and machine pickers their options and the filter, dark on weft.zip", () => {
+    const p = setup({ variant: "web" });
+    expect(seen.get("owners")).toMatchObject({ choices: p.owners, filter: p.railFilter, onFilter: p.onRailFilter, web: true });
   });
 
   it("hands ProjectBar the board's layout and a way to change it", () => {
