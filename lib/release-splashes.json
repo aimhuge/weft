@@ -1,4 +1,11 @@
 {
+  "0.9.1": {
+    "lines": [
+      "Your AI can now work in your own Chrome, so it reaches pages that need your sign-in, like Substack.",
+      "Copy-edit keeps your headings and links, so your piece exports the way you wrote it.",
+      "Write your Substack intro and sign-off once, and copy-edit puts them around every piece you export."
+    ]
+  },
   "0.9.0": {
     "lines": [
       "Weft now opens in Simple mode: just your threads and what they built. Switch back anytime in Settings.",
