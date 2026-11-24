@@ -8,6 +8,8 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-24
+
 ### Added
 
 - **Copy-edit: a Substack header and footer on every piece.** The copy-edit editor has two dashed boxes, above and below the text, for your Substack intro and sign-off. You write them once, they're kept for every piece, and Export puts them around the body in `piece.md` with `---` dividers (left out when empty). An image already on the web, such as one on Substack's CDN, now stays a link in `piece.md` instead of stopping the export. (`plugin/skills/copy-edit/kit/copy-edit-export.js`, `plugin/skills/copy-edit/kit/copy-edit.css`)
