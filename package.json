@@ -91,7 +91,7 @@
     "micromark-extension-gfm": "^3.0.0",
     "multicast-dns": "^7.2.5",
     "next": "16.4.6",
-    "node-diff3": "^3.2.1",
+    "node-diff3": "^4.0.0",
     "node-pty": "^1.1.0",
     "posthog-js": "^1.451.2",
     "posthog-node": "^5.69.0",
