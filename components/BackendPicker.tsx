@@ -12,6 +12,7 @@ import { useEscape } from "@/lib/use-escape";
 import { useAgyModels } from "@/lib/use-named-models";
 import { useLimitedModels } from "@/lib/use-plan-limits";
 import { isWorkerCard } from "@/lib/worker-project";
+import { useUiText } from "@/lib/ui-language";
 import { BackendBadge } from "./CardView";
 import Icon from "./Icon";
 
@@ -33,6 +34,7 @@ function selectedModelOf(card: Card, model: string | undefined): string | undefi
 }
 
 export default function BackendPicker({ card, up = false }: { card: Card; up?: boolean }) {
+  const t = useUiText();
   // Without a "[1m]" context suffix, so it matches a MODELS id.
   const model = runningOn(card).model?.replace(/\[[^\]]*\]$/, "");
   // "" is the CLI's own choice — the card's own model, when it has one.
@@ -71,7 +73,7 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
     // The card's host switches it (lib/project-host.ts): this Mac's route, or a worker's card.switchBackend.
     void patchNow(card.id, pickNow.patch, () => hostOf(card).act("card.switchBackend", { id: card.id, backend: next, replay: false, model: id })).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : String(err);
-      setError(message.replace(/^Error:\s*/, "") || "Couldn't switch.");
+      setError(message.replace(/^Error:\s*/, "") || t("Couldn't switch."));
     });
   }
 
@@ -81,9 +83,9 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        aria-label={`Switch model (currently ${BACKEND_LABELS[card.backend]})`}
+        aria-label={`${t("Switch model")}（当前：${t(BACKEND_LABELS[card.backend])}）`}
         aria-expanded={open}
-        title="Switch model or CLI"
+        title={t("Switch model or CLI")}
         className="flex max-w-full items-center gap-1 rounded"
       >
         <BackendBadge backend={card.backend} card={card} />
@@ -91,7 +93,7 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
       </button>
       {open && (
         <div className={`absolute left-0 z-30 w-48 rounded-lg ${up ? "bottom-full mb-1 max-h-[60vh] overflow-y-auto" : "top-full mt-1"} border border-line bg-panel p-1 shadow-lg`}>
-          <div role="group" aria-label="Default">
+          <div role="group" aria-label={t("Default")}>
             <button
               type="button"
               onClick={() => pick(card.backend, NO_MODEL)}
@@ -101,7 +103,7 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
               <span className="flex w-[14px] shrink-0 justify-center text-accent">
                 {onDefault && <Icon name="check" size={13} />}
               </span>
-              <span className="flex-1 font-medium text-ink">Default model</span>
+              <span className="flex-1 font-medium text-ink">{t("Default model")}</span>
             </button>
           </div>
           {backends.map((b) => (
@@ -122,14 +124,14 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
                     </span>
                     <span className="flex-1 font-medium text-ink">
                       {m.label}
-                      {atLimit.has(m.id) && <span className="ml-1 text-[11px] text-faint">— at its limit</span>}
+                      {atLimit.has(m.id) && <span className="ml-1 text-[11px] text-faint">{t("— at its limit")}</span>}
                     </span>
                   </button>
                 );
               })}
             </div>
           ))}
-          {live && <p className="px-2 pb-1 pt-1.5 text-[11px] leading-snug text-faint">Stop the thread to switch CLI.</p>}
+          {live && <p className="px-2 pb-1 pt-1.5 text-[11px] leading-snug text-faint">{t("Stop the thread to switch CLI.")}</p>}
           {error && <p role="alert" className="px-2 pb-1 pt-1.5 text-[11px] leading-snug text-danger">{error}</p>}
         </div>
       )}

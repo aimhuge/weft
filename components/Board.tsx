@@ -16,6 +16,7 @@ import { useBoardDialogs } from "@/lib/use-board-dialogs";
 import { useOpenCard } from "@/lib/use-open-card";
 import { useAwayOpen } from "@/lib/use-away-open";
 import { useNewThreadPane } from "@/lib/use-new-thread-pane";
+import { useOwnerFilterUrl } from "@/lib/use-owner-filter-url";
 import { filterState, footerFor, framedCard, headerCounts, menuProject, openCardMarks, openCardOf, workFolder } from "@/lib/board-derive";
 import { useRestart } from "@/lib/use-restart";
 import { useDesktopBridge } from "@/lib/use-desktop-bridge";
@@ -89,6 +90,7 @@ export default function Board() {
   const [libraryOpen, setLibraryOpen] = useState<RailPanel | null>(null);
   // ★ and 🏷 on the rail narrow the board to starred cards, a tag, or both.
   const [railFilter, setRailFilter] = useState<RailFilter>({});
+  useOwnerFilterUrl(railFilter, setRailFilter);
   const [dragOver, setDragOver] = useState<Column | null>(null);
   const [webBrowserOpen, setWebBrowserOpen] = useState(false);
   // The four-column workspace for an open card: open/close state, widths, and the divider drag.
@@ -147,7 +149,7 @@ export default function Board() {
   // Project filter and sort, persisted to a cookie; the card filter clears when the project changes.
   const { project: selectedProject, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter } = useBoardView({ select, setWebBrowserOpen });
   // One chip per project: a worker's checkout folds into its local twin (lib/use-project-twins.ts).
-  const { projectOf, project, summaries: projectSummaries, byColumn, archivedCount } = useProjectTwins({
+  const { projectOf, project, summaries: projectSummaries, byColumn, archivedCount, owners } = useProjectTwins({
     selected: selectedProject, projects, cards: boardCards, workerProjects: workers.projects, rootOf, railFilter,
     view: { query, sort, showArchived, reviewFilter },
   });
@@ -342,6 +344,7 @@ export default function Board() {
         onProject={chooseProject}
         railFilter={railFilter}
         onRailFilter={setRailFilter}
+        owners={owners}
         query={query}
         onQuery={setQuery}
         byColumn={byColumn}

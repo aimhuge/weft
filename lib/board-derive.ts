@@ -15,7 +15,7 @@ export function filterState(project: string | null, query: string, rail: RailFil
   const q = query.trim();
   return {
     filtering: Boolean(project || q || isFiltering(rail)),
-    view: `${project ?? ""}\n${q}\n${rail.starred ? "★" : ""}${rail.tag ?? ""}`,
+    view: `${project ?? ""}\n${q}\n${rail.starred ? "★" : ""}${rail.tag ?? ""}\n${rail.who ?? ""}@${rail.on ?? ""}`,
   };
 }
 

@@ -90,6 +90,16 @@ describe("toLeagueView", () => {
     expect(view.rows[2]).toMatchObject({ name: "Builder", badges: [] });
   });
 
+  it("reads the open league: your own tier, each row's tier, and pooled", () => {
+    const view = toLeagueView("2026-11-16", [
+      row({ user_id: "z", tier: 3, xp: 600, is_me: false, pooled: true }),
+      row({ rank: 2, tier: 2, xp: 500, pooled: true }),
+    ]);
+    expect(view).toMatchObject({ state: "ready", tier: 2, league: "Wool", pooled: true });
+    if (view.state !== "ready") throw new Error("not ready");
+    expect(view.rows.map((r) => r.tier)).toEqual([3, 2]);
+  });
+
   it("is an empty Cotton league with no rows", () => {
     expect(toLeagueView("2026-10-12", [])).toEqual({ state: "ready", week: "2026-10-12", tier: 0, league: "Cotton", up: 0, down: 0, rows: [] });
   });

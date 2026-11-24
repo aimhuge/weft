@@ -1,5 +1,7 @@
 # Limits and the start gate
 
+Model caps are keyed by backend and model. Older cache entries without a backend are ignored because their origin is unknown.
+
 A thread can meet a limit in three places, and each has its own store:
 
 | Limit | Store | Read by |

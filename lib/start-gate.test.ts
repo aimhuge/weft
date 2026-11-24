@@ -30,7 +30,7 @@ describe("startGate", () => {
 
   it("gates on the model's own limit", () => {
     vi.mocked(modelStore.modelLimits).mockReturnValueOnce([
-      { model: "opus", at: NOW - 60_000, resetsAt: RESET_AT },
+      { backend: "claude", model: "opus", at: NOW - 60_000, resetsAt: RESET_AT },
     ]);
     expect(startGate("claude", "opus", NOW)).toEqual({
       at: RESET_AT,

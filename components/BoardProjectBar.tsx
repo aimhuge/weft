@@ -1,6 +1,6 @@
 "use client";
 
-// The bar under the header: project chips, the rail's ★/tag filter chip, the filter box (with the few
+// The bar under the header: project chips, the person and machine pickers, the rail's ★/tag filter chip, the filter box (with the few
 // cards it matches listed under it) and the sort menu, in its own CrashGuard. The web board on weft.zip
 // draws the same bar (variant="web"), where the project menu can only pick a project.
 import type { Card, Column } from "@/lib/types";
@@ -12,6 +12,8 @@ import CrashGuard from "./CrashGuard";
 import ProjectBar from "./ProjectBar";
 import FilterBox from "./FilterBox";
 import RailFilterChip from "./RailFilterChip";
+import OwnerFilter from "./OwnerFilter";
+import type { OwnerChoices } from "@/lib/board-owners";
 
 // Cards the filter box lists under itself while typing.
 const FILTER_MATCHES = 5;
@@ -23,6 +25,8 @@ export interface BoardProjectBarProps {
   onProject: (path: string | null) => void;
   railFilter: RailFilter;
   onRailFilter: (filter: RailFilter) => void;
+  // Whose cards and which machine's, for the person and machine pickers (components/OwnerFilter.tsx).
+  owners: OwnerChoices;
   query: string;
   onQuery: (query: string) => void;
   // The board's cards by column, for the filter box's matches.
@@ -58,6 +62,7 @@ export default function BoardProjectBar(p: BoardProjectBarProps) {
         onSelect={p.onProject}
         filter={
           <>
+            <OwnerFilter choices={p.owners} filter={p.railFilter} onFilter={p.onRailFilter} web={p.variant === "web"} />
             <RailFilterChip filter={p.railFilter} onClear={p.onRailFilter} />
             <FilterBox
               query={p.query}

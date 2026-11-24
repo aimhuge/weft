@@ -1,5 +1,5 @@
 import { XP } from "./game";
-import { leagueMoves, leagueName, zoneOf } from "./league";
+import { leagueMoves, leagueName, POOL_SIZE, zoneOf } from "./league";
 
 // League emails (docs/architecture/gamification.md): which builder gets which email on a daily run, from the
 // league_weeks rows of this week and last, their profiles and the log of what already went out. Pure: the run
@@ -104,10 +104,11 @@ export function utcWeek(t: number): string {
 export const daysLeft = (t: number) => 7 - ((new Date(t).getUTCDay() + 6) % 7);
 
 // Each league of a week (same tier and cohort), best first, ranked the way league_standings ranks: ties share a rank.
-export function leaguesOf(rows: WeekRow[]): Map<string, { row: WeekRow; rank: number }[]> {
+// With `pooled` (a week under POOL_SIZE builders) the whole week is one open league, under the key "pool".
+export function leaguesOf(rows: WeekRow[], pooled = false): Map<string, { row: WeekRow; rank: number }[]> {
   const groups = new Map<string, WeekRow[]>();
   for (const row of rows) {
-    const key = `${row.tier}:${row.cohort}`;
+    const key = pooled ? "pool" : `${row.tier}:${row.cohort}`;
     groups.set(key, [...(groups.get(key) ?? []), row]);
   }
   const ranked = new Map<string, { row: WeekRow; rank: number }[]>();
@@ -191,7 +192,7 @@ interface Plan {
 
 // Monday: last week's results to everyone who played it.
 function offerResults(plan: Plan, lastWeek: WeekRow[]) {
-  const previous = leaguesOf(lastWeek);
+  const previous = leaguesOf(lastWeek, lastWeek.length < POOL_SIZE);
   for (const row of lastWeek) {
     const b = plan.reachable(row.user_id);
     const facts = b && resultFacts(row, plan.leagueFor(previous, row), plan.byId, plan.now);
@@ -223,12 +224,12 @@ export function planLeagueMails({ now, thisWeek, lastWeek, builders, sent }: Mai
   const byId = new Map(builders.map((b) => [b.id, b]));
   const done = new Set(sent.map((s) => `${s.user_id}:${s.kind}:${s.week}`));
   const weekday = new Date(now).getUTCDay();
-  const current = leaguesOf(thisWeek);
+  const current = leaguesOf(thisWeek, thisWeek.length < POOL_SIZE);
   const mails = new Map<string, LeagueMail>();
   const plan: Plan = {
     now,
     byId,
-    leagueFor: (leagues, row) => leagues.get(`${row.tier}:${row.cohort}`) ?? [],
+    leagueFor: (leagues, row) => leagues.get("pool") ?? leagues.get(`${row.tier}:${row.cohort}`) ?? [],
     reachable: (id) => {
       const b = byId.get(id);
       return b?.optedIn && b.email ? b : null;

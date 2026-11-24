@@ -2,9 +2,10 @@ import { useState } from "react";
 import { api } from "@/lib/client";
 import { patchNow, stopNow } from "@/lib/optimistic-cards";
 import { hostOf } from "@/lib/project-host";
-import { cardMenu, columnMenu, resumeCommand, withAccelerators, type CardAction, type ColumnAction, type MenuItem } from "@/lib/card-menu";
+import { cardMenu, columnMenu, resumeCommand, translateMenuItems, withAccelerators, type CardAction, type ColumnAction, type MenuItem } from "@/lib/card-menu";
 import { toAccelerator, useShortcutList } from "@/lib/hotkeys";
 import { BACKEND_LABELS, type Backend, type Card, type Column, type DevServerStatus, type PermissionMode } from "@/lib/types";
+import { useUiText } from "@/lib/ui-language";
 import { useDeleteDialog } from "@/lib/use-delete-dialog";
 import { findAgent } from "@/lib/agents";
 import { useAgents } from "@/lib/use-agents";
@@ -38,6 +39,7 @@ export interface BoardMenuDeps {
 export function useBoardMenus(deps: BoardMenuDeps) {
   const shell = typeof window === "undefined" ? undefined : window.weft;
   const popup = deps.popupMenu ?? (shell?.popupMenu ? (items: MenuItem[]) => shell.popupMenu(items) : undefined);
+  const t = useUiText();
   // Menu items that have a board shortcut use its key, read from the registry: menu item id -> shortcut id.
   // Keys the open menu handles itself (Return, arrows…) are skipped, so card-open shows O, not ↩.
   const shortcuts = useShortcutList();
@@ -65,7 +67,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     const host = hostOf(card);
     const dev = card.review?.dev && host.can("dev") ? await api.devStatus(card.id).then((r) => r.status, () => null) : null;
     const access = host.can("vault") ? await hasVaultAccess(card) : undefined;
-    const menu = host.menu(cardMenu(card, dev, access, agents));
+    const menu = translateMenuItems(host.menu(cardMenu(card, dev, access, agents)), t);
     const picked = (await popup(withAccelerators(menu, keys({ open: "card-open", archive: "archive" })))) as CardAction | null;
     if (picked) runCardAction(card, picked).catch(deps.notify);
   }
@@ -222,7 +224,7 @@ export function useBoardMenus(deps: BoardMenuDeps) {
     if (!popup) return;
     e.preventDefault();
     const done = deps.doneShown.filter((c) => !c.archived);
-    const menu = columnMenu(column, { count: done.length, archived: deps.archivedCount, showArchived: deps.showArchived });
+    const menu = translateMenuItems(columnMenu(column, { count: done.length, archived: deps.archivedCount, showArchived: deps.showArchived }), t);
     const picked = (await popup(withAccelerators(menu, keys({ new: "new-thread", "archive-done": "archive-done" })))) as ColumnAction | null;
     if (picked === "new") deps.openNew();
     if (picked === "toggle-archived") deps.toggleArchived();

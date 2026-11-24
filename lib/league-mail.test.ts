@@ -59,6 +59,12 @@ describe("leaguesOf", () => {
     expect(one[0]?.rank).toBe(1);
   });
 
+  it("puts a pooled week in one open league across tiers", () => {
+    const ranked = leaguesOf([row({ user_id: "a", tier: 2, xp: 50 }), row({ user_id: "z", tier: 3, xp: 90 })], true);
+    expect([...ranked.keys()]).toEqual(["pool"]);
+    expect(ranked.get("pool")!.map((e) => [e.row.user_id, e.rank])).toEqual([["z", 1], ["a", 2]]);
+  });
+
   it("returns an empty map for no rows", () => {
     expect(leaguesOf([]).size).toBe(0);
   });

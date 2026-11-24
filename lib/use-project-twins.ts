@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { groupByColumn, summarizeProjects, type BoardView } from "./board-view";
+import { cardPlace, deskNames, ownerChoices } from "./board-owners";
 import { filterCards, type RailFilter } from "./rail-view";
 import type { Card, Project } from "./types";
 import { projectKeyOf, twinMap } from "./worker-twin";
@@ -32,7 +33,7 @@ export function useProjectTwins({ selected, projects, cards, workerProjects, roo
   const project = selected ? (twins.get(selected) ?? selected) : null;
   const { query, sort, showArchived, reviewFilter } = view;
   const byColumn = useMemo(
-    () => groupByColumn(filterCards(cards, railFilter), { project, query, sort, showArchived, reviewFilter }, projectOf),
+    () => groupByColumn(filterCards(cards, railFilter, cardPlace), { project, query, sort, showArchived, reviewFilter }, projectOf),
     [cards, railFilter, project, query, sort, showArchived, reviewFilter, projectOf],
   );
   const archivedCount = cards.filter((c) => c.archived && (!project || projectOf(c.cwd) === project)).length;
@@ -40,5 +41,12 @@ export function useProjectTwins({ selected, projects, cards, workerProjects, roo
     () => withWorkerProjects(summarizeProjects(projects, cards, projectOf), workerProjects, twins),
     [projects, cards, projectOf, workerProjects, twins],
   );
-  return { projectOf, project, summaries, byColumn, archivedCount };
+  // The person and machine pickers' options: you, teammates from their cards, This Mac and your workers by name, counted
+  // over the cards the project chip, ★ and tag leave on screen, so a count is what picking it shows.
+  const { starred, tag, who } = railFilter;
+  const owners = useMemo(() => {
+    const shown = filterCards(cards, { starred, tag }).filter((c) => !project || projectOf(c.cwd) === project);
+    return ownerChoices(shown, cardPlace, deskNames(cards, workerProjects), who);
+  }, [cards, workerProjects, starred, tag, who, project, projectOf]);
+  return { projectOf, project, summaries, byColumn, archivedCount, owners };
 }

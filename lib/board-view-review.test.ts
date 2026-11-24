@@ -21,14 +21,13 @@ const view = (reviewFilter?: { errors: boolean; restart: boolean }) => ({ projec
 const ids = (cards: Card[] | undefined) => (cards ?? []).map((c) => c.lastLine);
 
 describe("the Review column's order", () => {
-  it("puts the most recently updated card on top, whatever the board's sort", () => {
+  it("follows the board's sort, like the other columns", () => {
     const stale = card("stale", { createdAt: 300, updatedAt: 10 });
     const fresh = card("fresh", { createdAt: 100, updatedAt: 50 });
     const picked = card("picked", { createdAt: 200, updatedAt: 5, lastActivity: 30 });
-    for (const sort of ["newest", "oldest", "active"] as const) {
-      const groups = groupByColumn([stale, fresh, picked], { ...view(), sort }, (c) => c);
-      expect(ids(groups.get("review"))).toEqual(["fresh", "picked", "stale"]);
-    }
+    const order = (sort: "newest" | "active") => ids(groupByColumn([stale, fresh, picked], { ...view(), sort }, (c) => c).get("review"));
+    expect(order("active")).toEqual(["fresh", "picked", "stale"]);
+    expect(order("newest")).toEqual(["stale", "picked", "fresh"]);
   });
 });
 

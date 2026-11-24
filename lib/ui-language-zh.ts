@@ -1,5 +1,8 @@
 // Display copy only. Model names, user content, settings IDs and protocol values stay as they are.
-export const simplifiedChinese: Readonly<Record<string, string>> = {
+import { simplifiedChineseSettings } from "./ui-language-zh-settings";
+import { simplifiedChineseBoard } from "./ui-language-zh-board";
+
+const simplifiedChineseBase: Readonly<Record<string, string>> = {
   "Interface language": "界面语言",
   "Applies to the board, Settings and the new-thread form.": "适用于看板、设置和新建线程界面。",
   "All": "全部",
@@ -17,6 +20,8 @@ export const simplifiedChinese: Readonly<Record<string, string>> = {
   "Search prompts, projects and commands for": "在提示词、项目和命令中搜索",
   "Sort cards": "排序卡片",
   "Newest first": "最新优先",
+  "Newest": "最新",
+  "Active": "活跃",
   "Oldest first": "最早优先",
   "Recently active": "最近活跃",
   "Board": "看板",
@@ -257,4 +262,10 @@ export const simplifiedChinese: Readonly<Record<string, string>> = {
   "phone mobile push notifications": "手机 移动 推送 通知",
   "pair seal encrypt approve web": "配对 加密 批准 网页",
   "worker vps mac mini headless": "工作机 服务器 无界面",
+};
+
+export const simplifiedChinese: Readonly<Record<string, string>> = {
+  ...simplifiedChineseBase,
+  ...simplifiedChineseBoard,
+  ...simplifiedChineseSettings,
 };

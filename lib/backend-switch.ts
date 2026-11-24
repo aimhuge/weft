@@ -18,7 +18,7 @@ import { repointCard } from "./card-repoint";
 export async function switchToBackup(cardId: string): Promise<{ from: string; to: string } | undefined> {
   const card = getCard(cardId);
   if (!card) return undefined;
-  const fallback = fallbackFor(card.model);
+  const fallback = fallbackFor(card.model, Date.now(), card.backend);
   if (!fallback?.model || !fallback.from) return undefined;
   const backend = fallback.backend ?? card.backend;
   // A card that's mid-turn can't have its session swapped under it; the turn that hit the limit

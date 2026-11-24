@@ -6,10 +6,11 @@ import type { LoginView } from "./types";
 
 const bus = vi.hoisted(() => ({ publish: vi.fn() }));
 vi.mock("node:child_process", () => ({
-  execFileSync: () => "/usr/local/bin/puku-cli\n",
+  execFileSync: vi.fn(),
   spawn: () => Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter(), stdin: new EventEmitter(), pid: 1, kill: vi.fn() }),
   execFile: vi.fn(),
 }));
+vi.mock("./cli-exec", () => ({ whichBin: () => "/usr/local/bin/puku-cli" }));
 vi.mock("./bus", () => ({ publish: bus.publish }));
 
 let login: typeof import("./login");

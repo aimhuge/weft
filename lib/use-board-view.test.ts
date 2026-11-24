@@ -142,11 +142,11 @@ describe("useBoardView", () => {
   });
 
   it("loadFromPrefs reads the cookie into state", () => {
-    readPrefs.mockReturnValue({ project: "/saved", sort: "oldest" });
+    readPrefs.mockReturnValue({ project: "/saved", sort: "active" });
     const { result } = makeView();
     act(() => result.current.loadFromPrefs());
     expect(result.current.project).toBe("/saved");
-    expect(result.current.sort).toBe("oldest");
+    expect(result.current.sort).toBe("active");
   });
 
   it("loadFromPrefs ignores an unknown sort", () => {

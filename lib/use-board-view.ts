@@ -76,4 +76,4 @@ export function useBoardView({ select, setWebBrowserOpen }: BoardViewDeps) {
   return { project, sort, query, setQuery, chooseProject, chooseSort, loadFromPrefs, reviewFilter, toggleReviewFilter };
 }
 
-const VALID_SORTS: ReadonlySet<SortKey> = new Set(["newest", "active", "oldest"]);
+const VALID_SORTS: ReadonlySet<SortKey> = new Set(["newest", "active"]);

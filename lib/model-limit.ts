@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { Backend } from "./types";
 import { globalSingleton } from "./global-singleton";
 
 // Which models are exhausted, and until when. The plan limits are per model on Anthropic's and
@@ -26,6 +27,7 @@ const DEFAULT_TTL_MS = 5 * 60 * 60 * 1000;
 
 // One model's exhaustion: when it ran out, and when it comes back (unix ms).
 export interface ModelLimit {
+  backend?: Backend;
   model: string;
   at: number;
   resetsAt: number;
@@ -46,6 +48,7 @@ function parse(text: string): Store {
       limits: limits.filter(
         (l): l is ModelLimit =>
           Boolean(l) &&
+          typeof (l as ModelLimit).backend === "string" &&
           typeof (l as ModelLimit).model === "string" &&
           typeof (l as ModelLimit).at === "number" &&
           typeof (l as ModelLimit).resetsAt === "number",
@@ -87,29 +90,29 @@ export function modelLimits(now = Date.now()): ModelLimit[] {
 
 // Records that a model ran out. The newest hit for a model wins: a second hit on the same model
 // moves its reset further out.
-export function recordModelLimit(model: string, at: number, resetsAt?: number) {
+export function recordModelLimit(model: string, at: number, resetsAt?: number, backend: Backend = "claude") {
   if (!model) return;
   const until = resetsAt && resetsAt > at ? resetsAt : at + DEFAULT_TTL_MS;
-  const all = modelLimits(at).filter((l) => l.model !== model);
-  all.push({ model, at, resetsAt: until });
+  const all = modelLimits(at).filter((l) => l.model !== model || l.backend !== backend);
+  all.push({ backend, model, at, resetsAt: until });
   write({ limits: all });
 }
 
 // Whether a model is exhausted right now, and when it comes back.
-export function modelLimit(model: string | undefined, now = Date.now()): ModelLimit | undefined {
+export function modelLimit(model: string | undefined, now = Date.now(), backend: Backend = "claude"): ModelLimit | undefined {
   if (!model) return undefined;
-  return modelLimits(now).find((l) => l.model === model);
+  return modelLimits(now).find((l) => l.model === model && l.backend === backend);
 }
 
 // Whether a model is exhausted right now. A model with no hit is fine.
-export function isModelLimited(model: string | undefined, now = Date.now()): boolean {
-  return modelLimit(model, now) !== undefined;
+export function isModelLimited(model: string | undefined, now = Date.now(), backend: Backend = "claude"): boolean {
+  return modelLimit(model, now, backend) !== undefined;
 }
 
 // Forgets a model's hit, so a thread can go back to it (the user picked it by hand, or its
 // window reset and Weft noticed).
-export function clearModelLimit(model: string) {
-  const all = modelLimits().filter((l) => l.model !== model);
+export function clearModelLimit(model: string, backend: Backend = "claude") {
+  const all = modelLimits().filter((l) => l.model !== model || l.backend !== backend);
   write({ limits: all });
 }
 

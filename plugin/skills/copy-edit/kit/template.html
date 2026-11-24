@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Editor — TITLE</title>
+<link rel="stylesheet" href="../_kit/copy-edit.css">
+</head>
+<body>
+<header>
+  <h1>✍️ TITLE — draft</h1>
+  <span class="stat" id="stat"></span>
+  <span class="stat" id="saved">saved</span>
+  <button id="applyTypos">Fix all typos</button>
+  <button id="reset">Reset to original</button>
+  <button class="primary" id="copy">Copy text</button>
+</header>
+
+<div class="wrap">
+<article id="doc" data-key="SLUG-v1" contenteditable="true" spellcheck="true">
+<!-- The piece, word for word. Flagged phrases: <mark data-n="1">…</mark> (claim), class="big" (big picture), class="typo". -->
+<p>PIECE</p>
+</article>
+
+<aside>
+  <h2>Notes</h2>
+  <div class="legend"><span style="--c:var(--err)">big picture</span><span style="--c:var(--warn)">claim</span><span style="--c:var(--typo)">typo</span></div>
+  <div id="notes-list"></div>
+</aside>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="application/json" id="notes">
+{ "1": { "t": "Note title", "q": "Why it matters", "fix": "Suggested replacement" } }
+</script>
+<script src="../_kit/copy-edit-doc.js"></script>
+<script src="../_kit/copy-edit-images.js"></script>
+<script src="../_kit/copy-edit-export.js"></script>
+<script src="../_kit/copy-edit.js"></script>
+</body>
+</html>

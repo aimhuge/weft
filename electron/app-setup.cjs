@@ -87,6 +87,10 @@ function setupApps({ ipcMain, vault, ownsPane, isBoard, dataDir, supabaseReadLin
   // device's window to capture, and its clicks go to the server as taps with the launch token.
   require("./sim-live.cjs").setupSimLive({ ipcMain, owns: ownsPane, dataDir, server, fetch: fetchImpl });
 
+  // And weft.showExport (electron/show-export.cjs): a page under show/ (the copy-edit editor) writes its piece and
+  // images to an export/ folder beside itself, so a thread can read what only the page's localStorage held.
+  require("./show-export.cjs").registerShowExport(ipcMain, { owns: ownsPane, dataDir });
+
   return { account };
 }
 

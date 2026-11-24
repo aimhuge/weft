@@ -1,5 +1,6 @@
 import { normalizeTag, normalizeTags, tagCounts, tagHue } from "./tags";
 import type { Card } from "./types";
+import { matchesPlace, type CardPlace } from "./board-owners";
 
 // How the left rail reads (components/LibraryRail.tsx): ★ starred and 🏷 tags filter the board, 🔐 and the
 // tools under it open their drawers. Pure, so it's testable and safe in the browser.
@@ -11,18 +12,25 @@ import type { Card } from "./types";
 // popover with the two admin links, since the pages live at /admin/users and /admin/settings.
 export type RailPanel = "tags" | "vault" | "webhooks" | "vercel" | "supabase" | "cloudflare" | "blastcp" | "github" | "slack" | "services" | "skills" | "crons" | "admin";
 
-// The board narrowed to starred cards, a tag, or both. Empty shows everything.
+// The board narrowed to starred cards, a tag, a person (`who`) and a machine (`on`; lib/board-owners.ts), in any mix.
+// Empty shows everything.
 export interface RailFilter {
   starred?: boolean;
   tag?: string;
+  who?: string;
+  on?: string;
 }
 
-export function filterCards<T extends Pick<Card, "starred" | "tags">>(cards: readonly T[], filter: RailFilter): T[] {
-  if (!filter.starred && !filter.tag) return cards as T[];
-  return cards.filter((c) => (!filter.starred || c.starred) && (!filter.tag || (c.tags ?? []).includes(filter.tag)));
+// `placeOf` says whose a card is and where it runs; without it, the person and machine filters don't apply.
+export function filterCards<T extends Pick<Card, "starred" | "tags">>(cards: readonly T[], filter: RailFilter, placeOf?: (card: T) => CardPlace): T[] {
+  const byPlace = placeOf && (filter.who || filter.on);
+  if (!filter.starred && !filter.tag && !byPlace) return cards as T[];
+  return cards.filter(
+    (c) => (!filter.starred || c.starred) && (!filter.tag || (c.tags ?? []).includes(filter.tag)) && (!byPlace || matchesPlace(placeOf(c), filter)),
+  );
 }
 
-export const isFiltering = (filter: RailFilter) => Boolean(filter.starred || filter.tag);
+export const isFiltering = (filter: RailFilter) => Boolean(filter.starred || filter.tag || filter.who || filter.on);
 
 // Clicking a tag filters to it; clicking it again clears it. ★ stays as it was.
 export function toggleTag(filter: RailFilter, tag: string): RailFilter {

@@ -109,8 +109,8 @@ describe("WebBoard", () => {
     expect(screen.getByText("In site")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Filter cards"), { target: { value: "zzz" } });
     expect(screen.getAllByText("No matching cards").length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByLabelText("Sort cards"), { target: { value: "oldest" } });
-    expect(screen.getByLabelText("Sort cards")).toHaveValue("oldest");
+    fireEvent.change(screen.getByLabelText("Sort cards"), { target: { value: "active" } });
+    expect(screen.getByLabelText("Sort cards")).toHaveValue("active");
   });
 
   it("hides archived cards until the Done column's toggle shows them", async () => {

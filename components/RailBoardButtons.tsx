@@ -8,9 +8,11 @@
 // synced tags — so only the button is shared.
 
 import { useEffect, useState } from "react";
+import { useUiText } from "@/lib/ui-language";
 
 // ★: filters the board to starred cards (again shows every card); its badge counts them. Drop a card on it to star it.
 export function StarRailButton({ on, count, cardDrag, onClick, onDropCard }: { on: boolean; count: number; cardDrag: boolean; onClick: () => void; onDropCard?: (cardId: string) => void }) {
+  const t = useUiText();
   const [dropOn, setDropOn] = useState(false);
   return (
     <button
@@ -26,12 +28,12 @@ export function StarRailButton({ on, count, cardDrag, onClick, onDropCard }: { o
         const id = e.dataTransfer.getData("text/plain");
         if (id) onDropCard?.(id);
       }}
-      title={on ? "Showing starred cards · click to show every card" : "Show only starred cards · drop a card here to star it"}
+      title={t(on ? "Showing starred cards · click to show every card" : "Show only starred cards · drop a card here to star it")}
       aria-pressed={on}
       className={`relative grid size-7 place-items-center rounded-md text-[15px] ${on || cardDrag ? "bg-accent-soft text-warn" : "text-muted hover:bg-sunken hover:text-warn"} ${dropOn ? "outline-2 outline-offset-2 outline-dashed outline-accent" : cardDrag ? "ring-1 ring-accent" : ""}`}
     >
       <span aria-hidden>{on ? "★" : "☆"}</span>
-      <span className="sr-only">Starred cards</span>
+      <span className="sr-only">{t("Starred cards")}</span>
       {count > 0 && <span className="absolute -right-1 -top-1 min-w-[14px] rounded-full bg-accent px-1 text-center text-[9px] font-semibold leading-[14px] text-on-accent">{count}</span>}
     </button>
   );
@@ -40,6 +42,7 @@ export function StarRailButton({ on, count, cardDrag, onClick, onDropCard }: { o
 // 🏷: opens the tags drawer; a dot when the board is filtered to a tag. Dragging a card over it opens the
 // drawer, so the card can drop on a tag.
 export function TagsRailButton({ open, tag, cardDrag, onOpen }: { open: boolean; tag?: string; cardDrag: boolean; onOpen: (open: boolean) => void }) {
+  const t = useUiText();
   return (
     <button
       onClick={() => onOpen(!open)}
@@ -47,13 +50,13 @@ export function TagsRailButton({ open, tag, cardDrag, onOpen }: { open: boolean;
         e.preventDefault();
         if (!open) onOpen(true);
       }}
-      title={tag ? `Showing #${tag} · open the tags` : "Tags: filter the board, add, rename, recolour"}
+      title={tag ? `${t("Showing")} #${tag} · ${t("open the tags")}` : t("Tags: filter the board, add, rename, recolour")}
       aria-pressed={open}
       className={`relative grid size-7 place-items-center rounded-md text-[14px] ${open || tag || cardDrag ? "bg-accent-soft text-accent" : "text-muted hover:bg-sunken hover:text-ink"} ${cardDrag ? "ring-1 ring-accent" : ""}`}
     >
       <span aria-hidden>🏷</span>
-      <span className="sr-only">Tags</span>
-      {tag && <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-accent ring-2 ring-panel" aria-label={`Filtered to ${tag}`} />}
+      <span className="sr-only">{t("Tags")}</span>
+      {tag && <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-accent ring-2 ring-panel" aria-label={`${t("Filtered to")} ${tag}`} />}
     </button>
   );
 }

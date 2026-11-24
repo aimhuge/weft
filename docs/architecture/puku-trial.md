@@ -50,7 +50,8 @@ surfaces later, where a thread needs it (the login pop-up below). The welcome's 
 4. **Retry.** `retryAfterLogin("puku")` runs the thread again in a fresh CLI. `queryOptions()`
    (`lib/runner-session.ts`) asks `trialOptions()`, which, with no own login and a token good for another
    minute, adds `PUKU_AI_BASE_URL=…/api/puku` and `PUKU_CLI_API_KEY_HELPER_TTL_MS=300000` to the env, and
-   `settings: { apiKeyHelper: "/bin/cat '<token file>'" }`, which the Agent SDK passes as `--settings`.
+   an `apiKeyHelper` command, which the Agent SDK passes as `--settings`. The helper reads the token
+   with PowerShell on Windows and `/bin/cat` on macOS and Linux.
 5. **Proxy.** puku-cli sends the helper's output as both `x-api-key` and `Authorization: Bearer` to
    `…/api/puku/v1/messages?beta=true`. `lib/puku-proxy.ts` checks the token, counts the request, swaps in
    `PUKU_TRIAL_API_KEY` (only `x-api-key`, Anthropic's header for `/v1/messages`) and forwards to

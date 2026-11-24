@@ -22,6 +22,6 @@ export function hitRateLimit(cardId: string, backend: Backend, message: string) 
   // The model that ran out: the one the card was on. A card with no model of its own ran on the
   // CLI's default, which Weft doesn't name, so there's nothing to record against.
   const model = card.model;
-  if (model) recordModelLimit(model, now, resetTimeOf(message, now));
+  if (model && hit) recordModelLimit(model, now, resetTimeOf(message, now), backend);
   updateCard(cardId, { column: "needs_you", pending: null, error: message, rateLimitHit: true, lastLine: `${BACKEND_LABELS[backend]} hit its plan limit` });
 }

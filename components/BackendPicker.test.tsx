@@ -41,7 +41,7 @@ describe("BackendPicker", () => {
   });
 
   it("marks the models at their cap on the card's own host: a worker card's, the worker's", async () => {
-    const fetch = vi.fn((url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ models: url === "/api/limits/plans?worker=w1" ? [{ model: "claude-opus-5-5", at: 1, resetsAt: 9e15 }] : [] }) } as Response));
+    const fetch = vi.fn((url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ models: url === "/api/limits/plans?worker=w1" ? [{ backend: "claude", model: "claude-opus-5-5", at: 1, resetsAt: 9e15 }] : [] }) } as Response));
     vi.stubGlobal("fetch", fetch);
     try {
       render(<BackendPicker card={makeCard({ backend: "claude", cwd: "worker://w1/app" })} />);

@@ -75,7 +75,7 @@ export function doneOverrides(card: Card): { model?: string; effort?: Effort; ba
   const model = picked && backendFor(picked) === card.backend ? picked : undefined;
   // The card's own model, unless the pick was the card's own and that model is exhausted.
   const wanted = model ?? card.model;
-  const fallback = fallbackFor(wanted);
+  const fallback = fallbackFor(wanted, Date.now(), card.backend);
   if (fallback?.model) {
     // The backup takes over, on its own CLI when it lives on another one.
     out.model = cardModel(fallback.model);

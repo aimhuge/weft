@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useUiText } from "@/lib/ui-language";
 import { useRouter } from "next/navigation";
 import { railPinned, setRailPinned, starredCount, toggleTag, type RailFilter, type RailPanel } from "@/lib/rail-view";
 import AdvancedOnly from "./AdvancedOnly";
@@ -108,6 +109,7 @@ export default function SideRail({
   // The page the board's pane shows, which lights its mini app below Services (components/AppsRail.tsx); unset outside the desktop app.
   paneUrl?: string;
 }) {
+  const t = useUiText();
   const { folders, cards, onOpenUrl, onOpenCard, onStartCard, notify, toast } = ctx;
   const [pinned, setPinned] = useState(() => typeof window !== "undefined" && railPinned());
   // A card is being dragged somewhere on the board: ★ and 🏷 light up to show they take drops.
@@ -151,23 +153,23 @@ export default function SideRail({
   };
 
   const drawerShell = ([icon, title, label]: readonly [React.ReactNode, string, string], body: React.ReactNode) => (
-    <aside className="rail-drawer flex shrink-0 overflow-hidden bg-panel" data-drawer data-closing={closing || undefined} aria-label={label}>
+    <aside className="rail-drawer flex shrink-0 overflow-hidden bg-panel" data-drawer data-closing={closing || undefined} aria-label={t(label)}>
       <div className="rail-drawer-body flex w-[calc(var(--rail-drawer-w)-12px)] shrink-0 flex-col">
         <div className="flex items-center gap-1.5 border-b border-line px-3 py-2">
           <span className="text-[14px]" aria-hidden>
             {icon}
           </span>
-          <h2 className="flex-1 text-[13px] font-semibold text-ink">{title}</h2>
+          <h2 className="flex-1 text-[13px] font-semibold text-ink">{t(title)}</h2>
           <IntroButton intro={intro} />
           <button
             onClick={() => pin(!pinned)}
-            title={pinned ? "Unpin: Esc slides it back under the board" : "Pin: keep it out, even on Esc"}
+            title={t(pinned ? "Unpin: Esc slides it back under the board" : "Pin: keep it out, even on Esc")}
             aria-pressed={pinned}
             className={`rounded px-1.5 py-0.5 text-[11px] ${pinned ? "bg-accent-soft text-accent" : "text-muted hover:bg-sunken hover:text-ink"}`}
           >
-            {pinned ? "Pinned" : "Pin"}
+            {t(pinned ? "Pinned" : "Pin")}
           </button>
-          <button onClick={() => onOpen(null)} aria-label="Close" className="rounded p-1 text-muted hover:bg-sunken hover:text-ink">
+          <button onClick={() => onOpen(null)} aria-label={t("Close")} className="rounded p-1 text-muted hover:bg-sunken hover:text-ink">
             <Icon name="x" size={13} />
           </button>
         </div>
@@ -204,7 +206,7 @@ export default function SideRail({
 
   return (
     <div className="relative flex shrink-0" data-rail style={{ "--rail-drawer-w": `${drawerWidth.width}px` } as React.CSSProperties}>
-      <nav className="flex w-[38px] flex-col items-center gap-1 border-r border-line bg-panel pt-2" aria-label="Rail">
+      <nav className="flex w-[38px] flex-col items-center gap-1 border-r border-line bg-panel pt-2" aria-label={t("Rail")}>
         <StarRailButton on={Boolean(filter.starred)} count={starred} cardDrag={cardDrag} onClick={() => onFilter({ ...filter, starred: !filter.starred })} onDropCard={onDropStar} />
         {/* Regular mode keeps ★, 🔐 and the saved apps. A drawer a thread opens (🪝 for a webhook) still draws. */}
         <AdvancedOnly>
@@ -249,14 +251,14 @@ export default function SideRail({
       </nav>
       {cardDrag && !open && (
         <span className="pointer-events-none absolute left-full top-2 z-30 ml-1.5 whitespace-nowrap rounded-md bg-ink px-2 py-1 text-[11.5px] text-canvas shadow-lg">
-          Drop on ☆ to star it
-          <AdvancedOnly> · 🏷 to tag it</AdvancedOnly>
+          {t("Drop on ☆ to star it")}
+          <AdvancedOnly> · 🏷 {t("to tag it")}</AdvancedOnly>
         </span>
       )}
       {drawer}
       {/* The board's edge over the drawer: drag it to resize the drawer, double-click for the default width. */}
       {drawer && !closing && (
-        <div onPointerDown={drawerWidth.startDrag} onDoubleClick={drawerWidth.reset} title="Drag to resize · double-click to reset" className="absolute inset-y-0 left-[calc(22px+var(--rail-drawer-w))] z-20 w-2 cursor-col-resize hover:bg-accent/30" aria-hidden="true" />
+        <div onPointerDown={drawerWidth.startDrag} onDoubleClick={drawerWidth.reset} title={t("Drag to resize · double-click to reset")} className="absolute inset-y-0 left-[calc(22px+var(--rail-drawer-w))] z-20 w-2 cursor-col-resize hover:bg-accent/30" aria-hidden="true" />
       )}
     </div>
   );

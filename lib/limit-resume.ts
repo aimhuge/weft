@@ -41,11 +41,11 @@ export function resumeParkedCards(backend: Backend, kind: LimitKind, now: number
 //
 // The card's model is the one that matters — a card on Sonnet was never parked by Opus's cap, and
 // waking it would send a message the user never asked for.
-export function resumeParkedOnModels(models: string[], now: number): number {
+export function resumeParkedOnModels(models: string[], now: number, backend: Backend = "claude"): number {
   if (!models.length) return 0;
   const wanted = models.map((m) => m.toLowerCase());
   const parked = listCards().filter(
-    (c) => !c.archived && c.column === "needs_you" && c.rateLimitHit && c.model && wanted.includes(c.model.toLowerCase()),
+    (c) => !c.archived && c.column === "needs_you" && c.rateLimitHit && c.backend === backend && c.model && wanted.includes(c.model.toLowerCase()),
   );
   return resumeAll(parked, "Auto-resumed after a plan upgrade", "upgrade", now);
 }

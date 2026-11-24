@@ -42,6 +42,9 @@ import { WebThreadPanel } from "./WebThreadPanel";
 import { useSignWindow } from "./useSignWindow";
 import { useHostForEveryCard, useOptimisticCards, useWebLine } from "./useWebHost";
 import { useWebCards } from "./useWebCards";
+import { useWebOwnerChoices, useWebOwners } from "./useWebOwners";
+import { EMPTY_DIRECTORY, type BoardDirectory } from "@/lib/board-directory";
+import { useOwnerFilterUrl } from "@/lib/use-owner-filter-url";
 
 export interface WebBoardProps {
   orgId: string;
@@ -55,12 +58,15 @@ export interface WebBoardProps {
   openCardId: string | null;
   initialThread: CloudThreadItemRow[];
   initialBlobUrls: Record<string, string>;
+  // Names for the person and machine pickers, and the ?who=…&on=… the page opened with (lib/board-owners.ts).
+  directory?: BoardDirectory;
+  initialOwners?: Pick<RailFilter, "who" | "on">;
 }
 
 // A card's folder is its project; there is no worktree folding here, so a path stands for itself.
 const identity = (cwd: string) => cwd;
 
-export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, initialCards, openCardId, initialThread, initialBlobUrls }: WebBoardProps) {
+export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, initialCards, openCardId, initialThread, initialBlobUrls, directory = EMPTY_DIRECTORY, initialOwners }: WebBoardProps) {
   const board = useWebBoard({ orgId, userId, initialCommands, initialCards, openCardId, initialBlobUrls });
   const signer = useSignWindow(board.client);
   // What the open thread draws, for its pane; the ?card= card starts from the thread the server read.
@@ -76,20 +82,24 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
   const [expanded, setExpanded] = useState<Column[]>([]);
   const [composing, setComposing] = useState(false);
   // The rail's ★ and 🏷, the desktop's own filter shape (lib/rail-view.ts).
-  const [railFilter, setRailFilter] = useState<RailFilter>({});
+  const [railFilter, setRailFilter] = useState<RailFilter>(() => ({ ...initialOwners }));
+  useOwnerFilterUrl(railFilter, setRailFilter);
   // The board's layout: cards in columns or in one list (lib/use-view-mode.ts).
   const { mode: viewMode, choose: chooseView } = useViewMode();
 
   useHostForEveryCard(board.host);
-  const cards = useOptimisticCards(useMemo(() => webCards(board.cards), [board.cards]));
   const rows = useMemo(() => new Map(board.cards.map((r) => [r.card_id, r])), [board.cards]);
+  // Teammates' cards marked as theirs, and whose and where each runs, for the person and machine pickers.
+  const owned = useWebOwners(useMemo(() => webCards(board.cards), [board.cards]), rows, userId, directory);
+  const cards = useOptimisticCards(owned.cards);
   const mine = useCallback((id: string) => {
     const row = rows.get(id);
     return Boolean(row && canReply(row, userId));
   }, [rows, userId]);
   const starredCount = cards.filter((c) => c.starred).length;
-  // The board narrowed by ★ and a tag, the desktop's own filter.
-  const visible = useMemo(() => filterCards(cards, railFilter), [cards, railFilter]);
+  // The board narrowed by ★, a tag, a person and a machine, the desktop's own filter.
+  const visible = useMemo(() => filterCards(cards, railFilter, owned.placeOf), [cards, railFilter, owned.placeOf]);
+  const owners = useWebOwnerChoices(cards, owned.placeOf, directory, railFilter, project);
   const byColumn = useMemo(
     () => groupByColumn(visible, { project, query, sort, showArchived }, identity),
     [visible, project, query, sort, showArchived],
@@ -172,6 +182,7 @@ export function WebBoard({ orgId, orgSlug, userId, user, orgs, initialCommands, 
               onProject={setProject}
               railFilter={railFilter}
               onRailFilter={setRailFilter}
+              owners={owners}
               query={query}
               onQuery={setQuery}
               byColumn={byColumn}
