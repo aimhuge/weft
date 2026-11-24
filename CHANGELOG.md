@@ -14,6 +14,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 - **Copy-edit: headings and links.** The copy-edit editor shows H1 and H2 headings as headings, with a Text / H1 / H2 menu in the toolbar for the paragraph you're in, and keeps links. Export writes headings as `#` and `##`, links as `[text](url)`, and the title as front matter so it doesn't clash with your own H1s. Copy text keeps each link's address in brackets. Notes can now underline text inside a heading. SKILL.md says how to pull a published Substack post back into the editor. (`plugin/skills/copy-edit/kit/copy-edit.js`, `plugin/skills/copy-edit/kit/copy-edit-export.js`, `plugin/skills/copy-edit/SKILL.md`)
 - **Threads can drive your own Chrome.** Claude Code threads on the desktop now start connected to the Claude in Chrome extension, so they work in the browser you're signed in to everywhere, not only the pane. They still browse in the pane by default and switch to Chrome when a page needs your sign-in (a Substack or Google Docs editor, an admin dashboard) or you ask for your browser. When the extension isn't connected, they fall back to AppleScript instead of saying they can't reach it (`lib/chrome.ts`, `lib/runner-session.ts`, `lib/weft-prompts.ts`).
 
+### Changed
+
+- **🖥️ weft.zip's home page now leads with "The ultimate AI desktop".** The hero is Weft's window, drawn in CSS: a board, a thread building Stripe checkout, the page in its pane, a Touch ID ask filling the key and the result on an iPhone. Below it are twelve app tiles for what your AI can reach (browser, vault, simulators, webhooks, Google, research, copy-edit, mini apps, dictation, crons, copilot) and a section on where Weft runs (Mac, Windows, iPhone, weft.zip, Workers). The open-card demo now has its own section. The title and share card say the new tagline. (`components/home/DesktopScene.tsx`, `Apps.tsx`, `Anywhere.tsx`, `lib/home-desktop.ts`)
+
 ## [0.9.0] - 2026-11-21
 
 ### Added
