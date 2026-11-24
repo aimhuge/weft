@@ -13,10 +13,10 @@ export const FEED = `${RELEASES}/latest/download/update.json`;
 // The footer's credits, as on the board's footer (components/BoardFooter.tsx).
 export const COFFEE = "https://buymeacoffee.com/alexmiller";
 export const AIMHUGE = "https://aimhuge.com";
-export const TAGLINE = "Engineering the future";
+export const TAGLINE = "The ultimate AI desktop";
 export const DESCRIPTION =
-  "Weft is a kanban board where every card is an AI coding thread, with a browser pane that shows what it built. " +
-  "Bring the idea; Claude Code, Codex or Puku threads plan it, build it, show it and walk you through the review.";
+  "Weft is the ultimate AI desktop: a board of Claude Code, Codex and Puku threads, each with its own browser, " +
+  "your keys behind Touch ID and your whole stack a click away. Bring the idea; your AI plans it, builds it and shows you.";
 
 // Vercel sets VERCEL=1 on every deployment; WEFT_HOME=1 shows the home page at / on a local server too.
 export function isDeployed(env: Record<string, string | undefined> = process.env): boolean {

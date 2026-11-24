@@ -1,6 +1,6 @@
 # The marketing site
 
-Status: built 2026-10-13, rebuilt 2026-11-12 around the open card (below).
+Status: built 2026-10-13, rebuilt 2026-11-12 around the open card, repositioned 2026-11-21 as "the ultimate AI desktop" (below).
 
 weft.zip is the same Next app as the board, rendering a landing page instead of it: `app/page.tsx` renders the home
 when `isDeployed()` (`VERCEL` or `WEFT_HOME`), and `app/home/page.tsx` always does, so it can be seen on
@@ -10,6 +10,8 @@ The home's content is split four ways, and the split is the rule worth keeping:
 
 - **`lib/home.ts`** holds the links and metadata — `TAGLINE`, `DESCRIPTION`, `REPO`, `homeMetadata`,
   `downloadLink`, `platformLinks`, `isDeployed`, `parseFeed` — so `lib/home.test.ts` can read them without rendering.
+- **`lib/home-desktop.ts`** holds the desktop story — `DESKTOP_HERO`, `SCENE` (the hero's drawn window), `APPS` (the twelve
+  tiles), `ANYWHERE`, `CLOSING` — read by `lib/home-desktop.test.ts`.
 - **`lib/home-story.ts`** holds what the story sections say — `HERO`, `DEMO`, `WHY`, `BOARD`, `LEVELS`, `xpRules()`,
   `GAME`, `OPEN` — read by `lib/home-story.test.ts`, which also refuses the word "loom" in page copy.
 - **`lib/home-release.ts`** reads the latest release's `update.json` for the download button, falling back to GitHub's releases API when that download path is down.
@@ -20,6 +22,22 @@ lib/home-story.ts ─▶ hero + CardDemo / Why / MiniBoard / Game / OpenSource  
 lib/home.ts ───────▶ HomeNav / Downloads / Tour / Plans + CloudWorkers / FaqTeaser / closing Downloads / HomeFooter
 home-release.ts ───▶ the release the download buttons name                         (home.css)
 ```
+
+## The AI desktop (2026-11-21)
+
+The page now leads with Weft as a whole desktop for your AI, not only a board of coding threads:
+
+- **`DesktopScene.tsx`** (the hero): Weft's window drawn in CSS. It has the rail, a board of four cards, the open thread
+  building Stripe checkout and the pane showing it, with a Touch ID ask and an iPhone floating over the pane. One 14 s
+  loop (`wz-dsSay1`, `wz-dsVault`, `wz-dsSay2` in `desktop.css`) lights the first reply and the ask, then the second
+  reply and the phone. It is sized in em. Under 760px the rail and the board fold away.
+- **`Apps.tsx`**: twelve app tiles: threads, a browser each, the vault, simulators, webhooks, Google Workspace,
+  research, copy-edit, mini apps, dictation, crons and the copilot.
+- The open-card demo moved out of the hero into its own section, headed by the old hero's words (`HERO`).
+- **`Anywhere.tsx`**: Mac and Windows, iPhone, weft.zip and Weft Workers.
+- `TAGLINE` is now "The ultimate AI desktop", so the title and the share card say it too.
+
+Order: hero → Apps → the open card → MiniBoard → Why → Anywhere → Game → OpenSource → Tour → Plans → FAQ → closing.
 
 ## Why it is shaped this way
 

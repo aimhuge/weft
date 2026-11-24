@@ -1,6 +1,7 @@
 import { catalog, freeTierCapLabel, PRO_PUKU_TOKENS, TEAM_SEAT_CENTS, type BlastcpTier, type PlanId } from "@/lib/billing/plans";
 import { planLink } from "@/lib/billing/plan-link";
 import CloudWorkers from "./CloudWorkers";
+import SendsHome from "./SendsHome";
 
 // The pricing section under the tour (docs/architecture/billing.md). The three plans come from the catalog
 // in lib/billing/plans.ts, so a price change there moves this page too — the numbers below are read, not typed.
@@ -107,7 +108,7 @@ function cards(download: PlanCta | null): PlanCard[] {
 
 export default function Plans({ download = null }: { download?: PlanCta | null }) {
   return (
-    <section className="wz-wrap wz-plans" aria-labelledby="wz-plansTitle">
+    <section id="plans" className="wz-wrap wz-plans" aria-labelledby="wz-plansTitle">
       <h2 id="wz-plansTitle" className="wz-h2">
         Free to start. <em>Pro when you ship daily.</em>
       </h2>
@@ -135,8 +136,9 @@ export default function Plans({ download = null }: { download?: PlanCta | null }
       </div>
       <CloudWorkers />
       <p className="wz-planNote">
-        Weft is free to download and open source. Plans are per workspace, charged on weft.zip, and cancel any time.
+        Weft is free to download, and its source is on GitHub under FSL. Plans are per workspace, charged on weft.zip, and cancel any time.
       </p>
+      <SendsHome />
     </section>
   );
 }

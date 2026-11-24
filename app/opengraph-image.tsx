@@ -67,7 +67,7 @@ export default async function Image() {
         </div>
         <div style={{ position: "relative", display: "flex", justifyContent: "space-between", fontSize: 24, color: "#f0995f", fontFamily: "sans-serif" }}>
           <div>weft.zip</div>
-          <div>Free, source on GitHub, for macOS</div>
+          <div>Free, source on GitHub, for Mac and Windows</div>
         </div>
       </div>
     ),

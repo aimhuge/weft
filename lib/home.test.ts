@@ -48,7 +48,7 @@ describe("isWebEnabled", () => {
 describe("homeMetadata", () => {
   it("names the site, the description and the version", () => {
     const meta = homeMetadata("0.3.0");
-    expect(meta.title).toBe("Weft: Engineering the future");
+    expect(meta.title).toBe("Weft: The ultimate AI desktop");
     expect(meta.description).toBe(DESCRIPTION);
     expect(String(meta.metadataBase)).toBe(`${SITE}/`);
     expect(meta.alternates).toEqual({ canonical: "/" });

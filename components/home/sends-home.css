@@ -1,0 +1,32 @@
+/* "What Weft sends home" under the plans (components/home/SendsHome.tsx): a quiet list in the plan note's colors. */
+.wz-sendsHome {
+  margin: 28px 0 0;
+  padding: 18px 20px;
+  border: 1px solid color-mix(in srgb, var(--thread-3) 30%, transparent);
+  border-radius: 14px;
+}
+.wz-sendsHomeTitle {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.wz-sendsHomeList {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  color: var(--thread-3);
+  text-wrap: pretty;
+}
+.wz-sendsHomeList strong {
+  color: inherit;
+  font-weight: 600;
+  filter: brightness(1.25);
+}
+.wz-sendsHomeLink {
+  display: inline-block;
+  margin-top: 10px;
+  font-size: 14px;
+}

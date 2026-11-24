@@ -1,0 +1,594 @@
+/* The weft.zip home page as "the ultimate AI desktop": the hero's drawn desktop (DesktopScene.tsx), the apps on it
+   (Apps.tsx) and the places it runs (Anywhere.tsx). Same palette and wz- prefix as home.css. The scene is sized in em
+   off a font-size that follows the viewport, so it scales as one picture; under 760px the rail and the board fold
+   away and it is a thread and its pane. Motion only inside prefers-reduced-motion: no-preference; at rest every
+   piece shows. */
+
+/* ─── The hero's desktop ─── */
+.wz-ds {
+  position: relative;
+  margin: 8px 0 0;
+  font-size: clamp(8.5px, 1.12vw, 13.5px);
+  padding-bottom: 3em;
+}
+
+.wz-dsWin {
+  border-radius: 1.1em;
+  border: 1px solid rgb(236 229 216 / 0.14);
+  background: #0e1220;
+  box-shadow:
+    0 2.5em 6em -1.5em rgb(0 0 0 / 0.7),
+    0 0 0 1px rgb(0 0 0 / 0.4),
+    inset 0 1px 0 rgb(236 229 216 / 0.06);
+  overflow: hidden;
+}
+
+.wz-dsBar {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  height: 2.6em;
+  padding: 0 1em;
+  border-bottom: 1px solid rgb(236 229 216 / 0.08);
+  background: rgb(236 229 216 / 0.03);
+  font-size: 1em;
+  color: var(--thread-3);
+}
+
+.wz-dsDots {
+  display: flex;
+  gap: 0.45em;
+}
+
+.wz-dsDots i {
+  width: 0.8em;
+  height: 0.8em;
+  border-radius: 50%;
+  background: rgb(236 229 216 / 0.16);
+}
+
+.wz-dsDots i:first-child {
+  background: #e0685a;
+}
+
+.wz-dsDots i:nth-child(2) {
+  background: #e2b04a;
+}
+
+.wz-dsDots i:nth-child(3) {
+  background: #5fc27e;
+}
+
+.wz-dsBarTitle {
+  margin-left: 0.6em;
+  font-weight: 600;
+  color: var(--thread-2);
+}
+
+.wz-dsBarSpace {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 0.85em;
+}
+
+.wz-dsBody {
+  display: grid;
+  grid-template-columns: 3.4em 15em 21em 1fr;
+  height: 34em;
+}
+
+/* The left rail: the drawers, then the stack. */
+.wz-dsRail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7em;
+  padding: 1em 0;
+  border-right: 1px solid rgb(236 229 216 / 0.08);
+  background: rgb(0 0 0 / 0.18);
+}
+
+.wz-dsRail span {
+  display: grid;
+  place-items: center;
+  width: 2.2em;
+  height: 2.2em;
+  border-radius: 0.6em;
+  background: rgb(236 229 216 / 0.06);
+  font-size: 1em;
+}
+
+.wz-dsRail b {
+  display: grid;
+  place-items: center;
+  width: 2.2em;
+  height: 2.2em;
+  border-radius: 50%;
+  border: 1px solid rgb(236 229 216 / 0.14);
+  font-size: 0.8em;
+  color: var(--thread-2);
+}
+
+.wz-dsRail .wz-dsRailGap {
+  flex: 1;
+  background: none;
+}
+
+/* The board, as a narrow list of cards. */
+.wz-dsBoard {
+  padding: 1em 0.9em;
+  border-right: 1px solid rgb(236 229 216 / 0.08);
+}
+
+.wz-dsKicker {
+  margin: 0 0 0.8em;
+  font-size: 0.8em;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--thread-3);
+}
+
+.wz-dsCard {
+  margin-bottom: 0.6em;
+  padding: 0.75em 0.85em;
+  border-radius: 0.7em;
+  border: 1px solid rgb(236 229 216 / 0.09);
+  background: rgb(236 229 216 / 0.035);
+}
+
+.wz-dsCardOn {
+  border-color: rgb(240 153 95 / 0.55);
+  background: rgb(218 122 76 / 0.12);
+}
+
+.wz-dsCardTitle {
+  display: block;
+  font-size: 1.05em;
+  font-weight: 600;
+  color: var(--thread);
+}
+
+.wz-dsCardState {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  margin-top: 0.3em;
+  font-size: 0.85em;
+  color: var(--thread-3);
+}
+
+.wz-dsCardState::before {
+  content: "";
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--thread-3);
+}
+
+.wz-dsCardOn .wz-dsCardState {
+  color: var(--clay-2);
+}
+
+.wz-dsCardOn .wz-dsCardState::before {
+  background: var(--clay-2);
+  box-shadow: 0 0 0 0.25em rgb(240 153 95 / 0.2);
+}
+
+/* The open thread: your message, then what it says. */
+.wz-dsThread {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+  padding: 1em 1.1em;
+  border-right: 1px solid rgb(236 229 216 / 0.08);
+}
+
+.wz-dsYou {
+  align-self: flex-end;
+  max-width: 88%;
+  margin: 0;
+  padding: 0.7em 0.95em;
+  border-radius: 1em 1em 0.25em 1em;
+  background: var(--clay);
+  color: #1b1410;
+  font-size: 1.05em;
+  line-height: 1.35;
+}
+
+.wz-dsSays {
+  margin: 0;
+  padding: 0.7em 0.95em;
+  border-radius: 1em 1em 1em 0.25em;
+  background: rgb(236 229 216 / 0.07);
+  font-size: 1.05em;
+  line-height: 1.4;
+  color: var(--thread);
+}
+
+.wz-dsTool {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.82em;
+  color: var(--thread-3);
+}
+
+.wz-dsTool b {
+  font-weight: 500;
+  color: #5fd3bc;
+}
+
+.wz-dsStatus {
+  margin-top: auto;
+  padding-top: 0.7em;
+  border-top: 1px dashed rgb(236 229 216 / 0.12);
+  font-family: var(--mono);
+  font-size: 0.78em;
+  color: var(--thread-3);
+}
+
+/* The pane: an address bar over the page the thread built. */
+.wz-dsPane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #f4efe6;
+  color: #1d2030;
+}
+
+.wz-dsUrl {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  height: 2.6em;
+  padding: 0 1em;
+  border-bottom: 1px solid rgb(29 32 48 / 0.1);
+  background: #e9e3d8;
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: #5b5d6a;
+}
+
+.wz-dsUrl::before {
+  content: "🔒";
+  font-size: 0.85em;
+}
+
+.wz-dsPage {
+  flex: 1;
+  padding: 2em 2.2em;
+}
+
+.wz-dsPageTitle {
+  margin: 0 0 0.2em;
+  font-family: var(--display);
+  font-size: 2.1em;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+
+.wz-dsPageSub {
+  margin: 0 0 1.4em;
+  color: #6b6d78;
+}
+
+.wz-dsCheckout {
+  max-width: 22em;
+  padding: 1.2em;
+  border-radius: 0.9em;
+  background: #fff;
+  box-shadow: 0 0.6em 1.6em -0.6em rgb(29 32 48 / 0.25);
+}
+
+.wz-dsField {
+  height: 2.2em;
+  margin-bottom: 0.6em;
+  border-radius: 0.45em;
+  border: 1px solid rgb(29 32 48 / 0.14);
+  padding: 0 0.7em;
+  display: flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: 0.9em;
+  color: #6b6d78;
+}
+
+.wz-dsPay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.5em;
+  margin-top: 0.9em;
+  border-radius: 0.5em;
+  background: #1d2030;
+  color: #f4efe6;
+  font-weight: 600;
+}
+
+/* Floating over the pane: the Touch ID ask, then the phone. */
+.wz-dsVault {
+  position: absolute;
+  top: 3.6em;
+  right: 1.2em;
+  display: flex;
+  gap: 0.8em;
+  align-items: center;
+  width: 19em;
+  padding: 0.9em 1em;
+  border-radius: 0.9em;
+  background: rgb(22 26 41 / 0.96);
+  border: 1px solid rgb(236 229 216 / 0.16);
+  box-shadow: 0 1em 2.5em -0.6em rgb(0 0 0 / 0.6);
+  color: var(--thread);
+  backdrop-filter: blur(8px);
+}
+
+.wz-dsFinger {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.6em;
+  height: 2.6em;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgb(240 153 95 / 0.35), rgb(240 153 95 / 0.08));
+  font-size: 1.2em;
+}
+
+.wz-dsVaultText {
+  margin: 0;
+  font-size: 0.9em;
+  line-height: 1.35;
+  color: var(--thread-2);
+}
+
+.wz-dsVaultText b {
+  display: block;
+  font-family: var(--mono);
+  font-weight: 500;
+  color: var(--thread);
+}
+
+.wz-dsPhone {
+  position: absolute;
+  right: -1.2em;
+  bottom: -1.4em;
+  width: 11.5em;
+  height: 23em;
+  padding: 0.55em;
+  border-radius: 2em;
+  background: #0b0d14;
+  border: 1px solid rgb(236 229 216 / 0.2);
+  box-shadow: 0 1.6em 3.5em -0.8em rgb(0 0 0 / 0.75);
+}
+
+.wz-dsPhoneScreen {
+  position: relative;
+  height: 100%;
+  border-radius: 1.55em;
+  overflow: hidden;
+  background: #f4efe6;
+  color: #1d2030;
+  padding: 2.6em 1em 1em;
+  text-align: center;
+}
+
+.wz-dsPhoneScreen::before {
+  content: "";
+  position: absolute;
+  top: 0.6em;
+  left: 50%;
+  width: 3.6em;
+  height: 1.05em;
+  margin-left: -1.8em;
+  border-radius: 1em;
+  background: #0b0d14;
+}
+
+.wz-dsTick {
+  display: grid;
+  place-items: center;
+  width: 3.2em;
+  height: 3.2em;
+  margin: 3em auto 0.8em;
+  border-radius: 50%;
+  background: #2f9e62;
+  color: #fff;
+  font-size: 1.2em;
+  font-weight: 700;
+}
+
+.wz-dsPhoneTitle {
+  margin: 0;
+  font-weight: 600;
+  font-size: 1.05em;
+}
+
+.wz-dsPhoneSub {
+  margin: 0.3em 0 0;
+  font-size: 0.85em;
+  color: #6b6d78;
+}
+
+/* Under 760px: just the thread and its pane, the phone tucked in smaller. */
+@media (max-width: 760px) {
+  .wz-ds {
+    font-size: 9.5px;
+  }
+
+  .wz-dsBody {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 30em;
+    height: auto;
+  }
+
+  .wz-dsRail,
+  .wz-dsBoard,
+  .wz-dsStatus {
+    display: none;
+  }
+
+  .wz-dsThread {
+    border-right: 0;
+    border-bottom: 1px solid rgb(236 229 216 / 0.08);
+  }
+
+  /* The Touch ID ask sits over the top of the pane, so the page starts under it. */
+  .wz-dsPage {
+    padding: 7.5em 1.4em 1.4em;
+  }
+
+  .wz-dsVault {
+    right: auto;
+    left: 1em;
+    width: 17em;
+  }
+
+  .wz-dsPhone {
+    right: 0.6em;
+    width: 10em;
+    height: 20em;
+  }
+}
+
+/* One 14 s loop: the first reply and the Touch ID ask, then the second reply and the phone. */
+@media (prefers-reduced-motion: no-preference) {
+  .wz-dsSay1 {
+    animation: wz-dsSay1 14s infinite both;
+  }
+
+  .wz-dsVault {
+    animation: wz-dsVault 14s infinite both;
+  }
+
+  .wz-dsSay2,
+  .wz-dsPhone {
+    animation: wz-dsSay2 14s infinite both;
+  }
+
+  .wz-dsCardOn .wz-dsCardState::before {
+    animation: wz-dsPulse 1.6s ease-in-out infinite;
+  }
+}
+
+@keyframes wz-dsSay1 {
+  0%, 10% { opacity: 0; transform: translateY(0.6em); }
+  15%, 94% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@keyframes wz-dsVault {
+  0%, 18% { opacity: 0; transform: translateY(-0.6em) scale(0.97); }
+  23%, 44% { opacity: 1; transform: none; }
+  50%, 100% { opacity: 0; transform: translateY(-0.6em) scale(0.97); }
+}
+
+@keyframes wz-dsSay2 {
+  0%, 50% { opacity: 0; transform: translateY(0.8em); }
+  56%, 94% { opacity: 1; transform: none; }
+  100% { opacity: 0; }
+}
+
+@keyframes wz-dsPulse {
+  50% { box-shadow: 0 0 0 0.45em rgb(240 153 95 / 0); }
+}
+
+/* ─── The apps on the desktop ─── */
+.wz-apps,
+.wz-anywhere,
+.wz-turns {
+  padding-top: 120px;
+}
+
+.wz-appGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.wz-app {
+  padding: 20px 20px 22px;
+  border-radius: 16px;
+  border: 1px solid rgb(236 229 216 / 0.09);
+  background: linear-gradient(180deg, rgb(236 229 216 / 0.045), rgb(236 229 216 / 0.008));
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.wz-app:hover {
+  border-color: rgb(240 153 95 / 0.4);
+  transform: translateY(-2px);
+}
+
+.wz-appIcon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  margin-bottom: 14px;
+  border-radius: 13px;
+  background: linear-gradient(160deg, rgb(236 229 216 / 0.14), rgb(236 229 216 / 0.04));
+  box-shadow: inset 0 1px 0 rgb(236 229 216 / 0.12), 0 6px 14px -6px rgb(0 0 0 / 0.6);
+  font-size: 24px;
+  color: var(--clay-2);
+}
+
+.wz-app h3,
+.wz-place h3 {
+  margin: 0 0 6px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--thread);
+}
+
+.wz-app p,
+.wz-place p {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--thread-2);
+}
+
+/* ─── Anywhere ─── */
+.wz-placeGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.wz-place {
+  padding: 22px;
+  border-radius: 16px;
+  border: 1px solid rgb(236 229 216 / 0.09);
+}
+
+.wz-placeIcon {
+  display: block;
+  margin-bottom: 12px;
+  font-size: 28px;
+}
+
+@media (max-width: 980px) {
+  .wz-appGrid,
+  .wz-placeGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .wz-appGrid {
+    gap: 10px;
+  }
+
+  .wz-app {
+    padding: 16px;
+  }
+
+  .wz-placeGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .wz-apps,
+  .wz-anywhere,
+  .wz-turns {
+    padding-top: 84px;
+  }
+}

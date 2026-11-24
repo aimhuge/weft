@@ -6,6 +6,7 @@ import { REPO, RELEASES } from "./home";
 // answers, in order: what is inside a card, why this board and not another, what the board looks like, what you earn
 // for shipping, and where the source is. No loom talk: visitors asked what a loom was.
 
+// The open-card section's head (once the hero; the hero is now DESKTOP_HERO in lib/home-desktop.ts).
 export const HERO = {
   eyebrow: "A board of AI coding threads",
   title: "Every card builds it,",

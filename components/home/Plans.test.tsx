@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import "../test-utils";
 import { catalog, freeTierCapLabel, TEAM_SEAT_CENTS } from "@/lib/billing/plans";
+import { SENDS_HOME } from "@/lib/home-sends-home";
 import Plans from "./Plans";
 
 // components/home/Plans.tsx: the home page's pricing section. The point of these tests is that the page
@@ -99,5 +100,20 @@ describe("Plans", () => {
     const { container } = render(<Plans />);
     expect(container.querySelector("#wz-cloud form")?.getAttribute("action")).toBe("/api/cloud-workers/request");
     expect(container.querySelector("#wz-access")).toBeNull();
+  });
+
+  it("is anchored at #plans and says the license honestly, not \"open source\"", () => {
+    const { container } = render(<Plans />);
+    expect(container.querySelector("section#plans")).toBeTruthy();
+    const note = container.querySelector(".wz-planNote")?.textContent ?? "";
+    expect(note).toContain("under FSL");
+    expect(note).not.toMatch(/open source/i);
+  });
+
+  it("ends with what Weft sends home, linking the privacy policy", () => {
+    const { container } = render(<Plans />);
+    expect(screen.getByRole("heading", { name: SENDS_HOME.title })).toBeTruthy();
+    expect(container.querySelectorAll(".wz-sendsHomeList li")).toHaveLength(SENDS_HOME.items.length);
+    expect(container.querySelector(".wz-sendsHomeLink")?.getAttribute("href")).toBe("/privacy");
   });
 });

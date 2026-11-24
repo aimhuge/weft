@@ -1,11 +1,27 @@
 # Weft™
 
-Engineering the future, one thread at a time. Weft is a Trello-style board where each card is an AI CLI
-thread (Claude Code, puku-cli, Codex, Goose or GitHub Copilot), with a browser pane on the side that you and the agents can both
-use, and a copilot in its own small window that can see and run the board.
+**A kanban board where every card is a Claude Code, Codex, Goose, GitHub Copilot or puku-cli thread, with a browser
+pane the agents drive.**
 
-In weaving, the weft is the thread that runs across the loom and binds the separate threads into
-cloth.
+**[Download for Mac](https://weft.zip/download?from=readme)** (Apple silicon) ·
+**[Download for Windows](https://weft.zip/download/windows?from=readme)** (x64, [ARM](https://weft.zip/download/windows?arch=arm64&from=readme)) ·
+[weft.zip](https://weft.zip) · Free; [Pro](https://weft.zip/#plans) when you ship daily
+
+From source: `git clone https://github.com/aimhuge/weft.git && cd weft && pnpm install && pnpm desktop`
+
+<!-- Hero: the "🎬 75s Weft demo video" card swaps this for the demo GIF. -->
+[![Weft: a board of AI threads, each one building, showing and shipping](https://weft.zip/opengraph-image)](https://weft.zip)
+
+- **One checkout, every card in it.** No worktree and no fresh install per task, so a reply starts in about 2 seconds.
+  Cards claim the functions they edit: when two reach for the same symbol, the second waits until the first is done.
+- **Agents show you, not tell you.** The browser pane beside the board is theirs to drive: they open what they built,
+  click through it and screenshot it. Every finished card ends with a review tour, one step per change.
+- **Keys and webhooks, handled.** A 🔐 vault behind Touch ID: agents fill a field or run a command with a key and never
+  see its value. A webhook relay gives your localhost a public URL for Stripe, GitHub or Resend, no ngrok.
+
+**License:** source-available under [FSL-1.1-ALv2](LICENSE) with Weft's additional terms. Free to use, at work too;
+a changed copy is for personal use, research or sending changes back, and nobody may sell a competing copy. Each
+version becomes Apache 2.0 two years after its release ([details](#contributing-and-license)).
 
 ## Run it
 

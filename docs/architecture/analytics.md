@@ -137,3 +137,12 @@ both send it. A new event name needs weft.zip redeployed before its collector ta
 - `lib/activation.ts`: `trackActivation()`, the desktop's first card, first Done and active days.
 - `instrumentation-client.ts`, `instrumentation.ts`, `lib/ai-observability.ts`.
 - `components/GoogleAnalytics.tsx`, `app/layout.tsx`, `components/home/Home.tsx` (the download button's `data-track`).
+
+## What the home page promises
+
+weft.zip says all of the above in five lines under the plans, "What Weft sends home" (`components/home/SendsHome.tsx`,
+words in `lib/home-sends-home.ts`): your work goes only from your CLI to the model, the desktop sends a few anonymous counts
+(the welcome, first card, first Done, a daily ping) that Settings → Security switches off, downloads are counted cookie-free,
+the site waits for a yes to cookies, and Project Sync is off per project until you turn it on. `lib/home-sends-home.test.ts`
+checks the counts it names are in `lib/telemetry-events.ts` and that the allow-list carries no prompt, path, project or email
+prop. Change what Weft sends and this note changes in the same commit.
