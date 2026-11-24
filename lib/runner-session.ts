@@ -9,6 +9,7 @@ import { onElicitation } from "./elicitation";
 import { spawnCli, withStderr } from "./cli-process";
 import { withRetryGrant } from "./classifier-denial";
 import { askAboutCall } from "./guards/ask";
+import { chromeArgs } from "./chrome";
 import { withConnectorEnv } from "./connector-env";
 import { guardedCli } from "./env";
 import { isNotLoggedInError, isRateLimitError } from "./login";
@@ -211,6 +212,8 @@ function queryOptions(session: Session, executable: string | undefined): Options
     // Puku-cli's CLI doesn't accept this flag, so only forward it to the Claude Code binary.
     allowDangerouslySkipPermissions: spec.backend === "claude" && !spec.copilot ? true : undefined,
     pathToClaudeCodeExecutable: executable,
+    // The user's own Chrome through the Claude in Chrome extension (lib/chrome.ts), on Claude Code threads on the desktop.
+    extraArgs: chromeArgs(spec),
     // A guessed next message after each turn, for the reply box's Tab (it rides the turn's prompt cache).
     promptSuggestions: spec.backend === "claude" && !spec.copilot ? true : undefined,
     // Weft's own skills (plugin/skills), so board threads can run /weft:done and the like.

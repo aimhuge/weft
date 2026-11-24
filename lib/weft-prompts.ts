@@ -5,6 +5,7 @@ import { COPILOT_PROMPT } from "./board-tools";
 import { PERSONA_PROMPTS, personaOf } from "./copilot-personas";
 import { BLASTCP_PROMPT } from "./blastcp-tools";
 import { BROWSER_PROMPT, WORKER_BROWSER_PROMPT } from "./browser-tools";
+import { CHROME_PROMPT, reachesChrome } from "./chrome";
 import { onWorker } from "./worker-pane";
 import { groupWorks, workerToolsPrompt } from "./worker-tools";
 import { ASK_BUTTONS_PROMPT, decisionsPrompt, MIGRATIONS_PROMPT } from "./decisions-prompt";
@@ -31,6 +32,7 @@ export const WEFT_PINNED_PROMPTS = {
   WEFT_SOUL_PROMPT,
   AGENT_SOULS,
   BROWSER_PROMPT,
+  CHROME_PROMPT,
   COPILOT_PROMPT,
   COPILOT_PERSONA_PROMPTS: PERSONA_PROMPTS,
   SECRETS_PROMPT,
@@ -88,7 +90,7 @@ export function weftSystemPrompt(spec: PromptSpec): string {
   if (cached !== undefined) return cached;
   const parts = spec.copilot
     ? [WEFT_SOUL_PROMPT, BROWSER_PROMPT, COPILOT_PROMPT, personaOf(spec.persona).prompt, ENV_PROMPT].filter(Boolean)
-    : [agentOf(spec.agent, listAgents()).soul, ...toolPrompts(), SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, ENV_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
+    : [agentOf(spec.agent, listAgents()).soul, ...toolPrompts(), reachesChrome(spec) ? CHROME_PROMPT : "", SIMULATOR_PROMPT, decisionsPrompt(spec.backend), RESTART_PROMPT, subagentPrompt(subagentModelFor(), spec.backend), threadPrompt(), REVIEW_PROMPT, ENV_PROMPT, spec.project ? ISOLATED_PROMPT : ""].filter(Boolean);
   // A settings change makes a new key; the old prompts are of no further use.
   if (built.size >= 8) built.clear();
   const text = parts.join("\n\n");

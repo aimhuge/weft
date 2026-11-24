@@ -155,6 +155,11 @@ port.
   ready to type; links that open a new window land in a new tab, and an agent's `open_url` with `new_tab` keeps
   the page it was showing. The tab strip only shows up under the toolbar once a card has two tabs; click to switch,
   × or middle-click to close (a card's last tab stays). The other agent tools act on the tab on screen.
+- **Your own Chrome too**: Claude Code threads on the desktop also drive the Chrome you use every day, through the
+  Claude in Chrome extension (Weft starts them with `--chrome`). They browse in the pane by default and switch to
+  Chrome when a page needs a sign-in the pane doesn't have (a Substack or Google Docs editor, an admin dashboard) or
+  you ask for your browser; with the extension off they fall back to AppleScript (`lib/chrome.ts`,
+  docs/architecture/agent-browser.md#the-users-chrome).
 - **Browser pane zoom**: the % button in the pane's toolbar zooms the page (Chrome's steps, plus
   50–200% presets); ⌘+ / ⌘− / ⌘0 and ⌘+scroll work on the page too, and a trackpad pinch magnifies.
   Opening the menu doesn't blank the page — the pane steps the page aside around the menu.

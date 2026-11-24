@@ -112,3 +112,23 @@ refused, stale refs, and a click at 150% zoom.
 - **Viewport in the toolbar**: the phone/tablet switch for you, not just agents.
 - **Iframes**: `getFullAXTree` covers the main frame only.
 - **Recording and background browsing**: the "🎥 Record agent browser sessions" card, on this session.
+
+## The user's Chrome
+
+Built 2026-11-22. The pane holds the sign-ins you made in it, but most of yours live in the Chrome you use every day,
+and threads used to tell you they "can't type into your main browser". Now a Claude Code thread on the desktop starts
+with `--chrome` (`chromeArgs()` in `lib/chrome.ts`, passed as `extraArgs` in `lib/runner-session.ts`), which connects
+the Claude in Chrome extension and gives it the `mcp__claude-in-chrome__*` tools (tabs, navigate, read_page,
+get_page_text, find, computer, form_input, javascript_tool and the rest). Starting with the flag costs no measurable time.
+
+`CHROME_PROMPT` (pinned in `lib/weft-prompts.ts`, so spares started before it go stale and restart) sets the rule:
+
+- **Pane by default**: your own pages, dev servers, public sites, anything you should watch beside the board.
+- **Chrome when it needs your sign-in**: an editor or dashboard the pane isn't logged in to, a page you say is open
+  there, or when you ask for "my browser". The thread works in a tab of its own and leaves yours alone.
+- **AppleScript as the fallback**: when the extension isn't connected (its tools time out), the thread says so and
+  runs JavaScript in a Chrome tab with `osascript` (`execute … javascript`), which needs Chrome's View → Developer →
+  Allow JavaScript from Apple Events.
+- Chrome isn't on the board, so the thread screenshots what it changed there or shows it on its page.
+
+Only the Claude Code CLI has the flag: puku-cli, Codex and Goose threads, the copilot and Weft Workers don't get it.
