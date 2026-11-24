@@ -102,16 +102,18 @@ describe("WelcomeDialog", () => {
   });
 
   it("screen 1 shows each CLI's login and offers Log in for one that isn't", async () => {
-    client.loginStatus.mockResolvedValue({ ...CLAUDE_READY, status: { ...CLAUDE_READY.status, "github-copilot": { loggedIn: false } } });
+    client.loginStatus.mockResolvedValue({ ...CLAUDE_READY, status: { ...CLAUDE_READY.status, "github-copilot": { loggedIn: false }, antigravity: { loggedIn: false } } });
     api.loadWelcome.mockResolvedValue({ welcome: null, preview: preview([project("/repo/a")]) });
     render(<WelcomeDialog />);
     expect(await screen.findByText(/Ready · a@b.c/)).toBeInTheDocument();
     expect(screen.getByText(/Ready to run threads/)).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: /Log in/ })).toHaveLength(3);
+    expect(screen.getAllByRole("button", { name: /Log in/ })).toHaveLength(4);
     await userEvent.click(screen.getByRole("button", { name: "Log in to puku-cli" }));
     expect(client.login).toHaveBeenCalledWith("puku", "start");
     await userEvent.click(screen.getByRole("button", { name: "Log in to GitHub Copilot" }));
     expect(client.login).toHaveBeenCalledWith("github-copilot", "start");
+    await userEvent.click(screen.getByRole("button", { name: "Log in to Antigravity" }));
+    expect(client.login).toHaveBeenCalledWith("antigravity", "start");
   });
 
   it("Bring in with the default ticks sends an empty skip list and moves to the first thread", async () => {

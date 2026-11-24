@@ -27,6 +27,12 @@ describe("the catalog", () => {
   it("has OpenRouter's vendor/model ids", () => {
     expect(GOOSE_PROVIDERS.find((p) => p.id === "openrouter")?.models).toContain("anthropic/claude-sonnet-4.5");
   });
+
+  it("lists the same models per provider as lib/goose-provider.ts, the board's copy", async () => {
+    const lib = await import("../lib/goose-provider");
+    for (const p of GOOSE_PROVIDERS) expect(p.models).toEqual(lib.providerById(p.id)?.models);
+    expect(providerById("google")?.models[0]).toBe("gemini-4-carbon");
+  });
 });
 
 describe("providerById", () => {

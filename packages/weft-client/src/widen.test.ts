@@ -30,6 +30,7 @@ describe("widenArgsOf and createTerms", () => {
     const payload = { prompt: " go ", title: "", model: " m ", repo: "r", effort: "high", backend: "codex", permissionMode: "auto", agent: "b", widen: {}, tags: ["x"] };
     expect(createTerms(payload)).toEqual({ prompt: "go", model: "m", repo: "r", effort: "high", backend: "codex", permissionMode: "auto" });
     expect(createTerms({ backend: "rm", permissionMode: "bypassPermissions", prompt: 3 })).toEqual({});
+    expect(createTerms({ backend: "antigravity" })).toEqual({ backend: "antigravity" });
     expect(createTerms(null)).toEqual({});
   });
 });

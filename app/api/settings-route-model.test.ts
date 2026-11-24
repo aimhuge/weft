@@ -137,7 +137,7 @@ describe("/settings: the Goose rows", () => {
 
 describe("/settings: the default CLI", () => {
   it("takes any CLI Weft can start a thread on", async () => {
-    for (const backend of ["claude", "puku", "codex", "goose"]) {
+    for (const backend of ["claude", "puku", "codex", "goose", "antigravity"]) {
       expect((await patch({ defaultBackend: backend })).status, backend).toBe(200);
       expect(settings.setDefaultBackend).toHaveBeenCalledWith(backend);
       vi.mocked(settings.setDefaultBackend).mockClear();

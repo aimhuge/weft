@@ -16,5 +16,6 @@ describe("decisionsPrompt", () => {
 
   it("leaves the buttons rule out for Codex, which has no AskUserQuestion", () => {
     expect(decisionsPrompt("codex")).toBe(MIGRATIONS_PROMPT);
+    expect(decisionsPrompt("antigravity")).toBe(MIGRATIONS_PROMPT);
   });
 });

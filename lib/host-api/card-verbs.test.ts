@@ -21,9 +21,12 @@ vi.mock("@/lib/splice", () => ({ sendFresh: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/copilot", () => ({ sendToCopilot: vi.fn() }));
 vi.mock("@/lib/restart", () => ({ restartTurn: vi.fn(() => Promise.resolve()) }));
 vi.mock("@/lib/precedence", () => ({ putFirst: vi.fn(), putHolderFirst: vi.fn() }));
+vi.mock("@/lib/antigravity-models", () => ({ agyModels: () => [{ id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" }] }));
 vi.mock("@/lib/new-thread", () => ({
-  BACKEND_IDS: ["claude", "codex"],
-  MODELS: { claude: [{ id: "opus" }], codex: [{ id: "codex-default" }] },
+  BACKEND_IDS: ["claude", "codex", "antigravity"],
+  MODELS: { claude: [{ id: "opus" }], codex: [{ id: "codex-default" }], antigravity: [{ id: "antigravity-default" }] },
+  isAgyValue: (v: string) => v.startsWith("agy:") && v.length > 4,
+  bareModel: (v: string) => v.replace(/^agy:/, ""),
   NO_MODEL: "",
   ALL_MODEL_IDS: new Set(["opus", "codex-default"]),
   backendFor: vi.fn((model: string) => (model === "opus" ? "claude" : undefined)),
@@ -137,10 +140,19 @@ describe("CLI switches", () => {
   });
 
   it("refuses an unknown CLI and a model from another one", async () => {
-    await expect(switchBackendVerb({ id: "c1", backend: "vim" })).rejects.toThrow("backend must be one of claude, codex.");
-    await expect(switchBackendVerb({ id: "c1", backend: 3 })).rejects.toThrow("backend must be one of claude, codex.");
+    await expect(switchBackendVerb({ id: "c1", backend: "vim" })).rejects.toThrow("backend must be one of claude, codex, antigravity.");
+    await expect(switchBackendVerb({ id: "c1", backend: 3 })).rejects.toThrow("backend must be one of claude, codex, antigravity.");
     await expect(switchBackendVerb({ id: "c1", backend: "codex", model: "opus" })).rejects.toThrow("opus isn't a codex model.");
     await expect(switchBackendVerb({ id: "c1", backend: "codex", model: 7 })).rejects.toThrow("That isn't a codex model.");
+  });
+
+  it("switches Antigravity to a model agy offers this account, bare or as an agy: value", async () => {
+    await switchBackendVerb({ id: "c1", backend: "antigravity", model: "agy:gpt-oss-120b-medium" });
+    expect(runner.switchBackend).toHaveBeenLastCalledWith("c1", "antigravity", { replay: false, model: "agy:gpt-oss-120b-medium" });
+    await switchBackendVerb({ id: "c1", backend: "antigravity", model: "claude-sonnet-4-6" });
+    expect(runner.switchBackend).toHaveBeenLastCalledWith("c1", "antigravity", { replay: false, model: "claude-sonnet-4-6" });
+    await switchBackendVerb({ id: "c1", backend: "antigravity", model: "antigravity-default" });
+    await expect(switchBackendVerb({ id: "c1", backend: "antigravity", model: "opus" })).rejects.toThrow("opus isn't a antigravity model.");
   });
 
   it("reruns on a model any CLI serves, and refuses anything else", async () => {

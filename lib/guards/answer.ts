@@ -5,12 +5,15 @@ import { GUARD_TOKEN_ENV, GUARD_URL_ENV, type GuardCli } from "./turn";
 //
 // Codex 0.162 reads Claude Code's hook output: a PreToolUse permissionDecision of deny with its reason, or nothing to
 // let the call go on to Codex's own sandbox; after a call, decision "block" with a reason the model is told, or
-// additionalContext. Goose 1.56's plugin hooks read {"decision": "allow" | "block", "reason"}.
+// additionalContext. Goose 1.56's plugin hooks read {"decision": "allow" | "block", "reason"}. Antigravity's hooks.json
+// PreToolUse reads {"decision": "allow" | "deny", "reason"} (lib/guards/antigravity.ts).
 
 export type Answer = { allow: true; context?: string; feedback?: string } | { allow: false; reason: string };
 
 export function cliAnswer(cli: GuardCli, event: GuardEvent, answer: Answer): Record<string, unknown> {
   if (cli === "goose") return answer.allow ? { decision: "allow" } : { decision: "block", reason: answer.reason };
+  // Antigravity reads {"decision": "allow" | "deny", "reason"} before a call, and has nothing Weft changes after one.
+  if (cli === "antigravity") return event !== "PreToolUse" ? {} : answer.allow ? { decision: "allow" } : { decision: "deny", reason: answer.reason };
   if (!answer.allow) {
     return event === "PreToolUse"
       ? { hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: answer.reason } }

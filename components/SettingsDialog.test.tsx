@@ -52,6 +52,7 @@ const SETTINGS: SettingsView = {
   gooseModelId: "",
   gooseBaseUrl: "",
   gooseNamedModels: [],
+  antigravityModels: [],
   projects: [],
   issueFolders: [],
   issueLandings: {},

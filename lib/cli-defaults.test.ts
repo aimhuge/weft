@@ -45,6 +45,7 @@ describe("defaultEffort", () => {
     fs.writeFileSync(claudeSettings, JSON.stringify({ effortLevel: "xhigh" }));
     const read = vi.spyOn(fs, "readFileSync");
     expect(defaultEffort("goose")).toBeUndefined();
+    expect(defaultEffort("antigravity")).toBeUndefined();
     expect(read).not.toHaveBeenCalled();
   });
 

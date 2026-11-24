@@ -1,3 +1,4 @@
+import { cancelTurn } from "./cli-adapter";
 import fs from "node:fs";
 import { randomUUID } from "node:crypto";
 import { isDoneCommand, skillsForPrompt } from "./automations";
@@ -289,9 +290,17 @@ export async function stop(cardId: string) {
   while (session.pending.length) settle(cardId, false);
   if (!session.busy) return;
   session.stopping = true;
-  if (session.spec.backend === "codex" || session.spec.backend === "github-copilot") {
+  if (session.spec.backend === "codex") {
     session.abort.abort();
     await session.done;
+    return;
+  }
+  // A CLI that can end a turn on its own (Antigravity over ACP, GitHub Copilot through its SDK) stops it and keeps the thread; one that
+  // doesn't end the turn in time is ended like any other.
+  if (cancelTurn(session)) {
+    setTimeout(() => {
+      if (session.busy && session.stopping) session.abort.abort();
+    }, STOP_GRACE_MS * 4);
     return;
   }
   // SIGTERM the commands the CLI is running first, so a long Bash call ends at once instead of after the interrupt.

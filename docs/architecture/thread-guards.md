@@ -23,6 +23,7 @@ Each CLI reaches the set through its own enforcement point:
 | Claude Code, puku-cli | Agent SDK in-process hooks (`Options.hooks`) | `lib/env.ts` `guardedCli()` |
 | Codex 0.162 | its own `PreToolUse`/`PostToolUse` hooks, given per turn on the command line | `lib/guards/codex.ts` |
 | Goose 1.56 | an open-plugin's `hooks/hooks.json` in the card's Goose state root | `lib/guards/goose.ts` |
+| Antigravity 1.5.16 | its own `PreToolUse` hook: Weft's inert `weft-guards` entry in `~/.gemini/config/hooks.json` | `lib/guards/antigravity.ts` |
 | GitHub Copilot | Weft-owned SDK tool handlers run the same guards before accessing files | `lib/github-copilot-tools.ts` |
 
 Codex and Goose hooks are commands, so their calls come to Weft over HTTP: the hook runs an inline `curl` to
@@ -40,6 +41,16 @@ answer in the CLI's words (`lib/guards/answer.ts`). Codex reads Claude Code's ow
 - **Goose**: `<GOOSE_PATH_ROOT>/.agents/plugins/weft-guards/` (`.plugin/plugin.json`, `hooks/hooks.json` mode 0600,
   matcher `.*` on `PreToolUse`, `PostToolUse` and `PostToolUseFailure`, `timeout` 3600), written before the turn and
   its hooks removed after. The token is written into the file, not Goose's env, which its shell would show.
+- **Antigravity**: agy has no flag or env var for another config folder, so Weft keeps one entry, `weft-guards`, in
+  agy's shared `~/.gemini/config/hooks.json` (merged, the rest left alone; a file that isn't a JSON object is refused,
+  not overwritten). Its `PreToolUse` command (matcher `*`, `timeout` 3600) acts only when agy's env has
+  `WEFT_GUARD_URL`, which only a Weft thread's agy gets, and lets every call through anywhere else, so your own agy runs
+  are untouched. It carries **no token**: the route finds the turn from the payload's `conversationId`, which the runner
+  bound to the card's guards (`lib/guards/antigravity-turns.ts`), so nothing secret is in agy's env for the model's shell.
+  agy reads `{"decision":"allow"|"deny","reason"}`; its tools (`run_command`, `read_file`, `write_file`, `mcp_<server>_<tool>`
+  …) are mapped by `lib/antigravity-tools.ts`, the same mapping the thread draws with. agy's `PostToolUse` can only
+  answer `{}`, so the after-call guards' notes are kept per conversation and injected as a system message by the
+  entry's `PreInvocation` hook before the model's next call (docs/architecture/antigravity.md).
 
 **Fail closed.** A turn whose guards can't be installed doesn't start: `openGuards` throws `GuardsUnavailable` without
 the server's port or a card, and `openGooseGuards` when its plugin can't be written; the card says why. Both CLIs let a

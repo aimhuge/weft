@@ -8,7 +8,7 @@ export const MIGRATIONS_PROMPT = `When you write a database migration (supabase/
 
 export const ASK_BUTTONS_PROMPT = `When you need the user to choose (a decision, an OK, which of two ways), ask with your AskUserQuestion tool so they get buttons, never as a prose question at the end of your reply: two to four options, your pick first with "(Recommended)" after its label. Don't ask what you can decide or check yourself.`;
 
-// Codex has no AskUserQuestion, so it gets only the migrations rule.
+// Codex and Antigravity have no AskUserQuestion, so they get only the migrations rule.
 export function decisionsPrompt(backend: Backend): string {
-  return backend === "codex" ? MIGRATIONS_PROMPT : `${MIGRATIONS_PROMPT}\n\n${ASK_BUTTONS_PROMPT}`;
+  return backend === "codex" || backend === "antigravity" ? MIGRATIONS_PROMPT : `${MIGRATIONS_PROMPT}\n\n${ASK_BUTTONS_PROMPT}`;
 }

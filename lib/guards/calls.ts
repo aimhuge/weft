@@ -1,6 +1,7 @@
 import path from "node:path";
 import type { GuardCall, GuardEvent } from "./decide";
 import { patchCalls } from "./patch";
+import { agyTool } from "../antigravity-tools";
 
 // What Codex's and Goose's own hooks send Weft, put into the calls Weft's guards read (lib/guards/decide.ts):
 // Claude Code's tool names and fields. One CLI call can be several guard calls (a patch over three files is three
@@ -85,4 +86,16 @@ export function gooseCalls(payload: unknown): GuardCall[] {
   const mapped = gooseTool(text(p.tool_name), record(p.tool_input), cwd);
   const failed = event === "PostToolUseFailure";
   return spread(event, text(p.tool_call_id), cwd, mapped, { response: p.tool_output, error: failed ? text(p.tool_output) || text(p.reason) : undefined });
+}
+
+// Antigravity's hooks.json payload (agy 1.5.16): {hookEventName, cwd, conversationId, toolCall: {id, name, args}}, its
+// tools put into Claude Code's names by lib/antigravity-tools.ts, the same mapping the thread draws with.
+export function antigravityCalls(payload: unknown): GuardCall[] {
+  const p = record(payload);
+  const event = eventOf(p.hookEventName);
+  if (!event) return [];
+  const cwd = text(p.cwd) || text((Array.isArray(p.workspacePaths) ? p.workspacePaths : [])[0]) || process.cwd();
+  const call = record(p.toolCall);
+  const use = agyTool(text(call.name), record(call.args), cwd);
+  return spread(event, text(call.id), cwd, [{ tool: use.name, input: use.input }], { response: p.toolResult ?? p.toolOutput, error: text(p.error) || undefined });
 }

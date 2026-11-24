@@ -18,15 +18,15 @@ function tone(left: number) {
 }
 
 // Each CLI's own colour, so a card's model reads as the CLI it runs on. Claude has none of
-// its own here and takes the warning tone; puku and the two plain CLIs (Codex, Goose) take
+// its own here and takes the warning tone; puku and the plain CLIs (Codex, Goose, Antigravity) take
 // the accent.
 function modelTone(backend?: Backend) {
   if (backend === "puku") return "text-puku";
-  if (backend === "codex" || backend === "goose") return "text-accent";
+  if (backend === "codex" || backend === "goose" || backend === "antigravity") return "text-accent";
   return "text-warn";
 }
 
-const CLI_NAMES: Record<Backend, string> = { claude: "claude", puku: "puku", codex: "codex", goose: "goose", "github-copilot": "GitHub Copilot" };
+const CLI_NAMES: Record<Backend, string> = { claude: "claude", puku: "puku", codex: "codex", goose: "goose", "github-copilot": "GitHub Copilot", antigravity: "agy" };
 
 // Which CLI and model the thread runs on: the model its session started with (runsOn), else the one the
 // last turn spent most on. The tip says when those differ (a subagent or side call cost more).

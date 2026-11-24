@@ -1,4 +1,4 @@
-import { backendFor, bareModel, cardModel, MODELS } from "./new-thread";
+import { ANTIGRAVITY_DEFAULT_MODEL, backendFor, bareModel, cardModel, MODELS } from "./new-thread";
 import { fallbackFor } from "./model-fallback";
 import { subagentModel, gooseNamedModels } from "./settings";
 import { BACKEND_SHORT, type Backend } from "./types";
@@ -18,7 +18,7 @@ import type { SubagentModel } from "./types-settings";
 // reach this module (and the settings file it reads) — see the note there.
 export type { SubagentModel };
 
-const COMMAND: Record<Exclude<Backend, "github-copilot">, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose" };
+const COMMAND: Record<Exclude<Backend, "github-copilot">, string> = { claude: "claude", puku: "puku-cli", codex: "codex", goose: "goose", antigravity: "agy" };
 
 // The CLI that serves a model id, or undefined for "choose", "inherit" and ids neither serves.
 export const subagentBackend = backendFor;
@@ -78,6 +78,12 @@ function crossCli(model: string | undefined, backend: Backend, thread: Backend =
   const id = model ? bareModel(model) : undefined;
   const why = model ? `Subagents run on ${subagentLabel(model)} (the user's Weft setting)${reach}.` : "Subagents run on the same provider and model as this thread.";
   const tail = `Several Bash calls in one message run in parallel; use run_in_background for long ones. If it fails because ${COMMAND[backend]} isn't installed or logged in, say so and ${fallback}.`;
+  if (backend === "antigravity") {
+    // agy's print mode takes no tool list or permission flag: --mode plan keeps a read-only subagent read-only.
+    return `${why} Run each one with Bash instead:
+${COMMAND[backend]} -p "<self-contained task>"${id && id !== ANTIGRAVITY_DEFAULT_MODEL ? ` --model ${id}` : ""} --mode plan
+Its output is the subagent's report. Drop --mode plan for a subagent that changes files. ${tail}`;
+  }
   if (backend === "goose") {
     const cmd = `${COMMAND[backend]} run --text "<self-contained task>"${id ? ` --model ${id}` : ""}`;
     return `${why} Run each one with Bash:
@@ -99,7 +105,8 @@ function goosePrompt(model: SubagentModel): string {
 }
 
 export function subagentPrompt(model: SubagentModel, backend: Backend): string {
-  if (backend === "github-copilot") return "";
+  // Antigravity (agy) has no Agent tool Weft can steer, so its threads get no subagent guide yet.
+  if (backend === "github-copilot" || backend === "antigravity") return "";
   if (backend === "goose") return goosePrompt(model);
   if (model === "choose") return backend === "claude" ? `${DELEGATE}\n\n${CHOOSE}` : DELEGATE;
   if (model === "inherit") return `${DELEGATE}\n\nSubagents run on the same model as this thread (the user's Weft setting), so leave the Agent tool's model input out.`;

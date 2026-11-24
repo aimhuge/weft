@@ -1,12 +1,13 @@
 // @vitest-environment node
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { bindConversation, noteForModel } from "@/lib/guards/antigravity-turns";
 import { openGuards } from "@/lib/guards/turn";
 import { sessions, type Session } from "@/lib/runner-state";
 import { addCards, deleteCard } from "@/lib/store";
 import type { Card } from "@/lib/types";
 import { POST } from "./guards/[cli]/[event]/route";
 
-// /api/guards/[cli]/[event]: a Codex or Goose hook posts each tool call here with its turn's bearer token, and prints
+// /api/guards/[cli]/[event]: a Codex, Goose or Antigravity hook posts each tool call here with its turn's bearer token, and prints
 // the answer. Any status but 200 makes the hook refuse the call.
 
 const cwd = process.cwd();
@@ -57,5 +58,25 @@ describe("POST /api/guards/[cli]/[event]", () => {
     const res = await call(bash("git reset --hard"));
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny" } });
+  });
+
+  it("answers Antigravity's PreInvocation hook with the notes kept for its conversation, once", async () => {
+    const unbind = bindConversation("agy-conv", token);
+    noteForModel({ conversationId: "agy-conv" }, "Fix the import.");
+    const body = JSON.stringify({ conversationId: "agy-conv", hookEventName: "PreInvocation" });
+    const first = await call(body, { cli: "antigravity", event: "PreInvocation", auth: "" });
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({ injectSteps: [{ systemMessage: { systemMessage: "Fix the import." } }] });
+    expect(await (await call(body, { cli: "antigravity", event: "PreInvocation", auth: "" })).json()).toEqual({});
+    unbind();
+  });
+
+  it("answers PreInvocation with nothing for a body that isn't JSON, and still refuses a host that isn't this machine", async () => {
+    const res = await call("{not json", { cli: "antigravity", event: "PreInvocation" });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({});
+    expect((await call("{}", { cli: "antigravity", event: "PreInvocation", host: "evil.example" })).status).toBe(403);
+    // PreInvocation is Antigravity's alone.
+    expect((await call("{}", { event: "PreInvocation" })).status).toBe(404);
   });
 });

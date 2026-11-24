@@ -102,6 +102,8 @@ export interface SettingsView {
   // (lib/goose-models.ts). The board's model picker reads them from here rather than importing
   // lib/goose-models.ts, which reads the settings file off disk and so can't run in the browser.
   gooseNamedModels: { id: string; name: string }[];
+  // The models agy last said this Antigravity account may use (lib/antigravity-models.ts), for the model menus.
+  antigravityModels: { id: string; label: string }[];
   projects: { path: string; lastUsedAt: number }[];
   // Project folders whose cards sync to the cloud (lib/cloud-sync.ts). Off by default; mirrors the
   // saved settings, the same shape /api/settings sends.
@@ -143,6 +145,8 @@ export interface CliStatus {
   loggedIn: boolean;
   email?: string;
   error?: string;
+  // A caution about how the CLI is signed in (Antigravity on a consumer Google account), shown under its row.
+  warning?: string;
 }
 
 // Your Weft account (lib/account.ts): optional, for cloud features.

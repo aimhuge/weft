@@ -8,7 +8,7 @@
 // The Goose rows come from the provider the user configured: a model id is whatever that provider
 // serves, and a named model is one the user gave a name to (lib/goose-models.ts).
 
-import { BACKENDS, CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, backendFor, bareModel, gooseValue } from "./new-thread";
+import { ANTIGRAVITY_DEFAULT_MODEL, BACKENDS, CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, MODELS, agyValue, backendFor, bareModel, gooseValue } from "./new-thread";
 import type { Backend } from "./types";
 
 // A row in a model menu.
@@ -26,9 +26,9 @@ export interface ModelOption {
 }
 
 // The CLIs whose model lives in their own config: Codex reads its model from its own config,
-// Goose from the provider the user set up. Each has one row in the menu for it, and picking that
+// Goose from the provider the user set up, Antigravity from agy's own settings. Each has one row in the menu for it, and picking that
 // row moves a thread to that CLI with no model pinned.
-const CLI_DEFAULT_IDS: ReadonlySet<string> = new Set([CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL]);
+const CLI_DEFAULT_IDS: ReadonlySet<string> = new Set([CODEX_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, ANTIGRAVITY_DEFAULT_MODEL]);
 
 /** Whether a string names one of the CLIs Weft knows. */
 export function isBackend(value: string): value is Backend {
@@ -38,10 +38,10 @@ export function isBackend(value: string): value is Backend {
 /**
  * The model a CLI runs when no model is pinned: the first model of the CLI's own list. This is
  * what a thread with no model picked shows, so the user reads the model that will actually run.
- * Empty for a CLI whose model lives in its own config (Codex, Goose) — those have their own row.
+ * Empty for a CLI whose model lives in its own config (Codex, Goose, Antigravity) — those have their own row.
  */
 export function cliChoiceModel(backend: Backend): string {
-  if (backend === "goose") return "";
+  if (backend === "goose" || backend === "antigravity") return "";
   return MODELS[backend].find((m) => !CLI_DEFAULT_IDS.has(m.id))?.id ?? "";
 }
 
@@ -58,6 +58,30 @@ export interface NamedModel {
  */
 export function gooseRowValue(id: string): string {
   return backendFor(id) === "goose" ? id : gooseValue(id);
+}
+
+// A model in a CLI's own list: the id it runs and what the user reads.
+export interface ListedModel {
+  id: string;
+  label: string;
+}
+
+/**
+ * The Antigravity group's models: agy's own pick first, then the models agy last said this account may use
+ * (lib/antigravity-models.ts), or the fixed list in MODELS until a thread has asked.
+ */
+export function antigravityList(offered: ListedModel[]): ListedModel[] {
+  if (!offered.length) return MODELS.antigravity;
+  const own = MODELS.antigravity.filter((m) => m.id === ANTIGRAVITY_DEFAULT_MODEL);
+  return [...own, ...offered.filter((m) => m.id !== ANTIGRAVITY_DEFAULT_MODEL)];
+}
+
+/**
+ * The value an Antigravity row hands back. An id of the fixed list stays as it is; any other agy serves
+ * ("claude-sonnet-4-6", "gpt-oss-120b-medium") gets the "agy:" prefix, so it isn't taken for another CLI's model.
+ */
+export function agyRowValue(id: string): string {
+  return MODELS.antigravity.some((m) => m.id === id) ? id : agyValue(id);
 }
 
 /**
@@ -84,9 +108,9 @@ export function gooseNamed(named: NamedModel[], configured = ""): NamedModel[] {
  */
 export function optionsFor(
   backend: Backend,
-  options: { named?: NamedModel[]; atLimit?: Set<string>; offer?: (backend: Backend, id: string) => boolean } = {},
+  options: { named?: NamedModel[]; atLimit?: Set<string>; offer?: (backend: Backend, id: string) => boolean; listed?: ListedModel[] } = {},
 ): ModelOption[] {
-  const { named = [], atLimit = new Set<string>(), offer } = options;
+  const { named = [], atLimit = new Set<string>(), offer, listed } = options;
   const rows: ModelOption[] = [];
 
   for (const model of named) {
@@ -99,9 +123,9 @@ export function optionsFor(
     });
   }
 
-  for (const model of listedModels(backend, { named, offer })) {
+  for (const model of listedModels(backend, { named, offer, listed })) {
     rows.push({
-      value: model.id,
+      value: backend === "antigravity" ? agyRowValue(model.id) : model.id,
       label: model.label,
       backend,
       note: atLimit.has(model.id) ? "At its limit" : undefined,
@@ -114,9 +138,9 @@ export function optionsFor(
 // The CLI's own models a menu lists under it, leaving out the ones another row already stands for.
 function listedModels(
   backend: Backend,
-  { named, offer }: { named: NamedModel[]; offer?: (backend: Backend, id: string) => boolean },
+  { named, offer, listed = MODELS[backend] }: { named: NamedModel[]; offer?: (backend: Backend, id: string) => boolean; listed?: ListedModel[] },
 ) {
-  return MODELS[backend].filter(
+  return listed.filter(
     (model) =>
       // A model the user already named shows once, under its name.
       !named.some((n) => n.id === model.id) &&
@@ -135,13 +159,15 @@ export function modelGroups(
     named?: Partial<Record<Backend, NamedModel[]>>;
     atLimit?: Set<string>;
     offer?: (backend: Backend, id: string) => boolean;
+    // A CLI's models when they aren't its fixed list in MODELS: the ones agy offers this account (antigravityList).
+    lists?: Partial<Record<Backend, ListedModel[]>>;
   } = {},
 ): { backend: Backend; heading: string; rows: ModelOption[] }[] {
-  const { named = {}, atLimit = new Set<string>(), offer } = options;
+  const { named = {}, atLimit = new Set<string>(), offer, lists = {} } = options;
   return BACKENDS.map((b) => ({
     backend: b.id,
     heading: b.label,
-    rows: optionsFor(b.id, { named: named[b.id], atLimit, offer }),
+    rows: optionsFor(b.id, { named: named[b.id], atLimit, offer, listed: lists[b.id] }),
   })).filter((g) => g.rows.length > 0);
 }
 

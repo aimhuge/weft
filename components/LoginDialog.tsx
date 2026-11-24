@@ -2,6 +2,7 @@
 
 import { useEffect, useEffectEvent, useRef, useState, type SubmitEvent } from "react";
 import { api } from "@/lib/client";
+import { GOOGLE_ACCOUNT_WARNING } from "@/lib/antigravity-warning";
 import type { Backend, LoginTrial, LoginView } from "@/lib/types";
 import { useAccount } from "@/lib/use-account";
 import { isMac } from "@/lib/hotkeys";
@@ -9,7 +10,7 @@ import Icon, { Spinner } from "./Icon";
 import Modal from "./Modal";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY } from "./button-styles";
 
-const NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot" };
+const NAMES: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot", antigravity: "Antigravity" };
 
 // How long "Logged in" shows before the pop-up closes itself.
 const DONE_MS = 2000;
@@ -189,6 +190,7 @@ export default function LoginDialog({ login, onClose }: { login: LoginView; onCl
 
         <div className="flex flex-col gap-4 px-5 py-4">
           {login.trial && login.state !== "done" && <TrialNote trial={login.trial} />}
+          {login.backend === "antigravity" && <p className="line-clamp-1 text-[11.5px] text-warn" title={GOOGLE_ACCOUNT_WARNING}>{GOOGLE_ACCOUNT_WARNING}</p>}
           {login.state === "running" && (
             <>
               <div className="flex items-start gap-2.5 text-[13px] text-ink">

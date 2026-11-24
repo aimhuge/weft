@@ -15,6 +15,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 let dir = "";
 let usageMock: ReturnType<typeof vi.fn>;
 
+// Antigravity's quota is its own module's (lib/antigravity-usage.test.ts): never run the real agy here.
+const agyUsage = vi.hoisted(() => vi.fn(() => Promise.resolve(false)));
+vi.mock("./antigravity-usage", () => ({ pollAntigravityUsage: agyUsage }));
+
 vi.mock("./runner-session", () => ({
   open: vi.fn(() => ({
     query: {

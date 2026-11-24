@@ -67,7 +67,7 @@ export function runBody(command: Pick<CloudCommandRow, "payload">): RunPayload |
     if (value) out[key] = value;
   }
   const backend = text(p.backend);
-  if (backend === "claude" || backend === "codex" || backend === "puku" || backend === "goose") out.backend = backend;
+  if (backend === "claude" || backend === "codex" || backend === "puku" || backend === "goose" || backend === "antigravity") out.backend = backend;
   const effort = text(p.effort);
   if (effort) out.effort = effort as RunPayload["effort"];
   const mode = RUN_MODES.find((m) => m === p.permissionMode);

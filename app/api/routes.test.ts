@@ -741,6 +741,11 @@ describe("POST /warm", () => {
     expect(runner.ensureSpare).toHaveBeenLastCalledWith(tmp, "puku");
   });
 
+  it("keeps no spare for Antigravity", async () => {
+    await warm({ cwd: tmp, backend: "antigravity" });
+    expect(runner.ensureSpare).not.toHaveBeenCalled();
+  });
+
   it("400s a folder that doesn't exist, or bad JSON", async () => {
     expect((await warm({ cwd: path.join(tmp, "missing") })).status).toBe(400);
     expect((await warm("x")).status).toBe(400);
@@ -805,7 +810,7 @@ describe("/login", () => {
   it("GET returns every CLI's status and runs", async () => {
     const json = await body(await loginRoute.GET(req("/login")));
     expect(json).toEqual({
-      status: { claude: { loggedIn: true }, puku: { loggedIn: true }, codex: { loggedIn: true }, goose: { loggedIn: true }, "github-copilot": { loggedIn: true } },
+      status: { claude: { loggedIn: true }, puku: { loggedIn: true }, codex: { loggedIn: true }, goose: { loggedIn: true }, "github-copilot": { loggedIn: true }, antigravity: { loggedIn: true } },
       runs: [],
     });
   });

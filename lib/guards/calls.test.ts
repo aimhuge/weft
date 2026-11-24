@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { codexCalls, gooseCalls } from "./calls";
+import { antigravityCalls, codexCalls, gooseCalls } from "./calls";
 
 // The hook payloads Codex and Goose send Weft (lib/guards/calls.ts), read as the calls Weft's guards expect:
 // Claude Code's tool names and fields.
@@ -162,5 +162,37 @@ describe("gooseCalls", () => {
   it("gives no call for an event Weft does not guard", () => {
     expect(gooseCalls({ event: "SessionStart", tool_name: "shell", tool_input: { command: "ls" } })).toEqual([]);
     expect(gooseCalls({})).toEqual([]);
+  });
+});
+
+describe("antigravityCalls", () => {
+  // agy 1.5.16's PreToolUse payload, verbatim.
+  const PRE = { conversationId: "C", cwd: "/tmp/p", hookEventName: "PreToolUse", stepIdx: 2, toolCall: { args: { Path: "/tmp/p/x.txt" }, id: "call_9", name: "read_file" }, workspacePaths: ["/tmp/p"] };
+
+  it("reads agy's own hook payload as Claude Code's call", () => {
+    expect(antigravityCalls(PRE)).toEqual([{ event: "PreToolUse", tool: "Read", input: { file_path: "/tmp/p/x.txt" }, cwd: "/tmp/p", id: "call_9" }]);
+  });
+
+  it("names a command Bash, and resolves a relative path against the folder", () => {
+    expect(antigravityCalls({ ...PRE, toolCall: { id: "c", name: "run_command", args: { CommandLine: "cat .env" } } })[0]).toMatchObject({ tool: "Bash", input: { command: "cat .env" } });
+    expect(antigravityCalls({ ...PRE, toolCall: { id: "c", name: "write_file", args: { Path: "y.txt", Content: "a" } } })[0]).toMatchObject({ tool: "Write", input: { file_path: "/tmp/p/y.txt", content: "a" } });
+  });
+
+  it("takes the folder from the workspace when there's no cwd, and the process's own when there's neither", () => {
+    expect(antigravityCalls({ ...PRE, cwd: undefined, workspacePaths: ["/ws"] })[0]?.cwd).toBe("/ws");
+    expect(antigravityCalls({ ...PRE, cwd: undefined, workspacePaths: "nope" })[0]?.cwd).toBe(process.cwd());
+    expect(antigravityCalls({ ...PRE, cwd: undefined, workspacePaths: undefined })[0]?.cwd).toBe(process.cwd());
+  });
+
+  it("carries what a call returned, from toolResult or toolOutput, and its error", () => {
+    expect(antigravityCalls({ ...PRE, hookEventName: "PostToolUse", toolResult: "r" })[0]).toMatchObject({ event: "PostToolUse", response: "r", error: undefined });
+    expect(antigravityCalls({ ...PRE, hookEventName: "PostToolUse", toolOutput: "o" })[0]?.response).toBe("o");
+    expect(antigravityCalls({ ...PRE, hookEventName: "PostToolUseFailure", error: "boom" })[0]).toMatchObject({ event: "PostToolUseFailure", error: "boom" });
+  });
+
+  it("gives no call for an event Weft does not guard, and reads a payload with no tool call", () => {
+    expect(antigravityCalls({ ...PRE, hookEventName: "SessionStart" })).toEqual([]);
+    expect(antigravityCalls(null)).toEqual([]);
+    expect(antigravityCalls({ hookEventName: "PreToolUse", cwd: "/w" })).toEqual([{ event: "PreToolUse", tool: "", input: {}, cwd: "/w", id: "" }]);
   });
 });

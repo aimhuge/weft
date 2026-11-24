@@ -18,8 +18,8 @@ function settingsFile(backend: Backend) {
 
 // The effort a CLI runs at when the card picks none: its user settings, if set.
 export function defaultEffort(backend: Backend): Effort | undefined {
-  // A CLI with no effort setting has no default effort.
-  if (backend === "goose") return undefined;
+  // A CLI with no effort setting has no default effort. Antigravity's thinking level rides in its model slug.
+  if (backend === "goose" || backend === "antigravity") return undefined;
   try {
     if (backend === "codex") {
       const content = fs.readFileSync(/*turbopackIgnore: true*/ settingsFile(backend), "utf8");

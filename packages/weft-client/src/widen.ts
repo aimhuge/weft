@@ -89,7 +89,7 @@ export function widenArgsOf(args: Record<string, unknown>): Record<string, unkno
 }
 
 const RUN_MODES = ["default", "acceptEdits", "auto", "plan"];
-const BACKENDS = ["claude", "codex", "puku", "goose"];
+const BACKENDS = ["claude", "codex", "puku", "goose", "antigravity"];
 const trimmed = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
 
 // What a new thread is made of, as a host reads its run or new_card (lib/worker-commands.ts runBody): the terms its

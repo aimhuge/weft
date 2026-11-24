@@ -10,9 +10,9 @@ export { COLUMNS, MODES, type Backend, type Column, type PermissionMode };
 // The copilot is one long-lived thread with this fixed id, kept off the board.
 export const COPILOT_ID = "copilot";
 
-export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot" };
+export const BACKEND_LABELS: Record<Backend, string> = { claude: "Claude Code", puku: "puku-cli", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot", antigravity: "Antigravity" };
 // The short name, for a label that sits beside something else ("Sonnet 5.5 (Claude)").
-export const BACKEND_SHORT: Record<Backend, string> = { claude: "Claude", puku: "Puku", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot" };
+export const BACKEND_SHORT: Record<Backend, string> = { claude: "Claude", puku: "Puku", codex: "Codex", goose: "Goose", "github-copilot": "GitHub Copilot", antigravity: "Antigravity" };
 // bypassPermissions is "YOLO": every tool runs without asking.
 
 // How the pickers (new thread, thread header, card menu) name each mode, loosest first.
@@ -24,7 +24,8 @@ export const MODE_OPTIONS: { id: PermissionMode; label: string; hint: string }[]
 ];
 
 export function permissionOptions(backend: Backend) {
-  if (backend !== "codex") return MODE_OPTIONS.filter((m) => backend === "claude" || m.id !== "bypassPermissions");
+  // Claude Code and Antigravity (agy) run all four modes; the others have no YOLO.
+  if (backend !== "codex") return MODE_OPTIONS.filter((m) => backend === "claude" || backend === "antigravity" || m.id !== "bypassPermissions");
   return [
     { id: "bypassPermissions", label: "Full access", hint: "Runs commands and writes outside the project without approval" },
     { id: "auto", label: "Auto review", hint: "Codex reviews command approvals inside the project" },

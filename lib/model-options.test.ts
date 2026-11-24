@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  agyRowValue,
+  antigravityList,
   cliChoiceModel,
   filterGroups,
   gooseNamed,
@@ -93,7 +95,7 @@ describe("the Goose models a menu lists", () => {
 describe("the menu's groups", () => {
   it("has one group per CLI, in the CLIs' order", () => {
     const groups = modelGroups();
-    expect(groups.map((g) => g.backend)).toEqual(["claude", "puku", "codex", "goose", "github-copilot"]);
+    expect(groups.map((g) => g.backend)).toEqual(["claude", "puku", "codex", "goose", "github-copilot", "antigravity"]);
   });
 
   it("heads each group with its CLI's name alone: every CLI runs behind Weft's guards (lib/guards)", () => {
@@ -158,5 +160,29 @@ describe("filtering the rows", () => {
   it("drops a group with nothing left in it", () => {
     const kept = filterGroups(groups, "nothing matches this");
     expect(kept).toHaveLength(0);
+  });
+});
+
+describe("the Antigravity models a menu lists", () => {
+  const OFFERED = [
+    { id: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (High)" },
+    { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Thinking)" },
+    { id: "antigravity-default", label: "agy's own" },
+  ];
+
+  it("is the fixed list until agy has said what the account may use", () => {
+    expect(antigravityList([]).map((m) => m.id)).toContain("gemini-4-argon-high");
+  });
+
+  it("is agy's own pick first, then the account's models", () => {
+    expect(antigravityList(OFFERED).map((m) => m.id)).toEqual(["antigravity-default", "gemini-3.8-flash-high", "claude-sonnet-4-6"]);
+  });
+
+  it("gives an id beyond the fixed list the agy: prefix, so it routes to Antigravity", () => {
+    expect(agyRowValue("gemini-3.8-flash-high")).toBe("gemini-3.8-flash-high");
+    expect(agyRowValue("claude-sonnet-4-6")).toBe("agy:claude-sonnet-4-6");
+    const group = modelGroups({ lists: { antigravity: antigravityList(OFFERED) } }).find((g) => g.backend === "antigravity");
+    expect(group?.rows.map((r) => r.value)).toEqual(["antigravity-default", "gemini-3.8-flash-high", "agy:claude-sonnet-4-6"]);
+    expect(group?.rows[2]?.label).toBe("Claude Sonnet 4.6 (Thinking)");
   });
 });

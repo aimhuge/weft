@@ -112,6 +112,7 @@ describe("runBody", () => {
     expect(runBody(wire({ prompt: "x", backend: "codex" }))?.backend).toBe("codex");
     expect(runBody(wire({ prompt: "x", backend: "puku" }))?.backend).toBe("puku");
     expect(runBody(wire({ prompt: "x", backend: "goose" }))?.backend).toBe("goose");
+    expect(runBody(wire({ prompt: "x", backend: "antigravity" }))?.backend).toBe("antigravity");
     expect(runBody(wire({ prompt: "x", backend: "gpt" }))?.backend).toBeUndefined();
     expect(runBody(wire({ prompt: "x", backend: 7 }))?.backend).toBeUndefined();
   });

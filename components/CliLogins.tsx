@@ -12,6 +12,7 @@ const CLIS: { id: Backend; label: string }[] = [
   { id: "puku", label: "puku-cli" },
   { id: "codex", label: "Codex" },
   { id: "github-copilot", label: "GitHub Copilot" },
+  { id: "antigravity", label: "Antigravity" },
 ];
 
 // How often the panel re-reads the logins while it is open. A login finishes in the browser,
@@ -123,6 +124,7 @@ export default function CliLogins({ titleClass }: { titleClass: string }) {
                   <span className={`min-w-0 break-words text-[12.5px] ${s?.error ? "text-danger" : "text-muted"}`}>
                     {line.text}
                     {error && <span className="block text-danger">{error}</span>}
+                    {s?.warning && <span className="block truncate text-[11.5px] text-warn" title={s.warning}>{s.warning}</span>}
                   </span>
                 </span>
                 {running ? (

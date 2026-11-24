@@ -38,10 +38,11 @@ function login(cardId: string, backend: Backend, trial?: LoginTrial) {
 
 // Called from the failed() path (lib/runner-session.ts) when the CLI's last turn hit an auth
 // error. Drops the card's sessionId so puku-cli doesn't replay the cached authentication_failed
-// entry from the session transcript on retry.
+// entry from the session transcript on retry. Copilot and Antigravity keep theirs: they resume by id, with no
+// cached auth failure to replay.
 export function needLogin(cardId: string, backend: Backend, message: string) {
   const card = getCard(cardId);
-  if (card?.sessionId && backend !== "github-copilot") updateCard(cardId, { sessionId: undefined });
+  if (card?.sessionId && backend !== "github-copilot" && backend !== "antigravity") updateCard(cardId, { sessionId: undefined });
   safeUpdate(cardId, {
     column: "needs_you",
     pending: null,

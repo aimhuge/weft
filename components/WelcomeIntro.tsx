@@ -18,6 +18,7 @@ export const CLIS: { id: Backend; label: string; note: string }[] = [
   { id: "puku", label: "puku-cli", note: "Claude Code on the Puku gateway, free to try" },
   { id: "codex", label: "Codex", note: "OpenAI's coding agent" },
   { id: "github-copilot", label: "GitHub Copilot", note: "GitHub's coding agent" },
+  { id: "antigravity", label: "Antigravity", note: "Google's coding agent" },
 ];
 
 export type { CliStatuses };

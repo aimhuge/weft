@@ -28,7 +28,8 @@ export function parsePs(out: string): Proc[] {
 // node_modules, or the Codex a card drives. Codex is matched on its `exec` subcommand, which only Weft's
 // runner passes (lib/codex-runner-prompt.ts argsFor: `exec --json` or `exec resume --json`), so a codex you
 // run by hand, and the long-lived `codex app-server` daemon (which spawns its own process tree under PID 1
-// after a crash), are never touched.
+// after a crash), are never touched. Antigravity is matched the same way, on the `acp` subcommand Weft's runner
+// starts it with (`agy acp`), so an interactive `agy` in a terminal is never touched.
 export function isThreadCli(command: string, sdkDir: string) {
   const [exe = ""] = command.split(/\s+/);
   const base = path.basename(exe);
@@ -36,7 +37,8 @@ export function isThreadCli(command: string, sdkDir: string) {
     base === "Puku" ||
     /(^|\/)puku-cli(\s|$)/.test(command) ||
     exe.startsWith(sdkDir) ||
-    (base === "codex" && /(?:^|\s)exec(?:\s|$)/.test(command))
+    (base === "codex" && /(?:^|\s)exec(?:\s|$)/.test(command)) ||
+    (base === "agy" && /(?:^|\s)acp(?:\s|$)/.test(command))
   );
 }
 

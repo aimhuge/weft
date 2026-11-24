@@ -12,6 +12,10 @@ let dir = "";
 let usageMock: ReturnType<typeof vi.fn>;
 let utilization: { fiveHour: number; sevenDay: number };
 
+// Antigravity's quota is its own module's (lib/antigravity-usage.test.ts): never run the real agy here.
+const agyUsage = vi.hoisted(() => vi.fn(() => Promise.resolve(false)));
+vi.mock("./antigravity-usage", () => ({ pollAntigravityUsage: agyUsage }));
+
 vi.mock("./runner-session", () => ({
   open: vi.fn(() => ({
     query: { usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET: usageMock },
@@ -57,6 +61,16 @@ async function load() {
 }
 
 describe("startLimitPoll", () => {
+  it("asks agy for Antigravity's quota on every tick", async () => {
+    const { startLimitPoll, LIMITS_POLL_MS } = await load();
+    agyUsage.mockClear();
+    startLimitPoll();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(agyUsage).toHaveBeenCalledWith(1_800_000_000_000);
+    await vi.advanceTimersByTimeAsync(LIMITS_POLL_MS);
+    expect(agyUsage).toHaveBeenCalledTimes(2);
+  });
+
   it("records a sample on the first tick and on every interval, idempotently", async () => {
     const { startLimitPoll, LIMITS_POLL_MS } = await load();
     startLimitPoll();
@@ -86,6 +100,17 @@ describe("startLimitPoll", () => {
   it("does nothing for codex (no equivalent CLI usage API yet)", async () => {
     vi.doMock("./settings", () => ({
       defaultBackend: () => "codex" as const,
+      listProjects: () => [{ path: "/repo", lastUsedAt: 1 }],
+    }));
+    const { startLimitPoll } = await load();
+    startLimitPoll();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(lines()).toEqual([]);
+  });
+
+  it("does nothing for Antigravity, which reads its usage with agy itself", async () => {
+    vi.doMock("./settings", () => ({
+      defaultBackend: () => "antigravity" as const,
       listProjects: () => [{ path: "/repo", lastUsedAt: 1 }],
     }));
     const { startLimitPoll } = await load();

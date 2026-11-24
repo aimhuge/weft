@@ -1,4 +1,5 @@
 import { answerHook, isGuardCli, isGuardEvent } from "@/lib/guards/hook";
+import { takeNotes } from "@/lib/guards/antigravity-turns";
 import { bridgeToken } from "@/lib/mcp-bridge";
 
 // Weft's guards for a Codex or Goose turn (lib/guards/hook.ts): the CLI's own hook posts each tool call here and
@@ -9,6 +10,8 @@ const LOCAL_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
 export async function POST(req: Request, { params }: { params: Promise<{ cli: string; event: string }> }) {
   if (!LOCAL_HOSTS.has((req.headers.get("host") ?? "").replace(/:\d+$/, ""))) return Response.json({ error: "Forbidden host" }, { status: 403 });
   const { cli, event } = await params;
+  // Antigravity's hook before each model call: the notes Weft's after-call guards kept for it (lib/guards/antigravity.ts).
+  if (cli === "antigravity" && event === "PreInvocation") return Response.json(takeNotes(await req.json().catch(() => null)));
   if (!isGuardCli(cli) || !isGuardEvent(event)) return Response.json({ error: "Unknown CLI or event" }, { status: 404 });
   let payload: unknown;
   try {

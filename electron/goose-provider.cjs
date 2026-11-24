@@ -26,7 +26,7 @@ const GOOSE_PROVIDERS = [
       "anthropic/claude-sonnet-4.5",
       "anthropic/claude-opus-4.1",
       "openai/gpt-4.1",
-      "google/gemini-2.5-pro",
+      "google/gemini-4-carbon",
       "qwen/qwen3-coder",
     ],
   },
@@ -53,7 +53,13 @@ const GOOSE_PROVIDERS = [
     id: "google",
     label: "Google Gemini",
     envKey: "GOOGLE_API_KEY",
-    models: ["gemini-2.5-pro", "gemini-2.5-flash"],
+    models: [
+      "gemini-4-carbon",
+      "gemini-4-argon",
+      "gemini-4-neon",
+      "gemini-4-hydrogen",
+      "gemini-3.8-flash",
+    ],
   },
   {
     id: "groq",

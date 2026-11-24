@@ -3,11 +3,11 @@ import { globalSingleton } from "../global-singleton";
 import { sessions, type Session } from "../runner-state";
 import { guardHooks, type GuardHooks } from "./hooks";
 
-// One Codex or Goose turn's guards, open while the turn runs. Its CLI's hook posts each tool call to Weft's guard
+// One Codex, Goose or Antigravity turn's guards, open while the turn runs. Its CLI's hook posts each tool call to Weft's guard
 // route with the turn's token (lib/guards/hook.ts), which finds the turn's session and guard set here. Like the
 // MCP bridge's token (lib/mcp-bridge.ts), it stands for one turn of one card and dies with the turn; it travels in
 // the CLI's environment, which Weft keeps out of the model's shell (lib/guards/codex.ts, lib/guards/goose.ts).
-export type GuardCli = "codex" | "goose";
+export type GuardCli = "codex" | "goose" | "antigravity";
 export type GuardTurn = { cli: GuardCli; session: Session; hooks: GuardHooks };
 
 export const GUARD_TOKEN_ENV = "WEFT_GUARD_TOKEN";
