@@ -15,7 +15,7 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `desktop-shell.md` — `electron/` itself: main, preload, tray, dock, `weft://` links, the start screen, the terminal drawer, and the packaging allow-list that decides what `app.asar` ships (`electron/packaged-deps.test.ts` guards it).
 - `threads-and-sessions.md` — the runner: one Agent SDK `query()` per Claude Code/puku thread, the Codex runner, sessions, queues, rewind, warm spares.
 - `thread-env.md` — the `<weft-env>` block on each turn a thread's CLI gets: the host (this Mac or a Weft Worker, OS, Weft's version, commit and distance behind origin/main, `lib/host-facts.ts`), the sender (desktop board, weft.zip, phone, cron, another card, a webhook; `lib/turn-client.ts`, the `payload.client` hint in `packages/weft-client/src/client-hint.ts`, never an authority) and the time in the user's and host's zones (`lib/turn-env.ts`); kept out of the thread, the cloud rows and transcripts (`lib/env-block.ts`).
-- `thread-guards.md` — the guard set every CLI runs behind: secret/restart/git/check/route-import/claim guards and the folder gate in `lib/guards/` (`hooks.ts` the set, `decide.ts` runs it on one call, `ask.ts` what an ask becomes); Claude Code and puku-cli get it through `guardedCli()`, Codex and Goose through their own hooks posting to `app/api/guards/[cli]/[event]` (`lib/guards/codex.ts`, `goose.ts`, `hook.ts`); a turn whose guards can't be installed doesn't start.
+- `thread-guards.md` — the guard set every CLI runs behind: secret/restart/git/check/route-import/claim guards and the folder gate in `lib/guards/` (`hooks.ts` the set, `decide.ts` runs it on one call, `ask.ts` what an ask becomes); Claude Code and puku-cli get it through `guardedCli()`, Codex, Goose and Antigravity through their own hooks posting to `app/api/guards/[cli]/[event]` (`lib/guards/codex.ts`, `goose.ts`, `antigravity.ts`, `hook.ts`); a turn whose guards can't be installed doesn't start.
 - `composer.md` — the reply box's modes: `lib/reply-mode.ts`'s table of chip, primary and ▾ menu per state, and what's still planned (one dock for every ask, one server-side queue).
 - `limits.md` — the three limit stores (the model's own cap, the CLI's weekly and 5-hour windows), the pure gate in `lib/limit-reset.ts`, the server-decides rule, the new-thread path that waits for a spent limit instead of failing, and the upgrade path that frees a model the moment the plan gives it room again.
 - `questions.md` — a thread's AskUserQuestion end to end: the panel above the reply box, keys, previews in the pane, answers and `annotations` back to the CLI.
@@ -54,6 +54,8 @@ matching doc below. When a feature lands, add or update its entry here and in it
 - `slack.md` — the Slack rail drawer: bot + app tokens in the Keychain, Socket Mode in main, commits/pushes (reflog), deploys and card status to a channel, `/weft` and @Weft start cards, weft.zip card links, a channel per kind of update, and growth (new user, new team, payment) with a daily summary.
 - `puku-trial.md` — the puku trial: a puku thread with no Puku login runs through the deployed Weft's proxy on Weft's own key, day-long token, per-account daily cap.
 - `goose.md` — the Goose backend: one `goose run` process per turn and its `stream-json` events, the provider catalog and the BYO key, the grant that puts the key in Goose's env without it ever reaching the board, and the per-card `GOOSE_PATH_ROOT`.
+- `antigravity.md` — the Antigravity backend (Google's `agy`, Gemini): one warm `agy acp` per card over the Agent Client Protocol (`lib/acp-client.ts`, `lib/antigravity-runner.ts`), Weft's instructions as `systemPrompt.append`, Weft's tools as stdio relays (`scripts/weft-mcp-relay.mjs`), guards through an inert `weft-guards` entry in `~/.gemini/config/hooks.json`, permission requests answered by the card, and the consumer-account terms warning (`lib/antigravity-login.ts`).
+- `cli-adapters.md` — the shared interface every CLI outside the Agent SDK runs in: `lib/cli-adapter.ts` (`CliAdapter`, `driveAdapter`, `cancelTurn`), the thread rows in `lib/cli-messages.ts`, the per-turn process in `lib/cli-turn.ts`; Codex, Goose and Antigravity are adapters, and how to add a CLI.
 - `github-copilot.md` — GitHub Copilot desktop threads, the bundled SDK runtime, device-code login and guarded project file tools.
 - `email-forwarding.md` — `weft.zip` mail → Resend → Svix-signed `email.received` → one inbox.
 - `github-issues.md` — a project's open GitHub issues become Backlog cards, one direction, polled every 5 min, instant sync via the deployed relay.
@@ -200,6 +202,14 @@ When a new doc lands in this folder, add it here on the same change.
   subagents are Bash `goose run --text` calls that inherit `GOOSE_PROVIDER`/`GOOSE_MODEL` from `gooseEnv()` (`lib/subagents.ts`
   `GOOSE_DELEGATE`, no Agent tool), and its commits are signed `Co-Authored-By: Goose (<model>) on Weft` through its system
   text (`lib/attribution.ts` `gooseAttributionPrompt`), since Goose has no attribution setting.
+- `lib/antigravity-runner.ts` + `lib/acp-client.ts`: Antigravity (Google's `agy`, Gemini), the sixth backend and the first that stays warm
+  outside the SDK: `agy acp` per card, `session/new` or `session/load`, each turn a `session/prompt`, a stop `session/cancel`
+  (`lib/runner.ts` `stop()` through `cancelTurn`). Its updates become rows through `lib/antigravity-events.ts` and
+  `lib/antigravity-tools.ts`; its instructions, mode and model through `lib/antigravity-prompt.ts`; Weft's tools through
+  `lib/antigravity-mcp.ts`; its guards through `lib/guards/antigravity.ts`; status and the account warning through
+  `lib/antigravity-login.ts`; the account's live model list through `lib/antigravity-models.ts` and its `/usage` quota on
+  the plan-limits strip through `lib/antigravity-usage.ts` (docs/architecture/antigravity.md). Codex, Goose and Antigravity all run in `lib/cli-adapter.ts`
+  `driveAdapter` (docs/architecture/cli-adapters.md).
   The models a user named in Settings → Models → Bring your own key (`gooseNamedModels`, owned by `lib/goose-models.ts`) show
   by name in every model menu, with their id beside them. **A name says "this runs on Goose"** — the names are a Goose list, so
   a name outranks a shared list naming the same id ("puku-ai-2.8" is puku-cli's own, but named there it runs on Goose) and the

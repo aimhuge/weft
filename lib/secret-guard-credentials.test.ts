@@ -138,4 +138,10 @@ describe("the files CLIs keep their sign-in in", () => {
     expect(isCliCredential(`${HOME}/.netrc`)).toBe(true);
     expect(isCliCredential("/tmp/hosts.yml")).toBe(false);
   });
+
+  it("counts the Gemini and Antigravity CLIs' Google sign-in, and its glob", () => {
+    expect(isCliCredential(`${HOME}/.gemini/oauth_creds.json`)).toBe(true);
+    expect(isCliCredential(`${HOME}/.gemini/x`, /oauth_creds\.json$/)).toBe(true);
+    expect(isCliCredential(`${HOME}/.gemini/settings.json`)).toBe(false);
+  });
 });

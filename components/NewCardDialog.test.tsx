@@ -198,6 +198,18 @@ describe("NewCardDialog", () => {
     expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "github-copilot" }));
   });
 
+  it("starts a thread on Antigravity from one of its Gemini models", async () => {
+    const { onCreate, box } = setup();
+    // Settings' defaults land first, as in the puku test above, so they don't replace the pick.
+    await waitFor(() => expect(api.settings).toHaveBeenCalled());
+    pickModel("Model", "Gemini 4 Argon (High)");
+    await userEvent.type(box, "Hi");
+    await userEvent.click(screen.getByRole("button", { name: "Start now" }));
+    await waitFor(() =>
+      expect(onCreate).toHaveBeenLastCalledWith(expect.objectContaining({ backend: "antigravity", model: "gemini-4-argon-high" })),
+    );
+  });
+
   it("starts in Settings' default permission mode", async () => {
     const { onCreate, box } = setup();
     await waitFor(() => expect(api.settings).toHaveBeenCalled());

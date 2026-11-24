@@ -1,11 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, NO_MODEL } from "@/lib/new-thread";
+import { ANTIGRAVITY_DEFAULT_MODEL, CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, GOOSE_DEFAULT_MODEL, NO_MODEL } from "@/lib/new-thread";
 import { useLimitedModels } from "@/lib/use-plan-limits";
 import { gooseModelsFor } from "@/lib/goose-provider";
-import { useGooseChoice, useNamedModels, type GooseChoice } from "@/lib/use-named-models";
-import { cliChoiceModel, gooseNamed, modelGroups, type NamedModel } from "@/lib/model-options";
+import { useAgyModels, useGooseChoice, useNamedModels, type GooseChoice } from "@/lib/use-named-models";
+import { antigravityList, cliChoiceModel, gooseNamed, modelGroups, type NamedModel } from "@/lib/model-options";
 import type { Backend } from "@/lib/types";
 import { isWorkerProject } from "@/lib/worker-project";
 import ModelTypeahead from "./ModelTypeahead";
@@ -34,7 +34,7 @@ export type PickerOption = { value: string; label: string };
 
 // The configured-model rows of the CLIs whose model lives in their own config. Picking one moves the
 // thread to that CLI with no model pinned.
-const CONFIGURED: Record<string, Backend> = { [CODEX_DEFAULT_MODEL]: "codex", [GOOSE_DEFAULT_MODEL]: "goose", [GITHUB_COPILOT_DEFAULT_MODEL]: "github-copilot" };
+const CONFIGURED: Record<string, Backend> = { [CODEX_DEFAULT_MODEL]: "codex", [GOOSE_DEFAULT_MODEL]: "goose", [GITHUB_COPILOT_DEFAULT_MODEL]: "github-copilot", [ANTIGRAVITY_DEFAULT_MODEL]: "antigravity" };
 
 // Whether a model belongs in the menu. A Goose model shows only when the provider the user set
 // up serves it (Settings → Models → Bring your own key); the models the user named always do, and
@@ -78,6 +78,9 @@ export default function ModelSelect({
   const shown = cli && value === NO_MODEL ? cliChoiceModel(cli.backend) || configuredRow(cli.backend) : value;
   const offered = useOffered(value, goose, !isWorkerProject(cwd) || shown === GITHUB_COPILOT_DEFAULT_MODEL);
   const names = useNamedModels();
+  // The Antigravity group lists what agy last said this account may use (lib/antigravity-models.ts).
+  const agy = useAgyModels();
+  const lists = useMemo(() => ({ antigravity: antigravityList(agy) }), [agy]);
 
   // The models the user named, per CLI. A name is a Goose name — the setting is `gooseNamedModels`
   // and the only place a name can be given is the Goose section of Settings — so a named model
@@ -110,8 +113,9 @@ export default function ModelSelect({
         named,
         atLimit,
         offer: offered,
+        lists,
       }),
-    [named, atLimit, offered],
+    [named, atLimit, offered, lists],
   );
 
   function pick(next: string) {

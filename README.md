@@ -1,7 +1,7 @@
 # Weft™
 
 Engineering the future, one thread at a time. Weft is a Trello-style board where each card is an AI CLI
-thread (Claude Code, puku-cli, Codex, Goose or GitHub Copilot), with a browser pane on the side that you and the agents can both
+thread (Claude Code, puku-cli, Codex, Goose, GitHub Copilot or Google's Antigravity), with a browser pane on the side that you and the agents can both
 use, and a copilot in its own small window that can see and run the board.
 
 In weaving, the weft is the thread that runs across the loom and binds the separate threads into
@@ -386,7 +386,7 @@ Claude Code keep the mode they last ran in (say `auto`).
 **Every model is on offer, and no row lets the CLI choose.** Wherever Weft asks for a model — the New
 thread dialog, Settings → Models (New threads, Use for subagents, Copilot, Review all, Run /weft:done
 on, Backup model), the thread header's chip — the list is every model any CLI serves, grouped under
-Claude, Puku, Codex and Goose. Nothing is locked to one CLI: picking a model moves the card to the CLI that
+Claude, Puku, Codex, Goose and Antigravity. Nothing is locked to one CLI: picking a model moves the card to the CLI that
 serves it, so the choice is one row, not two. Every row is a model: the two CLIs whose model lives in their
 own config (Codex and Goose) each have one row for it — **Codex's configured model** and **Your BYOK
 model** — and a menu with nothing picked shows the model that CLI actually runs, so you always see what will
@@ -421,6 +421,8 @@ GitHub device code from **Settings → Accounts**. Copilot resumes its conversat
 the card's project. Edits to existing files ask for approval on the card. See [GitHub Copilot threads](docs/architecture/github-copilot.md).
 
 Pick **Goose** to run the Goose CLI agent (the Rust one from Block), and bring your own key: Settings → Models → **Bring your own key** takes a provider's API key — OpenRouter, Anthropic, OpenAI, Google, Groq, Mistral, DeepSeek, xAI, Azure, LiteLLM, Perplexity, Cerebras, a local Ollama, or any OpenAI-compatible endpoint — and Weft keeps it in your Keychain. The key never reaches the board and never crosses Weft's control server: the thread's Goose process is started with the key in its env, and that is the only place it exists. The provider you pick is what new Goose threads run on, and its models are the ones the Goose group of every model menu lists — your provider's own ids, not another provider's. A card runs the model you gave it (in the New thread dialog or by switching mid-thread); a card left on **Your BYOK model** runs the model you picked for the provider, and with none, Goose chooses. A provider that needs an endpoint beside its key takes one (Anthropic's host, Azure's resource address, LiteLLM's proxy), and a provider whose model ids aren't known ahead of time lets you type the id. Give your models a name in the same page's **Model names** section, and every menu shows "Big Opus" instead of the raw id, with the id beside it. A name says the model runs on Goose, so it stays in the Goose group even when the id is another CLI's too — name `puku-ai-2.8` and the row reads "Big Opus" under Goose, and the thread starts on Goose. **Puku** is one click: the button beside the Provider picker fills in the Anthropic provider, `https://api-cli.puku.sh` and `puku-ai-2.8`, so all that is left is your Puku key. A Goose thread is a plain CLI process, so like a Codex thread it has no per-tool guards and no session to resume — one fresh `goose run` per turn — and it takes no effort setting. It has no Agent tool either, so its subagents are `goose run --text` calls from Bash on the same provider and model, and its commits are signed `Co-Authored-By: Goose (<model>) on Weft`. Install `goose` on your PATH first.
+
+Pick **Antigravity** to run a thread on Gemini through Google's Antigravity CLI (`agy`, the CLI Google moved individual Gemini users to from Gemini CLI). Install it with `curl -fsSL https://antigravity.google/cli/install.sh | bash` and sign in once (Settings → Accounts → Log in runs `agy acp --login`). Each card keeps one `agy` process warm over the Agent Client Protocol, so a turn starts without agy's startup, **Stop** ends the turn and keeps the process, and a card picks its conversation back up after Weft restarts. Weft gives it its instructions as a system prompt, its tools (the browser pane, the board, the vault) for that session only, and its guards through agy's own pre-tool hook — one inert `weft-guards` entry in `~/.gemini/config/hooks.json` that does nothing in your own agy sessions. What agy would stop to ask about lands on the card as an ask, and Bypass answers yes itself. Pick a Gemini model (Gemini 4 Argon, Gemini 3.8 Flash…) or **Antigravity's configured model**; the slug carries the thinking level, so there's no effort setting. **A word on accounts:** Google's Antigravity FAQ says wrapping `agy` in another app isn't supported on consumer plans and can get the account suspended, so the Log in row warns when agy is signed in with a personal Google account; a Gemini API key (`"modelProvider": "gemini"` with `GEMINI_API_KEY`) or a Google Cloud sign-in avoids that (docs/architecture/antigravity.md).
 
 ## How cards move
 

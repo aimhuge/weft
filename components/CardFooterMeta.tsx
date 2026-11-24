@@ -11,11 +11,11 @@ import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
 import { useRegularMode } from "@/lib/use-regular-mode";
 import Icon from "./Icon";
 
-// Each CLI's own colour in the footer: puku has its own, the two plain CLIs (Codex, Goose)
+// Each CLI's own colour in the footer: puku has its own, the plain CLIs (Codex, Goose, Antigravity)
 // take the accent, Claude has none here and takes its own.
 function cliColours(backend: Backend): { tone: string; dot: string } {
   if (backend === "puku") return { tone: "text-puku", dot: "bg-puku" };
-  if (backend === "codex" || backend === "goose") return { tone: "text-accent", dot: "bg-accent" };
+  if (backend === "codex" || backend === "goose" || backend === "antigravity") return { tone: "text-accent", dot: "bg-accent" };
   return { tone: "text-claude", dot: "bg-claude" };
 }
 

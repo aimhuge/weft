@@ -72,6 +72,15 @@ describe("ThreadPanel", () => {
     expect(api.switchBackend).toHaveBeenCalledWith("c1", "github-copilot", false, "github-copilot-default");
   });
 
+  it("can switch an existing thread to Antigravity from its reply composer", async () => {
+    renderPanel({ backend: "claude" });
+    const reply = await screen.findByRole("textbox", { name: "Message" });
+    const composer = within(reply.parentElement!);
+    await userEvent.click(composer.getByRole("button", { name: /Switch model/ }));
+    await userEvent.click(composer.getByRole("button", { name: "Gemini 3.8 Flash (Low)" }));
+    expect(api.switchBackend).toHaveBeenCalledWith("c1", "antigravity", false, "gemini-3.8-flash-low");
+  });
+
   it("opens the editor column from the ✏︎ in its header, lit while the editor is open", async () => {
     const { onEditor } = renderPanel();
     const pencil = screen.getByRole("button", { name: "Open editor" });

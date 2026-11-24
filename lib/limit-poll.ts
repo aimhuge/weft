@@ -1,3 +1,4 @@
+import { pollAntigravityUsage } from "./antigravity-usage";
 import { globalSingleton } from "./global-singleton";
 import { defaultBackend, listProjects } from "./settings";
 import { recordLimits, setOnLimitReset } from "./limit-history";
@@ -91,8 +92,11 @@ async function withSession<T>(backend: Backend, cwd: string, ask: (session: Sess
 }
 
 async function pollOnce(now = Date.now()): Promise<void> {
+  // Antigravity's quota comes from `agy -p /usage` on the same tick, whatever the default CLI (lib/antigravity-usage.ts).
+  void pollAntigravityUsage(now);
   const backend = pollBackend();
-  if (backend === "codex") return;
+  // Neither has the Agent SDK's usage call; Antigravity's is read above.
+  if (backend === "codex" || backend === "antigravity") return;
   const cwd = pollCwd();
   if (!cwd) return;
   const s = state();

@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { ANTIGRAVITY_STATUS_ARGS, antigravityAuthMode, antigravityWarning, parseAntigravityStatus } from "./antigravity-login";
 import { cliEnv } from "./env";
 import { githubCopilotStatus } from "./github-copilot-client";
 import { spawnPlan } from "./win-command";
@@ -10,7 +11,8 @@ import { binary, cleanOutput as clean, message } from "./login";
 // state. We time out and cap the buffer in case the CLI hangs.
 //
 // Claude Code and puku-cli print JSON. Codex and Goose print text, each with its own command:
-// Codex has `login status`, Goose has `info --check` (there is no `goose auth`).
+// Codex has `login status`, Goose has `info --check` (there is no `goose auth`). Antigravity has no status
+// command: `agy -p /usage --output-format json` needs a sign-in, so it answers SUCCESS or "authentication required".
 
 const STATUS_TIMEOUT_MS = 10_000;
 
@@ -55,6 +57,20 @@ function parseGooseStatus(stdout: string, stderr: string): CliStatus | null {
   return null;
 }
 
+// Each CLI's status command and how to read it; the rest run `auth status --json` and print JSON.
+const CHECKS: Partial<Record<Backend, { args: string[]; parse: (stdout: string, stderr: string) => CliStatus | null }>> = {
+  codex: { args: ["login", "status"], parse: parseCodexStatus },
+  goose: { args: ["info", "--check"], parse: parseGooseStatus },
+  antigravity: { args: ANTIGRAVITY_STATUS_ARGS, parse: parseAntigravityStatus },
+};
+const JSON_CHECK = { args: ["auth", "status", "--json"], parse: (stdout: string) => parseStatus(stdout) };
+
+// A Google-account sign-in is one Google says not to wrap in another app: Antigravity's status says so under its row.
+function withWarning(backend: Backend, status: CliStatus): CliStatus {
+  const warning = backend === "antigravity" && status.loggedIn ? antigravityWarning(antigravityAuthMode()) : undefined;
+  return warning ? { ...status, warning } : status;
+}
+
 export async function authStatus(backend: Backend): Promise<CliStatus> {
   if (backend === "github-copilot") return githubCopilotStatus();
   let bin: string;
@@ -65,26 +81,18 @@ export async function authStatus(backend: Backend): Promise<CliStatus> {
   }
   return new Promise((resolve) => {
     // A logged-out CLI can exit non-zero and still print its status.
-    const args = backend === "codex"
-      ? ["login", "status"]
-      : backend === "goose"
-        ? ["info", "--check"]
-        : ["auth", "status", "--json"];
+    const check = CHECKS[backend] ?? JSON_CHECK;
     const env = cliEnv();
     if (backend === "codex") delete env.CLAUDE_CODE_ENTRYPOINT;
-    const plan = spawnPlan(bin, args, { env });
+    const plan = spawnPlan(bin, check.args, { env });
     execFile(
       plan.command,
       plan.args,
       { env, timeout: STATUS_TIMEOUT_MS, maxBuffer: 1024 * 1024, ...(plan.windowsVerbatimArguments && { windowsVerbatimArguments: true }) },
       (err, stdout: string | undefined, stderr: string | undefined) => {
-        const status = backend === "codex"
-          ? parseCodexStatus(stdout ?? "", stderr ?? "")
-          : backend === "goose"
-            ? parseGooseStatus(stdout ?? "", stderr ?? "")
-            : parseStatus(stdout ?? "");
+        const status = check.parse(stdout ?? "", stderr ?? "");
         if (status) {
-          resolve(status);
+          resolve(withWarning(backend, status));
           return;
         }
         const detail = clean(stderr ?? "").trim() || (err ? message(err) : "") || "No status in the CLI's output.";

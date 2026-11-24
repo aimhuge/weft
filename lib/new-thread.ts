@@ -49,6 +49,7 @@ export const BACKENDS: { id: Backend; label: string }[] = [
   { id: "codex", label: "Codex" },
   { id: "goose", label: "Goose" },
   { id: "github-copilot", label: "GitHub Copilot" },
+  { id: "antigravity", label: "Antigravity" },
 ];
 
 // Every CLI Weft can start a thread on, as plain ids. The one list of them: a route that
@@ -64,6 +65,8 @@ export const CODEX_DEFAULT_MODEL = "codex-default";
 // this is "whatever the configured provider picks" rather than one fixed model.
 export const GOOSE_DEFAULT_MODEL = "goose-default";
 export const GITHUB_COPILOT_DEFAULT_MODEL = "github-copilot-default";
+// Picker sentinel: the model Antigravity (agy) is configured with, so the card pins none.
+export const ANTIGRAVITY_DEFAULT_MODEL = "antigravity-default";
 
 // The Puku gateway serves these three and answers any other id as puku-ai-2.8.
 // Goose's models are not here: each provider serves its own ids (lib/goose-provider.ts).
@@ -86,6 +89,16 @@ export const MODELS: Record<Backend, { id: string; label: string }[]> = {
   // one row every Goose menu has — the provider's own pick.
   goose: [{ id: GOOSE_DEFAULT_MODEL, label: "Your BYOK model" }],
   "github-copilot": [{ id: GITHUB_COPILOT_DEFAULT_MODEL, label: "GitHub Copilot’s configured model" }],
+  // Antigravity's slugs carry the thinking level (-high, -medium, -low), so it takes no effort.
+  antigravity: [
+    { id: ANTIGRAVITY_DEFAULT_MODEL, label: "Antigravity’s configured model" },
+    { id: "gemini-4-argon-high", label: "Gemini 4 Argon (High)" },
+    { id: "gemini-4-neon-high", label: "Gemini 4 Neon (High)" },
+    { id: "gemini-3.1-pro-high", label: "Gemini 3.1 Pro (High)" },
+    { id: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (High)" },
+    { id: "gemini-3.8-flash-medium", label: "Gemini 3.8 Flash (Medium)" },
+    { id: "gemini-3.8-flash-low", label: "Gemini 3.8 Flash (Low)" },
+  ],
 };
 
 // Every model id any CLI serves. The pickers offer them all — picking a model moves the
@@ -111,14 +124,30 @@ export function isGooseValue(value: string): boolean {
   return value.startsWith(GOOSE_PREFIX) && value.length > GOOSE_PREFIX.length;
 }
 
-/** The model id a picker value runs: the value itself, or a Goose value's id without its prefix. */
-export function bareModel(value: string): string {
-  return isGooseValue(value) ? value.slice(GOOSE_PREFIX.length) : value;
+// An Antigravity model's picker value, for an id the fixed list doesn't name: "agy:<id>". agy answers each account
+// with the models it may use (lib/antigravity-models.ts), and some carry other CLIs' names ("claude-sonnet-4-6",
+// "gpt-oss-120b-medium"), so the prefix says "this runs on Antigravity" the way "goose:" does for Goose.
+export const AGY_PREFIX = "agy:";
+
+/** The picker value of a model id on Antigravity. */
+export function agyValue(id: string): string {
+  return AGY_PREFIX + id;
 }
 
-/** Whether a value is a model a picker can hand back: one of the CLIs' own ids, or any Goose model. */
+/** Whether a picker value is an Antigravity model's ("agy:<id>", with an id). */
+export function isAgyValue(value: string): boolean {
+  return value.startsWith(AGY_PREFIX) && value.length > AGY_PREFIX.length;
+}
+
+/** The model id a picker value runs: the value itself, or a Goose or Antigravity value's id without its prefix. */
+export function bareModel(value: string): string {
+  if (isGooseValue(value)) return value.slice(GOOSE_PREFIX.length);
+  return isAgyValue(value) ? value.slice(AGY_PREFIX.length) : value;
+}
+
+/** Whether a value is a model a picker can hand back: one of the CLIs' own ids, or any Goose or Antigravity model. */
 export function isModelValue(value: string): boolean {
-  return ALL_MODEL_IDS.has(value) || isGooseValue(value);
+  return ALL_MODEL_IDS.has(value) || isGooseValue(value) || isAgyValue(value);
 }
 
 /**
@@ -140,9 +169,15 @@ export function cardModel(value: string | undefined): string | undefined {
 export function backendFor(model: string): Backend | undefined {
   if (model === CODEX_DEFAULT_MODEL) return undefined;
   if (isGooseValue(model)) return "goose";
-  const own = (Object.keys(MODELS) as Backend[]).find((b) => MODELS[b].some((m) => m.id === model));
+  if (isAgyValue(model)) return "antigravity";
+  const own = listedOn(model);
   if (own) return own;
   return GOOSE_PROVIDERS.some((p) => p.models.includes(model)) ? "goose" : undefined;
+}
+
+// The CLI whose own list names a model id, or undefined.
+function listedOn(model: string): Backend | undefined {
+  return (Object.keys(MODELS) as Backend[]).find((b) => MODELS[b].some((m) => m.id === model));
 }
 
 // The CLI that owns a model id when no list names it: Claude Code, the CLI every id is
@@ -161,6 +196,8 @@ export function modelFor(backend: Backend): string {
   if (saved === null) return NO_MODEL;
   // A Goose model the user named or configured is remembered as its picker value ("goose:<id>").
   if (backend === "goose" && isGooseValue(saved)) return saved;
+  // So is an Antigravity model the account offers beyond the fixed list ("agy:<id>").
+  if (backend === "antigravity" && isAgyValue(saved)) return saved;
   return MODELS[backend].some((m) => m.id === saved) ? saved : NO_MODEL;
 }
 
@@ -176,14 +213,20 @@ export function modelOn(backend: Backend, model: string | undefined): string | u
   if (!model) return undefined;
   // A Goose picker value runs on Goose only, as its bare id.
   if (isGooseValue(model)) return backend === "goose" ? modelOn(backend, bareModel(model)) : undefined;
+  if (isAgyValue(model)) return backend === "antigravity" ? bareModel(model) : undefined;
   if (model === CODEX_DEFAULT_MODEL) return undefined;
   // Goose's own sentinel too: "goose-default" means the provider picks, so the card pins no model id.
-  if (model === GOOSE_DEFAULT_MODEL || model === GITHUB_COPILOT_DEFAULT_MODEL) return undefined;
+  if (model === GOOSE_DEFAULT_MODEL || model === GITHUB_COPILOT_DEFAULT_MODEL || model === ANTIGRAVITY_DEFAULT_MODEL) {
+    return undefined;
+  }
   // A Goose card takes any model id: Goose's providers are gateways that serve their own ids (a local
   // Ollama model, a private endpoint's), so no list can name them all and dropping one would silently
   // run a different model than the card asked for.
   if (backend === "goose") return model;
   const bare = model.replace(/\[[^\]]*\]$/, "");
+  // An Antigravity card takes any id no other CLI's list names: agy serves each account its own list
+  // (lib/antigravity-models.ts), including ids like "claude-sonnet-4-6" that are no Claude Code model.
+  if (backend === "antigravity") return [undefined, "antigravity"].includes(listedOn(bare)) ? model : undefined;
   return (backendFor(bare) ?? DEFAULT_OWNER) === backend ? model : undefined;
 }
 
@@ -217,6 +260,7 @@ const EFFORT_BY_BACKEND: Record<Backend, Effort[]> = {
   codex: ["low", "medium", "high", "xhigh", "max"],
   goose: [],
   "github-copilot": [],
+  antigravity: [],
 };
 
 // The closest effort a backend accepts. Drops xhigh to high for puku. "" / undefined pass through

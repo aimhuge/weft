@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       prompt: briefPrompt(brief),
       title: briefTitle(brief),
       cwd: project,
-      backend: body.backend === "puku" || body.backend === "codex" || body.backend === "goose" ? body.backend : "claude",
+      backend: body.backend === "puku" || body.backend === "codex" || body.backend === "goose" || body.backend === "antigravity" ? body.backend : "claude",
       permissionMode: defaultPermissionMode(),
       tags: ["agent"],
     });

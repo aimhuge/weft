@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { antigravityLoginCommand } from "./antigravity-login";
 import type { Backend, LoginView } from "./types";
 import {
   addCallback,
@@ -35,6 +36,15 @@ function snapshot(run: { view: LoginView }): LoginView {
   return { ...run.view };
 }
 
+// Each CLI's own login command: Codex has device auth, Goose has an interactive `configure`
+// wizard, Antigravity `acp --login`, and the rest have `auth login`.
+function loginCommand(backend: Backend, bin: string): string {
+  if (backend === "codex") return `${shellQuote(bin)} login --device-auth`;
+  if (backend === "goose") return `${shellQuote(bin)} configure`;
+  if (backend === "antigravity") return antigravityLoginCommand(shellQuote(bin));
+  return `${shellQuote(bin)} auth login`;
+}
+
 export function openLoginInTerminal(backend: Backend, onDone?: () => void): LoginView {
   const existing = runs.get(backend);
   if (existing && existing.view.state === "terminal") return addCallback(existing, onDone);
@@ -49,21 +59,17 @@ export function openLoginInTerminal(backend: Backend, onDone?: () => void): Logi
     return snapshot(run);
   }
 
-  let bin: string;
+  let command: string;
   try {
-    bin = binary(backend);
+    command = loginCommand(backend, binary(backend));
   } catch (err) {
-    failRun(run, err instanceof Error ? err.message : String(err));
-    return snapshot(run);
+    // Antigravity installs itself in the same Terminal window when agy isn't there yet; the rest can't log in.
+    if (backend !== "antigravity") {
+      failRun(run, err instanceof Error ? err.message : String(err));
+      return snapshot(run);
+    }
+    command = antigravityLoginCommand();
   }
-
-  // Each CLI's own login command: Codex has device auth, Goose has an interactive `configure`
-  // wizard, and the rest have `auth login`.
-  const command = backend === "codex"
-    ? `${shellQuote(bin)} login --device-auth`
-    : backend === "goose"
-      ? `${shellQuote(bin)} configure`
-      : `${shellQuote(bin)} auth login`;
   const script = ["tell application \"Terminal\"", `do script ${appleScriptString(command)}`, "activate", "end tell"];
   append(run, `\nOpened Terminal to run: ${command}\n`);
   execFile(

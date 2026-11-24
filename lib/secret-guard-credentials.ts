@@ -108,14 +108,15 @@ export function credentialVerdict(words: string[]): string | null {
 }
 
 // The files where CLIs keep their sign-in: gh's hosts.yml, git's credential store, .netrc, the Supabase and
-// Vercel CLIs' tokens, gog's OAuth client and file keyring. Matched on the end of the full path, so a folder of
+// Vercel CLIs' tokens, gog's OAuth client and file keyring, Copilot's and the Gemini/Antigravity CLIs' Google sign-in. Matched on the end of the full path, so a folder of
 // the same name in a project doesn't count; the CLIs' own folders count whole, for `grep -r token ~/.config/gh`.
 const CREDENTIAL_PATH =
-  /(?:^|\/)(\.config\/gh(\/hosts\.ya?ml)?|\.git-credentials|\.config\/git\/credentials|\.netrc|\.supabase(\/access-token)?|com\.vercel\.cli(\/auth\.json)?|gogcli(\/(credentials\.json|keyring(\/.*)?))?|\.copilot(\/.*)?)$/i;
+  /(?:^|\/)(\.config\/gh(\/hosts\.ya?ml)?|\.git-credentials|\.config\/git\/credentials|\.netrc|\.supabase(\/access-token)?|com\.vercel\.cli(\/auth\.json)?|gogcli(\/(credentials\.json|keyring(\/.*)?))?|\.copilot(\/.*)?|\.gemini\/oauth_creds\.json)$/i;
 // What a glob like `~/.config/gh/*` is tried against.
 const CREDENTIAL_FILES = [
   ".config/gh/hosts.yml",
   ".copilot/config.json",
+  ".gemini/oauth_creds.json",
   ".git-credentials",
   ".config/git/credentials",
   ".netrc",

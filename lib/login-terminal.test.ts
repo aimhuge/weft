@@ -35,6 +35,12 @@ vi.mock("node:child_process", () => ({
   },
 }));
 vi.mock("./bus", () => ({ publish: bus.publish }));
+// Where agy is: PATH and ~/.local/bin both stand in here, so the test doesn't depend on this Mac's own install.
+const agyBin = vi.hoisted(() => ({ path: null as string | null }));
+vi.mock("./antigravity-login", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./antigravity-login")>()),
+  antigravityBin: () => agyBin.path,
+}));
 
 let login: typeof import("./login");
 const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
@@ -82,6 +88,7 @@ beforeEach(async () => {
   cp.osascript.mockReset().mockImplementation((cb) => cb(null, "", ""));
   cp.execFile.mockReset();
   bus.publish.mockReset();
+  agyBin.path = null;
   setPlatform("darwin");
   login = await import("./login");
 });
@@ -253,6 +260,21 @@ describe("openLoginInTerminal", () => {
 
     expect(scriptRun()).toContain("'/usr/local/bin/codex' login --device-auth");
     expect(scriptRun()).not.toContain("auth login");
+    expect(view.state).toBe("terminal");
+  });
+
+  it("signs Antigravity in with `agy acp --login`", () => {
+    agyBin.path = "/Users/me/.local/bin/agy";
+    const view = login.openLoginInTerminal("antigravity");
+
+    expect(scriptRun()).toContain("'/Users/me/.local/bin/agy' acp --login");
+    expect(view.state).toBe("terminal");
+  });
+
+  it("installs agy first when it isn't there, then signs in with the installer's copy", () => {
+    const view = login.openLoginInTerminal("antigravity");
+
+    expect(scriptRun()).toContain("curl -fsSL https://antigravity.google/cli/install.sh | bash && ~/.local/bin/agy acp --login");
     expect(view.state).toBe("terminal");
   });
 });

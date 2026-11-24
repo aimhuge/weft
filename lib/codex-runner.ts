@@ -1,14 +1,13 @@
 import fs from "node:fs";
-import path from "node:path";
-import readline from "node:readline";
-import type { EventEmitter } from "node:events";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { spawnCli } from "./cli-process";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { CLI_ADAPTER_CODE, driveAdapter, type CliAdapter } from "./cli-adapter";
+import { CLI_MESSAGES_CODE, fileReply, fileResult, fileToolResult, fileToolStart, keepSessionId, noteTouched } from "./cli-messages";
+import { CLI_TURN_CODE, readJsonLines, runCliTurn } from "./cli-turn";
 import { CODEX_PROMPT_CODE, argsFor, promptFor } from "./codex-runner-prompt";
 import { CODEX_INPUT_CODE, codexInput, writeImages } from "./codex-input";
 
 // Re-exports for tests and existing callers of codex-runner.ts. The prompt/argv code moved to
-// lib/codex-runner-prompt.ts; lib/codex-runner.ts drives the process and converts the events.
+// lib/codex-runner-prompt.ts; lib/codex-runner.ts runs the turn and converts the events.
 export { argsFor, promptFor };
 import { codexGuardArgs } from "./guards/codex";
 import { openGuards } from "./guards/turn";
@@ -17,10 +16,10 @@ import { weftMcpServers } from "./weft-mcp";
 import { CODEX_DEFAULT_MODEL } from "./new-thread";
 import { withConnectorEnv } from "./connector-env";
 import { cliEnv } from "./env";
-import { handle } from "./runner-turn";
-import { getCard, getThread, replaceThreadItem, updateCard } from "./store";
-import { touchFile } from "./overlap";
 import type { Session } from "./runner-state";
+
+// A Weft thread on `codex exec` (docs/architecture/cli-adapters.md): one process per turn, its stdout a stream of JSON
+// events, each turned into the thread's rows through lib/cli-messages.ts.
 
 type CodexItem = {
   id?: string;
@@ -47,31 +46,10 @@ type CodexEvent = {
   error?: { message?: string };
 };
 
-interface CliEvents extends EventEmitter {
-  once(event: "close", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
-  once(event: "error", listener: (error: Error) => void): this;
-}
-
-function sdkMessage(message: unknown) {
-  return message as SDKMessage;
-}
-
-async function assistant(session: Session, text: string) {
-  const model = session.spec.model === CODEX_DEFAULT_MODEL ? "Codex" : session.spec.model ?? "Codex";
-  await handle(session.cardId as string, session, sdkMessage({
-    type: "assistant",
-    parent_tool_use_id: null,
-    message: {
-      id: `codex-${Date.now()}`,
-      type: "message",
-      role: "assistant",
-      model,
-      content: [{ type: "text", text }],
-      stop_reason: null,
-      stop_sequence: null,
-      usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-    },
-  }));
+/** The model a thread's replies and result are filed under: the card's own, or "Codex" on the default. */
+export function codexLabel(session: Session): string {
+  const model = session.spec.model;
+  return model && model !== CODEX_DEFAULT_MODEL ? model : "Codex";
 }
 
 // The tool the thread shows for an item: a shell command is Bash, an MCP call keeps Claude's mcp__server__tool name.
@@ -86,81 +64,38 @@ export function mcpResult(item: CodexItem) {
   return { result: text, isError: item.status === "failed" };
 }
 
+/** A finished item's outcome: an MCP call's result, or a command's output (its exit code when it printed nothing). */
+export function commandResult(item: CodexItem) {
+  if (item.type === "mcp_tool_call") return mcpResult(item);
+  const output = item.aggregated_output?.trim();
+  return {
+    result: output || (item.exit_code === undefined ? "" : `Exited with code ${item.exit_code}.`),
+    isError: item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0),
+  };
+}
+
+// A tool row is filed under the spec's model as it is, the default's own id included.
 async function toolStart(session: Session, item: CodexItem) {
-  if (!item.id || session.toolIndex.has(item.id)) return;
-  await handle(session.cardId as string, session, sdkMessage({
-    type: "assistant",
-    parent_tool_use_id: null,
-    message: {
-      id: `codex-${item.id}`,
-      type: "message",
-      role: "assistant",
-      model: session.spec.model ?? "Codex",
-      content: [{ type: "tool_use", id: item.id, ...toolUse(item) }],
-      stop_reason: null,
-      stop_sequence: null,
-      usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-    },
-  }));
+  await fileToolStart(session, item.id ?? "", toolUse(item), session.spec.model ?? "Codex", "codex");
 }
 
 async function toolFinish(session: Session, item: CodexItem) {
-  const id = item.id;
-  if (!id) return;
+  if (!item.id) return;
   await toolStart(session, item);
-  const index = session.toolIndex.get(id);
-  if (index === undefined) return;
-  const threadItem = getThread(session.cardId as string)[index];
-  if (threadItem?.kind !== "tool") return;
-  const output = item.aggregated_output?.trim();
-  replaceThreadItem(session.cardId as string, index, {
-    ...threadItem,
-    ...(item.type === "mcp_tool_call"
-      ? mcpResult(item)
-      : {
-          result: output || (item.exit_code === undefined ? "" : `Exited with code ${item.exit_code}.`),
-          isError: item.status === "failed" || (item.exit_code !== undefined && item.exit_code !== 0),
-        }),
-  });
+  await fileToolResult(session, item.id, commandResult(item));
 }
 
+/** A file_change's paths, so the card's overlap warning knows them. */
 function noteFileChanges(session: Session, item: CodexItem) {
-  const id = session.cardId;
-  if (!id) return;
-  for (const change of item.changes ?? []) {
-    if (!change.path) continue;
-    const card = getCard(id);
-    const touched = touchFile(card?.touchedFiles, path.resolve(session.spec.cwd, change.path));
-    if (touched) updateCard(id, { touchedFiles: touched });
-  }
+  noteTouched(session, (item.changes ?? []).map((change) => change.path ?? ""));
 }
 
 async function result(session: Session, event: CodexEvent, error?: string) {
-  const id = session.cardId;
-  if (!id) return;
   const usage = event.usage ?? {};
-  const model = session.spec.model && session.spec.model !== CODEX_DEFAULT_MODEL ? session.spec.model : "Codex";
-  const modelUsage = {
-    [model]: {
-      inputTokens: usage.input_tokens ?? 0,
-      outputTokens: usage.output_tokens ?? 0,
-      cacheReadInputTokens: usage.cached_input_tokens ?? 0,
-      cacheCreationInputTokens: usage.cache_write_input_tokens ?? 0,
-      webSearchRequests: 0,
-      costUSD: 0,
-      contextWindow: 0,
-      maxOutputTokens: 0,
-    },
-  };
-  await handle(id, session, sdkMessage({
-    type: "result",
-    subtype: error ? "error_execution" : "success",
-    is_error: Boolean(error),
-    result: error ?? "Done.",
-    session_id: session.sessionId ?? session.spec.sessionId ?? "",
-    total_cost_usd: 0,
-    modelUsage,
-  }));
+  await fileResult(session, codexLabel(session), {
+    error,
+    usage: { input: usage.input_tokens, output: usage.output_tokens, cacheRead: usage.cached_input_tokens, cacheWrite: usage.cache_write_input_tokens },
+  });
 }
 
 async function handleItemEvent(session: Session, event: CodexEvent) {
@@ -173,22 +108,19 @@ async function handleItemEvent(session: Session, event: CodexEvent) {
   }
   if (event.type !== "item.completed") return;
   if (item.type === "file_change") noteFileChanges(session, item);
-  else if (item.type === "agent_message" && item.text) await assistant(session, item.text);
+  else if (item.type === "agent_message" && item.text) await fileReply(session, item.text, codexLabel(session), "codex");
 }
 
+/** Applies one event to the thread. True when it ended the turn. */
 async function handleEvent(session: Session, event: CodexEvent) {
   if (event.type === "thread.started") {
-    if (!event.thread_id) return false;
-    session.sessionId = event.thread_id;
-    if (session.cardId) updateCard(session.cardId, { sessionId: event.thread_id });
+    if (event.thread_id) keepSessionId(session, event.thread_id);
     return false;
   }
-
   if (event.type === "item.started" || event.type === "item.updated" || event.type === "item.completed") {
     await handleItemEvent(session, event);
     return false;
   }
-
   if (event.type === "turn.completed") {
     await result(session, event);
     return true;
@@ -200,75 +132,45 @@ async function handleEvent(session: Session, event: CodexEvent) {
   return false;
 }
 
-async function readEvents(session: Session, stdout: NodeJS.ReadableStream) {
-  let completed = false;
-  const lines = readline.createInterface({ input: stdout, crlfDelay: Infinity });
-  for await (const line of lines) {
-    if (!line.trim()) continue;
-    let event: CodexEvent;
-    try {
-      event = JSON.parse(line) as CodexEvent;
-    } catch {
-      continue;
-    }
-    if (await handleEvent(session, event)) completed = true;
+/** One turn: `codex exec` behind Weft's guards and tools, the prompt on stdin, its events filed as they come. */
+async function runCodexTurn(session: Session, executable: string, message: SDKUserMessage) {
+  const input = codexInput(message);
+  // Weft's guards, through Codex's own hooks (lib/guards/codex.ts). Without them the turn doesn't start.
+  const guards = openGuards(session, "codex");
+  const attachments = writeImages(input.images);
+  const env = withConnectorEnv(cliEnv(), () => session.cardId ?? undefined) as NodeJS.ProcessEnv;
+  delete env.CLAUDE_CODE_ENTRYPOINT;
+  // Weft's tools for this turn, over HTTP; the server's own port says where (PORT is stripped from the CLI's env).
+  const servers = () => weftMcpServers(session.spec, () => session.cardId ?? undefined);
+  const bridge = process.env.PORT ? openBridge(servers) : undefined;
+  if (bridge) env[BRIDGE_TOKEN_ENV] = bridge.token;
+  const mcp = bridge ? codexMcpArgs(`http://127.0.0.1:${process.env.PORT}`, Object.keys(servers())) : [];
+  Object.assign(env, guards.env);
+  try {
+    await runCliTurn(session, {
+      name: "Codex",
+      command: executable,
+      args: argsFor(session, attachments.paths, [...codexGuardArgs(), ...mcp]),
+      env,
+      stdin: promptFor(session, input.text),
+      read: (stdout) => readJsonLines(stdout, (event) => handleEvent(session, event)),
+    });
+  } finally {
+    guards.close();
+    bridge?.close();
+    if (attachments.directory) fs.rmSync(attachments.directory, { recursive: true, force: true });
   }
-  lines.close();
-  return completed;
 }
 
-function assertTurnCompleted(
-  completed: boolean,
-  aborted: boolean,
-  stderrTail: () => string,
-  exit: { code: number | null; signal: NodeJS.Signals | null },
-) {
-  if (completed || aborted) return;
-  const tail = stderrTail();
-  throw new Error(tail || `Codex exited ${exit.signal ? `on ${exit.signal}` : `with code ${exit.code ?? "unknown"}`} without finishing the turn.`);
+export function codexAdapter(executable: string): CliAdapter {
+  return { name: "Codex", runTurn: (session, message) => runCodexTurn(session, executable, message) };
 }
 
-export async function driveCodex(session: Session, executable: string) {
-  for await (const message of session.inbox) {
-    if (session.abort.signal.aborted) break;
-    const input = codexInput(message);
-    // Weft's guards, through Codex's own hooks (lib/guards/codex.ts). Without them the turn doesn't start.
-    const guards = openGuards(session, "codex");
-    const attachments = writeImages(input.images);
-    const env = withConnectorEnv(cliEnv(), () => session.cardId ?? undefined) as NodeJS.ProcessEnv;
-    delete env.CLAUDE_CODE_ENTRYPOINT;
-    // Weft's tools for this turn, over HTTP; the server's own port says where (PORT is stripped from the CLI's env).
-    const servers = () => weftMcpServers(session.spec, () => session.cardId ?? undefined);
-    const bridge = process.env.PORT ? openBridge(servers) : undefined;
-    if (bridge) env[BRIDGE_TOKEN_ENV] = bridge.token;
-    const mcp = bridge ? codexMcpArgs(`http://127.0.0.1:${process.env.PORT}`, Object.keys(servers())) : [];
-    Object.assign(env, guards.env);
-    const stderr = (data: string) => console.error(`[thread ${(session.cardId ?? "spare").slice(0, 8)}] ${data.trimEnd()}`);
-    session.toolIndex.clear();
-    try {
-      const process = spawnCli({ command: executable, args: argsFor(session, attachments.paths, [...codexGuardArgs(), ...mcp]), cwd: session.spec.cwd, env, signal: session.abort.signal }, stderr);
-      session.process = process;
-      process.stdin.on("error", () => {});
-      process.stdin.end(promptFor(session, input.text));
-      const proc = process as unknown as CliEvents;
-      let spawnError: Error | undefined;
-      proc.once("error", (error) => { spawnError = error; });
-      const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
-        proc.once("close", (code, signal) => resolve({ code, signal }));
-      });
-      const completed = await readEvents(session, process.stdout);
-      const exit = await exited;
-      if (spawnError) throw spawnError;
-      assertTurnCompleted(completed, session.abort.signal.aborted, () => process.stderrTail(), exit);
-    } finally {
-      guards.close();
-      bridge?.close();
-      if (attachments.directory) fs.rmSync(attachments.directory, { recursive: true, force: true });
-    }
-  }
+export function driveCodex(session: Session, executable: string) {
+  return driveAdapter(session, codexAdapter(executable));
 }
 
 export const CODEX_CODE = [
-  driveCodex, assistant, toolStart, toolFinish, noteFileChanges, result, ...CODEX_PROMPT_CODE, ...CODEX_INPUT_CODE,
-  handleItemEvent, handleEvent, readEvents, assertTurnCompleted, codexGuardArgs,
+  driveCodex, codexAdapter, runCodexTurn, codexLabel, toolStart, toolFinish, commandResult, noteFileChanges, result, ...CODEX_PROMPT_CODE, ...CODEX_INPUT_CODE,
+  handleItemEvent, handleEvent, codexGuardArgs, ...CLI_ADAPTER_CODE, ...CLI_MESSAGES_CODE, ...CLI_TURN_CODE,
 ];

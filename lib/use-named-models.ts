@@ -22,13 +22,23 @@ export interface GooseChoice {
   modelId: string;
 }
 
+// A model agy said this Antigravity account may use (lib/antigravity-models.ts).
+export interface AgyModel {
+  id: string;
+  label: string;
+}
+
+const NO_AGY: AgyModel[] = [];
+
 let named: NamedModel[] = [];
+let agy: AgyModel[] = NO_AGY;
 let goose: GooseChoice = { providerId: "", modelId: "" };
 let loaded = false;
 const listeners = new Set<() => void>();
 
-function publish(models: NamedModel[], choice: GooseChoice) {
+function publish(models: NamedModel[], choice: GooseChoice, agyModels: AgyModel[] = NO_AGY) {
   named = models;
+  agy = agyModels;
   goose = choice;
   loaded = true;
   for (const listener of listeners) listener();
@@ -37,11 +47,12 @@ function publish(models: NamedModel[], choice: GooseChoice) {
 export function loadNamedModels(): Promise<void> {
   return apiFetch("/api/settings")
     .then((res) => (res.ok ? res.json() : null))
-    .then((body: { gooseNamedModels?: NamedModel[]; gooseProviderId?: string; gooseModelId?: string } | null) => {
-      publish(body?.gooseNamedModels ?? [], {
-        providerId: body?.gooseProviderId ?? "",
-        modelId: body?.gooseModelId ?? "",
-      });
+    .then((body: { gooseNamedModels?: NamedModel[]; gooseProviderId?: string; gooseModelId?: string; antigravityModels?: AgyModel[] } | null) => {
+      publish(
+        body?.gooseNamedModels ?? [],
+        { providerId: body?.gooseProviderId ?? "", modelId: body?.gooseModelId ?? "" },
+        body?.antigravityModels ?? NO_AGY,
+      );
     })
     .catch(() => {
       // The settings route isn't there (the web board): no names, and the menu shows the raw ids.
@@ -79,9 +90,25 @@ export function useGooseChoice(): GooseChoice {
   );
 }
 
+/** The models agy last said this Antigravity account may use, empty until the server answers (or before any thread ran). */
+export function useAgyModels(): AgyModel[] {
+  useEffect(() => {
+    if (!loaded) void loadNamedModels();
+  }, []);
+  return useSyncExternalStore(
+    (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    () => agy,
+    () => NO_AGY,
+  );
+}
+
 // For tests: forget what was loaded, so the next hook asks the route again.
 export function resetNamedModels() {
   named = [];
+  agy = NO_AGY;
   goose = { providerId: "", modelId: "" };
   loaded = false;
 }

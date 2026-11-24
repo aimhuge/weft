@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Session } from "../runner-state";
 import type { GuardCall } from "./decide";
 
-// One hook call from a Codex or Goose turn: read in Claude Code's terms, run through the turn's guards (mocked here:
+// One hook call from a Codex, Goose or Antigravity turn: read in Claude Code's terms, run through the turn's guards (mocked here:
 // decide.ts and ask.ts have their own tests), and answered in the CLI's words. Anything that goes wrong refuses.
 
 const decide = vi.fn<(...a: unknown[]) => unknown>();
@@ -13,6 +13,7 @@ vi.mock("./ask", () => ({ askAboutCall: (...a: unknown[]) => askAboutCall(...a) 
 vi.mock("./turn", () => ({ guardTurn: (...a: unknown[]) => guardTurn(...a) }));
 
 const { answerHook, ASK_LIMIT_MS, isGuardCli, isGuardEvent } = await import("./hook");
+const { bindConversation, takeNotes } = await import("./antigravity-turns");
 
 const session = { cardId: "c", abort: new AbortController() } as unknown as Session;
 const turn = { session, hooks: {} };
@@ -28,7 +29,7 @@ beforeEach(() => {
 
 describe("isGuardCli and isGuardEvent", () => {
   it("know Codex and Goose, and the three events the guards answer", () => {
-    expect([isGuardCli("codex"), isGuardCli("goose"), isGuardCli("claude")]).toEqual([true, true, false]);
+    expect([isGuardCli("codex"), isGuardCli("goose"), isGuardCli("antigravity"), isGuardCli("claude")]).toEqual([true, true, true, false]);
     expect(["PreToolUse", "PostToolUse", "PostToolUseFailure", "Stop"].map(isGuardEvent)).toEqual([true, true, true, false]);
   });
 });
@@ -103,5 +104,65 @@ describe("answerHook", () => {
     expect(await answerHook("goose", "PreToolUse", "t", { event: "PreToolUse", tool_name: "shell", tool_input: { command: "ls" }, working_dir: "/w" }, signal())).toMatchObject({ decision: "block", reason: expect.stringContaining("(bare)") as string });
     expect(await answerHook("goose", "PostToolUse", "t", { event: "PostToolUse", tool_name: "shell", tool_input: { command: "ls" }, working_dir: "/w" }, signal())).toEqual({ decision: "allow" });
     error.mockRestore();
+  });
+});
+
+describe("answerHook on Antigravity", () => {
+  // agy 1.5.16's PreToolUse payload, as its hooks.json command posts it: no token, a conversation id.
+  const payload = (over: Record<string, unknown> = {}) => ({ conversationId: "C", cwd: "/tmp/p", hookEventName: "PreToolUse", stepIdx: 2, toolCall: { args: { Path: "/tmp/p/x.txt" }, id: "call_9", name: "read_file" }, workspacePaths: ["/tmp/p"], ...over });
+
+  it("finds the turn from the payload's conversation when the hook sent no token", async () => {
+    const unbind = bindConversation("C", "agy-token");
+    decide.mockResolvedValue({ decision: "allow" });
+    expect(await answerHook("antigravity", "PreToolUse", undefined, payload(), signal())).toEqual({ decision: "allow" });
+    expect(guardTurn).toHaveBeenCalledWith("agy-token", "antigravity");
+    expect(decide.mock.calls[0]?.[1]).toEqual({ event: "PreToolUse", tool: "Read", input: { file_path: "/tmp/p/x.txt" }, cwd: "/tmp/p", id: "call_9" });
+    unbind();
+  });
+
+  it("looks up no turn for a conversation Weft didn't start, and prefers a token when there is one", async () => {
+    guardTurn.mockReturnValue(undefined);
+    expect(await answerHook("antigravity", "PreToolUse", undefined, payload({ conversationId: "other" }), signal())).toBeNull();
+    expect(guardTurn).toHaveBeenLastCalledWith(undefined, "antigravity");
+    await answerHook("antigravity", "PreToolUse", "bearer", payload(), signal());
+    expect(guardTurn).toHaveBeenLastCalledWith("bearer", "antigravity");
+  });
+
+  it("never reads a conversation for another CLI's hook without a token", async () => {
+    const unbind = bindConversation("C", "agy-token");
+    guardTurn.mockReturnValue(undefined);
+    await answerHook("codex", "PreToolUse", undefined, payload(), signal());
+    expect(guardTurn).toHaveBeenLastCalledWith(undefined, "codex");
+    unbind();
+  });
+
+  it("refuses a denied call in agy's words, and says nothing after one", async () => {
+    decide.mockResolvedValue({ decision: "deny", reason: "No .env reads." });
+    expect(await answerHook("antigravity", "PreToolUse", "t", payload(), signal())).toEqual({ decision: "deny", reason: "No .env reads." });
+    decide.mockResolvedValue({ decision: "allow", context: "c" });
+    expect(await answerHook("antigravity", "PostToolUse", "t", payload({ hookEventName: "PostToolUse" }), signal())).toEqual({});
+  });
+
+  it("keeps what the guards said after a call for agy's next model call, feedback first", async () => {
+    const unbind = bindConversation("C", "agy-token");
+    decide.mockResolvedValue({ decision: "allow", context: "Broke an import.", feedback: "Fix it." });
+    expect(await answerHook("antigravity", "PostToolUse", undefined, payload({ hookEventName: "PostToolUse" }), signal())).toEqual({});
+    expect(takeNotes({ conversationId: "C" })).toEqual({ injectSteps: [{ systemMessage: { systemMessage: "Fix it.\n\nBroke an import." } }] });
+    // Nothing to say keeps nothing.
+    decide.mockResolvedValue({ decision: "allow" });
+    await answerHook("antigravity", "PostToolUse", undefined, payload({ hookEventName: "PostToolUse" }), signal());
+    await answerHook("antigravity", "PreToolUse", undefined, payload(), signal());
+    expect(takeNotes({ conversationId: "C" })).toEqual({});
+    unbind();
+  });
+
+  it("keeps no note for a refused call, nor for another CLI's after-call answer", async () => {
+    const unbind = bindConversation("C", "agy-token");
+    decide.mockResolvedValue({ decision: "deny", reason: "No .env reads." });
+    await answerHook("antigravity", "PreToolUse", undefined, payload(), signal());
+    decide.mockResolvedValue({ decision: "allow", context: "codex context" });
+    await answerHook("codex", "PostToolUse", "t", { ...bash("PostToolUse"), conversationId: "C" }, signal());
+    expect(takeNotes({ conversationId: "C" })).toEqual({});
+    unbind();
   });
 });

@@ -44,6 +44,12 @@ describe("isThreadCli", () => {
     expect(isThreadCli("/usr/local/bin/codex exec --json --cd /a/weft", SDK)).toBe(true);
     expect(isThreadCli("codex exec resume --json ABC -", SDK)).toBe(true);
   });
+  it("matches weft-launched Antigravity (`agy acp`) but not an interactive agy", () => {
+    expect(isThreadCli("/Users/me/.local/bin/agy acp", SDK)).toBe(true);
+    expect(isThreadCli("agy acp --login", SDK)).toBe(true);
+    expect(isThreadCli("agy", SDK)).toBe(false);
+    expect(isThreadCli("agy -p hello", SDK)).toBe(false);
+  });
   it("does NOT match the codex app-server daemon or interactive codex", () => {
     expect(
       isThreadCli(

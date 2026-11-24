@@ -5,9 +5,11 @@ import { backendPick } from "@/lib/backend-pick";
 import { patchNow } from "@/lib/optimistic-cards";
 import { isLive } from "@/lib/format";
 import { hostOf } from "@/lib/project-host";
-import { BACKENDS, CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, MODELS, NO_MODEL, runningOn } from "@/lib/new-thread";
+import { antigravityList, agyRowValue } from "@/lib/model-options";
+import { ANTIGRAVITY_DEFAULT_MODEL, BACKENDS, CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, MODELS, NO_MODEL, bareModel, runningOn } from "@/lib/new-thread";
 import { BACKEND_LABELS, type Backend, type Card } from "@/lib/types";
 import { useEscape } from "@/lib/use-escape";
+import { useAgyModels } from "@/lib/use-named-models";
 import { useLimitedModels } from "@/lib/use-plan-limits";
 import { isWorkerCard } from "@/lib/worker-project";
 import { BackendBadge } from "./CardView";
@@ -21,21 +23,29 @@ function pickableBackends(card: Card) {
 // CLI's swaps the open CLI's model, one of the other CLI's switches CLI and the next turn runs there
 // (stop the thread first). No replay by default — that's the rate-limit banner's job (and it
 // always replays). In a reply composer the menu opens upward, since the box sits at the bottom of its window.
+// The row the picker marks: the card's model, or the configured-model row of a CLI that names none of its own.
+// Codex's "Codex default" is the same idea under its own name, so it reads as the default too.
+function selectedModelOf(card: Card, model: string | undefined): string | undefined {
+  if (card.backend === "codex" && (!model || model === "Codex")) return CODEX_DEFAULT_MODEL;
+  if (card.backend === "github-copilot") return GITHUB_COPILOT_DEFAULT_MODEL;
+  if (card.backend === "antigravity" && !model) return ANTIGRAVITY_DEFAULT_MODEL;
+  return model;
+}
+
 export default function BackendPicker({ card, up = false }: { card: Card; up?: boolean }) {
   // Without a "[1m]" context suffix, so it matches a MODELS id.
   const model = runningOn(card).model?.replace(/\[[^\]]*\]$/, "");
-  // "" is the CLI's own choice — the card's own model, when it has one. Codex's "Codex default"
-  // is the same idea under its own name, so it reads as the default too.
-  let selectedModel = model;
-  if (card.backend === "codex" && (!model || model === "Codex")) selectedModel = CODEX_DEFAULT_MODEL;
-  if (card.backend === "github-copilot") selectedModel = GITHUB_COPILOT_DEFAULT_MODEL;
-  const onDefault = !selectedModel || selectedModel === CODEX_DEFAULT_MODEL || selectedModel === GITHUB_COPILOT_DEFAULT_MODEL;
+  // "" is the CLI's own choice — the card's own model, when it has one.
+  const selectedModel = selectedModelOf(card, model);
+  const onDefault = !selectedModel || [CODEX_DEFAULT_MODEL, GITHUB_COPILOT_DEFAULT_MODEL, ANTIGRAVITY_DEFAULT_MODEL].includes(selectedModel);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
   const live = isLive(card);
   const atLimit = new Set(useLimitedModels(card.cwd).map((l) => l.model));
   const backends = pickableBackends(card);
+  // Antigravity lists what agy last said this account may use; its ids beyond the fixed list go as "agy:<id>".
+  const agy = antigravityList(useAgyModels());
   useEscape(open, () => setOpen(false));
 
   useEffect(() => {
@@ -49,7 +59,7 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
 
   function pick(next: Backend, id: string) {
     // The same model again is a no-op; "Default model" on a card already on it is too.
-    if (next === card.backend && (id === selectedModel || (id === NO_MODEL && onDefault))) return;
+    if (next === card.backend && (bareModel(id) === selectedModel || (id === NO_MODEL && onDefault))) return;
     setError(null);
     // The new CLI and model show on the card at once (lib/optimistic-cards.ts). A live thread can't change CLI, but
     // the user may still pick a model on this CLI; when a move is refused, say why instead of failing silently.
@@ -97,13 +107,13 @@ export default function BackendPicker({ card, up = false }: { card: Card; up?: b
           {backends.map((b) => (
             <div key={b.id} role="group" aria-label={b.label}>
               <p className="px-2 pb-0.5 pt-1.5 text-[11px] font-medium text-faint">{b.label}</p>
-              {MODELS[b.id].map((m) => {
+              {(b.id === "antigravity" ? agy : MODELS[b.id]).map((m) => {
                 const on = card.backend === b.id && selectedModel === m.id;
                 return (
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => pick(b.id, m.id)}
+                    onClick={() => pick(b.id, b.id === "antigravity" ? agyRowValue(m.id) : m.id)}
                     className={row}
                     aria-pressed={on}
                   >

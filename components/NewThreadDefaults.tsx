@@ -27,6 +27,7 @@ export default function NewThreadDefaults({
     codex: modelFor("codex"),
     goose: modelFor("goose"),
     "github-copilot": modelFor("github-copilot"),
+    antigravity: modelFor("antigravity"),
   }));
   const [effort, setEffort] = useState<Effort | "">(lastEffort);
 

@@ -1,5 +1,6 @@
 import { publish } from "./bus";
 import { GOOSE_PROVIDERS } from "./goose-provider";
+import { agyModels } from "./antigravity-models";
 import { namedModels } from "./goose-models";
 import { DEFAULT_LANDING, workflowOf } from "./issue-landing";
 import { MODES, type Automation, type Backend, type PermissionMode, type Project, type SettingsView } from "./types";
@@ -339,6 +340,7 @@ export function settingsView(): SettingsView {
     gooseModelId: gooseModelId(),
     gooseBaseUrl: gooseBaseUrl(),
     gooseNamedModels: gooseNamedModels(),
+    antigravityModels: agyModels(),
     projects: listProjects(),
     issueFolders: issueFolders(),
     issueLandings: issueLandings(),

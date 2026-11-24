@@ -5,6 +5,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { makeCard } from "./test-utils";
+import { resetNamedModels } from "@/lib/use-named-models";
 import BackendPicker from "./BackendPicker";
 
 const api = vi.hoisted(() => ({
@@ -50,6 +51,40 @@ describe("BackendPicker", () => {
       expect(screen.queryByRole("group", { name: "GitHub Copilot" })).not.toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();
+    }
+  });
+
+  it("offers Antigravity's models, reads a model-less Antigravity card as its configured model, and moves a card there", async () => {
+    render(<BackendPicker card={makeCard({ backend: "antigravity" })} />);
+    await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
+    expect(screen.getByRole("group", { name: "Antigravity" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Antigravity’s configured model" })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(screen.getByRole("button", { name: "Gemini 3.1 Pro (High)" }));
+    expect(api.switchBackend).toHaveBeenCalledWith("c1", "antigravity", false, "gemini-3.1-pro-high");
+  });
+
+  it("lists the models agy offers this account, marks the card's own, and sends the rest as agy: values", async () => {
+    resetNamedModels();
+    const antigravityModels = [
+      { id: "gemini-3.8-flash-high", label: "Gemini 3.8 Flash (High)" },
+      { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Thinking)" },
+    ];
+    vi.stubGlobal("fetch", vi.fn((url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve(url === "/api/settings" ? { antigravityModels } : { models: [] }) } as Response)));
+    try {
+      const card = makeCard({ backend: "antigravity", model: "claude-sonnet-4-6" });
+      const { rerender } = render(<BackendPicker card={card} />);
+      await userEvent.click(screen.getByRole("button", { name: /Switch model/ }));
+      expect(await screen.findByRole("button", { name: "Claude Sonnet 4.6 (Thinking)" })).toHaveAttribute("aria-pressed", "true");
+      expect(screen.queryByRole("button", { name: "Gemini 4 Argon (High)" })).not.toBeInTheDocument();
+      // The card's own model again is a no-op.
+      await userEvent.click(screen.getByRole("button", { name: "Claude Sonnet 4.6 (Thinking)" }));
+      expect(api.switchBackend).not.toHaveBeenCalled();
+      rerender(<BackendPicker card={{ ...card, model: "gemini-3.8-flash-high" }} />);
+      await userEvent.click(screen.getByRole("button", { name: "Claude Sonnet 4.6 (Thinking)" }));
+      expect(api.switchBackend).toHaveBeenCalledWith("c1", "antigravity", false, "agy:claude-sonnet-4-6");
+    } finally {
+      vi.unstubAllGlobals();
+      resetNamedModels();
     }
   });
 

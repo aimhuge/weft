@@ -80,7 +80,7 @@ export interface GooseProviderEntry {
 }
 
 export const GOOSE_PROVIDERS: GooseProviderEntry[] = [
-  { id: "openrouter", label: "OpenRouter", envKey: "OPENROUTER_API_KEY", models: ["anthropic/claude-sonnet-4.5", "anthropic/claude-opus-4.1", "openai/gpt-4.1", "google/gemini-2.5-pro", "qwen/qwen3-coder"] },
+  { id: "openrouter", label: "OpenRouter", envKey: "OPENROUTER_API_KEY", models: ["anthropic/claude-sonnet-4.5", "anthropic/claude-opus-4.1", "openai/gpt-4.1", "google/gemini-4-carbon", "qwen/qwen3-coder"] },
   {
     id: "anthropic",
     label: "Anthropic",
@@ -94,7 +94,7 @@ export const GOOSE_PROVIDERS: GooseProviderEntry[] = [
     note: "Type the model id, e.g. puku-ai-2.8 for Puku's gateway, or a Claude id.",
   },
   { id: "openai", label: "OpenAI", envKey: "OPENAI_API_KEY", models: ["gpt-4.1", "gpt-4o", "o4-mini"] },
-  { id: "google", label: "Google Gemini", envKey: "GOOGLE_API_KEY", models: ["gemini-2.5-pro", "gemini-2.5-flash"] },
+  { id: "google", label: "Google Gemini", envKey: "GOOGLE_API_KEY", models: ["gemini-4-carbon", "gemini-4-argon", "gemini-4-neon", "gemini-4-hydrogen", "gemini-3.8-flash"] },
   { id: "groq", label: "Groq", envKey: "GROQ_API_KEY", models: [], note: "Type the model id, e.g. llama-3.3-70b-versatile" },
   { id: "mistral", label: "Mistral", envKey: "MISTRAL_API_KEY", models: ["mistral-large-latest", "mistral-small-latest", "codestral-latest"] },
   { id: "deepseek", label: "DeepSeek", envKey: "DEEPSEEK_API_KEY", models: ["deepseek-chat", "deepseek-reasoner"] },

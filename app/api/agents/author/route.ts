@@ -26,7 +26,7 @@ export async function POST(req: Request) {
       prompt: agentAuthorPrompt(what),
       title: "Write an agent",
       cwd,
-      backend: body.backend === "puku" || body.backend === "codex" || body.backend === "goose" ? body.backend : "claude",
+      backend: body.backend === "puku" || body.backend === "codex" || body.backend === "goose" || body.backend === "antigravity" ? body.backend : "claude",
       permissionMode: defaultPermissionMode(),
       tags: ["agent"],
     });

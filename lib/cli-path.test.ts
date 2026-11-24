@@ -5,6 +5,8 @@ import { describe, expect, it, vi } from "vitest";
 const which = vi.hoisted(() => vi.fn((_file: string, args: string[]) => `/opt/homebrew/bin/${args[0]}\n`));
 vi.mock("node:child_process", () => ({ execFileSync: which }));
 vi.mock("./win-command", () => ({ isWindows: () => false, findOnWindowsPath: vi.fn() }));
+const agy = vi.hoisted(() => vi.fn((): string | null => null));
+vi.mock("./antigravity-login", () => ({ antigravityBin: agy }));
 
 const { executableFor } = await import("./cli-path");
 
@@ -21,5 +23,11 @@ describe("executableFor on a Mac", () => {
       throw new Error("exit 1");
     });
     expect(() => executableFor("goose")).toThrow("goose isn't on this app's PATH.");
+  });
+
+  it("finds agy on PATH or in ~/.local/bin (antigravityBin), and says so when it's in neither", () => {
+    expect(() => executableFor("antigravity")).toThrow("agy isn't on this app's PATH.");
+    agy.mockReturnValueOnce("/Users/me/.local/bin/agy");
+    expect(executableFor("antigravity")).toBe("/Users/me/.local/bin/agy");
   });
 });

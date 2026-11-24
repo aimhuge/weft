@@ -12,10 +12,9 @@
 //   subprocess an env through a one-time grant (lib/goose-launch.ts), so the runner starts Goose through
 //   that helper rather than with the key itself.
 
-import path from "node:path";
-import readline from "node:readline";
-import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { spawnCli } from "./cli-process";
+import { CLI_ADAPTER_CODE, driveAdapter, messageText, type CliAdapter } from "./cli-adapter";
+import { CLI_MESSAGES_CODE, fileReply, fileResult, fileToolStart, noteTouched, scrub } from "./cli-messages";
+import { CLI_TURN_CODE, readLines, runCliTurn } from "./cli-turn";
 import { cliEnv } from "./env";
 import { gooseArgs, gooseRecipeYaml, GOOSE_RECIPE_CODE, type GooseTurnPlan } from "./goose-recipe";
 import { gooseLaunch } from "./goose-launch";
@@ -28,11 +27,10 @@ import { writeRecipe } from "./goose-recipe-store";
 import { gooseHasSession, gooseStateRoot } from "./goose-state";
 import { endsGooseTurn, parseGooseEvent, type GooseEvent, type GooseNotificationEvent } from "./goose-runner-events";
 import { GOOSE_DEFAULT_MODEL } from "./new-thread";
-import { handle } from "./runner-turn";
-import { redactStored } from "./secret-run";
-import { getCard, updateCard } from "./store";
-import { touchFile } from "./overlap";
 import type { Session } from "./runner-state";
+
+// The text of the message a turn starts with, shared by every CLI adapter (lib/cli-adapter.ts); kept here for callers.
+export { messageText };
 
 // Goose's own knobs for a Weft thread.
 export const GOOSE_ENV = {
@@ -46,10 +44,6 @@ export const GOOSE_ENV = {
 const STDERR_TAIL = 4_000;
 // How many plain-text lines of Goose's stdout a failed turn keeps, from its error on.
 const PLAIN_LINES = 12;
-
-function sdkMessage(message: unknown) {
-  return message as SDKMessage;
-}
 
 /**
  * Where Goose keeps its own state (config, data, state): under Weft's data dir, one folder per card, so
@@ -68,31 +62,12 @@ export function modelName(session: Session): string {
 }
 
 /**
- * Text Goose produced, with any vault value or provider key the card used swapped for ‹NAME› before it's filed: on a
- * worker the Goose key the Mac sealed for this turn is one (lib/worker-goose-key.ts). Goose's rows are text and tool
- * steps, never the tool results lib/runner-turn.ts redacts, so it's done here.
+ * The assistant's text, as a row in the thread. Like every row Goose files it goes through lib/cli-messages.ts's scrub
+ * first: any vault value or provider key the card used becomes ‹NAME›, and on a worker the Goose key the Mac sealed
+ * for this turn is one (lib/worker-goose-key.ts).
  */
-function scrub(session: Session, text: string): Promise<string> {
-  return session.cardId ? redactStored(session.cardId, text) : Promise.resolve(text);
-}
-
-/** The assistant's text, as a row in the thread. */
 async function assistant(session: Session, raw: string) {
-  const text = await scrub(session, raw);
-  await handle(session.cardId as string, session, sdkMessage({
-    type: "assistant",
-    parent_tool_use_id: null,
-    message: {
-      id: `goose-${Date.now()}`,
-      type: "message",
-      role: "assistant",
-      model: modelName(session),
-      content: [{ type: "text", text }],
-      stop_reason: null,
-      stop_sequence: null,
-      usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-    },
-  }));
+  await fileReply(session, raw, modelName(session), "goose");
 }
 
 /**
@@ -111,58 +86,14 @@ export function gooseToolResult(progress: string, error?: string): { result: str
 
 /** The turn's result: the text Goose finished with, or the error it failed with. */
 async function result(session: Session, text: string, error?: string) {
-  const id = session.cardId;
-  if (!id) return;
-  const model = modelName(session);
-  const summary = await scrub(session, error ?? (text || "Done."));
-  await handle(id, session, sdkMessage({
-    type: "result",
-    subtype: error ? "error_execution" : "success",
-    is_error: Boolean(error),
-    result: summary,
-    session_id: session.sessionId ?? session.spec.sessionId ?? "",
-    total_cost_usd: 0,
-    modelUsage: {
-      [model]: {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheReadInputTokens: 0,
-        cacheCreationInputTokens: 0,
-        webSearchRequests: 0,
-        costUSD: 0,
-        contextWindow: 0,
-        maxOutputTokens: 0,
-      },
-    },
-  }));
+  await fileResult(session, modelName(session), { text, error });
 }
 
 /**
- * The files Goose touched, so the card's overlap warning knows about them.
- *
- * Only files inside the card's own folder are noted. A card works in its folder, so a path that
- * resolves outside it is not the card's to touch and not the card's to claim: the boundary is checked
- * on the resolved path, so a relative path with ".." in it that climbs out is dropped too.
+ * The files Goose touched, so the card's overlap warning knows about them: only the ones inside the card's own
+ * folder, checked on the resolved path (lib/cli-messages.ts's noteTouched).
  */
-export function noteFileChanges(session: Session, paths: string[]) {
-  const id = session.cardId;
-  if (!id) return;
-  const root = path.resolve(session.spec.cwd);
-  for (const file of paths) {
-    if (!file) continue;
-    const absolute = path.resolve(root, file);
-    if (!insideFolder(absolute, root)) continue;
-    const card = getCard(id);
-    const touched = touchFile(card?.touchedFiles, absolute);
-    if (touched) updateCard(id, { touchedFiles: touched });
-  }
-}
-
-/** Whether a path sits inside a folder: the folder itself, or somewhere under it. */
-function insideFolder(child: string, parent: string): boolean {
-  if (child === parent) return true;
-  return child.startsWith(parent === "/" ? "/" : `${parent}/`);
-}
+export const noteFileChanges = noteTouched;
 
 /** Whether the event ends the turn. */
 export function isTurnEnd(event: GooseEvent | null): boolean {
@@ -194,22 +125,8 @@ export async function handleGooseEvent(session: Session, event: GooseEvent): Pro
   if (use) {
     const progress = await scrub(session, (event as GooseNotificationEvent).progress);
     noteFileChanges(session, progressPaths(progress));
-    const id = progress;
-    if (!id || session.toolIndex.has(id)) return false;
-    await handle(session.cardId as string, session, sdkMessage({
-      type: "assistant",
-      parent_tool_use_id: null,
-      message: {
-        id: `goose-${id}`,
-        type: "message",
-        role: "assistant",
-        model: modelName(session),
-        content: [{ type: "tool_use", id, ...use, input: { progress } }],
-        stop_reason: null,
-        stop_sequence: null,
-        usage: { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
-      },
-    }));
+    // The note is the row's id too: the same note twice draws one row.
+    await fileToolStart(session, progress, { ...use, input: { progress } }, modelName(session), "goose");
     return false;
   }
   if (event.kind === "error") {
@@ -229,19 +146,13 @@ export async function handleGooseEvent(session: Session, event: GooseEvent): Pro
  * names a kind Weft doesn't act on, is skipped: Goose prints the odd line of noise on stdout.
  */
 export async function readGooseEvents(session: Session, stdout: NodeJS.ReadableStream, plain: string[] = []): Promise<boolean> {
-  let completed = false;
   resetReply(session);
-  const lines = readline.createInterface({ input: stdout, crlfDelay: Infinity });
-  for await (const line of lines) {
-    if (!line.trim()) continue;
+  const completed = await readLines(stdout, (line) => {
     const event = parseGooseEvent(line);
-    if (!event) {
-      keepPlainError(plain, line);
-      continue;
-    }
-    if (await handleGooseEvent(session, event)) completed = true;
-  }
-  lines.close();
+    if (event) return handleGooseEvent(session, event);
+    keepPlainError(plain, line);
+    return false;
+  });
   // A stream that ends mid-reply still files what Goose said.
   await flushReply(session, (text) => assistant(session, text));
   return completed;
@@ -327,32 +238,16 @@ export function gooseEnv(session: Session): Record<string, string> {
   return clean;
 }
 
-/** The text of the message a turn starts with. */
-export function messageText(message: { message?: { content?: unknown } }): string {
-  const content = message.message?.content;
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .map((part) => {
-      if (!part || typeof part !== "object" || !("text" in part)) return "";
-      // The text may be any shape. A part that isn't a string must not stringify to "[object Object]",
-      // so only the primitives are stringified and anything else is dropped.
-      const text = (part as { text?: unknown }).text;
-      if (typeof text === "string") return text;
-      if (typeof text === "number" || typeof text === "boolean") return String(text);
-      return "";
-    })
-    .join("\n");
+/** The adapter a Goose thread runs on: one `goose run` per turn (lib/cli-adapter.ts). */
+export function gooseAdapter(executable: string): CliAdapter {
+  return { name: "Goose", runTurn: (session, message) => runGooseTurn(session, executable, messageText(message)) };
 }
 
 /**
  * Runs the session's turns on Goose: one process per turn, its stdout read as events.
  */
-export async function driveGoose(session: Session, executable: string) {
-  for await (const message of session.inbox) {
-    if (session.abort.signal.aborted) break;
-    await runGooseTurn(session, executable, messageText(message));
-  }
+export function driveGoose(session: Session, executable: string) {
+  return driveAdapter(session, gooseAdapter(executable));
 }
 
 /**
@@ -385,47 +280,31 @@ async function runGooseProcess(session: Session, executable: string, prompt: str
   saveTurnRecipe(session, prompt);
   const argv = argsFor(session, prompt);
   const env = gooseEnv(session);
-  const stderr = (data: string) => console.error(`[thread ${(session.cardId ?? "spare").slice(0, 8)}] ${data.trimEnd()}`);
-  session.toolIndex.clear();
   // The provider's key stays in Electron main: the launch helper starts Goose with it in its env, so
   // this process never holds the plaintext. Without a saved key the plain binary is started, which is
   // what Goose wants when the user configured a provider itself. On a worker the key comes sealed from
   // the paired Mac after Touch ID and goes into this one process's env (lib/worker-goose-key.ts).
   // The helper spawns argv[0] as the program, so the Goose binary leads; without it the helper tried to run `run`.
   const launch = session.spec.provider ? await gooseLaunch(session.spec.provider, [executable, ...argv], env, session.spec.cwd, session.spec.gooseBaseUrl ?? "", session.cardId) : undefined;
-  const command = launch ? launch.bin : executable;
-  const args = launch ? launch.args : argv;
-  const childEnv = childEnvOf(session, env, launch?.env);
-  const proc = spawnCli({ command, args, cwd: session.spec.cwd, env: childEnv, signal: session.abort.signal }, stderr);
-  session.process = proc;
-  proc.stdin.on("error", () => {});
-  // The prompt goes on the command line (--text), so the helper's stdin carries the grant instead.
-  proc.stdin.end(launch ? launch.stdin : "");
-  let spawnError: Error | undefined;
-  proc.once("error", (error) => {
-    spawnError = error;
-  });
-  const exited = new Promise<void>((resolve) => {
-    // The SDK's SpawnedProcess types no `close` event, so the listener is reached through the
-    // process's own emitter: the event fires with the code and the signal that ended the process.
-    (proc as unknown as { once(event: "close", listener: () => void): void }).once("close", () => resolve());
-  });
   const plain: string[] = [];
-  const completed = await readGooseEvents(session, proc.stdout, plain);
-  await exited;
-  if (spawnError) throw spawnError;
-  if (completed || session.abort.signal.aborted) return;
-  // The turn ended without a `complete` event: Goose failed, and its stderr says why.
-  const tail = (proc.stderrTail() || plain.join("\n")).slice(-STDERR_TAIL);
-  const signal = proc.signalCode;
-  throw new Error((await scrub(session, tail)) || `Goose exited ${signal ? `on ${signal}` : `with code ${proc.exitCode ?? "unknown"}`} without finishing the turn.`);
+  await runCliTurn(session, {
+    name: "Goose",
+    command: launch ? launch.bin : executable,
+    args: launch ? launch.args : argv,
+    env: childEnvOf(session, env, launch?.env),
+    // The prompt goes on the command line (--text), so the helper's stdin carries the grant instead.
+    stdin: launch ? launch.stdin : "",
+    read: (stdout) => readGooseEvents(session, stdout, plain),
+    // A turn that ended without a `complete`: Goose failed, and its stderr (or the error it printed on stdout) says why.
+    explain: (stderrTail) => scrub(session, (stderrTail || plain.join("\n")).slice(-STDERR_TAIL)),
+  });
 }
 
 // The code in this module, fed into the runner's BUILD fingerprint (lib/runner-session.ts) so a change to
 // the runner or to the plan it starts Goose with replaces idle sessions.
 export const GOOSE_RUNNER_CODE = [
-  driveGoose, assistant, result, noteFileChanges, handleGooseEvent, readGooseEvents, promptFor, argsFor, gooseEnv,
-  gooseToolUse, gooseToolResult, isTurnEnd, eventText, messageText, modelName, planFor, saveTurnRecipe, scrub,
-  openGooseMcp, openGooseGuards, addToReply, flushReply, lastReply, resetReply, replacesSystemPrompt, parseGooseEvent,
-  ...GOOSE_RECIPE_CODE,
+  driveGoose, gooseAdapter, runGooseTurn, runGooseProcess, childEnvOf, assistant, result, handleGooseEvent, readGooseEvents,
+  keepPlainError, promptFor, argsFor, gooseEnv, gooseToolUse, gooseToolResult, isTurnEnd, eventText, modelName, planFor,
+  saveTurnRecipe, openGooseMcp, openGooseGuards, addToReply, flushReply, lastReply, resetReply, replacesSystemPrompt,
+  parseGooseEvent, ...GOOSE_RECIPE_CODE, ...CLI_ADAPTER_CODE, ...CLI_MESSAGES_CODE, ...CLI_TURN_CODE,
 ];

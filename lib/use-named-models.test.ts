@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { loadNamedModels, resetNamedModels, useNamedModels } from "./use-named-models";
+import { loadNamedModels, resetNamedModels, useAgyModels, useNamedModels } from "./use-named-models";
 
 const NAMED = [
   { id: "gpt-5", name: "The one I like" },
@@ -73,6 +73,25 @@ describe("loadNamedModels", () => {
     // A second load replaces the names.
     fetch.mockImplementation(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ gooseNamedModels: [] }) } as Response));
     await loadNamedModels();
+    await waitFor(() => expect(result.current).toEqual([]));
+  });
+});
+
+describe("useAgyModels", () => {
+  const AGY = [{ id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6 (Thinking)" }];
+
+  it("reads the models agy offered this account from /api/settings", async () => {
+    vi.stubGlobal("fetch", respond({ antigravityModels: AGY }));
+    const { result } = renderHook(() => useAgyModels());
+    await waitFor(() => expect(result.current).toEqual(AGY));
+  });
+
+  it("is empty when the settings carry none, and after a reset", async () => {
+    vi.stubGlobal("fetch", respond({ antigravityModels: AGY }));
+    await loadNamedModels();
+    resetNamedModels();
+    vi.stubGlobal("fetch", respond({}));
+    const { result } = renderHook(() => useAgyModels());
     await waitFor(() => expect(result.current).toEqual([]));
   });
 });

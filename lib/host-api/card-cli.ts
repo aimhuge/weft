@@ -1,5 +1,6 @@
 // The card's CLI and model: switch to another CLI (or model on its own), or rerun the last message on a backup model.
-import { ALL_MODEL_IDS, BACKEND_IDS, MODELS, NO_MODEL, backendFor } from "../new-thread";
+import { agyModels } from "../antigravity-models";
+import { ALL_MODEL_IDS, BACKEND_IDS, MODELS, NO_MODEL, backendFor, bareModel, isAgyValue } from "../new-thread";
 import { rerunOnModel, switchBackend } from "../runner";
 import { getCard } from "../store";
 import type { Backend, Card } from "../types";
@@ -26,11 +27,19 @@ export async function switchBackendVerb({ id, backend, model, replay }: SwitchAr
   // "" is the no-model choice: "let the CLI decide", which is what the Default model row picks.
   // Any other model has to be one this CLI serves — the picker sends a model's own CLI with it,
   // so a model from another CLI is a mismatch worth refusing.
-  if (model !== undefined && (typeof model !== "string" || (model !== NO_MODEL && !MODELS[backend as Backend].some((m) => m.id === model)))) {
+  if (model !== undefined && (typeof model !== "string" || (model !== NO_MODEL && !servedOn(backend as Backend, model)))) {
     throw new Error(`${typeof model === "string" ? model : "That"} isn't a ${backend} model.`);
   }
   await switchBackend(id, backend as Backend, { replay: replay === true, model });
   return { card: getCard(id) };
+}
+
+// Whether a CLI serves a model the header's picker sent: one of its own list, or on Antigravity one agy offers this
+// account (lib/antigravity-models.ts), sent bare or as "agy:<id>".
+function servedOn(backend: Backend, model: string): boolean {
+  if (MODELS[backend].some((m) => m.id === model)) return true;
+  if (backend !== "antigravity") return false;
+  return isAgyValue(model) || agyModels().some((m) => m.id === bareModel(model));
 }
 
 // One-click "rerun the last user message on a different model" — used by the first-message-failed

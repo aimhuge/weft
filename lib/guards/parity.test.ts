@@ -6,13 +6,14 @@ import { sessions, type Session } from "../runner-state";
 import { addCards, deleteCard } from "../store";
 import type { Card } from "../types";
 import { decide, type GuardCall } from "./decide";
+import { bindConversation } from "./antigravity-turns";
 import { answerHook } from "./hook";
 import { openGuards } from "./turn";
 
 // The proof that every CLI runs behind the same guards: the four calls Weft must never let a thread make quietly
 // (read a .env, reset --hard the shared tree, kill Weft's own server while other cards run, write outside the card's
-// folder), made as Claude Code, Codex and Goose make them, through the real guard set and a real card. Claude Code's
-// verdict comes from its in-process hooks (lib/env.ts guardedCli); Codex's and Goose's from Weft's guard route.
+// folder), made as Claude Code, Codex, Goose and Antigravity make them, through the real guard set and a real card. Claude Code's
+// verdict comes from its in-process hooks (lib/env.ts guardedCli); the others' from Weft's guard route.
 
 const PORT = "1000";
 // The card works in this repo: the git guard only protects a shared tree, never a scratch folder under /tmp.
@@ -51,7 +52,7 @@ afterAll(() => {
   vi.unstubAllEnvs();
 });
 
-type Case = { name: string; claude: Omit<GuardCall, "event" | "cwd" | "id">; codex: Record<string, unknown>; goose: Record<string, unknown>; want: "deny" | "ask"; says: string };
+type Case = { name: string; claude: Omit<GuardCall, "event" | "cwd" | "id">; codex: Record<string, unknown>; goose: Record<string, unknown>; antigravity: Record<string, unknown>; want: "deny" | "ask"; says: string };
 
 const CASES: Case[] = [
   {
@@ -59,6 +60,7 @@ const CASES: Case[] = [
     claude: { tool: "Bash", input: { command: "cat .env" } },
     codex: { tool_name: "Bash", tool_input: { command: "cat .env" } },
     goose: { tool_name: "shell", tool_input: { command: "cat .env" } },
+    antigravity: { name: "run_command", args: { CommandLine: "cat .env", toolSummary: "read env" } },
     want: "deny",
     says: "keeps secret values out",
   },
@@ -67,6 +69,7 @@ const CASES: Case[] = [
     claude: { tool: "Bash", input: { command: "git reset --hard" } },
     codex: { tool_name: "Bash", tool_input: { command: "git reset --hard" } },
     goose: { tool_name: "shell", tool_input: { command: "git reset --hard" } },
+    antigravity: { name: "run_command", args: { CommandLine: "git reset --hard" } },
     want: "deny",
     says: "reset --hard",
   },
@@ -75,6 +78,7 @@ const CASES: Case[] = [
     claude: { tool: "Bash", input: { command: `lsof -ti :${PORT} | xargs kill` } },
     codex: { tool_name: "Bash", tool_input: { command: `lsof -ti :${PORT} | xargs kill` } },
     goose: { tool_name: "shell", tool_input: { command: `lsof -ti :${PORT} | xargs kill` } },
+    antigravity: { name: "run_command", args: { CommandLine: `lsof -ti :${PORT} | xargs kill` } },
     want: "deny",
     says: "restart_weft_when_idle",
   },
@@ -83,6 +87,7 @@ const CASES: Case[] = [
     claude: { tool: "Write", input: { file_path: outside, content: "x" } },
     codex: { tool_name: "apply_patch", tool_input: { command: `*** Begin Patch\n*** Add File: ${outside}\n+x\n*** End Patch` } },
     goose: { tool_name: "write", tool_input: { path: outside, content: "x" } },
+    antigravity: { name: "write_file", args: { Path: outside, Content: "x", Overwrite: true } },
     want: "ask",
     says: "Outside the project",
   },
@@ -97,15 +102,19 @@ async function claude(c: Case) {
   return decide(hooks ?? {}, { ...c.claude, event: "PreToolUse", cwd, id: `claude-${++n}` }, signal());
 }
 
-// Codex's or Goose's hook posting the call; an ask is answered No on the card, as you would.
-async function viaHook(cli: "codex" | "goose", c: Case) {
+// Codex's, Goose's or Antigravity's hook posting the call; an ask is answered No on the card, as you would.
+// Antigravity's hook carries no token: its conversation id, bound to the turn's guards, says whose call it is.
+async function viaHook(cli: "codex" | "goose" | "antigravity", c: Case) {
   const guards = openGuards(session, cli);
   const id = `${cli}-${++n}`;
+  const unbind = bindConversation(`conv-${id}`, guards.token);
   const payload =
     cli === "codex"
       ? { hook_event_name: "PreToolUse", cwd, tool_use_id: id, ...c.codex }
-      : { event: "PreToolUse", working_dir: cwd, tool_call_id: id, ...c.goose };
-  const answer = answerHook(cli, "PreToolUse", guards.token, payload, signal());
+      : cli === "goose"
+        ? { event: "PreToolUse", working_dir: cwd, tool_call_id: id, ...c.goose }
+        : { hookEventName: "PreToolUse", conversationId: `conv-${id}`, cwd, stepIdx: 2, toolCall: { id, ...c.antigravity }, workspacePaths: [cwd] };
+  const answer = answerHook(cli, "PreToolUse", cli === "antigravity" ? undefined : guards.token, payload, signal());
   let asked: string | undefined;
   if (c.want === "ask") {
     await vi.waitFor(() => expect(session.pending.length).toBe(1));
@@ -114,6 +123,7 @@ async function viaHook(cli: "codex" | "goose", c: Case) {
     pending?.resolve({ behavior: "deny", message: "Denied in Weft." });
   }
   const out = await answer;
+  unbind();
   guards.close();
   return { out: JSON.stringify(out), asked };
 }
@@ -125,7 +135,7 @@ describe.each(CASES)("$name", (c) => {
     expect(JSON.stringify(verdict)).toContain(c.says);
   });
 
-  it.each(["codex", "goose"] as const)(`is refused on %s, in the same words`, async (cli) => {
+  it.each(["codex", "goose", "antigravity"] as const)(`is refused on %s, in the same words`, async (cli) => {
     const { out, asked } = await viaHook(cli, c);
     if (c.want === "ask") {
       expect(asked).toContain(c.says);
@@ -134,7 +144,8 @@ describe.each(CASES)("$name", (c) => {
       expect(out).toContain(c.says);
     }
     if (cli === "codex") expect(out).toContain('"permissionDecision":"deny"');
-    else expect(out).toContain('"decision":"block"');
+    else if (cli === "goose") expect(out).toContain('"decision":"block"');
+    else expect(out).toContain('"decision":"deny"');
   });
 });
 
@@ -152,5 +163,15 @@ describe("a call nobody can check", () => {
       expect(await answerHook(cli, "PreToolUse", guards.token, payload, signal())).toEqual(cli === "codex" ? {} : { decision: "allow" });
       guards.close();
     }
+  });
+
+  it("is turned away on Antigravity when its conversation names no open turn, and let through when it does", async () => {
+    const payload = { hookEventName: "PreToolUse", conversationId: "conv-unknown", cwd, toolCall: { id: "x", name: "run_command", args: { CommandLine: "ls" } } };
+    expect(await answerHook("antigravity", "PreToolUse", undefined, payload, signal())).toBeNull();
+    const guards = openGuards(session, "antigravity");
+    const unbind = bindConversation("conv-unknown", guards.token);
+    expect(await answerHook("antigravity", "PreToolUse", undefined, payload, signal())).toEqual({ decision: "allow" });
+    unbind();
+    guards.close();
   });
 });

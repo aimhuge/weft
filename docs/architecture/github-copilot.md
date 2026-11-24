@@ -10,7 +10,7 @@ The SDK handles authorization and saves the GitHub credential. Weft never asks f
 environment and access to the system credential store. Weft disables project configuration discovery,
 file hooks, and built-in tools for its sessions. Session data lives under `github-copilot` in Weft's data directory.
 `lib/github-copilot-runner.ts` starts one runtime per turn, persists the SDK's session ID on the card
-and resumes it on later turns. The runner stops the runtime on cancellation.
+and resumes it on later turns. The runner stops the runtime on cancellation. It is a CLI adapter (`githubCopilotAdapter()`, docs/architecture/cli-adapters.md): **Stop** calls the SDK's `session.abort()`, which ends the turn with a result row and keeps the thread; a turn that doesn't end in time is ended by `stop()`'s fallback abort.
 
 The initial backend uses the GitHub account's default model. It exposes three local tools to list
 project directories, read text files, and replace text in an existing file. Each tool resolves its

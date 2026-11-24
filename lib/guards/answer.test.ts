@@ -51,6 +51,16 @@ describe("cliAnswer", () => {
   });
 });
 
+describe("cliAnswer for Antigravity", () => {
+  it("lets a call through or denies it with a reason before it runs, and says nothing after", () => {
+    expect(cliAnswer("antigravity", "PreToolUse", { allow: true })).toEqual({ decision: "allow" });
+    expect(cliAnswer("antigravity", "PreToolUse", { allow: true, context: "c", feedback: "f" })).toEqual({ decision: "allow" });
+    expect(cliAnswer("antigravity", "PreToolUse", { allow: false, reason: "no" })).toEqual({ decision: "deny", reason: "no" });
+    expect(cliAnswer("antigravity", "PostToolUse", { allow: false, reason: "no" })).toEqual({});
+    expect(cliAnswer("antigravity", "PostToolUseFailure", { allow: true, feedback: "f" })).toEqual({});
+  });
+});
+
 describe("the hook command", () => {
   it("posts the call to Weft's guard route with the turn's token", () => {
     const command = hookCommand("codex", "PreToolUse");

@@ -8,7 +8,7 @@ import Tip from "./Tip";
 export default function BackendBadge({ backend, card }: { backend: Card["backend"]; card?: Card }) {
   const { model, effort } = card ? runningOn(card) : {};
   const label = model ? [modelLabel(model), effort].filter(Boolean).join(" · ") : BACKEND_LABELS[backend];
-  const tone = backend === "puku" ? "bg-puku-soft text-puku" : backend === "codex" ? "bg-accent-soft text-accent" : "bg-claude-soft text-claude";
+  const tone = backend === "puku" ? "bg-puku-soft text-puku" : backend === "codex" || backend === "antigravity" ? "bg-accent-soft text-accent" : "bg-claude-soft text-claude";
   const badge = <span className={`shrink-0 whitespace-nowrap rounded px-1.5 py-px text-[11px] font-medium ${tone}`}>{label}</span>;
   if (!model) return badge;
   const cli = BACKEND_LABELS[backend];

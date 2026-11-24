@@ -113,4 +113,16 @@ describe("subagentPrompt for a Goose thread", () => {
     expect(subagentPrompt("anthropic/claude-sonnet-4.5", "claude")).toContain("say so and use the Agent tool");
     expect(subagentPrompt("choose", "claude")).not.toContain("You have no Agent tool");
   });
+
+  it("runs an Antigravity model headless with agy's print mode, read-only in plan mode", () => {
+    const text = subagentPrompt("gemini-3.1-pro-high", "claude");
+    expect(text).toContain('agy -p "<self-contained task>" --model gemini-3.1-pro-high --mode plan');
+    expect(text).toContain("Gemini 3.1 Pro (High) (Antigravity)");
+    expect(text).toContain("If it fails because agy isn't installed");
+  });
+
+  it("leaves an Antigravity thread without a subagent guide, and runs agy's own default with no --model", () => {
+    expect(subagentPrompt("choose", "antigravity")).toBe("");
+    expect(subagentPrompt("antigravity-default", "claude")).toContain('agy -p "<self-contained task>" --mode plan');
+  });
 });

@@ -98,6 +98,15 @@ describe("gooseModelFor", () => {
   it("is empty for a provider with no curated list", () => {
     expect(gooseModelFor("groq")).toBe("");
   });
+
+  it("offers Google's newest Gemini API ids, Gemini 4 first, and no deprecated 2.5", () => {
+    expect(gooseModelFor("google")).toBe("gemini-4-carbon");
+    const google = providerById("google")?.models ?? [];
+    expect(google).toEqual(["gemini-4-carbon", "gemini-4-argon", "gemini-4-neon", "gemini-4-hydrogen", "gemini-3.8-flash"]);
+    const all = GOOSE_PROVIDERS.flatMap((p) => p.models);
+    expect(all.some((m) => m.includes("gemini-2.5"))).toBe(false);
+    expect(providerById("openrouter")?.models).toContain("google/gemini-4-carbon");
+  });
 });
 
 describe("needsBaseUrl", () => {
