@@ -8,6 +8,10 @@ lands; a release moves those lines under its version and tags the commit `vX.Y.Z
 
 ## [Unreleased]
 
+### Changed
+
+- **YOLO threads can read Claude's transcripts.** A card in YOLO can now read your past sessions under `~/.claude/projects/` with Read, Grep, Glob and read-only shell commands (`cat`, `jq`, `grep`, `find`, or a node or python one-liner that writes to /tmp). You no longer have to run the export yourself in Terminal. Only reading is allowed: in every mode, Claude's settings, hooks, `~/.claude.json`, `.env` files and Weft's own data stay sealed, and so does writing into transcripts. A card that isn't in YOLO is now told to ask you to switch it to YOLO. The mode is checked on every tool call, so switching a card to YOLO mid-thread works on its next step (`lib/secret-guard-transcripts.ts`, `lib/secret-guard-tool.ts`, `lib/secret-guard-why.ts`).
+
 ## [0.9.1] - 2026-11-24
 
 ### Added
