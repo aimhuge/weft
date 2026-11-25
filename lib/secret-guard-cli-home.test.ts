@@ -120,3 +120,77 @@ describe("helpers", () => {
     expect(changesCliSettings(file, folder)).toBe(want);
   });
 });
+
+// YOLO opens the CLI's transcripts to read, and nothing else in its folder (lib/secret-guard-transcripts.ts, 2026-11-25).
+describe("the CLI's transcripts in YOLO", () => {
+  const YOLO = "bypassPermissions";
+  const asked = (tool: string, input: unknown, mode?: string, cwd = project) => {
+    const named: unknown = JSON.parse(JSON.stringify(input).replace("HOME", home));
+    return fromCwd(cwd, () => toolVerdict(tool, named, DATA, undefined, undefined, mode));
+  };
+  const reads: [string, unknown][] = [
+    ["Read", { file_path: "~/.claude/projects/-x/s.jsonl" }],
+    ["Read", { file_path: "HOME/.claude/projects/-x/s.jsonl" }],
+    ["Grep", { pattern: "message", path: "~/.claude/projects" }],
+    ["Glob", { pattern: "~/.claude/projects/**/*.jsonl" }],
+    ["LS", { path: "~/.claude/projects/-x" }],
+    ["Bash", { command: "cat ~/.claude/projects/-x/s.jsonl" }],
+    ["Bash", { command: "jq -r '.message.content' ~/.claude/projects/-x/s.jsonl | head -50" }],
+    ["Bash", { command: "find ~/.claude/projects -name '*.jsonl' | xargs grep -h '\"type\":\"user\"' > /tmp/prompts.txt" }],
+    ["Bash", { command: "find ~/.claude/projects -name '*.jsonl' -exec jq -c . {} \;" }],
+    ["Bash", { command: 'for f in ~/.claude/projects/*/*.jsonl; do jq -r .message "$f" >> /tmp/out.txt; done' }],
+    ["Bash", { command: "node -e \"require('fs').writeFileSync('/tmp/p.json', require('fs').readFileSync(process.argv[1]))\" ~/.claude/projects/-x/s.jsonl" }],
+    ["Bash", { command: "mkdir -p /tmp/lessons && cp ~/.claude/projects/-x/s.jsonl /tmp/lessons/" }],
+  ];
+
+  it.each(reads)("lets a YOLO %s %j read them", (tool, input) => expect(asked(tool, input, YOLO)).toBeNull());
+
+  it.each(reads)("keeps a non-YOLO %s %j sealed, and says YOLO opens it", (tool, input) => {
+    const why = asked(tool, input, "acceptEdits");
+    expect(why).toContain(REFUSED);
+  });
+
+  it("points a non-YOLO thread at YOLO, not at the user's Terminal", () => {
+    expect(asked("Read", { file_path: "~/.claude/projects/-x/s.jsonl" })).toContain("switch this card to YOLO");
+  });
+
+  it.each([
+    ["Write", { file_path: "~/.claude/projects/-x/s.jsonl" }],
+    ["Edit", { file_path: "~/.claude/projects/-x/s.jsonl" }],
+    ["Write", { file_path: "~/.claude/settings.json" }],
+    ["Write", { file_path: "~/.claude/hooks/pre.sh" }],
+    ["Write", { file_path: "~/.claude.json" }],
+    ["Read", { file_path: "~/.claude/settings.json" }],
+    ["Read", { file_path: "~/.claude.json" }],
+    ["Bash", { command: "echo x > ~/.claude/projects/-x/s.jsonl" }],
+    ["Bash", { command: "cat ~/.claude/projects/-x/s.jsonl > ~/.claude/settings.json" }],
+    ["Bash", { command: "rm ~/.claude/projects/-x/s.jsonl" }],
+    ["Bash", { command: "rm -rf ~/.claude/projects" }],
+    ["Bash", { command: "find ~/.claude/projects -name '*.jsonl' | xargs rm" }],
+    ["Bash", { command: "find ~/.claude/projects -delete" }],
+    ["Bash", { command: "sed -i '' s/a/b/ ~/.claude/projects/-x/s.jsonl" }],
+    ["Bash", { command: "cp /tmp/x ~/.claude/projects/-x/s.jsonl" }],
+    ["Bash", { command: "tee ~/.claude/projects/-x/s.jsonl < /tmp/x" }],
+    ["Bash", { command: 'for f in ~/.claude/projects/*/*.jsonl; do echo x > "$f"; done' }],
+    ["Bash", { command: "cd ~/.claude/projects/-x && rm s.jsonl" }],
+    ["Bash", { command: "bash -c 'mv ~/.claude/projects/-x/s.jsonl /tmp/'" }],
+    ["Bash", { command: "echo \"$(rm ~/.claude/projects/-x/s.jsonl)\"" }],
+    ["Bash", { command: "python3 -c \"open('HOME/.claude/projects/-x/s.jsonl', 'w').write('')\"" }],
+    ["Bash", { command: "node -e \"const p='~/.claude/projects/-x/s.jsonl'; require('fs').unlinkSync(p)\"" }],
+    ["Bash", { command: "cat ~/.claude/settings.json" }],
+    ["Bash", { command: "printenv" }],
+    ["Bash", { command: "cat .env" }],
+    ["Bash", { command: "cat ~/.claude/projects/-x/s.jsonl ~/.weft/account.json" }],
+  ])("keeps a YOLO %s %j from writing the CLI's folder or reading past the transcripts", (tool, input) => {
+    expect(asked(tool, input, YOLO)).not.toBeNull();
+  });
+
+  it("is sealed through a link from the projects folder to the settings", () => {
+    const link = path.join(home, ".claude", "projects", "-x", "settings-link.json");
+    fs.writeFileSync(path.join(home, ".claude", "settings.json"), "{}");
+    fs.symlinkSync(path.join(home, ".claude", "settings.json"), link);
+    expect(asked("Read", { file_path: link }, YOLO)).toContain(REFUSED);
+    expect(asked("Bash", { command: `cat ${link}` }, YOLO)).toContain(REFUSED);
+    fs.rmSync(link);
+  });
+});

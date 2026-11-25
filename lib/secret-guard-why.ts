@@ -9,6 +9,12 @@ import { DATA_SECRET, PROC_ENV, SECRET_FILE, TEMPLATE, inTranscriptDir, placedPa
 import { workerHome } from "./worker-config";
 import { credentialFileRefusal, isCliCredential } from "./secret-guard-credentials";
 import { SETTINGS_REFUSAL, changesCliSettings } from "./secret-guard-cli-home";
+import { inCliProjects } from "./secret-guard-transcripts";
+
+export const TRANSCRIPT_REFUSAL = (name: string) =>
+  `${name} is a transcript in the CLI's own folder (~/.claude/projects/), so it can't be read here: they hold every value a thread ` +
+  "saw. A thread in YOLO reads them (Read, Grep, Glob and read-only Bash such as cat, jq, grep, find), so ask the user to " +
+  "switch this card to YOLO rather than run it in their own Terminal. Memory in ~/.claude/projects/<project>/memory/ is open in every mode.";
 
 // The worker's files that hold a key or a token, as opposed to its log and update notes.
 const WORKER_KEYS = /^(worker\.json|worker\.env|seal-key\.json|sign-key\.json|github-credentials)$/i;
@@ -25,6 +31,8 @@ const SECRET = (name: string) =>
 const KINDS: { is: (at: string, clean: string, dataDir: string) => boolean; say: (name: string) => string }[] = [
   // A glob in the name (`~/.config/gh/*`) is named by its folder.
   { is: (at) => isCliCredential(at) || isCliCredential(path.dirname(at)), say: credentialFileRefusal },
+  // A transcript: YOLO opens these to read (lib/secret-guard-transcripts.ts), so that's the way in, not the user's Terminal.
+  { is: (at, clean) => inTranscriptDir(clean) && inCliProjects(at), say: TRANSCRIPT_REFUSAL },
   {
     is: (_at, clean) => inTranscriptDir(clean),
     say: (name) =>

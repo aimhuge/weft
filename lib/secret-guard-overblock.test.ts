@@ -102,6 +102,27 @@ describe("a thread's memory folder", () => {
   ])("keeps %s %j sealed", (tool, input) => {
     expect(toolVerdict(tool, input, DATA)).toContain(REFUSED);
   });
+
+  // YOLO opens the transcripts beside the memory folder to read; the settings and every write stay sealed (2026-11-25).
+  it.each([
+    ["Read", { file_path: "~/.claude/projects/-Users-me-app/s.jsonl" }],
+    ["Bash", { command: "cat ~/.claude/projects/-Users-me-app/*.jsonl" }],
+    ["Bash", { command: "ls ~/.claude/projects" }],
+    ["Bash", { command: "echo '- x' >> ~/.claude/projects/-Users-me-app/memory/MEMORY.md" }],
+  ])("lets a YOLO %s %j read them", (tool, input) => {
+    expect(toolVerdict(tool, input, DATA, undefined, undefined, "bypassPermissions")).toBeNull();
+  });
+
+  it.each([
+    ["Read", { file_path: "~/.claude/settings.json" }],
+    ["Read", { file_path: "~/.claude/projects/-Users-me-app/memory/settings-link.md" }],
+    ["Write", { file_path: "~/.claude/projects/-Users-me-app/s.jsonl" }],
+    ["Write", { file_path: "~/.claude/settings.local.json" }],
+    ["Bash", { command: "echo x >> ~/.claude/projects/-Users-me-app/s.jsonl" }],
+    ["Glob", { pattern: "*", path: "~/.claude" }],
+  ])("keeps a YOLO %s %j sealed", (tool, input) => {
+    expect(toolVerdict(tool, input, DATA, undefined, undefined, "bypassPermissions")).not.toBeNull();
+  });
 });
 
 describe("refusal", () => {

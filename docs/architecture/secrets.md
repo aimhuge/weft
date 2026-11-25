@@ -397,6 +397,16 @@ denied). A file watcher notices hand edits and offers "Import changes", so editi
     folder alone, after folding `..` and following links (the folder must really be a `projects/<p>/memory`, and the
     file really in it), so `settings*.json`, hooks, skills and the `*.jsonl` transcripts beside it stay sealed: a thread
     that could write those could grant itself permissions. The folder gate takes the card's own memory folder as its own.
+    **YOLO reads every transcript (2026-11-25):** a thread in YOLO (`bypassPermissions`, read from the PreToolUse hook
+    input's own `permission_mode`, so a mid-thread switch counts on the next tool call) may read anything under
+    `~/.claude/projects/` with Read, Grep, Glob, LS and read-only Bash (`cat`, `jq`, `grep`, `find`, `xargs` of a reader,
+    `sed` without `-i`, a node or python one-liner that writes only to /tmp) — `lib/secret-guard-transcripts.ts`. Only
+    reads open: in every mode a Bash line that names a transcript must be made of reads (`transcriptWrites`, so `rm`,
+    `sed -i`, `find -delete`, `xargs rm`, a redirect or `cp` into the folder are refused), and only then are its paths
+    swapped for `/tmp/transcripts/<name>` stand-ins for the rest of the guard. `~/.claude` settings and hooks,
+    `~/.claude.json`, `.env` files, Weft's data dir and env dumps stay sealed in YOLO. A non-YOLO thread hears "switch
+    this card to YOLO", not "run it in your own Terminal". The same rule holds on a Weft Worker, where YOLO is already
+    Touch-ID signed.
   - **Text isn't a path (2026-11-02).** `gh pr create --body "…~/.weft/vault/…"` was refused because the guard read
     every word on the line. Words a command takes as text (`textWords`, `lib/shell-text.ts`) are skipped; a `$(…)`
     inside them still runs, and is checked as the command it is. `--body-file`, `-F` and anything a shell or an
